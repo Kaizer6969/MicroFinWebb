@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $plan_tier = trim($_POST['plan_tier'] ?? '');
     $company_email = trim($_POST['company_email'] ?? '');
     $demo_schedule_date = trim($_POST['demo_schedule_date'] ?? '');
+    $demo_schedule_date = $demo_schedule_date === '' ? date('Y-m-d H:i:s') : $demo_schedule_date;
     $uploaded_files = $_FILES['legitimacy_documents'] ?? null;
 
     $document_count = 0;
@@ -319,8 +320,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .plan-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            align-items: stretch;
         }
 
         .plan-option {
@@ -343,8 +345,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             border: 1px solid rgba(255, 255, 255, 0.12);
             background: rgba(11, 15, 26, 0.88);
             border-radius: 12px;
-            padding: 12px;
-            min-height: 98px;
+            padding: 12px 36px 12px 12px;
+            min-height: 112px;
             transition: all 0.2s ease;
             position: relative;
         }
@@ -606,7 +608,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 </span>
                             </label>
 
-                            <label class="plan-option wide">
+                            <label class="plan-option">
                                 <input type="radio" name="plan_tier" value="Unlimited">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Unlimited</span>
@@ -645,11 +647,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <input type="hidden" name="is_otp_verified" id="is_otp_verified" value="0">
                     </div>
 
-                    <div class="form-group">
-                        <label>Preferred Contact Schedule <span class="text-danger">*</span></label>
-                        <input type="datetime-local" class="input-field" name="demo_schedule_date" id="demo_schedule_date" required>
-                    </div>
-
                     <button type="submit" id="btn-final-submit" class="btn btn-primary btn-block" style="opacity: 0.5; pointer-events: none;">Contact Us</button>
                     <small id="form-block-note" style="display: block; text-align: center; margin-top: 10px; color: #ef4444;">Verify your email to enable submission.</small>
                 </form>
@@ -661,14 +658,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     document.addEventListener('DOMContentLoaded', () => {
         const demoForm = document.getElementById('demo-form');
         if (!demoForm) return;
-
-        // Date/Time picker: disallow past dates
-        const dateInput = document.getElementById('demo_schedule_date');
-        if (dateInput) {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            dateInput.min = now.toISOString().slice(0, 16);
-        }
 
         // OTP Elements
         const btnSendOtp = document.getElementById('btn-send-otp');
