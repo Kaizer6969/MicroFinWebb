@@ -300,7 +300,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <a href="#contact" class="btn btn-outline">Read our Security Whitepaper</a>
             </div>
             <div class="security-image" style="flex: 1; text-align: center; padding: 40px; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border-radius: 24px;">
-                <span class="material-symbols-rounded" style="font-size: 140px; color: #1e293b; drop-shadow: 0 10px 15px rgba(0,0,0,0.1);">gpp_good</span>
+                <span class="material-symbols-rounded" style="font-size: 140px; color: #1e293b; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1));">gpp_good</span>
                 <div style="margin-top: 24px; font-weight: 600; color: #475569; font-size: 1.1rem;">ISO 27001 & PCI-DSS Compliant Infrastructure</div>
             </div>
         </div>
