@@ -7,6 +7,7 @@ if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_
 }
 
 require_once '../backend/db_connect.php';
+require_once '../backend/tenant_identity.php';
 
 $ui_theme = (($_SESSION['ui_theme'] ?? 'dark') === 'dark') ? 'dark' : 'light';
 if (!empty($_SESSION['super_admin_id'])) {
@@ -52,6 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'provision_tenant') {
+        if (isset($_POST['tenant_id']) && trim((string) $_POST['tenant_id']) !== '') {
+            $_SESSION['sa_error'] = 'Tenant ID is system-generated and cannot be set manually.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
         $tenant_name = trim($_POST['tenant_name'] ?? '');
         $admin_email = trim($_POST['admin_email'] ?? '');
         $custom_slug = trim($_POST['custom_slug'] ?? '');
@@ -66,10 +73,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $branch_name = trim($_POST['branch_name'] ?? '');
         $contact_number = trim($_POST['contact_number'] ?? '');
 
-        if ($custom_slug !== '') {
-            $tenant_slug = preg_replace('/[^a-z0-9-]/', '', strtolower($custom_slug));
-        } else {
-            $tenant_slug = preg_replace('/[^a-z0-9]/', '', strtolower($tenant_name));
+        $slug_source = $custom_slug !== '' ? $custom_slug : $tenant_name;
+        $base_tenant_slug = mf_normalize_tenant_slug($slug_source);
+        if ($base_tenant_slug === '') {
+            $base_tenant_slug = 'tenant';
         }
 
         $mrr = $plan_pricing_map[$plan_tier];
@@ -79,22 +86,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: super_admin.php?section=tenants');
             exit;
         } else {
-            $check = $pdo->prepare('SELECT tenant_id FROM tenants WHERE tenant_slug = ?');
-            $check->execute([$tenant_slug]);
-            if ($check->fetch()) {
-                $tenant_slug .= substr(bin2hex(random_bytes(3)), 0, 6);
-            }
-
             $existing_check = $pdo->prepare("SELECT tenant_id FROM tenants WHERE tenant_name = ? AND status IN ('Demo Requested', 'Contacted') LIMIT 1");
             $existing_check->execute([$tenant_name]);
             $existing = $existing_check->fetch();
 
             if ($existing) {
-                $tenant_id = $existing['tenant_id'];
+                $tenant_id = (string) $existing['tenant_id'];
+                $tenant_slug = mf_generate_unique_tenant_slug($pdo, $base_tenant_slug, $tenant_id);
                 $update = $pdo->prepare("UPDATE tenants SET tenant_slug = ?, email = ?, first_name = ?, last_name = ?, mi = ?, suffix = ?, branch_name = ?, contact_number = ?, status = 'Active', plan_tier = ?, mrr = ?, onboarding_deadline = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE tenant_id = ?");
                 $update->execute([$tenant_slug, $admin_email, $first_name, $last_name, $mi, $suffix, $branch_name, $contact_number, $plan_tier, $mrr, $tenant_id]);
             } else {
-                $tenant_id = $tenant_slug;
+                $tenant_id = mf_generate_tenant_id($pdo, 10);
+                $tenant_slug = mf_generate_unique_tenant_slug($pdo, $base_tenant_slug);
                 $insert = $pdo->prepare("INSERT INTO tenants (tenant_id, tenant_name, tenant_slug, email, first_name, last_name, mi, suffix, branch_name, contact_number, status, plan_tier, mrr, onboarding_deadline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))");
                 $insert->execute([$tenant_id, $tenant_name, $tenant_slug, $admin_email, $first_name, $last_name, $mi, $suffix, $branch_name, $contact_number, $plan_tier, $mrr]);
             }
@@ -110,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user_insert->execute([$tenant_id, $admin_email, $password_hash, $new_role_id]);
 
             $log = $pdo->prepare("INSERT INTO audit_logs (action_type, entity_type, description, tenant_id) VALUES ('TENANT_PROVISIONED', 'tenant', ?, ?)");
-            $log->execute(["Provisioned new tenant: {$tenant_name} ({$plan_tier} Plan)", $tenant_id]);
+            $log->execute(["Provisioned tenant {$tenant_name} (ID: {$tenant_id}, Slug: {$tenant_slug}, Plan: {$plan_tier})", $tenant_id]);
 
             if (isset($_POST['data_migration']) && $_POST['data_migration'] == '1') {
                 $log = $pdo->prepare("INSERT INTO audit_logs (action_type, entity_type, description, tenant_id) VALUES ('DATA_MIGRATION_REQUIRED', 'tenant', 'Client requested legacy data migration', ?)");
@@ -158,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $email_status = " (Email failed: {$mail->ErrorInfo})";
             }
 
-            $_SESSION['sa_flash'] = 'Tenant provisioned successfully.' . $email_status;
+            $_SESSION['sa_flash'] = 'Tenant provisioned successfully. Tenant ID: ' . $tenant_id . '.' . $email_status;
             header('Location: super_admin.php?section=tenants');
             exit;
         }
@@ -185,6 +188,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $log->execute([$tenant_id]);
 
         $_SESSION['sa_flash'] = "Tenant has been rejected.";
+        header('Location: super_admin.php?section=tenants');
+        exit;
+    } elseif ($action === 'update_tenant_slug') {
+        $tenant_id = trim((string) ($_POST['tenant_id'] ?? ''));
+        $requested_slug = trim((string) ($_POST['tenant_slug'] ?? ''));
+
+        if ($tenant_id === '' || $requested_slug === '') {
+            $_SESSION['sa_error'] = 'Tenant ID and new slug are required.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $new_slug = mf_normalize_tenant_slug($requested_slug);
+        if ($new_slug === '') {
+            $_SESSION['sa_error'] = 'Please provide a valid slug using letters, numbers, or hyphens.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $tenant_stmt = $pdo->prepare('SELECT tenant_name, tenant_slug FROM tenants WHERE tenant_id = ? LIMIT 1');
+        $tenant_stmt->execute([$tenant_id]);
+        $tenant_row = $tenant_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$tenant_row) {
+            $_SESSION['sa_error'] = 'Tenant not found.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $old_slug = (string) ($tenant_row['tenant_slug'] ?? '');
+        if ($old_slug === $new_slug) {
+            $_SESSION['sa_flash'] = 'Tenant slug is unchanged.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        if (mf_tenant_slug_exists($pdo, $new_slug, $tenant_id)) {
+            $_SESSION['sa_error'] = 'Slug is already in use by another tenant.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $update_slug = $pdo->prepare('UPDATE tenants SET tenant_slug = ? WHERE tenant_id = ?');
+        $update_slug->execute([$new_slug, $tenant_id]);
+
+        $log = $pdo->prepare("INSERT INTO audit_logs (action_type, entity_type, description, tenant_id) VALUES ('TENANT_SLUG_UPDATED', 'tenant', ?, ?)");
+        $log->execute(["Tenant slug changed from {$old_slug} to {$new_slug}", $tenant_id]);
+
+        $_SESSION['sa_flash'] = 'Tenant slug updated successfully.';
         header('Location: super_admin.php?section=tenants');
         exit;
     } elseif ($action === 'update_settings') {
@@ -617,7 +669,8 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                     <tr data-status="<?php echo htmlspecialchars($t['status']); ?>">
                                         <td>
                                             <?php echo htmlspecialchars($t['tenant_name']); ?><br>
-                                            <small class="text-muted"><?php echo htmlspecialchars($t['tenant_slug'] ?? '—'); ?></small>
+                                            <small class="text-muted">Slug: <?php echo htmlspecialchars($t['tenant_slug'] ?? '—'); ?></small><br>
+                                            <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? '—'); ?></small>
                                         </td>
                                         <td>
                                             <?php
@@ -669,6 +722,14 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                                                         <span class="material-symbols-rounded" style="font-size:16px;">description</span> Doc <?php echo $doc_index + 1; ?>
                                                     </a>
                                                 <?php endforeach; ?>
+
+                                                <button type="button"
+                                                    class="btn btn-outline btn-sm btn-edit-tenant-slug"
+                                                    data-tenant-id="<?php echo htmlspecialchars($t['tenant_id']); ?>"
+                                                    data-tenant-slug="<?php echo htmlspecialchars($t['tenant_slug'] ?? ''); ?>"
+                                                    title="Edit tenant slug">
+                                                    <span class="material-symbols-rounded" style="font-size:16px;">edit</span> Slug
+                                                </button>
 
                                                 <?php if (in_array($status, ['Demo Requested', 'Contacted'])): ?>
                                                     <!-- Approve: opens provision modal -->
@@ -1148,6 +1209,12 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
         </main>
     </div>
 
+    <form id="tenant-slug-update-form" method="POST" action="" style="display:none;">
+        <input type="hidden" name="action" value="update_tenant_slug">
+        <input type="hidden" name="tenant_id" id="slug-edit-tenant-id" value="">
+        <input type="hidden" name="tenant_slug" id="slug-edit-tenant-slug" value="">
+    </form>
+
     <!-- Create Tenant Modal Wizard -->
     <div id="modal-backdrop" class="modal-backdrop">
         <div class="modal">
@@ -1160,12 +1227,12 @@ $recent_tenants = $recent_tenants_stmt->fetchAll();
                 <div class="form-group">
                     <label>Company / Institution Name</label>
                     <input type="text" class="form-control" name="tenant_name" placeholder="e.g. Village Microfinance" required>
-                    <small class="text-muted">The system will auto-generate a unique instance identifier from this name.</small>
+                    <small class="text-muted">The system auto-generates a unique 10-character tenant ID.</small>
                 </div>
                 <div class="form-group">
                     <label>Custom Site Slug (Optional)</label>
                     <input type="text" class="form-control" name="custom_slug" placeholder="e.g. village-microfinance">
-                    <small class="text-muted">Will be used in the login URL: .../login.php?s=<strong>slug</strong></small>
+                    <small class="text-muted">Used in login URL: .../login.php?s=<strong>slug</strong>. Tenant ID is system-generated and immutable.</small>
                 </div>
                 <div class="form-group row-2">
                     <div>

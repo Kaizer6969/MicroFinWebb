@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../backend/db_connect.php';
+require_once '../backend/tenant_identity.php';
 
 $form_success = false;
 $form_error = '';
@@ -54,8 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 $pdo->beginTransaction();
 
-                $base_slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $institution_name)));
-                $tenant_id = $base_slug . '-' . substr(bin2hex(random_bytes(2)), 0, 4);
+                $tenant_id = mf_generate_tenant_id($pdo, 10);
 
                 $stmt = $pdo->prepare("
                     INSERT INTO tenants (

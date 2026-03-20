@@ -107,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Bind provision buttons (from tenant table rows)
     bindProvisionButtons();
+    bindSlugEditorButtons();
 
     // ============================================================
     // DASHBOARD: Charts + Polling
@@ -584,6 +585,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (modalBackdrop) modalBackdrop.classList.add('show');
+            });
+        });
+    }
+
+    function bindSlugEditorButtons() {
+        const slugButtons = document.querySelectorAll('.btn-edit-tenant-slug');
+        const slugForm = document.getElementById('tenant-slug-update-form');
+        const tenantIdInput = document.getElementById('slug-edit-tenant-id');
+        const tenantSlugInput = document.getElementById('slug-edit-tenant-slug');
+
+        if (!slugForm || !tenantIdInput || !tenantSlugInput) {
+            return;
+        }
+
+        slugButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const tenantId = btn.getAttribute('data-tenant-id') || '';
+                const currentSlug = btn.getAttribute('data-tenant-slug') || '';
+                const requestedSlug = window.prompt('Enter new tenant slug (letters, numbers, hyphens only):', currentSlug);
+
+                if (requestedSlug === null) {
+                    return;
+                }
+
+                const normalized = requestedSlug
+                    .toLowerCase()
+                    .trim()
+                    .replace(/[^a-z0-9-]+/g, '-')
+                    .replace(/^-+|-+$/g, '');
+
+                if (!normalized) {
+                    window.alert('Please enter a valid slug.');
+                    return;
+                }
+
+                tenantIdInput.value = tenantId;
+                tenantSlugInput.value = normalized;
+                slugForm.submit();
             });
         });
     }
