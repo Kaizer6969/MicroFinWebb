@@ -5,6 +5,7 @@
     --surface-light: #1A2235;
 
     --primary: #3B82F6; /* Bright Blue Accent */
+    --primary-rgb: 59, 130, 246;
     --primary-light: #60A5FA;
     --accent: #8B5CF6; /* Purple Accent */
     --accent-hover: #7C3AED;
@@ -297,24 +298,24 @@ body {
     align-items: center;
     gap: 0.4rem;
     padding: 0.4rem 0.8rem;
-    background: rgba(var(--primary-rgb, 15,23,42), 0.05); /* very light primary bg */
-    border: 1px solid rgba(15,23,42, 0.1);
+    background: rgba(var(--primary-rgb), 0.14);
+    border: 1px solid rgba(96, 165, 250, 0.35);
     border-radius: 20px;
     font-size: 0.8rem;
-    color: var(--text-dark);
+    color: #dbeafe;
     font-weight: 600;
     transition: all 0.3s ease;
 }
 
 .trusted-tenant-badge:hover {
-    background: rgba(15,23,42, 0.08);
+    background: rgba(var(--primary-rgb), 0.24);
     transform: translateY(-2px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.28);
 }
 
 .trusted-tenant-badge .material-symbols-rounded {
     font-size: 1rem;
-    color: var(--primary-color);
+    color: var(--primary-light);
 }
 
 /* Mockup Window - Upgraded */
@@ -561,11 +562,11 @@ body {
 }
 
 .timeline-content {
-    background: var(--bg-white);
+    background: rgba(18, 24, 38, 0.82);
     padding: 24px 32px;
     border-radius: 16px;
     box-shadow: var(--shadow-sm);
-    border: 1px solid rgba(0,0,0,0.03);
+    border: 1px solid rgba(255, 255, 255, 0.09);
     flex: 1;
 }
 
