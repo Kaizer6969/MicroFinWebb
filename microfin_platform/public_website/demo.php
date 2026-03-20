@@ -342,6 +342,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         .plan-card-content {
+            display: block;
+            width: 100%;
             border: 1px solid rgba(255, 255, 255, 0.12);
             background: rgba(11, 15, 26, 0.88);
             border-radius: 12px;
@@ -398,6 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             font-size: 0.8rem;
             color: var(--text-gray);
             line-height: 1.35;
+            max-width: 100%;
         }
 
         .otp-group {

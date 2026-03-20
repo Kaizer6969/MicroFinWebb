@@ -301,7 +301,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 80% -20%, rgba(96,165,250,0.28) 0%, transparent 52%); z-index: 0;"></div>
         <div class="container" style="text-align: center; max-width: 700px; position: relative; z-index: 1;">
             <h2 style="font-size: 2.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 20px; letter-spacing: -1px;">Ready to modernize your cooperative?</h2>
-            <p style="font-size: 1.1rem; margin-bottom: 36px; color: var(--text-light);">Leave legacy desktop software behind. Let our team migrate your data to the cloud seamlessly.</p>
+            <p style="font-size: 1.1rem; margin-bottom: 36px; color: #dbeafe;">Leave legacy desktop software behind. Let our team migrate your data to the cloud seamlessly.</p>
             <a href="demo.php" class="btn btn-primary btn-lg" style="padding: 16px 36px; font-size: 1.1rem;">
                 <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">calendar_month</span>
                 Contact Us
