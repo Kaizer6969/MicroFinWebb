@@ -36,11 +36,12 @@ USE microfin_db;
 -- ✅ EDITED: Branding fields moved to tenant_branding table (TABLE A2)
 -- ✅ EDITED: Proof of legitimacy uploads moved to tenant_legitimacy_documents (TABLE A3)
 -- ✅ EDITED: setup_token removed — just use slug for tenant access
+-- ✅ EDITED: tenant_id is system-generated immutable 10-character alphanumeric identifier (tenant_slug remains editable)
 --
 -- STATUS FLOW: Active → Suspended → Soft Deleted → 30 days → Purged
 -- ============================================================
 CREATE TABLE IF NOT EXISTS tenants (
-    tenant_id VARCHAR(50) PRIMARY KEY,
+    tenant_id VARCHAR(50) PRIMARY KEY COMMENT 'System-generated immutable tenant identifier (10-char alphanumeric in app logic)',
     tenant_name VARCHAR(100) NOT NULL,
     tenant_slug VARCHAR(50) UNIQUE COMMENT 'URL-safe identifier e.g. fundline, plaridel, sacredheart',
 
