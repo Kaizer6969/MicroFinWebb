@@ -304,6 +304,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             padding: 12px;
             min-height: 98px;
             transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .plan-card-content::after {
+            content: '';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.65);
+            background: transparent;
+            transition: all 0.2s ease;
         }
 
         .plan-option:hover .plan-card-content {
@@ -319,6 +333,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             border-color: var(--accent);
             background: linear-gradient(180deg, rgba(30, 41, 59, 0.96) 0%, rgba(18, 24, 38, 0.95) 100%);
             box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.45);
+        }
+
+        .plan-option input:checked + .plan-card-content::after {
+            background: var(--accent);
+            border-color: var(--accent);
+            box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.9);
         }
 
         .plan-name {
