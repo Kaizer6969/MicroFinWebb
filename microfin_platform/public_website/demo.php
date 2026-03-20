@@ -396,7 +396,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .plan-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 10px;
             align-items: stretch;
         }
@@ -416,14 +416,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         .plan-card-content {
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 5px;
             width: 100%;
             height: 100%;
             border: 1px solid rgba(148, 163, 184, 0.26);
             background: linear-gradient(170deg, rgba(12, 19, 35, 0.95) 0%, rgba(10, 15, 27, 0.95) 100%);
             border-radius: 12px;
-            padding: 11px 35px 11px 11px;
-            min-height: 108px;
+            padding: 12px 36px 12px 12px;
+            min-height: 122px;
             transition: all 0.2s ease;
             position: relative;
         }
@@ -443,7 +443,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .plan-option:hover .plan-card-content {
             border-color: rgba(96, 165, 250, 0.65);
-            transform: translateY(-1px);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(2, 6, 23, 0.35);
         }
 
         .plan-option input:focus + .plan-card-content {
@@ -466,27 +467,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             display: block;
             font-weight: 700;
             color: #f8fbff;
-            font-size: 0.94rem;
+            font-size: 0.95rem;
+            letter-spacing: -0.2px;
         }
 
         .plan-meta {
             display: block;
             max-width: 100%;
+            margin-top: auto;
         }
 
         .plan-capacity {
             display: block;
-            font-size: 0.79rem;
+            font-size: 0.78rem;
             color: #b8c3d8;
             line-height: 1.34;
         }
 
         .plan-price {
             display: block;
-            margin-top: 2px;
-            font-size: 0.8rem;
+            margin-top: 6px;
+            font-size: 0.78rem;
             font-weight: 700;
-            color: #93c5fd;
+            color: #bfdbfe;
+            background: rgba(59, 130, 246, 0.16);
+            border: 1px solid rgba(96, 165, 250, 0.35);
+            border-radius: 999px;
+            width: fit-content;
+            padding: 3px 8px;
         }
 
         .email-row {
@@ -501,6 +509,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.11);
             margin-bottom: 16px;
+        }
+
+        .otp-row {
+            display: flex;
+            gap: 10px;
         }
 
         .btn {
@@ -616,11 +629,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 flex-direction: column;
             }
 
+            .otp-row {
+                flex-direction: column;
+            }
+
             .back-btn {
                 top: 12px;
                 left: 12px;
                 padding: 8px 13px;
                 font-size: 0.82rem;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .plan-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
@@ -783,12 +806,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <small id="email-help-text" style="color: #94a3b8; font-size: 0.8rem; margin-top: 4px; display:block;">Requires verification before submission.</small>
                     </div>
 
-                    <div class="form-group">
-                        <label>Proof of Legitimacy Documents <span class="text-danger">*</span></label>
-                        <input type="file" class="input-field" name="legitimacy_documents[]" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px;" multiple required>
-                        <small style="color: #94a3b8; font-size: 0.8rem; margin-top: 4px; display:block;">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
-                    </div>
-
                     <!-- OTP Input Group -->
                     <div class="otp-group" id="otp-group">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -801,6 +818,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         </div>
                         <div id="otp-status-msg" style="font-size: 0.85rem; margin-top: 8px; font-weight: 500;"></div>
                         <input type="hidden" name="is_otp_verified" id="is_otp_verified" value="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Proof of Legitimacy Documents <span class="text-danger">*</span></label>
+                        <input type="file" class="input-field" name="legitimacy_documents[]" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px;" multiple required>
+                        <small style="color: #94a3b8; font-size: 0.8rem; margin-top: 4px; display:block;">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
                     </div>
 
                     <button type="submit" id="btn-final-submit" class="btn btn-primary btn-block" style="opacity: 0.5; pointer-events: none;">Contact Us</button>
