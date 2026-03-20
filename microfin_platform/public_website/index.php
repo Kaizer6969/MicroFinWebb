@@ -269,7 +269,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     </section>
 
     <!-- Security Section -->
-    <section id="security" class="section bg-white" style="border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+    <section id="security" class="section bg-white" style="border: none;">
         <div class="container container-flex">
             <div class="security-content">
                 <span class="badge-pill" style="background: #fce7f3; color: #9333ea; margin-bottom: 16px;">Bank-Grade Security</span>
@@ -307,7 +307,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     </section>
 
     <!-- CTA Section -->
-    <section id="contact" class="section text-white" style="position: relative; overflow: hidden; background: linear-gradient(135deg, var(--primary) 0%, #1e1b4b 100%);">
+    <section id="contact" class="section text-white" style="position: relative; overflow: hidden; background: linear-gradient(135deg, var(--primary) 0%, #1e1b4b 100%); border: none;">
         <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 80% -20%, rgba(37,99,235,0.4) 0%, transparent 50%); z-index: 0;"></div>
         <div class="container" style="text-align: center; max-width: 700px; position: relative; z-index: 1;">
             <h2 style="font-size: 2.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 20px; letter-spacing: -1px;">Ready to modernize your cooperative?</h2>
