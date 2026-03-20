@@ -572,22 +572,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </div>
 
                     <div class="form-group">
-                        <label>Subscription Plan (Optional)</label>
-                        <p class="plan-helper">Pick a plan now, or decide with our team after your demo.</p>
+                        <label>Subscription Plan <span class="text-danger">*</span></label>
+                        <p class="plan-helper">Select one plan to match your expected operational scale.</p>
                         <div class="plan-grid">
-                            <label class="plan-option wide">
-                                <input type="radio" name="plan_tier" value="" checked>
-                                <span class="plan-card-content">
-                                    <span class="plan-name">Decide After Demo</span>
-                                    <span class="plan-meta">No commitment yet. We will recommend the best fit based on your portfolio size.</span>
-                                </span>
-                            </label>
-
                             <label class="plan-option">
-                                <input type="radio" name="plan_tier" value="Starter">
+                                <input type="radio" name="plan_tier" value="Starter" required>
                                 <span class="plan-card-content">
                                     <span class="plan-name">Starter</span>
-                                    <span class="plan-meta">Up to 1,000 clients and 250 users</span>
+                                    <span class="plan-meta">Up to 1,000 clients and 250 users | Php 4,999/mo</span>
                                 </span>
                             </label>
 
@@ -595,7 +587,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Growth">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Growth</span>
-                                    <span class="plan-meta">Up to 2,500 clients and 750 users</span>
+                                    <span class="plan-meta">Up to 2,500 clients and 750 users | Php 9,999/mo</span>
                                 </span>
                             </label>
 
@@ -603,7 +595,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Pro">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Pro</span>
-                                    <span class="plan-meta">Up to 5,000 clients and 2,000 users</span>
+                                    <span class="plan-meta">Up to 5,000 clients and 2,000 users | Php 14,999/mo</span>
                                 </span>
                             </label>
 
@@ -611,7 +603,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Enterprise">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Enterprise</span>
-                                    <span class="plan-meta">Up to 10,000 clients and 5,000 users</span>
+                                    <span class="plan-meta">Up to 10,000 clients and 5,000 users | Php 22,999/mo</span>
                                 </span>
                             </label>
 
@@ -619,7 +611,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Unlimited">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Unlimited</span>
-                                    <span class="plan-meta">Unlimited clients and users with full platform access</span>
+                                    <span class="plan-meta">Unlimited clients and users | Php 29,999/mo</span>
                                 </span>
                             </label>
                         </div>
@@ -635,8 +627,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </div>
 
                     <div class="form-group">
-                        <label>Business Permit <span class="text-muted" style="font-size: 0.8rem;">(Optional)</span></label>
-                        <input type="file" class="input-field" name="business_permit" accept=".pdf,.jpg,.jpeg,.png" style="padding: 8px;">
+                        <label>Proof of Legitimacy Documents <span class="text-danger">*</span></label>
+                        <input type="file" class="input-field" name="legitimacy_documents[]" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px;" multiple required>
+                        <small style="color: #94a3b8; font-size: 0.8rem; margin-top: 4px; display:block;">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
                     </div>
 
                     <!-- OTP Input Group -->
