@@ -43,12 +43,12 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <a href="#pricing">Pricing</a>
                 <a href="#security">Security</a>
                 <!-- Replaced by Private URL approach -->
-                <a href="demo.php" class="nav-btn-link" style="color: var(--text-gray); font-weight: 500; font-size: 0.95rem; text-decoration: none; transition: color 0.2s; margin-left: 16px;">Contact Sales</a>
+                <a href="demo.php" class="nav-btn-link nav-contact-link">Contact Sales</a>
             </div>
             
-            <div class="nav-cta" style="display: flex; gap: 12px; align-items: center;">
-                <a href="../super_admin/login.php" class="btn btn-outline" style="border: 1px solid #cbd5e1; color: #475569; border-radius: 8px; font-weight: 600; padding: 10px 20px;">Platform Login</a>
-                <a href="demo.php" class="btn btn-primary" style="border-radius: 8px;">Contact Us</a>       
+            <div class="nav-cta">
+                <a href="../super_admin/login.php" class="btn btn-login">Platform Login</a>
+                <a href="demo.php" class="btn btn-primary">Contact Us</a>
             </div>
         </div>
     </nav>
