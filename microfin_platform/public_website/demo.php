@@ -636,17 +636,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </a>
 
     <div class="demo-wrapper">
-        <!-- Brand -->
-        <div class="page-brand">
-            <div class="logo">
-                <span class="material-symbols-rounded">public</span>
-                <span class="logo-text">MicroFin</span>
-            </div>
-            <p>Contact our team for your institution</p>
-        </div>
+        <div class="demo-layout">
+            <aside class="demo-intro">
+                <div class="page-brand">
+                    <div class="logo">
+                        <span class="material-symbols-rounded">public</span>
+                        <span class="logo-text">MicroFin</span>
+                    </div>
+                    <p>Cloud core banking for modern MFIs</p>
+                </div>
+                <span class="intro-badge">
+                    <span class="material-symbols-rounded" style="font-size: 15px;">rocket_launch</span>
+                    Get Started
+                </span>
+                <h1 class="intro-title">Bring your institution online with confidence.</h1>
+                <p class="intro-sub">Complete this quick onboarding request and our team will start provisioning your isolated tenant environment.</p>
+                <ul class="intro-list">
+                    <li><span class="material-symbols-rounded">verified_user</span><span>Dedicated tenant isolation with strict data boundaries.</span></li>
+                    <li><span class="material-symbols-rounded">bolt</span><span>Rapid setup with guided onboarding and migration assistance.</span></li>
+                    <li><span class="material-symbols-rounded">support_agent</span><span>Hands-on support from implementation through go-live.</span></li>
+                </ul>
+                <p class="intro-note">Average review time for new demo requests is within 24 hours.</p>
+            </aside>
 
-        <!-- Form Card -->
-        <div class="demo-card">
+            <div class="demo-card">
             <?php if ($form_success): ?>
                 <div class="success-view">
                     <span class="material-symbols-rounded">check_circle</span>
@@ -708,7 +721,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Starter" required>
                                 <span class="plan-card-content">
                                     <span class="plan-name">Starter</span>
-                                    <span class="plan-meta">Up to 1,000 clients and 250 users | Php 4,999/mo</span>
+                                    <span class="plan-meta">
+                                        <span class="plan-capacity">Up to 1,000 clients and 250 users</span>
+                                        <span class="plan-price">Php 4,999/mo</span>
+                                    </span>
                                 </span>
                             </label>
 
@@ -716,7 +732,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Growth">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Growth</span>
-                                    <span class="plan-meta">Up to 2,500 clients and 750 users | Php 9,999/mo</span>
+                                    <span class="plan-meta">
+                                        <span class="plan-capacity">Up to 2,500 clients and 750 users</span>
+                                        <span class="plan-price">Php 9,999/mo</span>
+                                    </span>
                                 </span>
                             </label>
 
@@ -724,7 +743,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Pro">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Pro</span>
-                                    <span class="plan-meta">Up to 5,000 clients and 2,000 users | Php 14,999/mo</span>
+                                    <span class="plan-meta">
+                                        <span class="plan-capacity">Up to 5,000 clients and 2,000 users</span>
+                                        <span class="plan-price">Php 14,999/mo</span>
+                                    </span>
                                 </span>
                             </label>
 
@@ -732,7 +754,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Enterprise">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Enterprise</span>
-                                    <span class="plan-meta">Up to 10,000 clients and 5,000 users | Php 22,999/mo</span>
+                                    <span class="plan-meta">
+                                        <span class="plan-capacity">Up to 10,000 clients and 5,000 users</span>
+                                        <span class="plan-price">Php 22,999/mo</span>
+                                    </span>
                                 </span>
                             </label>
 
@@ -740,7 +765,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <input type="radio" name="plan_tier" value="Unlimited">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Unlimited</span>
-                                    <span class="plan-meta">Unlimited clients and users | Php 29,999/mo</span>
+                                    <span class="plan-meta">
+                                        <span class="plan-capacity">Unlimited clients and users</span>
+                                        <span class="plan-price">Php 29,999/mo</span>
+                                    </span>
                                 </span>
                             </label>
                         </div>
@@ -748,7 +776,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                     <div class="form-group">
                         <label>Business Email <span class="text-danger">*</span></label>
-                        <div style="display: flex; gap: 10px;">
+                        <div class="email-row">
                             <input type="email" class="input-field" name="company_email" id="work_email" placeholder="ceo@institution.com" required>
                             <button type="button" id="btn-send-otp" class="btn btn-outline" style="padding: 0 15px; white-space: nowrap;">Send OTP</button>
                         </div>
@@ -779,6 +807,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <small id="form-block-note" style="display: block; text-align: center; margin-top: 10px; color: #ef4444;">Verify your email to enable submission.</small>
                 </form>
             <?php endif; ?>
+            </div>
         </div>
     </div>
 
