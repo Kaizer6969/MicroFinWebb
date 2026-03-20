@@ -244,7 +244,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     <div class="timeline-dot">2</div>
                     <div class="timeline-content">
                         <h3>Instant Provisioning</h3>
-                        <p>Once approved, our Super Admins spin up your isolated database environment (Tenant ID) in seconds.</p>
+                        <p>Once approved, our Super Admins spin up your isolated database environment in seconds.</p>
                     </div>
                 </div>
                 <div class="timeline-item">
