@@ -24,7 +24,6 @@ USE microfin_db;
 -- ************************************************************
 -- ************************************************************
 
-
 -- ============================================================
 -- TABLE A1: tenants (Master tenant registry)
 -- ============================================================
@@ -75,8 +74,8 @@ CREATE TABLE IF NOT EXISTS tenants (
 
     -- Status
     status ENUM('Active', 'Draft', 'CONSIDER', 'Suspended', 'Archived', 'Deleted',
-                'Compromised', 'Demo Requested', 'Contacted', 'Accepted', 'Rejected')
-           DEFAULT 'Demo Requested',
+                'Compromised', 'Pending', 'Contacted', 'Accepted', 'Rejected')
+           DEFAULT 'Pending',
 
     -- ✅ EDITED: Soft delete columns
     deleted_at TIMESTAMP NULL COMMENT 'Soft delete timestamp, NULL = active',

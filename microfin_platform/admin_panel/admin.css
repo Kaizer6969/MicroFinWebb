@@ -126,6 +126,19 @@ body {
     gap: 4px;
 }
 
+.sidebar-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 10px 8px 6px;
+}
+
+.sidebar-section-title:first-child {
+    margin-top: 0;
+}
+
 .nav-item {
     display: flex;
     align-items: center;
@@ -833,6 +846,61 @@ input:checked + .slider:before {
     padding: 6px;
     border-radius: 8px;
     font-size: 20px;
+}
+
+/* Roles permissions toggles: isolate from generic toggle styles to prevent layout glitches. */
+.permissions-grid .toggle-list {
+    gap: 0;
+}
+
+.permissions-grid .toggle-item {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.permissions-grid .toggle-item:last-child {
+    border-bottom: none;
+}
+
+.permissions-grid .toggle-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.permissions-grid .toggle-info h4 {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.permissions-grid .toggle-info p {
+    margin: 0;
+    line-height: 1.45;
+}
+
+.permissions-grid .switch {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.permissions-grid .switch input:disabled + .slider,
+.permissions-grid .slider.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.permissions-grid .switch input:disabled + .slider:before,
+.permissions-grid .slider.disabled:before {
+    background-color: #f1f5f9;
+}
+
+[data-theme="dark"] .permissions-grid .switch input:disabled + .slider:before,
+[data-theme="dark"] .permissions-grid .slider.disabled:before {
+    background-color: #cbd5e1;
 }
 
 /* Modal specific permissions scroll container */

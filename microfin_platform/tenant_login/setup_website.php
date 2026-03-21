@@ -194,7 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hero_description,
             $hero_cta_text,
             $hero_cta_url,
-            '',
+            $hero_background_path,
             $about_heading,
             $about_body,
             '',
@@ -566,8 +566,8 @@ $e = function ($val) {
                         <h3>Live Preview</h3>
                         <p>See updates as you make changes to your content.</p>
                     </div>
-                    <div class="preview-canvas" id="previewContainer">
-                        <!-- Templates will be inserted here via JavaScript -->
+                    <div style="padding:0; height:600px; background:#f1f5f9;">
+                        <iframe id="previewContainer" style="width:100%; height:100%; border:none;"></iframe>
                     </div>
                 </aside>
             </div>
@@ -578,9 +578,77 @@ $e = function ($val) {
         var accentColor = '<?php echo $e($accent); ?>';
         var tenantName = '<?php echo $e($tenant_name); ?>';
 
+        // Preload the iframe document with Tailwind and Fonts so it doesn't flicker on typing
+        var iframeInited = false;
+        function initIframeDoc() {
+            var iframe = document.getElementById('previewContainer');
+            var docHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"><\/script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Public+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+    darkMode: "class",
+    theme: {
+        extend: {
+            colors: {
+                primary: "${accentColor}",
+                "primary-container": "${accentColor}33",
+                "on-primary": "#ffffff",
+                secondary: "#0ea5e9",
+                "secondary-container": "#0ea5e933",
+                surface: "#f8fafc",
+                "on-surface": "#0f172a",
+                "on-surface-variant": "#64748b",
+                "outline-variant": "#cbd5e1"
+            },
+            fontFamily: {
+                "headline": ["Manrope", "sans-serif"],
+                "body": ["Public Sans", "sans-serif"]
+            }
+        }
+    }
+};
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.html !== undefined) {
+        var bodyMsg = document.getElementById('preview-body-content');
+        if (bodyMsg) bodyMsg.innerHTML = e.data.html;
+    }
+});
+<\/script>
+<style>
+    body { font-family: 'Public Sans', sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 0; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="preview-body-content"></div>
+</body>
+</html>
+            `;
+            iframe.onload = function() {
+                if (iframeInited) {
+                    var html = window.lastGeneratedHtml || '';
+                    if (html) iframe.contentWindow.postMessage({ html: html }, '*');
+                }
+            };
+            iframe.srcdoc = docHtml;
+            iframeInited = true;
+        }
+
         function updatePreview() {
+            if (!iframeInited) initIframeDoc();
+
             var form = document.getElementById('websiteSetupForm');
-            var template = form.querySelector('input[name="layout_template"]:checked').value;
+            if (!form) return;
+            var templateEl = form.querySelector('input[name="layout_template"]:checked');
+            var template = templateEl ? templateEl.value : 'template1';
             var heroTitle = form.querySelector('input[name="hero_title"]').value || 'Welcome to ' + tenantName;
             var heroSubtitle = form.querySelector('input[name="hero_subtitle"]').value || 'Your trusted microfinance partner';
             var heroDesc = form.querySelector('textarea[name="hero_description"]').value;
@@ -603,123 +671,108 @@ $e = function ($val) {
 
             if (template === 'template1') {
                 html = generateTemplate1(heroTitle, heroSubtitle, heroDesc, aboutBody, contactPhone, contactEmail, contactAddr, contactHours, downloadTitle, downloadDesc, downloadBtn, showAbout, showServices, showContact, showDownload);
-            } else if (template === 'template2') {
-                html = generateTemplate2(heroTitle, heroSubtitle, heroDesc, aboutBody, contactPhone, contactEmail, contactAddr, contactHours, downloadTitle, downloadDesc, downloadBtn, showAbout, showServices, showContact, showDownload);
-            } else if (template === 'template3') {
-                html = generateTemplate3(heroTitle, heroSubtitle, heroDesc, aboutBody, contactPhone, contactEmail, contactAddr, contactHours, downloadTitle, downloadDesc, downloadBtn, showAbout, showServices, showContact, showDownload);
             }
 
-            var container = document.getElementById('previewContainer');
-            container.innerHTML = '';
-            container.className = 'preview-canvas template-' + template;
-            var frame = document.createElement('div');
-            frame.className = 'preview-frame';
-            frame.innerHTML = html;
-            container.appendChild(frame);
+            window.lastGeneratedHtml = html;
+            var iframe = document.getElementById('previewContainer');
+            if (iframe && iframe.contentWindow) {
+                // Post message to the iframe
+                iframe.contentWindow.postMessage({ html: html }, '*');
+            }
         }
 
         function generateTemplate1(title, subtitle, desc, about, phone, email, addr, hours, dlTitle, dlDesc, dlBtn, showAbout, showServices, showContact, showDownload) {
-            var html = '<div class="preview-header"><div class="preview-logo">' + tenantName + '</div><div class="preview-nav">';
-            if (showAbout) html += '<div class="preview-nav-item">About</div>';
-            if (showServices) html += '<div class="preview-nav-item">Services</div>';
-            if (showContact) html += '<div class="preview-nav-item">Contact</div>';
-            html += '</div></div><div class="preview-content">';
-            // Hero with image
-            html += '<div class="preview-hero"><div class="preview-hero-left">';
-            if (subtitle) html += '<span class="preview-hero-subtitle">' + subtitle + '</span>';
-            html += '<h4 class="preview-hero-title">' + title + '</h4>';
-            if (desc) html += '<p class="preview-hero-desc">' + desc + '</p>';
-            html += '<a class="preview-cta">Get Started →</a>';
-            html += '</div><div class="preview-hero-image"><div class="preview-stats-card"><div class="preview-stats-num">500+</div><div class="preview-stats-label">Members</div></div></div></div>';
-            // Steps
-            html += '<div class="preview-steps">';
-            html += '<div class="preview-step"><div class="preview-step-num">01</div><h6>Apply</h6><p>Quick online form</p></div>';
-            html += '<div class="preview-step"><div class="preview-step-num">02</div><h6>Review</h6><p>Fast decision</p></div>';
-            html += '<div class="preview-step"><div class="preview-step-num">03</div><h6>Funded</h6><p>Direct to account</p></div>';
-            html += '</div>';
-            // Cards
-            html += '<div class="preview-sections">';
-            if (showAbout) html += '<div class="preview-section-card"><h5>About Us</h5><p>' + (about || 'Our mission and impact in communities.') + '</p></div>';
-            if (showServices) html += '<div class="preview-section-card"><h5>Services</h5><p>Tailored loan products for every need.</p></div>';
-            if (showContact) html += '<div class="preview-section-card"><h5>Contact</h5><p>' + (phone ? phone : '') + (email ? '<br/>' + email : '') + '</p></div>';
-            html += '</div></div>';
-            html += '<div class="preview-footer"><div class="preview-footer-text">&copy; ' + new Date().getFullYear() + ' ' + tenantName + '. All rights reserved.</div></div>';
-            return html;
-        }
+            var html = `
+            <!-- Navbar -->
+            <nav class="sticky top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm">
+                <div class="flex justify-between items-center h-14 px-4 max-w-7xl mx-auto">
+                    <div class="text-base font-bold text-primary font-headline tracking-tight">${tenantName}</div>
+                    <div class="hidden sm:flex items-center space-x-4 text-xs font-headline font-semibold">
+                        ${showServices ? '<a class="text-on-surface-variant">Services</a>' : ''}
+                        ${showAbout ? '<a class="text-on-surface-variant">About Us</a>' : ''}
+                        ${showContact ? '<a class="text-on-surface-variant">Contact</a>' : ''}
+                    </div>
+                </div>
+            </nav>
 
-        function generateTemplate2(title, subtitle, desc, about, phone, email, addr, hours, dlTitle, dlDesc, dlBtn, showAbout, showServices, showContact, showDownload) {
-            var html = '<div class="preview-header"><div class="preview-logo">' + tenantName + '</div><div class="preview-nav">';
-            if (showAbout) html += '<div class="preview-nav-item">About</div>';
-            if (showServices) html += '<div class="preview-nav-item">Services</div>';
-            if (showContact) html += '<div class="preview-nav-item">Contact</div>';
-            html += '</div></div><div class="preview-content">';
-            // Editorial hero
-            html += '<div class="preview-hero">';
-            if (subtitle) html += '<p class="preview-hero-subtitle">' + subtitle + '</p>';
-            html += '<h4 class="preview-hero-title">' + title + '</h4>';
-            if (desc) html += '<p class="preview-hero-desc">' + desc + '</p>';
-            html += '<a class="preview-hero-cta">Learn More</a>';
-            html += '</div>';
-            // Narrative image
-            html += '<div class="preview-narrative-image">';
-            if (subtitle) html += '<div class="preview-narrative-badge">' + subtitle + '</div>';
-            html += '</div>';
-            // Bento cards
-            html += '<div class="preview-sections">';
-            var cardNum = 1;
-            if (showServices) { html += '<div class="preview-section-card"><div class="card-num">0' + cardNum + '</div><h5>Our Services</h5><p>Loan products designed for your growth.</p><span class="explore-link">Explore →</span></div>'; cardNum++; }
-            if (showAbout) { html += '<div class="preview-section-card"><div class="card-num">0' + cardNum + '</div><h5>About</h5><p>' + (about || 'Our commitment to empowerment.') + '</p><span class="explore-link">Explore →</span></div>'; cardNum++; }
-            if (showContact) { html += '<div class="preview-section-card"><div class="card-num">0' + cardNum + '</div><h5>Contact</h5><p>' + (phone ? phone : '') + (email ? '<br/>' + email : '') + '</p><span class="explore-link">Explore →</span></div>'; cardNum++; }
-            if (showDownload) { html += '<div class="preview-section-card"><div class="card-num">0' + cardNum + '</div><h5>' + dlTitle + '</h5><p>' + dlDesc + '</p><span class="explore-link">Explore →</span></div>'; }
-            html += '</div>';
-            // Quote
-            if (showAbout && about) {
-                html += '<div class="preview-quote"><blockquote>"' + about + '"</blockquote><cite>— ' + tenantName + '</cite></div>';
-            }
-            // Stats
-            html += '<div class="preview-stats"><div class="preview-stat"><div class="preview-stat-num">500+</div><div class="preview-stat-label">Active Members</div></div><div class="preview-stat"><div class="preview-stat-num">1,200+</div><div class="preview-stat-label">Loans Funded</div></div></div>';
-            html += '</div>';
-            html += '<div class="preview-footer"><div class="preview-footer-text">&copy; ' + new Date().getFullYear() + ' ' + tenantName + '</div></div>';
-            return html;
-        }
+            <!-- Hero -->
+            <header class="relative overflow-hidden pt-8 pb-12 px-4 max-w-7xl mx-auto">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        ${subtitle ? `<div class="inline-flex items-center px-2 py-1 rounded-full bg-secondary-container text-secondary text-[10px] font-bold mb-4 tracking-wider uppercase">${subtitle}</div>` : ''}
+                        <h1 class="text-3xl font-extrabold text-primary leading-tight mb-4 tracking-tight">${title.replace(/\n/g, '<br>')}</h1>
+                        ${desc ? `<p class="text-sm text-on-surface-variant mb-6">${desc}</p>` : ''}
+                        <div class="flex gap-2">
+                            <span class="bg-primary text-on-primary px-4 py-2 rounded font-bold text-sm shadow">Get Started</span>
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <div class="bg-primary-container rounded-xl aspect-[4/5] overflow-hidden relative shadow-lg flex items-center justify-center">
+                            <span class="material-symbols-outlined text-primary/20" style="font-size: 80px;">account_balance</span>
+                            <div class="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur p-3 rounded shadow-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-white"><span class="material-symbols-outlined text-sm">verified_user</span></div>
+                                    <div>
+                                        <div class="text-xs font-bold text-primary">500+ Members</div>
+                                        <div class="text-[10px] text-on-surface-variant">Loans Funded</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
 
-        function generateTemplate3(title, subtitle, desc, about, phone, email, addr, hours, dlTitle, dlDesc, dlBtn, showAbout, showServices, showContact, showDownload) {
-            var html = '<div class="preview-header"><div class="preview-logo">' + tenantName + '</div><div class="preview-nav">';
-            if (showAbout) html += '<div class="preview-nav-item">About</div>';
-            if (showServices) html += '<div class="preview-nav-item">Features</div>';
-            if (showContact) html += '<div class="preview-nav-item">Contact</div>';
-            html += '<div class="preview-cta-btn">' + dlBtn + ' ⚡</div>';
-            html += '</div></div><div class="preview-content">';
-            // Hero with image + floating cards
-            html += '<div class="preview-hero"><div class="preview-hero-left">';
-            if (subtitle) html += '<span class="preview-hero-subtitle">' + subtitle + '</span>';
-            html += '<h4 class="preview-hero-title">' + title + '</h4>';
-            if (desc) html += '<p class="preview-hero-desc">' + desc + '</p>';
-            html += '<div class="preview-hero-actions"><a class="preview-cta">Get Started →</a>';
-            if (showAbout) html += '<a class="preview-cta-secondary">Learn More</a>';
-            html += '</div>';
-            html += '</div><div class="preview-hero-image"><div class="preview-float-card top-right">✓ 500+</div><div class="preview-float-card bottom-left">📈 Growing</div></div></div>';
-            // Bento features
-            html += '<div class="preview-sections">';
-            if (showServices) html += '<div class="preview-section-card"><h5>🎯 Our Services</h5><p>Fast processing, flexible terms, expert support for every borrower.</p></div>';
-            if (showAbout) html += '<div class="preview-section-card"><h5>💡 About Us</h5><p>' + (about || 'Empowering growth through accessible finance.') + '</p></div>';
-            if (showContact) html += '<div class="preview-section-card"><h5>📍 Contact</h5><p>' + (phone ? phone : '') + (email ? '<br/>' + email : '') + '</p></div>';
-            if (showDownload) html += '<div class="preview-section-card"><h5>📱 ' + dlTitle + '</h5><p>' + dlDesc + '</p></div>';
-            html += '</div>';
-            // Journey steps
-            html += '<div class="preview-journey">';
-            html += '<div class="preview-journey-step"><div class="preview-journey-num">01</div><h6>Apply</h6><p>From any device</p></div>';
-            html += '<div class="preview-journey-step"><div class="preview-journey-num">02</div><h6>Approved</h6><p>Quick review</p></div>';
-            html += '<div class="preview-journey-step"><div class="preview-journey-num">03</div><h6>Funded</h6><p>Direct deposit</p></div>';
-            html += '</div>';
-            html += '</div>';
-            html += '<div class="preview-footer"><div class="preview-footer-text">&copy; ' + new Date().getFullYear() + ' ' + tenantName + '. All rights reserved.</div></div>';
+            <!-- Services Placeholder (Simulated) -->
+            ${showServices ? `
+            <section class="py-10 px-4 max-w-7xl mx-auto bg-white border-t border-outline-variant/30">
+                <span class="text-secondary font-bold text-[10px] tracking-widest uppercase mb-4 block">Our Services</span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="bg-surface p-4 rounded-lg">
+                        <h3 class="font-bold text-primary text-sm mb-2">Personal Loans</h3>
+                        <p class="text-xs text-on-surface-variant">Flexible terms for your personal needs.</p>
+                    </div>
+                    <div class="bg-surface p-4 rounded-lg">
+                        <h3 class="font-bold text-primary text-sm mb-2">Business Loans</h3>
+                        <p class="text-xs text-on-surface-variant">Grow your enterprise with us.</p>
+                    </div>
+                </div>
+            </section>
+            ` : ''}
+
+            <!-- About Us -->
+            ${showAbout ? `
+            <section class="py-10 px-4 max-w-7xl mx-auto bg-primary text-white rounded-lg my-4 mx-4">
+                <span class="text-white/70 font-bold text-[10px] tracking-widest uppercase mb-2 block">About Us</span>
+                <p class="font-headline font-bold text-base">${about ? about.replace(/\n/g, '<br>') : 'Our commitment to empowerment and community growth.'}</p>
+            </section>
+            ` : ''}
+
+            <!-- Footer -->
+            ${showContact ? `
+            <footer class="bg-white border-t border-outline-variant/30 py-8 px-4 mt-8">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <div class="text-sm font-bold text-primary mb-2">${tenantName}</div>
+                        <p class="text-[10px] text-on-surface-variant max-w-xs">Your trusted partner in financial growth.</p>
+                    </div>
+                    <div class="flex flex-col space-y-1 text-xs text-on-surface-variant">
+                        <span class="font-bold text-primary">Contact</span>
+                        ${phone ? `<p>${phone}</p>` : ''}
+                        ${email ? `<p>${email}</p>` : ''}
+                        ${addr ? `<p>${addr}</p>` : ''}
+                        ${hours ? `<p>${hours}</p>` : ''}
+                    </div>
+                </div>
+            </footer>
+            ` : ''}
+            `;
             return html;
         }
 
         // Initialize preview on page load
         document.addEventListener('DOMContentLoaded', function() {
-            updatePreview();
+            setTimeout(updatePreview, 100);
         });
     </script>
 </body>

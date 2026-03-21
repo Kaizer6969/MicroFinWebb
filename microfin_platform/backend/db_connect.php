@@ -33,6 +33,23 @@ try {
     // This keeps older databases compatible without a manual migration step.
     try {
         $pdo->exec("\n            CREATE TABLE IF NOT EXISTS tenant_website_content (\n                tenant_id VARCHAR(50) PRIMARY KEY,\n                layout_template ENUM('template1', 'template2', 'template3') DEFAULT 'template1',\n                hero_title VARCHAR(255) NULL,\n                hero_subtitle VARCHAR(255) NULL,\n                hero_description TEXT NULL,\n                hero_cta_text VARCHAR(100) DEFAULT 'Learn More',\n                hero_cta_url VARCHAR(255) DEFAULT '#about',\n                hero_image_path VARCHAR(500) NULL,\n                about_heading VARCHAR(255) DEFAULT 'About Us',\n                about_body TEXT NULL,\n                about_image_path VARCHAR(500) NULL,\n                services_heading VARCHAR(255) DEFAULT 'Our Services',\n                services_json LONGTEXT NULL,\n                contact_address TEXT NULL,\n                contact_phone VARCHAR(100) NULL,\n                contact_email VARCHAR(255) NULL,\n                contact_hours VARCHAR(255) NULL,\n                custom_css LONGTEXT NULL,\n                meta_description VARCHAR(255) NULL,\n                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n                CONSTRAINT fk_tenant_website_content_tenant\n                    FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE\n            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4\n        ");
+
+        // Add newer content columns used by the Website Editor publish workflow.
+        $websiteContentColumnMigrations = [
+            "ALTER TABLE tenant_website_content ADD COLUMN hero_badge_text VARCHAR(255) NULL AFTER hero_image_path",
+            "ALTER TABLE tenant_website_content ADD COLUMN stats_json LONGTEXT NULL AFTER services_json",
+            "ALTER TABLE tenant_website_content ADD COLUMN stats_heading VARCHAR(255) NULL AFTER stats_json",
+            "ALTER TABLE tenant_website_content ADD COLUMN stats_subheading VARCHAR(255) NULL AFTER stats_heading",
+            "ALTER TABLE tenant_website_content ADD COLUMN stats_image_path VARCHAR(500) NULL AFTER stats_subheading",
+            "ALTER TABLE tenant_website_content ADD COLUMN footer_description TEXT NULL AFTER contact_hours"
+        ];
+        foreach ($websiteContentColumnMigrations as $migrationSql) {
+            try {
+                $pdo->exec($migrationSql);
+            } catch (\PDOException $columnError) {
+                // Column already exists or DB flavor differs; safe to ignore.
+            }
+        }
     } catch (\PDOException $migrationError) {
         error_log('Schema guard warning (tenant_website_content): ' . $migrationError->getMessage());
     }

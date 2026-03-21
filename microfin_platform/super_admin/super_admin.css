@@ -855,8 +855,16 @@ input:checked + .slider:before { transform: translateX(22px); }
     gap: 24px;
 }
 
+.dashboard-charts-col {
+    min-width: 0;
+}
+
 .dashboard-charts-col .charts-grid {
     margin-bottom: 0;
+}
+
+.dashboard-sidebar-col {
+    min-width: 0;
 }
 
 .dashboard-sidebar-col .card:last-child {

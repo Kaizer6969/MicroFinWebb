@@ -202,6 +202,7 @@ $website_settings = [
     'website_download_url' => '',
     'website_hero_background' => '',
     'website_show_stats' => '1',
+    'website_stats_auto' => '1',
     'website_show_loan_calc' => '1',
     'website_show_partners' => '0',
     'website_partners_json' => '[]'
@@ -221,6 +222,7 @@ $settings_stmt = $pdo->prepare("
         'website_download_url',
         'website_hero_background',
         'website_show_stats',
+        'website_stats_auto',
         'website_show_loan_calc',
         'website_show_partners',
         'website_partners_json'
@@ -238,6 +240,7 @@ $show_services = settingAsBool($website_settings['website_show_services'], true)
 $show_contact = settingAsBool($website_settings['website_show_contact'], true);
 $show_download = settingAsBool($website_settings['website_show_download'], true);
 $show_stats = settingAsBool($website_settings['website_show_stats'], true);
+$stats_auto = settingAsBool($website_settings['website_stats_auto'], true);
 $show_loan_calc = settingAsBool($website_settings['website_show_loan_calc'], true);
 $show_partners = settingAsBool($website_settings['website_show_partners'], false);
 $partners = json_decode($website_settings['website_partners_json'] ?? '[]', true) ?: [];
@@ -256,6 +259,26 @@ $total_clients = (int)$stats_stmt->fetchColumn();
 $stats_loans_stmt = $pdo->prepare("SELECT COUNT(*) as total_loans FROM loans WHERE tenant_id = ? AND loan_status = 'Active'");
 $stats_loans_stmt->execute([$data['tenant_id']]);
 $total_loans = (int)$stats_loans_stmt->fetchColumn();
+
+if ($stats_auto) {
+    $active_staff_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_id = ? AND user_type = 'Employee' AND status = 'Active'");
+    $active_staff_stmt->execute([$data['tenant_id']]);
+    $total_staff = (int)$active_staff_stmt->fetchColumn();
+
+    $stats = [
+        ['value' => number_format($total_clients) . '+', 'label' => 'Active Clients'],
+        ['value' => number_format($total_loans) . '+', 'label' => 'Active Loans'],
+        ['value' => number_format($total_staff) . '+', 'label' => 'Active Staff'],
+        ['value' => date('Y'), 'label' => 'Serving Since']
+    ];
+
+    if (trim((string)$stats_heading) === '') {
+        $stats_heading = 'Building Trust Through Numbers';
+    }
+    if (trim((string)$stats_subheading) === '') {
+        $stats_subheading = 'Updated automatically from your live platform activity';
+    }
+}
 
 $show_download_section = $show_download && $download_url !== '';
 

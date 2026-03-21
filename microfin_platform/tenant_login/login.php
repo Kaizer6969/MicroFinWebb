@@ -103,6 +103,9 @@ if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_type'] = $user['user_type'];
             $_SESSION['theme'] = $tenant['theme_primary_color'] ?: '#0f172a';
             $_SESSION['ui_theme'] = (($user['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
+
+            $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, description) VALUES (?, ?, 'STAFF_LOGIN', 'user', 'Staff logged into the system')")->execute([$user['user_id'], $tenant['tenant_id']]);
+
             if ($user['user_type'] === 'Employee') {
                 // Differentiate Admin vs Staff based on is_system_role or role_name
                 $is_admin = ((bool)$user['is_system_role'] || stripos($user['role_name'], 'Admin') !== false);

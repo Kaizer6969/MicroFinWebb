@@ -38,7 +38,7 @@ try {
             $stmt = $pdo->query("SELECT COALESCE(SUM(mrr), 0) AS total_mrr FROM tenants WHERE status = 'Active' AND deleted_at IS NULL");
             $data['total_mrr'] = number_format((float) $stmt->fetch(PDO::FETCH_ASSOC)['total_mrr'], 2);
 
-            $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE status IN ('Demo Requested', 'Contacted') AND deleted_at IS NULL");
+            $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE status IN ('Pending', 'Contacted') AND deleted_at IS NULL");
             $data['pending_applications'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
 
             // Chart: User growth (last 12 months)
@@ -54,8 +54,8 @@ try {
             $stmt = $pdo->query("
                 SELECT DATE_FORMAT(created_at, '%Y-%m') AS month,
                     SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) AS active_count,
-                    SUM(CASE WHEN status IN ('Draft', 'CONSIDER', 'Demo Requested', 'Contacted', 'Accepted', 'Rejected') THEN 1 ELSE 0 END) AS pending_count,
-                    SUM(CASE WHEN status NOT IN ('Active', 'Draft', 'CONSIDER', 'Demo Requested', 'Contacted', 'Accepted', 'Rejected') THEN 1 ELSE 0 END) AS inactive_count
+                    SUM(CASE WHEN status IN ('Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'Rejected') THEN 1 ELSE 0 END) AS pending_count,
+                    SUM(CASE WHEN status NOT IN ('Active', 'Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'Rejected') THEN 1 ELSE 0 END) AS inactive_count
                 FROM tenants
                 WHERE deleted_at IS NULL
                 GROUP BY month ORDER BY month ASC
@@ -89,13 +89,13 @@ try {
                 SELECT t.tenant_id, t.tenant_name, t.status, t.plan_tier, t.created_at,
                     CASE
                         WHEN t.status = 'Active' THEN 'Active'
-                        WHEN t.status IN ('Draft', 'CONSIDER', 'Demo Requested', 'Contacted', 'Accepted', 'Rejected') THEN 'Pending Application'
+                        WHEN t.status IN ('Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'Rejected') THEN 'Pending Application'
                         ELSE 'Inactive'
                     END AS status_legend
                 FROM tenants t
                 WHERE t.deleted_at IS NULL
                   AND t.created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
-                  AND t.status NOT IN ('Draft', 'CONSIDER', 'Demo Requested', 'Contacted', 'Accepted', 'Rejected')
+                  AND t.status NOT IN ('Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'Rejected')
             ";
             $params = [$date_from, $date_to];
             if ($tenant_id !== '') {
@@ -202,7 +202,7 @@ try {
                 FROM audit_logs al
                 LEFT JOIN users u ON al.user_id = u.user_id
                 LEFT JOIN tenants t ON al.tenant_id = t.tenant_id
-                WHERE 1=1
+                WHERE al.action_type IN ('WEBSITE_SETUP', 'LOAN_PRODUCT_SETUP', 'CREDIT_CONFIG_SETUP', 'BRANDING_SETUP', 'BILLING_SETUP', 'TENANT_PROVISIONED', 'SETUP_COMPLETED', 'TENANT_STATUS_CHANGE', 'TENANT_REJECTED', 'TENANT_SLUG_UPDATED', 'DATA_MIGRATION_REQUIRED', 'SUBSCRIPTION_UPDATED', 'BILLING_PAID')
             ";
             $params = [];
 

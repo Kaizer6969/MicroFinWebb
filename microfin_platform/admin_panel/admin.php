@@ -17,7 +17,8 @@ require_once '../backend/db_connect.php';
 
 $tenant_id = $_SESSION['tenant_id'];
 $tenant_name = $_SESSION['tenant_name'] ?? 'Company Admin';
-$role_name = $_SESSION['role'] ?? 'User';
+$role_name = $_SESSION['role_name'] ?? ($_SESSION['role'] ?? 'User');
+$is_admin_account = strcasecmp($role_name, 'Admin') === 0;
 $ui_theme = (($_SESSION['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
 
 // Check if user still needs to change their password (e.g. closed browser during force change)
@@ -159,6 +160,197 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 }
 
 // ==========================================
+// POST Handler — Update Subscription Plan
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_subscription_plan') {
+    if ($is_admin_account) {
+        $new_plan = trim($_POST['new_plan'] ?? '');
+        $plan_aliases = [
+            'Professional' => 'Pro',
+            'Elite' => 'Enterprise'
+        ];
+        if (isset($plan_aliases[$new_plan])) {
+            $new_plan = $plan_aliases[$new_plan];
+        }
+        $valid_plans = [
+            'Starter' => ['max_clients' => 1000, 'max_users' => 250],
+            'Growth' => ['max_clients' => 2500, 'max_users' => 750],
+            'Pro' => ['max_clients' => 5000, 'max_users' => 2000],
+            'Enterprise' => ['max_clients' => 10000, 'max_users' => 5000],
+            'Unlimited' => ['max_clients' => -1, 'max_users' => -1]
+        ];
+        
+        if (array_key_exists($new_plan, $valid_plans)) {
+            $max_clients = (int)$valid_plans[$new_plan]['max_clients'];
+            $max_users = (int)$valid_plans[$new_plan]['max_users'];
+            
+            $upd = $pdo->prepare("UPDATE tenants SET plan_tier = ?, max_clients = ?, max_users = ? WHERE tenant_id = ?");
+            $upd->execute([$new_plan, $max_clients, $max_users, $tenant_id]);
+            
+            $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_UPDATE', ?, ?)");
+            $log_stmt->execute([$tenant_id, $_SESSION['user_id'], "Subscription plan updated to $new_plan", $_SERVER['REMOTE_ADDR'] ?? '']);
+            
+            $_SESSION['admin_flash'] = "Subscription plan successfully updated to $new_plan.";
+        } else {
+            $_SESSION['admin_flash'] = "Invalid plan selected.";
+        }
+    } else {
+        $_SESSION['admin_flash'] = "You do not have permission to change the billing plan.";
+    }
+    header("Location: admin.php?tab=billing");
+    exit;
+}
+
+// ==========================================
+// POST Handler — Update Payment Method
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_payment_method') {
+    if (!$is_admin_account) {
+        $_SESSION['admin_flash'] = 'You do not have permission to edit payment methods.';
+        header('Location: admin.php?tab=billing');
+        exit;
+    }
+
+    $method_id = (int)($_POST['method_id'] ?? 0);
+    $cardholder_name = trim($_POST['cardholder_name'] ?? '');
+    $exp_month = (int)($_POST['exp_month'] ?? 0);
+    $exp_year = (int)($_POST['exp_year'] ?? 0);
+    $set_default = isset($_POST['is_default']) ? 1 : 0;
+
+    if ($method_id <= 0 || $cardholder_name === '' || $exp_month < 1 || $exp_month > 12 || $exp_year < (int)date('Y')) {
+        $_SESSION['admin_flash'] = 'Please provide valid payment method details.';
+        header('Location: admin.php?tab=billing');
+        exit;
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $existing_stmt = $pdo->prepare('SELECT method_id FROM tenant_billing_payment_methods WHERE method_id = ? AND tenant_id = ? LIMIT 1');
+        $existing_stmt->execute([$method_id, $tenant_id]);
+        if (!$existing_stmt->fetch(PDO::FETCH_ASSOC)) {
+            throw new Exception('Payment method not found.');
+        }
+
+        $update_stmt = $pdo->prepare('UPDATE tenant_billing_payment_methods SET cardholder_name = ?, exp_month = ?, exp_year = ? WHERE method_id = ? AND tenant_id = ?');
+        $update_stmt->execute([$cardholder_name, $exp_month, $exp_year, $method_id, $tenant_id]);
+
+        if ($set_default === 1) {
+            $pdo->prepare('UPDATE tenant_billing_payment_methods SET is_default = 0 WHERE tenant_id = ?')->execute([$tenant_id]);
+            $pdo->prepare('UPDATE tenant_billing_payment_methods SET is_default = 1 WHERE method_id = ? AND tenant_id = ?')->execute([$method_id, $tenant_id]);
+        } else {
+            $default_count_stmt = $pdo->prepare('SELECT COUNT(*) FROM tenant_billing_payment_methods WHERE tenant_id = ? AND is_default = 1');
+            $default_count_stmt->execute([$tenant_id]);
+            if ((int)$default_count_stmt->fetchColumn() === 0) {
+                $pdo->prepare('UPDATE tenant_billing_payment_methods SET is_default = 1 WHERE method_id = ? AND tenant_id = ?')->execute([$method_id, $tenant_id]);
+            }
+        }
+
+        $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'PAYMENT_METHOD_UPDATED', ?, ?)");
+        $log_stmt->execute([$tenant_id, $_SESSION['user_id'] ?? null, 'Payment method details were updated.', $_SERVER['REMOTE_ADDR'] ?? '']);
+
+        $pdo->commit();
+        $_SESSION['admin_flash'] = 'Payment method updated successfully.';
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $_SESSION['admin_flash'] = $e->getMessage();
+    }
+
+    header('Location: admin.php?tab=billing');
+    exit;
+}
+
+// ==========================================
+// POST Handler — Delete Payment Method
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_payment_method') {
+    if (!$is_admin_account) {
+        $_SESSION['admin_flash'] = 'You do not have permission to edit payment methods.';
+        header('Location: admin.php?tab=billing');
+        exit;
+    }
+
+    $method_id = (int)($_POST['method_id'] ?? 0);
+    if ($method_id <= 0) {
+        $_SESSION['admin_flash'] = 'Invalid payment method selected.';
+        header('Location: admin.php?tab=billing');
+        exit;
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $count_stmt = $pdo->prepare('SELECT COUNT(*) FROM tenant_billing_payment_methods WHERE tenant_id = ?');
+        $count_stmt->execute([$tenant_id]);
+        $method_count = (int)$count_stmt->fetchColumn();
+        if ($method_count <= 1) {
+            throw new Exception('At least one payment method is required. You cannot remove the last one.');
+        }
+
+        $delete_stmt = $pdo->prepare('DELETE FROM tenant_billing_payment_methods WHERE method_id = ? AND tenant_id = ?');
+        $delete_stmt->execute([$method_id, $tenant_id]);
+        if ($delete_stmt->rowCount() === 0) {
+            throw new Exception('Payment method not found.');
+        }
+
+        $default_count_stmt = $pdo->prepare('SELECT COUNT(*) FROM tenant_billing_payment_methods WHERE tenant_id = ? AND is_default = 1');
+        $default_count_stmt->execute([$tenant_id]);
+        if ((int)$default_count_stmt->fetchColumn() === 0) {
+            $fallback_stmt = $pdo->prepare('SELECT method_id FROM tenant_billing_payment_methods WHERE tenant_id = ? ORDER BY created_at ASC LIMIT 1');
+            $fallback_stmt->execute([$tenant_id]);
+            $fallback_id = (int)$fallback_stmt->fetchColumn();
+            if ($fallback_id > 0) {
+                $pdo->prepare('UPDATE tenant_billing_payment_methods SET is_default = 1 WHERE method_id = ? AND tenant_id = ?')->execute([$fallback_id, $tenant_id]);
+            }
+        }
+
+        $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'PAYMENT_METHOD_DELETED', ?, ?)");
+        $log_stmt->execute([$tenant_id, $_SESSION['user_id'] ?? null, 'A payment method was removed from billing settings.', $_SERVER['REMOTE_ADDR'] ?? '']);
+
+        $pdo->commit();
+        $_SESSION['admin_flash'] = 'Payment method removed successfully.';
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $_SESSION['admin_flash'] = $e->getMessage();
+    }
+
+    header('Location: admin.php?tab=billing');
+    exit;
+}
+
+// ==========================================
+// POST Handler — Update Personal Profile
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_personal_profile') {
+    $uid = $_SESSION['user_id'] ?? null;
+    if ($uid) {
+        $pf = trim($_POST['personal_first_name'] ?? '');
+        $pl = trim($_POST['personal_last_name'] ?? '');
+        $pe = trim($_POST['personal_email'] ?? '');
+        $pp = $_POST['personal_password'] ?? '';
+        
+        $pdo->prepare('UPDATE employees SET first_name = ?, last_name = ? WHERE user_id = ? AND tenant_id = ?')->execute([$pf, $pl, $uid, $tenant_id]);
+        $pdo->prepare('UPDATE users SET email = ? WHERE user_id = ?')->execute([$pe, $uid]);
+        
+        if ($pp !== '') {
+            $hash = password_hash($pp, PASSWORD_DEFAULT);
+            $pdo->prepare('UPDATE users SET password_hash = ? WHERE user_id = ?')->execute([$hash, $uid]);
+        }
+        
+        $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'PROFILE_UPDATE', ?, ?)");
+        $log_stmt->execute([$tenant_id, $uid, "User updated their personal profile.", $_SERVER['REMOTE_ADDR'] ?? '']);
+        
+        $_SESSION['admin_flash'] = "Personal profile updated successfully.";
+    }
+    header("Location: admin.php?tab=personal");
+    exit;
+}
+
+// ==========================================
 // POST Handler — Save Website Content
 // ==========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_website_content') {
@@ -169,7 +361,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $hero_description = trim($_POST['hero_description'] ?? '');
     $hero_cta_text    = trim($_POST['hero_cta_text'] ?? 'Learn More');
     $hero_cta_url     = trim($_POST['hero_cta_url'] ?? '#about');
-    $hero_image_path  = trim($_POST['hero_image_path'] ?? '');
+    // Fetch existing image path to fall back on if no new image is uploaded
+    $existing_h_stmt = $pdo->prepare("SELECT hero_image_path FROM tenant_website_content WHERE tenant_id = ?");
+    $existing_h_stmt->execute([$tenant_id]);
+    $hero_image_path = $existing_h_stmt->fetchColumn() ?: '';
+
+    if (isset($_FILES['hero_background']) && (int) $_FILES['hero_background']['error'] === UPLOAD_ERR_OK) {
+        $original_name = $_FILES['hero_background']['name'];
+        $tmp_name = $_FILES['hero_background']['tmp_name'];
+        $size_bytes = (int) $_FILES['hero_background']['size'];
+        $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+        $allowed = ['jpg', 'jpeg', 'png', 'webp'];
+        if (in_array($extension, $allowed, true) && $size_bytes <= (3 * 1024 * 1024)) {
+            $upload_dir = __DIR__ . '/../uploads/tenant_logos';
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0775, true);
+            $safe_tenant = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenant_id);
+            $new_name = $safe_tenant . '_bg_' . time() . '.' . $extension;
+            if (move_uploaded_file($tmp_name, $upload_dir . '/' . $new_name)) {
+                $app_path = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
+                $hero_image_path = ($app_path === '' ? '/' : $app_path) . '/uploads/tenant_logos/' . $new_name;
+            }
+        }
+    }
+
     $hero_badge_text  = trim($_POST['hero_badge_text'] ?? '');
 
     $about_heading    = trim($_POST['about_heading'] ?? 'About Us');
@@ -198,6 +412,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $stats_heading = trim($_POST['stats_heading'] ?? '');
     $stats_subheading = trim($_POST['stats_subheading'] ?? '');
     $stats_image_path = trim($_POST['stats_image_path'] ?? '');
+    $stats_auto_mode = isset($_POST['website_stats_auto']) ? '1' : '0';
     $stat_values = $_POST['stat_value'] ?? [];
     $stat_labels = $_POST['stat_label'] ?? [];
     $stats_arr = [];
@@ -211,6 +426,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             }
         }
     }
+
+    if ($stats_auto_mode === '1') {
+        $active_clients_stmt = $pdo->prepare("SELECT COUNT(*) FROM clients WHERE tenant_id = ? AND client_status = 'Active'");
+        $active_clients_stmt->execute([$tenant_id]);
+        $active_clients = (int)$active_clients_stmt->fetchColumn();
+
+        $active_loans_stmt = $pdo->prepare("SELECT COUNT(*) FROM loans WHERE tenant_id = ? AND loan_status = 'Active'");
+        $active_loans_stmt->execute([$tenant_id]);
+        $active_loans = (int)$active_loans_stmt->fetchColumn();
+
+        $active_staff_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_id = ? AND user_type = 'Employee' AND status = 'Active'");
+        $active_staff_stmt->execute([$tenant_id]);
+        $active_staff = (int)$active_staff_stmt->fetchColumn();
+
+        $stats_arr = [
+            ['value' => number_format($active_clients) . '+', 'label' => 'Active Clients'],
+            ['value' => number_format($active_loans) . '+', 'label' => 'Active Loans'],
+            ['value' => number_format($active_staff) . '+', 'label' => 'Active Staff'],
+            ['value' => date('Y'), 'label' => 'Serving Since']
+        ];
+    }
+
     $stats_json = json_encode($stats_arr, JSON_UNESCAPED_UNICODE);
 
     $contact_address  = trim($_POST['contact_address'] ?? '');
@@ -227,6 +464,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'website_show_contact' => isset($_POST['website_show_contact']) ? '1' : '0',
         'website_show_download' => isset($_POST['website_show_download']) ? '1' : '0',
         'website_show_stats' => isset($_POST['website_show_stats']) ? '1' : '0',
+        'website_stats_auto' => $stats_auto_mode,
         'website_show_loan_calc' => isset($_POST['website_show_loan_calc']) ? '1' : '0',
         'website_show_partners' => isset($_POST['website_show_partners']) ? '1' : '0',
         'website_partners_json' => trim($_POST['website_partners_json'] ?? '[]'),
@@ -272,7 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $footer_description, $custom_css, $meta_description
     ]);
 
-    $boolean_setting_keys = ['website_show_about', 'website_show_services', 'website_show_contact', 'website_show_download', 'website_show_stats', 'website_show_loan_calc', 'website_show_partners'];
+    $boolean_setting_keys = ['website_show_about', 'website_show_services', 'website_show_contact', 'website_show_download', 'website_show_stats', 'website_stats_auto', 'website_show_loan_calc', 'website_show_partners'];
     $setting_upsert = $pdo->prepare('
         INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type)
         VALUES (?, ?, ?, ?, ?)
@@ -339,6 +577,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($action === 'create_role') {
             $role_name = trim($_POST['role_name'] ?? '');
             $initial_perms = $_POST['initial_permissions'] ?? [];
+            if (is_array($initial_perms)) {
+                $initial_perms = array_values(array_filter($initial_perms, function ($code) {
+                    return $code !== 'EDIT_BILLING';
+                }));
+            }
 
             if (empty($role_name)) {
                 throw new Exception('Role name is required.');
@@ -398,6 +641,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $check->execute([$role_id, $tenant_id]);
             if ($check->fetchColumn() == 0) throw new Exception('Invalid role.');
 
+            $role_meta_stmt = $pdo->prepare('SELECT role_name, is_system_role FROM user_roles WHERE role_id = ? AND tenant_id = ? LIMIT 1');
+            $role_meta_stmt->execute([$role_id, $tenant_id]);
+            $role_meta = $role_meta_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $is_target_admin_role = ((int)($role_meta['is_system_role'] ?? 0) === 1 && (($role_meta['role_name'] ?? '') === 'Admin'));
+            if (!$is_target_admin_role && is_array($permissions)) {
+                $permissions = array_values(array_filter($permissions, function ($code) {
+                    return $code !== 'EDIT_BILLING';
+                }));
+            }
+
             // Check for duplicate permissions before updating
             $duplicate_role_name = check_duplicate_permissions($pdo, $tenant_id, $permissions, $role_id);
             if ($duplicate_role_name) {
@@ -430,6 +683,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if (empty($target_user_id)) throw new Exception('Invalid user.');
             $s = $pdo->prepare('UPDATE users SET status = ? WHERE user_id = ? AND tenant_id = ? AND user_type = \'Employee\'');
             $s->execute([$new_status, $target_user_id, $tenant_id]);
+            
+            $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'STAFF_STATUS_CHANGE', 'user', ?, ?)")->execute([$_SESSION['user_id'] ?? null, "Staff account status changed to $new_status", $tenant_id]);
+            
             $_SESSION['admin_flash'] = "Staff status updated to $new_status.";
             header('Location: admin.php?tab=staff-list');
             exit;
@@ -462,6 +718,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 ->execute([$email, $role_id, $status, $target_user_id, $tenant_id]);
             $pdo->prepare('UPDATE employees SET first_name = ?, last_name = ? WHERE user_id = ? AND tenant_id = ?')
                 ->execute([$first_name, $last_name, $target_user_id, $tenant_id]);
+            
+            $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'STAFF_UPDATED', 'user', ?, ?)")->execute([$_SESSION['user_id'] ?? null, "Staff account updated for $first_name $last_name", $tenant_id]);
+            
             $pdo->commit();
 
             $_SESSION['admin_flash'] = 'Staff account updated successfully.';
@@ -475,6 +734,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $email = trim($_POST['email'] ?? '');
             $role_id = (int)($_POST['role_id'] ?? 0);
             $status = $_POST['status'] ?? 'Active';
+            $create_as_admin = isset($_POST['create_as_admin']) && $_POST['create_as_admin'] === '1';
+
+            if ($create_as_admin) {
+                $admin_role_stmt = $pdo->prepare("SELECT role_id FROM user_roles WHERE tenant_id = ? AND role_name = 'Admin' LIMIT 1");
+                $admin_role_stmt->execute([$tenant_id]);
+                $admin_role_id = (int)$admin_role_stmt->fetchColumn();
+                if ($admin_role_id <= 0) {
+                    throw new Exception('Admin role could not be found for this tenant.');
+                }
+                $role_id = $admin_role_id;
+            }
 
             if (empty($first_name) || empty($last_name) || empty($email) || empty($role_id)) {
                 throw new Exception('All fields are required.');
@@ -515,6 +785,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             $emp_stmt = $pdo->prepare('INSERT INTO employees (user_id, tenant_id, first_name, last_name, department, hire_date) VALUES (?, ?, ?, ?, \'Admin\', CURDATE())');
             $emp_stmt->execute([$new_user_id, $tenant_id, $first_name, $last_name]);
+
+            $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'STAFF_ADDED', 'user', ?, ?)")->execute([$_SESSION['user_id'] ?? null, "New staff account created for $first_name $last_name", $tenant_id]);
 
             $pdo->commit();
             // Get the tenant slug for the login link
@@ -577,6 +849,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // ==========================================
+// Fetch recent staff movement for dashboard
+$staff_audit_stmt = $pdo->prepare("
+    SELECT al.action_type, al.description, al.created_at,
+           CASE
+               WHEN u.user_id IS NULL OR NULLIF(TRIM(u.username), '') IS NULL THEN 'System'
+               WHEN u.user_type = 'Super Admin' THEN CONCAT(u.username, ' (Super Admin)')
+               WHEN NULLIF(TRIM(ur.role_name), '') IS NOT NULL THEN CONCAT(u.username, ' (', ur.role_name, ')')
+               ELSE u.username
+           END AS actor_name
+    FROM audit_logs al 
+    LEFT JOIN users u ON al.user_id = u.user_id 
+    LEFT JOIN user_roles ur ON u.role_id = ur.role_id
+    WHERE al.tenant_id = ? AND al.action_type IN ('STAFF_ADDED', 'STAFF_UPDATED', 'STAFF_LOGIN', 'STAFF_LOGOUT', 'STAFF_STATUS_CHANGE', 'IMPERSONATION') 
+    ORDER BY al.created_at DESC LIMIT 5
+");
+$staff_audit_stmt->execute([$tenant_id]);
+$staff_audit_logs = $staff_audit_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$all_audit_logs_stmt = $pdo->prepare("SELECT a.*, CASE WHEN u.user_id IS NULL OR NULLIF(TRIM(u.username), '') IS NULL THEN 'System' WHEN u.user_type = 'Super Admin' THEN CONCAT(u.username, ' (Super Admin)') WHEN NULLIF(TRIM(ur.role_name), '') IS NOT NULL THEN CONCAT(u.username, ' (', ur.role_name, ')') ELSE u.username END AS actor_name FROM audit_logs a LEFT JOIN users u ON a.user_id = u.user_id LEFT JOIN user_roles ur ON u.role_id = ur.role_id WHERE a.tenant_id = ? ORDER BY a.created_at DESC LIMIT 100");
+$all_audit_logs_stmt->execute([$tenant_id]);
+$all_audit_logs = $all_audit_logs_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$dashboard_total_clients_stmt = $pdo->prepare("SELECT COUNT(*) FROM clients WHERE tenant_id = ?");
+$dashboard_total_clients_stmt->execute([$tenant_id]);
+$dashboard_total_clients = (int)$dashboard_total_clients_stmt->fetchColumn();
+
+$dashboard_active_staff_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_id = ? AND user_type = 'Employee' AND status = 'Active'");
+$dashboard_active_staff_stmt->execute([$tenant_id]);
+$dashboard_active_staff = (int)$dashboard_active_staff_stmt->fetchColumn();
+
+$dashboard_alerts_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_id = ? AND status IN ('Suspended', 'Inactive')");
+$dashboard_alerts_stmt->execute([$tenant_id]);
+$dashboard_system_alerts = (int)$dashboard_alerts_stmt->fetchColumn();
+
 // Pre-fetch Data for UI Rendering
 // ==========================================
 // 1. Fetch Roles
@@ -606,8 +912,54 @@ $staff_stmt->execute([$tenant_id, 'Employee']);
 $staff_list = $staff_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // 2. Fetch Global Permissions
+try {
+    $pdo->prepare("INSERT INTO permissions (permission_code, module, description) VALUES ('EDIT_BILLING', 'System', 'Can edit billing and subscription settings') ON DUPLICATE KEY UPDATE module = VALUES(module), description = VALUES(description)")->execute();
+} catch (Exception $e) {
+    // Permission seed is best-effort and should not block the page.
+}
+
 $perm_stmt = $pdo->query('SELECT * FROM permissions ORDER BY module ASC, permission_code ASC');
 $all_permissions = $perm_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$permission_description_map = [
+    'VIEW_USERS' => 'View user and employee accounts',
+    'CREATE_USERS' => 'Create and invite employee accounts',
+    'MANAGE_ROLES' => 'Create roles and assign permissions',
+    'VIEW_CLIENTS' => 'View client profiles and records',
+    'CREATE_CLIENTS' => 'Register and onboard new clients',
+    'VIEW_LOANS' => 'View loan applications and active loans',
+    'CREATE_LOANS' => 'Create and draft loan applications',
+    'APPROVE_LOANS' => 'Approve or reject loan applications',
+    'PROCESS_PAYMENTS' => 'Post and process loan payments',
+    'VIEW_REPORTS' => 'View and generate business reports',
+    'VIEW_APPLICATIONS' => 'View submitted applications',
+    'MANAGE_APPLICATIONS' => 'Review and manage application workflow',
+    'EDIT_BILLING' => 'Edit subscription plan, billing, and payment settings'
+];
+
+$permission_capability_map = [
+    'VIEW_USERS' => 'Members can open the users list and view account details for employees and staff.',
+    'CREATE_USERS' => 'Members can add new employee accounts and send account invitations.',
+    'MANAGE_ROLES' => 'Members can create custom roles and update role permission assignments.',
+    'VIEW_CLIENTS' => 'Members can access client profiles, records, and client-related details.',
+    'CREATE_CLIENTS' => 'Members can register new clients and complete onboarding entries.',
+    'VIEW_LOANS' => 'Members can see loan applications, loan records, and current loan statuses.',
+    'CREATE_LOANS' => 'Members can draft and submit new loan applications.',
+    'APPROVE_LOANS' => 'Members can approve, reject, and finalize loan application decisions.',
+    'PROCESS_PAYMENTS' => 'Members can post and process borrower payment transactions.',
+    'VIEW_REPORTS' => 'Members can access and generate business and financial reports.',
+    'VIEW_APPLICATIONS' => 'Members can view incoming and existing application entries.',
+    'MANAGE_APPLICATIONS' => 'Members can move applications through review and processing workflows.',
+    'EDIT_BILLING' => 'Members can change subscription plan settings, billing options, and payment settings.'
+];
+
+foreach ($all_permissions as &$permission_row) {
+    $perm_code = $permission_row['permission_code'] ?? '';
+    if (isset($permission_description_map[$perm_code])) {
+        $permission_row['description'] = $permission_description_map[$perm_code];
+    }
+}
+unset($permission_row);
 
 // 3. Prepare Active Codes for ALL Roles
 $active_codes_by_role = [];
@@ -676,14 +1028,14 @@ if (($ws['layout_template'] ?? '') !== 'template1') {
 $website_config = [
     'website_show_about' => '1', 'website_show_services' => '1',
     'website_show_contact' => '1', 'website_show_download' => '1',
-    'website_show_stats' => '1', 'website_show_loan_calc' => '1',
+    'website_show_stats' => '1', 'website_stats_auto' => '1', 'website_show_loan_calc' => '1',
     'website_show_partners' => '0', 'website_partners_json' => '[]',
     'website_download_title' => 'Download Our App',
     'website_download_description' => 'Get the app for faster loan tracking and updates.',
     'website_download_button_text' => 'Download App',
     'website_download_url' => ''
 ];
-$ws_settings_stmt = $pdo->prepare("SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND setting_key IN ('website_show_about','website_show_services','website_show_contact','website_show_download','website_show_stats','website_show_loan_calc','website_show_partners','website_partners_json','website_download_title','website_download_description','website_download_button_text','website_download_url')");
+$ws_settings_stmt = $pdo->prepare("SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND setting_key IN ('website_show_about','website_show_services','website_show_contact','website_show_download','website_show_stats','website_stats_auto','website_show_loan_calc','website_show_partners','website_partners_json','website_download_title','website_download_description','website_download_button_text','website_download_url')");
 $ws_settings_stmt->execute([$tenant_id]);
 foreach ($ws_settings_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     if (array_key_exists($row['setting_key'], $website_config)) {
@@ -850,8 +1202,8 @@ function hexToRgb($hex) {
                     $active_view = 'billing';
                 } elseif ($_GET['tab'] === 'website') {
                     $active_view = 'website';
-                } elseif (strpos($_GET['tab'], 'logs') !== false) {
-                    $active_view = 'logs';
+                } elseif ($_GET['tab'] === 'personal') {
+                    $active_view = 'personal';
                 }
             }
             $page_titles = [
@@ -859,40 +1211,45 @@ function hexToRgb($hex) {
                 'staff' => 'Staff & Roles',
                 'website' => 'Website Editor',
                 'settings' => 'Settings',
+                'personal' => 'Personal Settings',
                 'features' => 'Feature Toggles',
-                'billing' => 'Billing & Subscription',
-                'logs' => 'Audit Logs'
+                'billing' => 'Billing & Subscription'
             ];
             $page_title = $page_titles[$active_view] ?? 'Dashboard';
             ?>
             <nav class="sidebar-nav">
-                <a href="#dashboard" class="nav-item <?php echo $active_view === 'dashboard' ? 'active' : ''; ?>" data-target="dashboard">
+                <span class="sidebar-section-title">Overview</span>
+                <a href="#dashboard" class="nav-item <?php echo $active_view === 'dashboard' ? 'active' : ''; ?>" data-target="dashboard" data-title="Dashboard">
                     <span class="material-symbols-rounded">dashboard</span>
                     <span>Dashboard</span>
                 </a>
-                <a href="#staff" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff">
+
+                <span class="sidebar-section-title">Management</span>
+                <a href="#staff" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff" data-title="Staff &amp; Roles">
                     <span class="material-symbols-rounded">groups</span>
                     <span>Staff & Roles</span>
                 </a>
-                <a href="#website" class="nav-item <?php echo $active_view === 'website' ? 'active' : ''; ?>" data-target="website">
-                    <span class="material-symbols-rounded">language</span>
-                    <span>Website</span>
-                </a>
-                <a href="#billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing">
+
+                <span class="sidebar-section-title">Configuration</span>
+                <a href="#billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
                     <span class="material-symbols-rounded">receipt_long</span>
                     <span>Billing</span>
                 </a>
-                <a href="#settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings">
-                    <span class="material-symbols-rounded">settings</span>
-                    <span>Settings</span>
+                <a href="#website" class="nav-item <?php echo $active_view === 'website' ? 'active' : ''; ?>" data-target="website" data-title="Website Editor">
+                    <span class="material-symbols-rounded">language</span>
+                    <span>Website</span>
                 </a>
-                <a href="#features" class="nav-item <?php echo $active_view === 'features' ? 'active' : ''; ?>" data-target="features">
+                <a href="#features" class="nav-item <?php echo $active_view === 'features' ? 'active' : ''; ?>" data-target="features" data-title="Feature Toggles">
                     <span class="material-symbols-rounded">toggle_on</span>
                     <span>Feature Toggles</span>
                 </a>
-                <a href="#logs" class="nav-item <?php echo $active_view === 'logs' ? 'active' : ''; ?>" data-target="logs">
-                    <span class="material-symbols-rounded">manage_search</span>
-                    <span>Audit Logs</span>
+                <a href="#settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Settings">
+                    <span class="material-symbols-rounded">settings</span>
+                    <span>Settings</span>
+                </a>
+                <a href="#settings" class="nav-item <?php echo $active_view === 'personal' ? 'active' : ''; ?>" data-target="settings" data-subtab="personal-profile" data-title="Personal Settings">
+                    <span class="material-symbols-rounded">person</span>
+                    <span>Personal</span>
                 </a>
             </nav>
 
@@ -945,7 +1302,7 @@ function hexToRgb($hex) {
                             </div>
                             <div class="stat-details">
                                 <p>Total Clients</p>
-                                <h3>0</h3>
+                                <h3><?php echo number_format($dashboard_total_clients); ?></h3>
                             </div>
                         </div>
                         <div class="stat-card">
@@ -954,7 +1311,7 @@ function hexToRgb($hex) {
                             </div>
                             <div class="stat-details">
                                 <p>Active Staff</p>
-                                <h3>0</h3>
+                                <h3><?php echo number_format($dashboard_active_staff); ?></h3>
                             </div>
                         </div>
                         <div class="stat-card">
@@ -963,134 +1320,238 @@ function hexToRgb($hex) {
                             </div>
                             <div class="stat-details">
                                 <p>System Alerts</p>
-                                <h3>0</h3>
+                                <h3><?php echo number_format($dashboard_system_alerts); ?></h3>
                             </div>
                         </div>
                     </div>
 
                     <div class="dashboard-widgets">
                         <div class="widget">
-                            <h3>Recent Activity</h3>
+                            <h3>Recent Staff Activity</h3>
                             <ul class="activity-list">
+                                <?php if (empty($staff_audit_logs)): ?>
                                 <li>
-                                    <div class="activity-icon"><span class="material-symbols-rounded">info</span></div>
+                                    <div class="activity-icon" style="background: rgba(100, 116, 139, 0.1);"><span class="material-symbols-rounded">info</span></div>
                                     <div class="activity-text">
-                                        <p>No recent activity. Your tenant dashboard is ready for use.</p>
-                                        <span>Just now</span>
+                                        <p>No recent staff activity recorded.</p>
                                     </div>
                                 </li>
+                                <?php else: ?>
+                                    <?php foreach ($staff_audit_logs as $sal): ?>
+                                    <li>
+                                        <div class="activity-icon" style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color);">
+                                            <span class="material-symbols-rounded"><?php echo $sal['action_type'] === 'STAFF_LOGIN' ? 'login' : ($sal['action_type'] === 'STAFF_LOGOUT' ? 'logout' : 'manage_accounts'); ?></span>
+                                        </div>
+                                        <div class="activity-text">
+                                            <p><?php echo htmlspecialchars($sal['description'] . ' (' . ($sal['actor_name'] ?? 'System') . ')'); ?></p>
+                                            <span><?php echo date('M j, Y, g:i a', strtotime($sal['created_at'])); ?></span>
+                                        </div>
+                                    </li>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card-header-flex mb-4">
+                            <h3>Complete Audit Logs</h3>
+                            <div class="search-box">
+                                <span class="material-symbols-rounded">search</span>
+                                <input type="text" placeholder="Search logs...">
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="admin-table log-table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Username</th>
+                                        <th>Action</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($all_audit_logs)): ?>
+                                    <tr>
+                                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                            No audit logs recorded yet.
+                                        </td>
+                                    </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($all_audit_logs as $log): ?>
+                                        <tr>
+                                            <td><?php echo date('M j, Y, g:i a', strtotime($log['created_at'])); ?></td>
+                                            <td><?php echo htmlspecialchars($log['actor_name'] ?? 'System'); ?></td>
+                                            <td><span class="status-badge status-active"><?php echo htmlspecialchars($log['action_type']); ?></span></td>
+                                            <td><?php echo htmlspecialchars($log['description']); ?></td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>
 
                 <!-- General Settings View -->
-                <section id="settings" class="view-section <?php echo $active_view === 'settings' ? 'active' : ''; ?>">
-                    <div class="settings-panel">
-                        <form id="settings-form" method="POST" action="">
-                            <input type="hidden" name="action" value="save_settings">
-                            <input type="hidden" id="hidden-toggle-booking" name="toggle_booking_system" value="1" <?php echo ((int) $toggles['booking_system'] === 1) ? '' : 'disabled'; ?>>
-                            <input type="hidden" id="hidden-toggle-registration" name="toggle_user_registration" value="1" <?php echo ((int) $toggles['user_registration'] === 1) ? '' : 'disabled'; ?>>
-                            <input type="hidden" id="hidden-toggle-maintenance" name="toggle_maintenance_mode" value="1" <?php echo ((int) $toggles['maintenance_mode'] === 1) ? '' : 'disabled'; ?>>
-                            <input type="hidden" id="hidden-toggle-emails" name="toggle_email_notifications" value="1" <?php echo ((int) $toggles['email_notifications'] === 1) ? '' : 'disabled'; ?>>
-                            <input type="hidden" id="hidden-toggle-website" name="toggle_public_website_enabled" value="1" <?php echo ((int) ($toggles['public_website_enabled'] ?? 0) === 1) ? '' : 'disabled'; ?>>
+                <section id="settings" class="view-section <?php echo in_array($active_view, ['settings', 'personal'], true) ? 'active' : ''; ?>">
+                    <div class="tabs">
+                        <button class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'personal') ? 'active' : ''; ?>" data-tab="company-profile">Company Profile</button>
+                        <button class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'personal') ? 'active' : ''; ?>" data-tab="personal-profile">Personal Profile</button>
+                    </div>
 
-                        <div class="card">
-                            <h3>Branding Configuration</h3>
-                            <div class="form-group">
-                                <label for="company-name">Company Name</label>
-                                <input type="text" id="company-name" name="company_name" value="<?php echo htmlspecialchars($settings['company_name']); ?>" class="form-control">
-                            </div>
-                            <div class="form-group">
-                                <label>Logo Upload</label>
-                                <div class="file-upload">
-                                    <input type="file" id="logo-upload" class="hidden-input">
-                                    <label for="logo-upload" class="upload-btn">
-                                        <span class="material-symbols-rounded">upload</span> Choose Image
-                                    </label>
-                                    <span class="file-name">No file chosen</span>
+                    <div id="company-profile" class="tab-content <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'personal') ? 'active' : ''; ?>">
+                        <div class="settings-panel">
+                            <form id="settings-form" method="POST" action="">
+                                <input type="hidden" name="action" value="save_settings">
+                                <input type="hidden" id="hidden-toggle-booking" name="toggle_booking_system" value="1" <?php echo ((int) $toggles['booking_system'] === 1) ? '' : 'disabled'; ?>>
+                                <input type="hidden" id="hidden-toggle-registration" name="toggle_user_registration" value="1" <?php echo ((int) $toggles['user_registration'] === 1) ? '' : 'disabled'; ?>>
+                                <input type="hidden" id="hidden-toggle-maintenance" name="toggle_maintenance_mode" value="1" <?php echo ((int) $toggles['maintenance_mode'] === 1) ? '' : 'disabled'; ?>>
+                                <input type="hidden" id="hidden-toggle-emails" name="toggle_email_notifications" value="1" <?php echo ((int) $toggles['email_notifications'] === 1) ? '' : 'disabled'; ?>>
+                                <input type="hidden" id="hidden-toggle-website" name="toggle_public_website_enabled" value="1" <?php echo ((int) ($toggles['public_website_enabled'] ?? 0) === 1) ? '' : 'disabled'; ?>>
+
+                            <div class="card">
+                                <h3>Branding Configuration</h3>
+                                <div class="form-group">
+                                    <label for="company-name">Company Name</label>
+                                    <input type="text" id="company-name" name="company_name" value="<?php echo htmlspecialchars($settings['company_name'] ?? ''); ?>" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Logo Upload</label>
+                                    <div class="file-upload">
+                                        <input type="file" id="logo-upload" class="hidden-input">
+                                        <label for="logo-upload" class="upload-btn">
+                                            <span class="material-symbols-rounded">upload</span> Choose Image
+                                        </label>
+                                        <span class="file-name">No file chosen</span>
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-top: 10px;">
+                                    <label for="logo-path">Logo URL Path</label>
+                                    <input type="text" id="logo-path" name="logo_path" value="<?php echo htmlspecialchars($settings['logo_path'] ?? ''); ?>" class="form-control" placeholder="https://example.com/logo.png">
+                                    <small class="text-muted">Enter a direct URL to your logo.</small>
                                 </div>
                             </div>
-                            <!-- Note: Added logo_path as a text input as planned for now to store the reference/CDN URL while file upload is implemented -->
-                            <div class="form-group" style="margin-top: 10px;">
-                                <label for="logo-path">Logo URL Path</label>
-                                <input type="text" id="logo-path" name="logo_path" value="<?php echo htmlspecialchars($settings['logo_path']); ?>" class="form-control" placeholder="https://example.com/logo.png">
-                                <small class="text-muted">Enter a direct URL to your logo.</small>
+
+                            <div class="card">
+                                <h3>Theme Settings</h3>
+                                <p class="text-muted">Customize the platform colors to match your brand.</p>
+
+                                <div class="form-group" style="margin-bottom: 20px;">
+                                    <label>Font Family</label>
+                                    <select name="font_family" class="form-control">
+                                        <?php
+                                        $allowed_fonts_list = ['Inter', 'Poppins', 'Outfit', 'Roboto', 'Open Sans', 'Lato', 'Nunito', 'Montserrat', 'DM Sans', 'Plus Jakarta Sans'];
+                                        foreach ($allowed_fonts_list as $fnt):
+                                        ?>
+                                        <option value="<?php echo htmlspecialchars($fnt); ?>" <?php echo ($settings['font_family'] ?? '') === $fnt ? 'selected' : ''; ?>><?php echo htmlspecialchars($fnt); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <div class="theme-colors">
+                                    <div class="form-group">
+                                        <label>Primary Color</label>
+                                        <div class="color-picker-wrapper">
+                                            <input type="color" id="primary-color" name="primary_color" value="<?php echo htmlspecialchars($settings['primary_color'] ?? ''); ?>">
+                                            <span class="color-hex"><?php echo htmlspecialchars($settings['primary_color'] ?? ''); ?></span>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label>Text Main</label>
+                                        <div class="color-picker-wrapper">
+                                            <input type="color" name="text_main" value="<?php echo htmlspecialchars($settings['text_main'] ?? ''); ?>">
+                                            <span class="color-hex"><?php echo htmlspecialchars($settings['text_main'] ?? ''); ?></span>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Text Muted</label>
+                                        <div class="color-picker-wrapper">
+                                            <input type="color" name="text_muted" value="<?php echo htmlspecialchars($settings['text_muted'] ?? ''); ?>">
+                                            <span class="color-hex"><?php echo htmlspecialchars($settings['text_muted'] ?? ''); ?></span>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Background Body</label>
+                                        <div class="color-picker-wrapper">
+                                            <input type="color" name="bg_body" value="<?php echo htmlspecialchars($settings['bg_body'] ?? ''); ?>">
+                                            <span class="color-hex"><?php echo htmlspecialchars($settings['bg_body'] ?? ''); ?></span>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Background Card</label>
+                                        <div class="color-picker-wrapper">
+                                            <input type="color" name="bg_card" value="<?php echo htmlspecialchars($settings['bg_card'] ?? ''); ?>">
+                                            <span class="color-hex"><?php echo htmlspecialchars($settings['bg_card'] ?? ''); ?></span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
+                            <div class="card">
+                                <h3>Module: Contact Information</h3>
+                                <div class="form-group">
+                                    <label>Support Email</label>
+                                    <input type="email" id="support-email" name="support_email" class="form-control" value="<?php echo htmlspecialchars($settings['support_email'] ?? ''); ?>">
+                                </div>
+                                <div class="form-group">
+                                    <label>Support Phone</label>
+                                    <input type="text" id="support-phone" name="support_phone" class="form-control" value="<?php echo htmlspecialchars($settings['support_phone'] ?? ''); ?>">
+                                </div>
+                            </div>
+
+                            <div class="action-bar">
+                                <button class="btn btn-primary" id="save-settings" type="submit">Save Settings</button>
+                            </div>
+                            </form>
                         </div>
+                    </div>
 
-                        <div class="card">
-                            <h3>Theme Settings</h3>
-                            <p class="text-muted">Customize the platform colors to match your brand.</p>
-
-                            <div class="form-group" style="margin-bottom: 20px;">
-                                <label>Font Family</label>
-                                <select name="font_family" class="form-control">
-                                    <?php
-                                    $allowed_fonts_list = ['Inter', 'Poppins', 'Outfit', 'Roboto', 'Open Sans', 'Lato', 'Nunito', 'Montserrat', 'DM Sans', 'Plus Jakarta Sans'];
-                                    foreach ($allowed_fonts_list as $fnt):
-                                    ?>
-                                    <option value="<?php echo htmlspecialchars($fnt); ?>" <?php echo $settings['font_family'] === $fnt ? 'selected' : ''; ?>><?php echo htmlspecialchars($fnt); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-
-                            <div class="theme-colors">
-                                <div class="form-group">
-                                    <label>Primary Color</label>
-                                    <div class="color-picker-wrapper">
-                                        <input type="color" id="primary-color" name="primary_color" value="<?php echo htmlspecialchars($settings['primary_color']); ?>">
-                                        <span class="color-hex"><?php echo htmlspecialchars($settings['primary_color']); ?></span>
+                    <div id="personal-profile" class="tab-content <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'personal') ? 'active' : ''; ?>">
+                        <div class="settings-panel">
+                            <?php
+                                $personal_data = ['first_name' => '', 'last_name' => '', 'email' => ''];
+                                if (isset($_SESSION['user_id'])) {
+                                    $pd_stmt = $pdo->prepare('SELECT u.email, e.first_name, e.last_name FROM users u JOIN employees e ON u.user_id = e.user_id WHERE u.user_id = ?');
+                                    $pd_stmt->execute([$_SESSION['user_id']]);
+                                    $pd_res = $pd_stmt->fetch(PDO::FETCH_ASSOC);
+                                    if ($pd_res) $personal_data = $pd_res;
+                                }
+                            ?>
+                            <form method="POST" action="admin.php">
+                                <input type="hidden" name="action" value="update_personal_profile">
+                                <div class="card">
+                                    <h3>Personal Details</h3>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label>First Name</label>
+                                            <input type="text" name="personal_first_name" class="form-control" value="<?php echo htmlspecialchars($personal_data['first_name']); ?>" required>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label>Last Name</label>
+                                            <input type="text" name="personal_last_name" class="form-control" value="<?php echo htmlspecialchars($personal_data['last_name']); ?>" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Log-in Email Address</label>
+                                        <input type="email" name="personal_email" class="form-control" value="<?php echo htmlspecialchars($personal_data['email']); ?>" required>
                                     </div>
                                 </div>
-
-                                <div class="form-group">
-                                    <label>Text Main</label>
-                                    <div class="color-picker-wrapper">
-                                        <input type="color" name="text_main" value="<?php echo htmlspecialchars($settings['text_main']); ?>">
-                                        <span class="color-hex"><?php echo htmlspecialchars($settings['text_main']); ?></span>
+                                <div class="card">
+                                    <h3>Security</h3>
+                                    <p class="text-muted" style="margin-bottom: 12px;">Leave blank if you do not want to change your password.</p>
+                                    <div class="form-group">
+                                        <label>New Password</label>
+                                        <input type="password" name="personal_password" class="form-control" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
                                     </div>
                                 </div>
-                                <div class="form-group">
-                                    <label>Text Muted</label>
-                                    <div class="color-picker-wrapper">
-                                        <input type="color" name="text_muted" value="<?php echo htmlspecialchars($settings['text_muted']); ?>">
-                                        <span class="color-hex"><?php echo htmlspecialchars($settings['text_muted']); ?></span>
-                                    </div>
+                                <div class="action-bar">
+                                    <button class="btn btn-primary" type="submit">Update Personal Profile</button>
                                 </div>
-                                <div class="form-group">
-                                    <label>Background Body</label>
-                                    <div class="color-picker-wrapper">
-                                        <input type="color" name="bg_body" value="<?php echo htmlspecialchars($settings['bg_body']); ?>">
-                                        <span class="color-hex"><?php echo htmlspecialchars($settings['bg_body']); ?></span>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label>Background Card</label>
-                                    <div class="color-picker-wrapper">
-                                        <input type="color" name="bg_card" value="<?php echo htmlspecialchars($settings['bg_card']); ?>">
-                                        <span class="color-hex"><?php echo htmlspecialchars($settings['bg_card']); ?></span>
-                                    </div>
-                                </div>
-                            </div>
+                            </form>
                         </div>
-
-                        <div class="card">
-                            <h3>Module: Contact Information</h3>
-                            <div class="form-group">
-                                <label>Support Email</label>
-                                <input type="email" id="support-email" name="support_email" class="form-control" value="<?php echo htmlspecialchars($settings['support_email']); ?>">
-                            </div>
-                            <div class="form-group">
-                                <label>Support Phone</label>
-                                <input type="text" id="support-phone" name="support_phone" class="form-control" value="<?php echo htmlspecialchars($settings['support_phone']); ?>">
-                            </div>
-                        </div>
-
-                        <div class="action-bar">
-                            <button class="btn btn-primary" id="save-settings" type="submit">Save Settings</button>
-                        </div>
-                        </form>
                     </div>
                 </section>
 
@@ -1172,8 +1633,44 @@ function hexToRgb($hex) {
                                     <h3><?php
                                         $plan_stmt = $pdo->prepare('SELECT plan_tier FROM tenants WHERE tenant_id = ?');
                                         $plan_stmt->execute([$tenant_id]);
-                                        echo htmlspecialchars($plan_stmt->fetchColumn() ?: 'Starter');
+                                        $current_plan = $plan_stmt->fetchColumn() ?: 'Starter';
+                                        $plan_aliases = ['Professional' => 'Pro', 'Elite' => 'Enterprise'];
+                                        if (isset($plan_aliases[$current_plan])) {
+                                            $current_plan = $plan_aliases[$current_plan];
+                                        }
+                                        $plan_catalog = [
+                                            'Starter' => ['label' => 'Starter', 'price' => 4999],
+                                            'Growth' => ['label' => 'Growth', 'price' => 9999],
+                                            'Pro' => ['label' => 'Pro', 'price' => 14999],
+                                            'Enterprise' => ['label' => 'Enterprise', 'price' => 22999],
+                                            'Unlimited' => ['label' => 'Unlimited', 'price' => 29999]
+                                        ];
+                                        if (!isset($plan_catalog[$current_plan])) {
+                                            $plan_catalog[$current_plan] = ['label' => $current_plan, 'price' => 0];
+                                        }
+                                        echo htmlspecialchars($current_plan);
                                     ?></h3>
+                                    <p class="text-muted" style="margin-top: 2px; font-size: 0.85rem;">₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 2); ?>/month</p>
+                                    
+                                    <?php if ($is_admin_account): ?>
+                                    <div style="margin-top: 12px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 12px;">
+                                        <form method="POST" action="admin.php" style="display: flex; gap: 8px; flex-direction: column;">
+                                            <input type="hidden" name="action" value="update_subscription_plan">
+                                            <label style="font-size:0.75rem; font-weight:600; color:var(--text-muted); text-transform:uppercase;">Change Subscription Type</label>
+                                            <div style="display:flex; gap:8px;">
+                                                <select name="new_plan" id="new-plan-select" class="form-control" style="padding: 6px 10px; font-size: 0.85rem; height: auto;">
+                                                    <option value="Starter" data-price="4999" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - ₱4,999/mo</option>
+                                                    <option value="Growth" data-price="9999" <?php echo $current_plan === 'Growth' ? 'selected' : ''; ?>>Growth - ₱9,999/mo</option>
+                                                    <option value="Pro" data-price="14999" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - ₱14,999/mo</option>
+                                                    <option value="Enterprise" data-price="22999" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱22,999/mo</option>
+                                                    <option value="Unlimited" data-price="29999" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - ₱29,999/mo</option>
+                                                </select>
+                                                <button type="submit" class="btn btn-primary btn-sm" style="padding: 6px 12px; font-size: 0.85rem;">Update</button>
+                                            </div>
+                                            <p id="selected-plan-price" class="text-muted" style="margin: 2px 0 0; font-size: 0.8rem;">Selected plan price: ₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 2); ?>/month</p>
+                                        </form>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <div class="stat-card">
@@ -1204,27 +1701,101 @@ function hexToRgb($hex) {
                             </div>
                         </div>
 
-                        <h4 style="margin-bottom: 16px;">Recent Invoices</h4>
+                        <h4 style="margin: 6px 0 16px;">Saved Payment Methods</h4>
+                        <div class="table-responsive" style="margin-bottom: 28px;">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Card</th>
+                                        <th>Cardholder</th>
+                                        <th>Expiry</th>
+                                        <th>Default</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $payment_methods_stmt = $pdo->prepare('SELECT method_id, last_four_digits, cardholder_name, exp_month, exp_year, is_default, created_at FROM tenant_billing_payment_methods WHERE tenant_id = ? ORDER BY is_default DESC, created_at ASC');
+                                    $payment_methods_stmt->execute([$tenant_id]);
+                                    $payment_methods = $payment_methods_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                    if (empty($payment_methods)):
+                                    ?>
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; padding: 1.5rem; color: var(--text-muted);">
+                                            No payment methods found yet. Please add one in onboarding billing setup.
+                                        </td>
+                                    </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($payment_methods as $pm): ?>
+                                        <tr>
+                                                <td>
+                                                    <div class="text-muted" style="font-size: 0.8rem;">•••• <?php echo htmlspecialchars($pm['last_four_digits']); ?></div>
+                                                </td>
+                                                <td>
+                                                    <?php echo htmlspecialchars($pm['cardholder_name']); ?>
+                                                </td>
+                                                <td>
+                                                    <?php echo str_pad((string)((int)$pm['exp_month']), 2, '0', STR_PAD_LEFT); ?> / <?php echo (int)$pm['exp_year']; ?>
+                                                </td>
+                                                <td>
+                                                    <?php if ((int)$pm['is_default'] === 1): ?>
+                                                        <span class="badge badge-green">Yes</span>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">No</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <div style="display:flex; gap:8px; align-items:center;">
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-outline btn-sm"
+                                                            data-method-id="<?php echo (int)$pm['method_id']; ?>"
+                                                            data-cardholder-name="<?php echo htmlspecialchars($pm['cardholder_name'], ENT_QUOTES); ?>"
+                                                            data-exp-month="<?php echo (int)$pm['exp_month']; ?>"
+                                                            data-exp-year="<?php echo (int)$pm['exp_year']; ?>"
+                                                            data-is-default="<?php echo ((int)$pm['is_default'] === 1) ? '1' : '0'; ?>"
+                                                            data-last-four="<?php echo htmlspecialchars($pm['last_four_digits'], ENT_QUOTES); ?>"
+                                                            onclick="openEditPaymentMethodModal(this)">
+                                                            Edit
+                                                        </button>
+                                                        <form method="POST" action="admin.php" data-confirm-title="Remove Payment Method" data-confirm-message="Are you sure you want to remove this payment method? At least one payment method is required." data-confirm-button="Remove">
+                                                            <input type="hidden" name="action" value="delete_payment_method">
+                                                            <input type="hidden" name="method_id" value="<?php echo (int)$pm['method_id']; ?>">
+                                                            <button type="submit" class="btn btn-sm" style="color:#ef4444; background: rgba(239,68,68,0.1);">Remove</button>
+                                                        </form>
+                                                    </div>
+                                                </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h4 style="margin-bottom: 16px;">Billing History (Monthly Invoices)</h4>
                         <div class="table-responsive">
                             <table class="admin-table">
                                 <thead>
                                     <tr>
                                         <th>Invoice #</th>
+                                        <th>Billing Month</th>
                                         <th>Period</th>
                                         <th>Amount</th>
+                                        <th>Issued</th>
                                         <th>Due Date</th>
+                                        <th>Paid Date</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php
-                                    $invoices_stmt = $pdo->prepare('SELECT * FROM tenant_billing_invoices WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 10');
+                                    $invoices_stmt = $pdo->prepare('SELECT * FROM tenant_billing_invoices WHERE tenant_id = ? ORDER BY billing_period_start DESC, created_at DESC LIMIT 24');
                                     $invoices_stmt->execute([$tenant_id]);
                                     $invoices = $invoices_stmt->fetchAll(PDO::FETCH_ASSOC);
                                     if (empty($invoices)):
                                     ?>
                                     <tr>
-                                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                        <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">
                                             <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">receipt_long</span>
                                             No invoices yet. Your billing history will appear here.
                                         </td>
@@ -1233,9 +1804,12 @@ function hexToRgb($hex) {
                                         <?php foreach ($invoices as $inv): ?>
                                         <tr>
                                             <td style="font-weight: 500;"><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
+                                            <td class="text-muted"><?php echo htmlspecialchars(date('M Y', strtotime((string)$inv['billing_period_start']))); ?></td>
                                             <td class="text-muted"><?php echo htmlspecialchars($inv['billing_period_start'] . ' — ' . $inv['billing_period_end']); ?></td>
                                             <td>₱<?php echo number_format($inv['amount'], 2); ?></td>
+                                            <td class="text-muted"><?php echo htmlspecialchars(date('Y-m-d', strtotime((string)$inv['created_at']))); ?></td>
                                             <td class="text-muted"><?php echo htmlspecialchars($inv['due_date']); ?></td>
+                                            <td class="text-muted"><?php echo !empty($inv['paid_at']) ? htmlspecialchars(date('Y-m-d', strtotime((string)$inv['paid_at']))) : '—'; ?></td>
                                             <td>
                                                 <?php
                                                     $inv_class = 'badge-gray';
@@ -1265,9 +1839,42 @@ function hexToRgb($hex) {
                         <div class="card">
                             <div class="card-header-flex">
                                 <h3>Registered Staff</h3>
-                                <button class="btn btn-primary btn-sm" onclick="document.getElementById('add-staff-modal').style.display='flex'">
-                                    <span class="material-symbols-rounded">add</span> Add Staff
-                                </button>
+                                <div style="display:flex; gap:8px;">
+                                    <button class="btn btn-sm btn-outline" style="border-color: var(--primary-color); color: var(--primary-color);" onclick="openAddAdminModal()">
+                                        <span class="material-symbols-rounded">admin_panel_settings</span> Create Admin
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="openAddStaffModal()">
+                                        <span class="material-symbols-rounded">add</span> Add Staff
+                                    </button>
+                                </div>
+                                <script>
+                                    function openAddStaffModal() {
+                                        var m = document.getElementById('add-staff-modal');
+                                        var flag = document.getElementById('create-as-admin-flag');
+                                        var title = document.getElementById('add-staff-modal-title');
+                                        var submit = document.getElementById('add-staff-submit-btn');
+                                        if (flag) flag.value = '0';
+                                        if (title) title.textContent = 'Add Staff Member';
+                                        if (submit) submit.textContent = 'Add Staff';
+                                        m.style.display='flex';
+                                    }
+                                    function openAddAdminModal() {
+                                        var m = document.getElementById('add-staff-modal');
+                                        var sel = m.querySelector('select[name="role_id"]');
+                                        var flag = document.getElementById('create-as-admin-flag');
+                                        var title = document.getElementById('add-staff-modal-title');
+                                        var submit = document.getElementById('add-staff-submit-btn');
+                                        if (sel) {
+                                            for(var i=0; i<sel.options.length; i++) {
+                                                if(sel.options[i].text === 'Admin') sel.selectedIndex = i;
+                                            }
+                                        }
+                                        if (flag) flag.value = '1';
+                                        if (title) title.textContent = 'Create Admin Account';
+                                        if (submit) submit.textContent = 'Create Admin';
+                                        m.style.display='flex';
+                                    }
+                                </script>
                             </div>
                             <div class="table-responsive">
                                 <table class="admin-table">
@@ -1468,12 +2075,16 @@ function hexToRgb($hex) {
                                                             </h4>
                                                             <div class="toggle-list">
                                                                 <?php foreach ($perms as $p): 
+                                                                    if ($p['permission_code'] === 'EDIT_BILLING' && !$is_admin_role) {
+                                                                        continue;
+                                                                    }
                                                                     $is_checked = $is_admin_role || in_array($p['permission_code'], $panel_active_codes);
+                                                                    $permission_help_text = $permission_capability_map[$p['permission_code']] ?? 'Members with this permission can perform the selected action in this module.';
                                                                 ?>
                                                                     <div class="toggle-item">
                                                                         <div class="toggle-info">
                                                                             <h4 style="margin-bottom: 4px; font-weight: 600;"><?php echo htmlspecialchars($p['description']); ?></h4>
-                                                                            <p style="color: var(--text-muted); font-size: 0.85rem; font-family: monospace;"><?php echo htmlspecialchars($p['permission_code']); ?></p>
+                                                                            <p style="color: var(--text-muted); font-size: 0.85rem;"><?php echo htmlspecialchars($permission_help_text); ?></p>
                                                                         </div>
                                                                         <label class="switch">
                                                                             <input type="checkbox" name="permissions[]" value="<?php echo htmlspecialchars($p['permission_code']); ?>" <?php echo $is_checked ? 'checked' : ''; ?> <?php echo $is_admin_role ? 'disabled' : ''; ?>>
@@ -1511,7 +2122,7 @@ function hexToRgb($hex) {
                         </a>
                     </div>
 
-                    <form method="POST" id="we-editor-form">
+                    <form method="POST" id="we-editor-form" enctype="multipart/form-data">
                         <input type="hidden" name="action" value="save_website_content">
 
                         <!-- SECTION: Layout Template -->
@@ -1607,13 +2218,16 @@ function hexToRgb($hex) {
                                         </div>
                                     </div>
                                     <div class="we-form-group">
-                                        <label>Hero Background Image URL</label>
-                                        <input type="text" name="hero_image_path" class="we-form-input" value="<?php echo $e($ws['hero_image_path']); ?>" placeholder="https://images.unsplash.com/...">
-                                        <p class="we-hint">Paste an external image URL. For best results use a wide landscape image (1920x1080 or similar).</p>
+                                        <label>Hero Background Image</label>
+                                        <input type="file" name="hero_background" class="we-form-input" accept=".jpg,.jpeg,.png,.webp">
+                                        <?php if (!empty($ws['hero_image_path'])): ?>
+                                            <p class="we-hint" style="margin-top:6px;">Current image: <a href="<?php echo $e($ws['hero_image_path']); ?>" target="_blank" style="color:var(--primary-color);">View Image</a></p>
+                                        <?php endif; ?>
+                                        <p class="we-hint">Upload a wide landscape image (1920x1080 or similar). Max 3MB. Leave empty to keep current image.</p>
                                     </div>
                                     <div class="we-form-group">
                                         <label>Badge Text (small label above title)</label>
-                                        <input type="text" name="hero_badge_text" class="we-form-input" value="<?php echo $e($ws['hero_badge_text']); ?>" placeholder="e.g. Trusted Since 2015">
+                                        <input type="text" name="hero_badge_text" class="we-form-input" value="<?php echo $e($ws['hero_badge_text'] ?? ''); ?>" placeholder="e.g. Trusted Since 2015">
                                         <p class="we-hint">A short badge shown above the hero title. Leave blank to hide.</p>
                                     </div>
                                 </div>
@@ -1673,17 +2287,21 @@ function hexToRgb($hex) {
                                 <div class="we-editor-card">
                                     <h3>Trust Stats Section</h3>
                                     <p class="we-card-desc">Highlight key numbers that build trust with visitors.</p>
+                                    <div class="we-form-group" style="margin-bottom: 14px;">
+                                        <label><input type="checkbox" name="website_stats_auto" value="1" <?php echo $website_config['website_stats_auto'] === '1' ? 'checked' : ''; ?>> Auto-generate stat cards from live system data</label>
+                                        <p class="we-hint">When enabled, stat cards are updated automatically using active clients, active loans, and active staff.</p>
+                                    </div>
                                     <div class="we-form-group">
                                         <label>Section Heading</label>
-                                        <input type="text" name="stats_heading" class="we-form-input" value="<?php echo $e($ws['stats_heading']); ?>" placeholder="Building Trust Through Numbers">
+                                        <input type="text" name="stats_heading" class="we-form-input" value="<?php echo $e($ws['stats_heading'] ?? ''); ?>" placeholder="Building Trust Through Numbers">
                                     </div>
                                     <div class="we-form-group">
                                         <label>Section Subheading</label>
-                                        <input type="text" name="stats_subheading" class="we-form-input" value="<?php echo $e($ws['stats_subheading']); ?>" placeholder="Our track record speaks for itself">
+                                        <input type="text" name="stats_subheading" class="we-form-input" value="<?php echo $e($ws['stats_subheading'] ?? ''); ?>" placeholder="Our track record speaks for itself">
                                     </div>
                                     <div class="we-form-group">
                                         <label>Stats Image URL (optional)</label>
-                                        <input type="text" name="stats_image_path" class="we-form-input" value="<?php echo $e($ws['stats_image_path']); ?>" placeholder="https://images.unsplash.com/...">
+                                        <input type="text" name="stats_image_path" class="we-form-input" value="<?php echo $e($ws['stats_image_path'] ?? ''); ?>" placeholder="https://images.unsplash.com/...">
                                         <p class="we-hint">Displayed beside the stat cards. Use a portrait-style image.</p>
                                     </div>
                                     <hr style="border: 0; border-top: 1px solid var(--border-color, #e2e8f0); margin: 20px 0;">
@@ -1727,7 +2345,7 @@ function hexToRgb($hex) {
                                     </div>
                                     <div class="we-form-group">
                                         <label>Footer Description</label>
-                                        <textarea name="footer_description" class="we-form-textarea" rows="3" placeholder="A short tagline or description shown in the footer..."><?php echo $e($ws['footer_description']); ?></textarea>
+                                        <textarea name="footer_description" class="we-form-textarea" rows="3" placeholder="A short tagline or description shown in the footer..."><?php echo $e($ws['footer_description'] ?? ''); ?></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -1750,6 +2368,9 @@ function hexToRgb($hex) {
                                     </div>
                                     <div class="we-form-group">
                                         <label><input type="checkbox" name="website_show_stats" value="1" <?php echo $website_config['website_show_stats'] === '1' ? 'checked' : ''; ?>> Show Trust Stats Section</label>
+                                    </div>
+                                    <div class="we-form-group">
+                                        <label><input type="checkbox" name="website_stats_auto" value="1" <?php echo $website_config['website_stats_auto'] === '1' ? 'checked' : ''; ?>> Auto-generate stat cards</label>
                                     </div>
                                     <div class="we-form-group">
                                         <label><input type="checkbox" name="website_show_loan_calc" value="1" <?php echo $website_config['website_show_loan_calc'] === '1' ? 'checked' : ''; ?>> Show Loan Calculator</label>
@@ -1810,36 +2431,7 @@ function hexToRgb($hex) {
                     </form>
                 </section>
 
-                <section id="logs" class="view-section <?php echo $active_view === 'logs' ? 'active' : ''; ?>">
-                    <div class="card">
-                        <div class="card-header-flex mb-4">
-                            <h3>Audit Logs</h3>
-                            <div class="search-box">
-                                <span class="material-symbols-rounded">search</span>
-                                <input type="text" placeholder="Search logs...">
-                            </div>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="admin-table log-table">
-                                <thead>
-                                    <tr>
-                                        <th>Timestamp</th>
-                                        <th>User</th>
-                                        <th>Action</th>
-                                        <th>IP Address</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                                            No audit logs recorded yet.
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </section>
+
 
             </div>
         </main>
@@ -1892,13 +2484,14 @@ function hexToRgb($hex) {
     <div id="add-staff-modal" class="modal-backdrop" style="display: none;">
         <div class="modal" style="width: 500px; max-width: 90vw;">
             <div class="modal-header">
-                <h2>Add Staff Member</h2>
+                <h2 id="add-staff-modal-title">Add Staff Member</h2>
                 <button type="button" class="icon-btn" onclick="document.getElementById('add-staff-modal').style.display='none'">
                     <span class="material-symbols-rounded">close</span>
                 </button>
             </div>
             <form method="POST" action="admin.php">
                 <input type="hidden" name="action" value="create_staff">
+                <input type="hidden" id="create-as-admin-flag" name="create_as_admin" value="0">
                 <div class="modal-body">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                         <div class="form-group" style="margin-bottom: 0;">
@@ -1937,7 +2530,7 @@ function hexToRgb($hex) {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline" onclick="document.getElementById('add-staff-modal').style.display='none'">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Staff</button>
+                    <button type="submit" id="add-staff-submit-btn" class="btn btn-primary">Add Staff</button>
                 </div>
             </form>
         </div>
@@ -1978,6 +2571,7 @@ function hexToRgb($hex) {
                                     <h4 style="font-size: 0.9rem; margin-bottom: 8px; border-bottom: none;"><?php echo htmlspecialchars($moduleName); ?></h4>
                                     <div class="toggle-list" style="gap: 8px;">
                                         <?php foreach ($perms as $p): ?>
+                                            <?php if ($p['permission_code'] === 'EDIT_BILLING') continue; ?>
                                             <div class="toggle-item" style="padding: 8px 12px; border-radius: 6px; background: var(--bg-body); border: 1px solid var(--border-color);">
                                                 <div class="toggle-info">
                                                     <h4 style="margin-bottom: 2px; font-weight: 500; font-size: 0.9rem; border-bottom: none;"><?php echo htmlspecialchars($p['description']); ?></h4>
@@ -2055,8 +2649,66 @@ function hexToRgb($hex) {
         </div>
     </div>
 
+    <!-- Edit Payment Method Modal -->
+    <div id="edit-payment-method-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal" style="width: 500px; max-width: 90vw;">
+            <div class="modal-header">
+                <h2>Edit Payment Method</h2>
+                <button type="button" class="icon-btn" onclick="closeEditPaymentMethodModal()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <form method="POST" action="admin.php">
+                <input type="hidden" name="action" value="update_payment_method">
+                <input type="hidden" name="method_id" id="edit-payment-method-id">
+                <div class="modal-body">
+                    <p class="text-muted" id="edit-payment-method-mask" style="margin-top: 0; margin-bottom: 12px;"></p>
+                    <div class="form-group">
+                        <label>Cardholder Name <span style="color:var(--danger-color);">*</span></label>
+                        <input type="text" class="form-control" name="cardholder_name" id="edit-payment-cardholder-name" required>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Expiry Month <span style="color:var(--danger-color);">*</span></label>
+                            <input type="number" class="form-control" name="exp_month" id="edit-payment-exp-month" min="1" max="12" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Expiry Year <span style="color:var(--danger-color);">*</span></label>
+                            <input type="number" class="form-control" name="exp_year" id="edit-payment-exp-year" min="<?php echo (int)date('Y'); ?>" max="2099" required>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem; margin-bottom: 0;">
+                        <label style="display:flex; align-items:center; gap:8px; margin:0;">
+                            <input type="checkbox" name="is_default" id="edit-payment-is-default" value="1">
+                            <span>Set as default payment method</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeEditPaymentMethodModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="admin.js?v=<?php echo time(); ?>"></script>
     <script>
+        (function() {
+            var planSelect = document.getElementById('new-plan-select');
+            var selectedPlanPrice = document.getElementById('selected-plan-price');
+            if (!planSelect || !selectedPlanPrice) return;
+
+            function updateSelectedPlanPrice() {
+                var selectedOption = planSelect.options[planSelect.selectedIndex];
+                var planPrice = Number(selectedOption ? (selectedOption.getAttribute('data-price') || 0) : 0);
+                selectedPlanPrice.textContent = 'Selected plan price: ' + new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(planPrice) + '/month';
+            }
+
+            planSelect.addEventListener('change', updateSelectedPlanPrice);
+            updateSelectedPlanPrice();
+        })();
+
         // Shared branded confirmation for destructive/sensitive form actions.
         (function() {
             var modal = document.getElementById('confirm-action-modal');
@@ -2132,6 +2784,38 @@ function hexToRgb($hex) {
                 document.getElementById('edit-staff-modal').style.display = 'flex';
             });
         });
+
+        function closeEditPaymentMethodModal() {
+            var modal = document.getElementById('edit-payment-method-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        function openEditPaymentMethodModal(button) {
+            if (!button) return;
+
+            document.getElementById('edit-payment-method-id').value = button.dataset.methodId || '';
+            document.getElementById('edit-payment-cardholder-name').value = button.dataset.cardholderName || '';
+            document.getElementById('edit-payment-exp-month').value = button.dataset.expMonth || '';
+            document.getElementById('edit-payment-exp-year').value = button.dataset.expYear || '';
+            document.getElementById('edit-payment-is-default').checked = button.dataset.isDefault === '1';
+            document.getElementById('edit-payment-method-mask').textContent = 'Card ending in ' + (button.dataset.lastFour || '----');
+
+            var modal = document.getElementById('edit-payment-method-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
+        }
+
+        var editPaymentMethodModal = document.getElementById('edit-payment-method-modal');
+        if (editPaymentMethodModal) {
+            editPaymentMethodModal.addEventListener('click', function(event) {
+                if (event.target === editPaymentMethodModal) {
+                    closeEditPaymentMethodModal();
+                }
+            });
+        }
     </script>
 
     <script>

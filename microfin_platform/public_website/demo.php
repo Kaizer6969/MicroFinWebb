@@ -14,11 +14,21 @@ function demo_column_exists(PDO $pdo, $table, $column)
         return $cache[$key];
     }
 
-    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE ?");
-    $stmt->execute([$column]);
+    $sanitized_column = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE '{$sanitized_column}'");
+    $stmt->execute();
     $cache[$key] = (bool) $stmt->fetch();
 
     return $cache[$key];
+}
+
+function demo_generate_username_base($preferredLastName, $fallbackInstitutionName = '')
+{
+    $base = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', (string)$preferredLastName));
+    if ($base === '' && $fallbackInstitutionName !== '') {
+        $base = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace(' ', '.', (string)$fallbackInstitutionName)));
+    }
+    return $base !== '' ? $base : 'tenantadmin';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'request_demo') {
@@ -27,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $contact_last_name = trim($_POST['contact_last_name'] ?? '');
     $contact_mi = trim($_POST['contact_mi'] ?? '');
     $contact_suffix = trim($_POST['contact_suffix'] ?? '');
+    $contact_number = trim($_POST['contact_number'] ?? '');
     $location = trim($_POST['location'] ?? '');
     $plan_tier = trim($_POST['plan_tier'] ?? '');
     $company_email = trim($_POST['company_email'] ?? '');
@@ -68,6 +79,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf', 'odt', 'ods', 'odp'
                 ];
 
+                $plan_pricing_map = [
+                    'Starter' => 4999.00,
+                    'Growth' => 9999.00,
+                    'Pro' => 14999.00,
+                    'Enterprise' => 22999.00,
+                    'Unlimited' => 29999.00,
+                ];
+                $plan_limits_map = [
+                    'Starter' => ['clients' => 1000, 'users' => 250],
+                    'Growth' => ['clients' => 2500, 'users' => 750],
+                    'Pro' => ['clients' => 5000, 'users' => 2000],
+                    'Enterprise' => ['clients' => 10000, 'users' => 5000],
+                    'Unlimited' => ['clients' => -1, 'users' => -1],
+                ];
+                $mrr = $plan_pricing_map[$plan_tier] ?? 4999.00;
+                $max_c = $plan_limits_map[$plan_tier]['clients'] ?? 1000;
+                $max_u = $plan_limits_map[$plan_tier]['users'] ?? 250;
+
                 $pdo->beginTransaction();
 
                 $tenant_id = mf_generate_tenant_id($pdo, 10);
@@ -78,28 +107,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             INSERT INTO tenants (
                                 tenant_id, tenant_name, first_name, last_name,
                                 mi, suffix, branch_name, plan_tier,
-                                email, demo_schedule_date, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Demo Requested')
+                                email, demo_schedule_date, mrr, max_clients, max_users, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
                         ");
                         $stmt->execute([
-                            $tenant_id, $institution_name, $contact_first_name, $contact_last_name,
-                            $contact_mi, $contact_suffix, $location, $plan_tier,
-                            $company_email, $demo_schedule_date
+                            $tenant_id, $institution_name, null, null,
+                            null, null, $location, $plan_tier,
+                            $company_email, $demo_schedule_date, $mrr, $max_c, $max_u
                         ]);
                     } else {
                         $stmt = $pdo->prepare("
                             INSERT INTO tenants (
                                 tenant_id, tenant_name, first_name, last_name,
                                 mi, suffix, branch_name, plan_tier,
-                                email, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Demo Requested')
+                                email, mrr, max_clients, max_users, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
                         ");
                         $stmt->execute([
-                            $tenant_id, $institution_name, $contact_first_name, $contact_last_name,
-                            $contact_mi, $contact_suffix, $location, $plan_tier,
-                            $company_email
+                            $tenant_id, $institution_name, null, null,
+                            null, null, $location, $plan_tier,
+                            $company_email, $mrr, $max_c, $max_u
                         ]);
                     }
+
+                $admin_role_stmt = $pdo->prepare("INSERT INTO user_roles (tenant_id, role_name, role_description, is_system_role) VALUES (?, 'Admin', 'Default system administrator', TRUE)");
+                $admin_role_stmt->execute([$tenant_id]);
+                $admin_role_id = (int)$pdo->lastInsertId();
+
+                $base_username = demo_generate_username_base($contact_last_name, $institution_name);
+                $username = $base_username;
+                $username_counter = 2;
+                while (true) {
+                    $username_check_stmt = $pdo->prepare('SELECT 1 FROM users WHERE tenant_id = ? AND username = ? LIMIT 1');
+                    $username_check_stmt->execute([$tenant_id, $username]);
+                    if (!$username_check_stmt->fetchColumn()) {
+                        break;
+                    }
+                    $username = $base_username . $username_counter;
+                    $username_counter++;
+                }
+
+                $temp_password = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'), 0, 12);
+                $password_hash = password_hash($temp_password, PASSWORD_DEFAULT);
+
+                $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, 'Employee', 'Inactive', ?, ?, ?, ?)");
+                $user_insert_stmt->execute([
+                    $tenant_id,
+                    $username,
+                    $company_email,
+                    $contact_number !== '' ? $contact_number : null,
+                    $password_hash,
+                    $admin_role_id,
+                    $contact_first_name !== '' ? $contact_first_name : null,
+                    $contact_last_name !== '' ? $contact_last_name : null,
+                    $contact_mi !== '' ? $contact_mi : null,
+                    $contact_suffix !== '' ? $contact_suffix : null,
+                ]);
 
                 $upload_dir = __DIR__ . '/../uploads/business_permits/';
                 if (!is_dir($upload_dir) && !mkdir($upload_dir, 0777, true)) {
@@ -761,6 +824,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <label>Suffix</label>
                             <input type="text" class="input-field" name="contact_suffix" placeholder="e.g. Jr, Sr" maxlength="10">
                         </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Contact Number</label>
+                        <input type="text" class="input-field" name="contact_number" placeholder="e.g. 09171234567">
                     </div>
 
                     <div class="form-group">

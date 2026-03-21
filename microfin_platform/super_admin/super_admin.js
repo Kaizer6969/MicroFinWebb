@@ -79,15 +79,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalForm = modalBackdrop ? modalBackdrop.querySelector('form') : null;
     const btnSubmitTenant = document.getElementById('submit-tenant');
 
+    const resetModalFormReadOnly = () => {
+        if (modalForm) {
+            Array.from(modalForm.elements).forEach(el => {
+                if (el.tagName !== 'BUTTON' && el.type !== 'hidden') {
+                    el.removeAttribute('readonly');
+                    el.style.pointerEvents = '';
+                    el.style.backgroundColor = '';
+                    el.style.opacity = '';
+                    el.style.cursor = '';
+                }
+            });
+        }
+    };
+
     const closeModal = () => {
         if (modalBackdrop) {
             modalBackdrop.classList.remove('show');
-            if (modalForm) modalForm.reset();
+            if (modalForm) {
+                modalForm.reset();
+                resetModalFormReadOnly();
+            }
         }
     };
 
     if (btnCreateTenant && modalBackdrop) {
-        btnCreateTenant.addEventListener('click', () => modalBackdrop.classList.add('show'));
+        btnCreateTenant.addEventListener('click', () => {
+            resetModalFormReadOnly();
+            modalBackdrop.classList.add('show');
+        });
     }
     if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
     if (btnCancelModal) btnCancelModal.addEventListener('click', closeModal);
@@ -103,11 +123,54 @@ document.addEventListener('DOMContentLoaded', () => {
             btnSubmitTenant.style.opacity = '0.8';
             btnSubmitTenant.disabled = true;
         });
+        
+        const nameInputGlobal = modalForm.querySelector('input[name="tenant_name"]');
+        const slugInputGlobal = modalForm.querySelector('input[name="custom_slug"]');
+        if (nameInputGlobal && slugInputGlobal) {
+            nameInputGlobal.addEventListener('input', () => {
+                if (!slugInputGlobal.dataset.manuallyEdited) {
+                    slugInputGlobal.value = nameInputGlobal.value.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+                }
+            });
+            slugInputGlobal.addEventListener('input', () => {
+                slugInputGlobal.dataset.manuallyEdited = ((slugInputGlobal.value.length > 0) ? 'true' : '');
+            });
+        }
+    }
+
+    // Create SA Modal
+    const btnCreateSA = document.getElementById('btn-create-super-admin');
+    const saModalBackdrop = document.getElementById('modal-sa-backdrop');
+    if (btnCreateSA && saModalBackdrop) {
+        btnCreateSA.addEventListener('click', () => saModalBackdrop.classList.add('show'));
+    }
+    const btnCloseSAModal = document.getElementById('close-sa-modal');
+    const btnCancelSAModal = document.getElementById('cancel-sa-modal');
+    
+    if (btnCloseSAModal) btnCloseSAModal.addEventListener('click', () => {
+        if (saModalBackdrop) {
+            saModalBackdrop.classList.remove('show');
+            saModalBackdrop.querySelector('form').reset();
+        }
+    });
+    if (btnCancelSAModal) btnCancelSAModal.addEventListener('click', () => {
+        if (saModalBackdrop) {
+            saModalBackdrop.classList.remove('show');
+            saModalBackdrop.querySelector('form').reset();
+        }
+    });
+    if (saModalBackdrop) {
+        saModalBackdrop.addEventListener('click', (e) => {
+            if (e.target === saModalBackdrop) {
+                saModalBackdrop.classList.remove('show');
+                saModalBackdrop.querySelector('form').reset();
+            }
+        });
     }
 
     // Bind provision buttons (from tenant table rows)
     bindProvisionButtons();
-    bindSlugEditorButtons();
+
 
     // ============================================================
     // DASHBOARD: Charts + Polling
@@ -497,12 +560,12 @@ document.addEventListener('DOMContentLoaded', () => {
         tbody.innerHTML = logs.map(log => `
             <tr>
                 <td><small>${formatDateTime(log.created_at)}</small></td>
-                <td>${esc(log.username || log.user_email || 'System')}</td>
+                <td><span style="font-family: monospace;">${esc(log.username || '—')}</span></td>
+                <td>${esc(log.user_email || 'System')}</td>
                 <td>${esc(log.tenant_name || 'Platform')}</td>
                 <td><span class="badge badge-blue">${esc(log.action_type)}</span></td>
                 <td>${esc(log.entity_type || '—')}</td>
-                <td>${esc(log.description || '—')}</td>
-                <td><small>${esc(log.ip_address || '—')}</small></td>
+                <td style="white-space: normal; min-width: 250px;">${esc(log.description || '—')}</td>
             </tr>
         `).join('');
     }
@@ -547,6 +610,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 const contactNumber = btn.getAttribute('data-contact-number') || '';
 
                 if (modalForm) {
+                    // Make fields read-only for demo provision
+                    Array.from(modalForm.elements).forEach(el => {
+                        if (el.tagName !== 'BUTTON' && el.type !== 'hidden') {
+                            el.setAttribute('readonly', 'true');
+                            if (el.tagName === 'SELECT' || el.type === 'checkbox') {
+                                el.style.pointerEvents = 'none';
+                                el.style.opacity = '0.7';
+                            }
+                            el.style.backgroundColor = 'var(--bg-tertiary)';
+                            el.style.cursor = 'default';
+                        }
+                    });
+
                     const nameInput = modalForm.querySelector('input[name="tenant_name"]');
                     const emailInput = modalForm.querySelector('input[name="admin_email"]');
                     const slugInput = modalForm.querySelector('input[name="custom_slug"]');
@@ -560,7 +636,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (nameInput) nameInput.value = tenantName;
                     if (emailInput) emailInput.value = companyEmail;
-                    if (slugInput) slugInput.value = '';
+                    if (slugInput) {
+                        slugInput.value = tenantName.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+                        delete slugInput.dataset.manuallyEdited;
+                    }
                     if (firstNameInput) firstNameInput.value = firstName;
                     if (lastNameInput) lastNameInput.value = lastName;
                     if (miInput) miInput.value = mi;
@@ -589,43 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function bindSlugEditorButtons() {
-        const slugButtons = document.querySelectorAll('.btn-edit-tenant-slug');
-        const slugForm = document.getElementById('tenant-slug-update-form');
-        const tenantIdInput = document.getElementById('slug-edit-tenant-id');
-        const tenantSlugInput = document.getElementById('slug-edit-tenant-slug');
 
-        if (!slugForm || !tenantIdInput || !tenantSlugInput) {
-            return;
-        }
-
-        slugButtons.forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const tenantId = btn.getAttribute('data-tenant-id') || '';
-                const currentSlug = btn.getAttribute('data-tenant-slug') || '';
-                const requestedSlug = window.prompt('Enter new tenant slug (letters, numbers, hyphens only):', currentSlug);
-
-                if (requestedSlug === null) {
-                    return;
-                }
-
-                const normalized = requestedSlug
-                    .toLowerCase()
-                    .trim()
-                    .replace(/[^a-z0-9-]+/g, '-')
-                    .replace(/^-+|-+$/g, '');
-
-                if (!normalized) {
-                    window.alert('Please enter a valid slug.');
-                    return;
-                }
-
-                tenantIdInput.value = tenantId;
-                tenantSlugInput.value = normalized;
-                slugForm.submit();
-            });
-        });
-    }
 
     function esc(str) {
         if (!str) return '';

@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
         item.addEventListener('click', (e) => {
             const targetId = item.getAttribute('data-target');
             if(!targetId) return;
+            const subTabId = item.getAttribute('data-subtab');
+            const navTitle = item.getAttribute('data-title');
             
             e.preventDefault();
             navItems.forEach(nav => nav.classList.remove('active'));
@@ -32,7 +34,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
             viewSections.forEach(section => section.classList.remove('active'));
             document.getElementById(targetId).classList.add('active');
-            pageTitle.textContent = item.querySelector('span:nth-child(2)').textContent;
+
+            if (targetId === 'settings' && subTabId) {
+                tabBtns.forEach(btn => btn.classList.remove('active'));
+                tabContents.forEach(content => content.classList.remove('active'));
+
+                const targetTabButton = document.querySelector(`.tab-btn[data-tab="${subTabId}"]`);
+                if (targetTabButton) {
+                    targetTabButton.classList.add('active');
+                }
+
+                const targetTabContent = document.getElementById(subTabId);
+                if (targetTabContent) {
+                    targetTabContent.classList.add('active');
+                }
+            }
+
+            if (pageTitle) {
+                pageTitle.textContent = navTitle || item.querySelector('span:nth-child(2)').textContent;
+            }
         });
     });
 
