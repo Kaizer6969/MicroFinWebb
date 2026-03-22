@@ -35,7 +35,7 @@ class TenantBranding {
     tagline: 'Your trusted lending partner',
     primaryColor: Color(0xFFDC2626),
     secondaryColor: Color(0xFF991B1B),
-    emoji: '💳',
+    emoji: '\u{1F4B3}',
     description: 'Personal and Business Loans at low rates',
     logo: 'images/fundline_logo.png',
   );
@@ -47,7 +47,7 @@ class TenantBranding {
     tagline: 'Banking for every Filipino',
     primaryColor: Color(0xFF1D4ED8),
     secondaryColor: Color(0xFF1E40AF),
-    emoji: '🏦',
+    emoji: '\u{1F3E6}',
     description: 'Agricultural and Rural Financing Solutions',
     logo: 'images/plaridel_logo.png',
   );
@@ -59,7 +59,7 @@ class TenantBranding {
     tagline: 'Community-driven microfinance',
     primaryColor: Color(0xFF059669),
     secondaryColor: Color(0xFF065F46),
-    emoji: '🌿',
+    emoji: '\u{1F33F}',
     description: 'Cooperative loans for the community',
     logo: 'images/sacred_logo.jpg',
   );
@@ -75,10 +75,15 @@ class TenantBranding {
     }
   }
 
-  /// Builds branding from API tenant rows while preserving known defaults.
-  static TenantBranding fromApiTenant(Map<String, dynamic> row) {
+  /// Returns null when API row has no real tenant_id.
+  static TenantBranding? fromApiTenant(Map<String, dynamic> row) {
     final tenantId = (row['tenant_id'] ?? '').toString().trim();
-    final slug = (row['tenant_slug'] ?? '').toString().trim().toLowerCase();
+    if (tenantId.isEmpty) {
+      return null;
+    }
+
+    final rawSlug = (row['tenant_slug'] ?? '').toString().trim().toLowerCase();
+    final slug = rawSlug.isEmpty ? tenantId.toLowerCase() : rawSlug;
     final tenantName = (row['tenant_name'] ?? slug).toString().trim();
     final staticMatch = fromTenantId(slug);
     final primaryFromApi = _parseHexColor(row['primary_color']);
@@ -86,7 +91,7 @@ class TenantBranding {
 
     if (staticMatch != null) {
       return TenantBranding(
-        tenantId: tenantId.isNotEmpty ? tenantId : staticMatch.tenantId,
+        tenantId: tenantId,
         slug: staticMatch.slug,
         appName: tenantName.isNotEmpty ? tenantName : staticMatch.appName,
         tagline: staticMatch.tagline,
@@ -100,18 +105,15 @@ class TenantBranding {
 
     const fallbackPrimary = Color(0xFF2563EB);
     const fallbackSecondary = Color(0xFF1E3A8A);
-    final fallbackId = tenantId.isEmpty
-        ? (slug.isEmpty ? 'tenant' : slug)
-        : tenantId;
     return TenantBranding(
-      tenantId: fallbackId,
-      slug: slug.isEmpty ? 'tenant' : slug,
+      tenantId: tenantId,
+      slug: slug,
       appName: tenantName.isEmpty ? 'Unknown Tenant' : tenantName,
       tagline: 'Active tenant',
       primaryColor: primaryFromApi ?? fallbackPrimary,
       secondaryColor: secondaryFromApi ?? fallbackSecondary,
-      emoji: '🏦',
-      description: 'Tenant slug: ${slug.isEmpty ? 'n/a' : slug}',
+      emoji: '\u{1F3E6}',
+      description: 'Tenant slug: $slug',
       logo: '',
     );
   }

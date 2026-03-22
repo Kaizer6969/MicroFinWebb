@@ -65,6 +65,7 @@ class _SplashScreenState extends State<SplashScreen> {
             (row) =>
                 TenantBranding.fromApiTenant(Map<String, dynamic>.from(row)),
           )
+          .whereType<TenantBranding>()
           .toList();
 
       if (!mounted) return;
