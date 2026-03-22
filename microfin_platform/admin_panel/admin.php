@@ -966,13 +966,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $slug_stmt = $pdo->prepare('SELECT tenant_slug FROM tenants WHERE tenant_id = ?');
             $slug_stmt->execute([$tenant_id]);
             $tenant_slug = $slug_stmt->fetchColumn();
-            
-            // Build login URL — detect Railway and use HTTPS, but keep basePath
-            // since the app is served under /microfin_platform/ on Railway.
-            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || getenv('RAILWAY_ENVIRONMENT') !== false ? 'https' : 'http';
-            $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
-            $base_url = $protocol . "://" . $requestHost . dirname(dirname($_SERVER['PHP_SELF']));
-            $login_url = $base_url . "/tenant_login/login.php?s=" . urlencode($tenant_slug);
+            // Explicitly check for Railway environment
+            $isRailway = getenv('RAILWAY_ENVIRONMENT') !== false || getenv('RAILWAY_PUBLIC_DOMAIN') !== false || getenv('RAILWAY_STATIC_URL') !== false;
+
+            if ($isRailway) {
+                // EXACT URL FOR RAILWAY PRODUCTION
+                $login_url = "https://microfinwebb-production.up.railway.app/microfin_platform/tenant_login/login.php?s=" . urlencode($tenant_slug);
+            } else {
+                // Localhost fallback for XAMPP
+                $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
+                $base_url = "http://" . $requestHost . dirname(dirname($_SERVER['PHP_SELF']));
+                $login_url = $base_url . "/tenant_login/login.php?s=" . urlencode($tenant_slug);
+            }
             
             $subject = "Welcome to " . $_SESSION['tenant_name'] . " - Employee Logins";
             $message = "Hello $first_name,\n\n"

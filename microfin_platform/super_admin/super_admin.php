@@ -117,17 +117,17 @@ function sa_build_tenant_login_url(string $tenantSlug): string
 
     // Optional explicit override, useful if a custom domain is used.
     $explicitBase = trim((string)(getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
-    if ($explicitBase !== '') {
-        return rtrim($explicitBase, '/') . '/tenant_login/login.php?s=' . $safeSlug;
+    // Explicitly check for Railway environment
+    $isRailway = getenv('RAILWAY_ENVIRONMENT') !== false || getenv('RAILWAY_PUBLIC_DOMAIN') !== false || getenv('RAILWAY_STATIC_URL') !== false;
+
+    if ($isRailway) {
+        // EXACT URL FOR RAILWAY PRODUCTION
+        return 'https://microfinwebb-production.up.railway.app/microfin_platform/tenant_login/login.php?s=' . $safeSlug;
     }
 
-    // The simplest and most robust approach for both XAMPP and Railway:
-    // Build the URL using the current request host and the derived base path.
-    // Railway handles the HTTPS protocol automatically, while XAMPP uses HTTP.
-    $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || getenv('RAILWAY_ENVIRONMENT') !== false ? 'https' : 'http';
+    // Localhost fallback for XAMPP
     $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    
-    return $protocol . '://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
+    return 'http://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
 }
 
 $provision_success = '';
