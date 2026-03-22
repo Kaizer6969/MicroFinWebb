@@ -61,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen>
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'tenant_id': activeTenant.value.slug,
+          'tenant_id': activeTenant.value.tenantId,
           'username': _emailController.text,
           'password': _passwordController.text,
         }),
@@ -133,10 +133,10 @@ class _LoginScreenState extends State<LoginScreen>
           position: _slideAnim,
           child: Column(
             children: [
-              // ── Header ─────────────────────────────────────────────────────
+              // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               _buildHeader(context, tenant, primary, secondary),
 
-              // ── Form ───────────────────────────────────────────────────────
+              // â”€â”€ Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
@@ -638,7 +638,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'tenant_id': activeTenant.value.slug,
+          'tenant_id': activeTenant.value.tenantId,
           'username': _usernameController.text,
           'email': _emailController.text,
           'password': _passwordController.text,
@@ -708,7 +708,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Create Account 🚀',
+                                'Create Account ðŸš€',
                                 style: TextStyle(
                                   fontSize: 26,
                                   fontWeight: FontWeight.w800,
@@ -1244,7 +1244,7 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': _emailController.text,
-          'tenant_id': activeTenant.value.slug,
+          'tenant_id': activeTenant.value.tenantId,
         }),
       );
 
@@ -1287,7 +1287,7 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': _emailController.text,
-          'tenant_id': activeTenant.value.slug,
+          'tenant_id': activeTenant.value.tenantId,
           'new_password': _passwordController.text,
         }),
       );
