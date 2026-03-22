@@ -121,18 +121,18 @@ function sa_build_tenant_login_url(string $tenantSlug): string
         return rtrim($explicitBase, '/') . '/tenant_login/login.php?s=' . $safeSlug;
     }
 
-    // Railway public URL support.
+    // Railway public URL support — include $basePath (/microfin_platform).
     $railwayStaticUrl = trim((string)(getenv('RAILWAY_STATIC_URL') ?: ''));
     if ($railwayStaticUrl !== '') {
         if (!preg_match('#^https?://#i', $railwayStaticUrl)) {
             $railwayStaticUrl = 'https://' . $railwayStaticUrl;
         }
-        return rtrim($railwayStaticUrl, '/') . '/tenant_login/login.php?s=' . $safeSlug;
+        return rtrim($railwayStaticUrl, '/') . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
     }
 
     $railwayPublicDomain = trim((string)(getenv('RAILWAY_PUBLIC_DOMAIN') ?: ''));
     if ($railwayPublicDomain !== '') {
-        return 'https://' . rtrim($railwayPublicDomain, '/') . '/tenant_login/login.php?s=' . $safeSlug;
+        return 'https://' . rtrim($railwayPublicDomain, '/') . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
     }
 
     // Fallback: use request host + computed basePath.

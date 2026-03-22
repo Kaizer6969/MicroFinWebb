@@ -1,6 +1,6 @@
 # Admin Module Checklist Evaluation
 
-Assessment date: 2026-03-22
+Assessment date: 2026-03-22 (Updated)
 
 Legend:
 - [x] Implemented
@@ -12,15 +12,20 @@ Legend:
 - [ ] Active and inactive users `(Partial: counts exist in code, but dashboard UI is incomplete)`
 - [x] Daily and monthly activity
 - [x] Visual charts (user growth, tenant activity, sales trends)
+- [x] Pending Applications stat card (excludes inquiries — filtered by request_type = 'tenant_application')
+- [x] Sidebar notification badge on Tenants (combined pending applications + inquiries)
+- [x] Tab badges on Applications and Inquiries tabs (individual counts, live-updated every 5s)
 
 ## Tenant Management
 - [x] List of all tenants
 - [x] Tenant profile (name, owner, status, plan)
 - [x] Tenant status (active, pending, suspended)
 - [ ] Actions (approve, reject, deactivate) `(Partial: approve/provision, reject, suspend, reactivate exist; no clear deactivate/archive flow found)`
+- [x] Tenant provisioning — email with login URL (no Tenant ID exposed in alert)
+- [x] Railway URL generation — correct domain + /microfin_platform path via APP_BASE_URL env var
 
 ## Reports
-- [x] Tenant activity reports
+- [x] Tenant activity reports (Pending Application badge removed from legend)
 - [ ] User registration reports `(Partial: user-growth analytics exist, but no dedicated registration report module found)`
 - [ ] Usage statistics `(Partial: usage stats exist under Tenant Subscriptions, not under Reports)`
 - [x] Filtered data (by date, tenant, etc.)
@@ -38,11 +43,16 @@ Legend:
 - [x] Tenant-related changes
 - [x] Timestamps of all events
 
-## Backup (Optional for now)
-- [ ] Backup history
-- [ ] Backup status (successful/failed)
-- [ ] Stored backup files
-- [ ] Restore points (if available)
+## Backup
+- [x] Backup history (logged in backup_logs table, displayed in Backup History table)
+- [x] Backup status (successful/failed — status tracked per operation)
+- [x] Stored backup files (streamed as direct downloads for Railway compatibility)
+- [ ] Restore points (if available) `(Not implemented — only manual SQL import is available)`
+- [x] Full database backup (mysqldump with PHP fallback)
+- [x] Tenant-specific data export
+- [x] SQL Import with duplicate skipping (INSERT IGNORE INTO)
+- [x] Schema mismatch detection on import
+- [x] Import error reporting and logging
 
 ## Settings
 - [ ] System name and branding `(Partial: tenant-side branding/settings exist; no full global super admin branding settings found)`
@@ -50,12 +60,15 @@ Legend:
 - [x] User roles and permissions
 
 ## Quick Totals
-- [x] Implemented: 13 items
-- [ ] Incomplete or missing: 15 items
+- [x] Implemented: 24 items
+- [ ] Incomplete or missing: 10 items
 
 ## Priority Gaps
-- [ ] Finish Backup module
+- [x] ~~Finish Backup module~~ (Done — create, export, import, history, logging all implemented)
 - [ ] Add proper User Registration Reports
 - [ ] Add full Usage Statistics under Reports
 - [ ] Complete super admin login/logout audit coverage
 - [ ] Decide whether global Settings should fully manage branding and tenant rules
+- [ ] Add restore points feature (optional)
+- [ ] Add total tenants dashboard stat card
+- [ ] Add active/inactive users dashboard stat cards
