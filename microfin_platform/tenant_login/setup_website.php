@@ -609,7 +609,6 @@ $e = function ($val) {
         var accentColor = '<?php echo $e($accent); ?>';
         var tenantName = '<?php echo $e($tenant_name); ?>';
 
-        // Preload the iframe document with Tailwind and Fonts so it doesn't flicker on typing
         var iframeInited = false;
         function initIframeDoc() {
             var iframe = document.getElementById('previewContainer');
@@ -618,44 +617,62 @@ $e = function ($val) {
 <html>
 <head>
 <meta charset="utf-8"/>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"><\/script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Public+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0&display=swap" rel="stylesheet"/>
 <script>
-tailwind.config = {
-    darkMode: "class",
-    theme: {
-        extend: {
-            colors: {
-                primary: "${accentColor}",
-                "primary-container": "${accentColor}33",
-                "on-primary": "#ffffff",
-                secondary: "#0ea5e9",
-                "secondary-container": "#0ea5e933",
-                surface: "#f8fafc",
-                "on-surface": "#0f172a",
-                "on-surface-variant": "#64748b",
-                "outline-variant": "#cbd5e1"
-            },
-            fontFamily: {
-                "headline": ["Manrope", "sans-serif"],
-                "body": ["Public Sans", "sans-serif"]
-            }
-        }
-    }
-};
 window.addEventListener('message', function(e) {
     if (e.data && e.data.html !== undefined) {
-        var bodyMsg = document.getElementById('preview-body-content');
-        if (bodyMsg) bodyMsg.innerHTML = e.data.html;
+        var el = document.getElementById('preview-body-content');
+        if (el) el.innerHTML = e.data.html;
     }
 });
 <\/script>
 <style>
-    body { font-family: 'Public Sans', sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 0; }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
+    :root {
+        --brand: ${accentColor};
+        --brand-text: #ffffff;
+        --bs-body-font-family: 'Public Sans', sans-serif;
+        --bs-body-bg: #f8fafc;
+        --bs-body-color: #1e293b;
+    }
+    h1,h2,h3,h4,h5,.headline { font-family: 'Manrope', sans-serif; }
+    body { font-family: 'Public Sans', sans-serif; background: #f8fafc; color: #1e293b; margin: 0; padding: 0; font-size: 14px; }
+    .material-symbols-rounded { vertical-align: middle; font-variation-settings: 'FILL' 1; }
+    ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .text-brand { color: var(--brand) !important; }
+    .bg-brand { background-color: var(--brand) !important; }
+    .btn-brand { background: var(--brand); color: var(--brand-text); border:none; }
+    .btn-brand:hover { filter: brightness(0.9); color: var(--brand-text); }
+    .btn-brand-outline { border: 2px solid var(--brand); color: var(--brand); background: transparent; }
+    .btn-brand-outline:hover { background: var(--brand); color: var(--brand-text); }
+    .site-nav { background: rgba(255,255,255,0.85); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(0,0,0,0.06); }
+    .nav-link { font-weight: 600; font-size: .78rem; color: #475569; }
+    .nav-link:hover { color: var(--brand) !important; }
+    .hero-wrap { min-height: 300px; display: flex; align-items: center; padding: 40px 0 30px; background: linear-gradient(135deg, #f8fafc, #eef2ff, #f0fdf4); position: relative; overflow: hidden; }
+    .hero-title { font-size: 1.6rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; color: #0f172a; }
+    .hero-title span { color: var(--brand); }
+    .hero-subtitle { font-size: .78rem; color: #64748b; font-weight: 500; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.06); border-radius: 999px; padding: 4px 12px; font-size: .65rem; font-weight: 700; color: var(--brand); }
+    .hero-illus { background: linear-gradient(145deg, rgba(0,0,0,0.03), #f1f5f9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 12px; border-radius: 16px; position: relative; overflow: hidden; }
+    .hi-card { background: #fff; border-radius: 10px; padding: 8px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 8px; width: 100%; }
+    .hi-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .hi-icon .material-symbols-rounded { font-size: 14px; color: #fff; }
+    .hi-primary { background: var(--brand); }
+    .hi-green { background: #10b981; }
+    .hi-amber { background: #f59e0b; }
+    .hi-label { font-size: .52rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .hi-value { font-size: .78rem; font-weight: 800; color: #0f172a; }
+    .service-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; transition: box-shadow 0.2s; background: #fff; }
+    .service-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+    .service-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+    .about-wrap { background: var(--brand); color: #fff; border-radius: 16px; padding: 24px; position: relative; overflow: hidden; }
+    .about-wrap::before { content:''; position:absolute; width:200px; height:200px; border-radius:50%; background:rgba(255,255,255,0.06); top:-60px; right:-60px; }
+    .download-section { background: linear-gradient(135deg, var(--brand), #0ea5e9); border-radius: 16px; padding: 24px; color: #fff; text-align: center; position: relative; overflow: hidden; }
+    .download-section::before { content:''; position:absolute; width:180px; height:180px; border-radius:50%; background:rgba(255,255,255,0.08); bottom:-50px; left:-50px; }
+    .footer-section { background: #fff; border-top: 1px solid #e2e8f0; padding: 20px 0; }
 </style>
 </head>
 <body>
@@ -688,18 +705,17 @@ window.addEventListener('message', function(e) {
             var contactEmail = form.querySelector('input[name="contact_email"]').value;
             var contactAddr = form.querySelector('textarea[name="contact_address"]').value;
             var contactHours = form.querySelector('input[name="contact_hours"]').value;
-            
+
             var showAbout = form.querySelector('input[name="website_show_about"]').checked;
             var showServices = form.querySelector('input[name="website_show_services"]').checked;
             var showContact = form.querySelector('input[name="website_show_contact"]').checked;
             var showDownload = form.querySelector('input[name="website_show_download"]').checked;
-            
+
             var downloadTitle = form.querySelector('input[name="website_download_title"]').value || 'Download Our App';
             var downloadDesc = form.querySelector('textarea[name="website_download_description"]').value || 'Get the app for faster access.';
             var downloadBtn = form.querySelector('input[name="website_download_button_text"]').value || 'Download App';
 
             var html = '';
-
             if (template === 'template1') {
                 html = generateTemplate1(heroTitle, heroSubtitle, heroDesc, aboutBody, contactPhone, contactEmail, contactAddr, contactHours, downloadTitle, downloadDesc, downloadBtn, showAbout, showServices, showContact, showDownload);
             }
@@ -707,96 +723,176 @@ window.addEventListener('message', function(e) {
             window.lastGeneratedHtml = html;
             var iframe = document.getElementById('previewContainer');
             if (iframe && iframe.contentWindow) {
-                // Post message to the iframe
                 iframe.contentWindow.postMessage({ html: html }, '*');
             }
+        }
+
+        function escH(str) { var d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+        function colorFirstWord(title) {
+            var safe = escH(title);
+            var parts = safe.split(' ');
+            if (parts.length >= 2) return '<span>' + parts[0] + '</span> ' + parts.slice(1).join(' ');
+            return safe;
         }
 
         function generateTemplate1(title, subtitle, desc, about, phone, email, addr, hours, dlTitle, dlDesc, dlBtn, showAbout, showServices, showContact, showDownload) {
             var html = `
             <!-- Navbar -->
-            <nav class="sticky top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm">
-                <div class="flex justify-between items-center h-14 px-4 max-w-7xl mx-auto">
-                    <div class="text-base font-bold text-primary font-headline tracking-tight">${tenantName}</div>
-                    <div class="hidden sm:flex items-center space-x-4 text-xs font-headline font-semibold">
-                        ${showServices ? '<a class="text-on-surface-variant">Services</a>' : ''}
-                        ${showAbout ? '<a class="text-on-surface-variant">About Us</a>' : ''}
-                        ${showContact ? '<a class="text-on-surface-variant">Contact</a>' : ''}
-                    </div>
+            <nav class="site-nav sticky-top py-2">
+              <div class="container">
+                <div class="d-flex justify-content-between align-items-center" style="height:44px;">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold headline text-brand" style="font-size:.9rem;">${escH(tenantName)}</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-1" style="font-size:.72rem;">
+                    ${showServices ? '<a class="nav-link px-2">Services</a>' : ''}
+                    ${showAbout ? '<a class="nav-link px-2">About Us</a>' : ''}
+                    ${showContact ? '<a class="nav-link px-2">Contact</a>' : ''}
+                    ${showDownload ? '<a class="nav-link px-2">Download</a>' : ''}
+                  </div>
+                  <div class="d-flex gap-2 align-items-center">
+                    <a class="btn btn-brand-outline rounded-pill px-3 fw-bold" style="font-size:.68rem;">Log In</a>
+                    <a class="btn btn-brand rounded-pill px-3 fw-bold shadow-sm" style="font-size:.68rem;">Get Started</a>
+                  </div>
                 </div>
+              </div>
             </nav>
 
             <!-- Hero -->
-            <header class="relative overflow-hidden pt-8 pb-12 px-4 max-w-7xl mx-auto">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                    <div>
-                        ${subtitle ? `<div class="inline-flex items-center px-2 py-1 rounded-full bg-secondary-container text-secondary text-[10px] font-bold mb-4 tracking-wider uppercase">${subtitle}</div>` : ''}
-                        <h1 class="text-3xl font-extrabold text-primary leading-tight mb-4 tracking-tight">${title.replace(/\n/g, '<br>')}</h1>
-                        ${desc ? `<p class="text-sm text-on-surface-variant mb-6">${desc}</p>` : ''}
-                        <div class="flex gap-2">
-                            <span class="bg-primary text-on-primary px-4 py-2 rounded font-bold text-sm shadow">Get Started</span>
-                        </div>
+            <section class="hero-wrap">
+              <div class="container position-relative" style="z-index:2;">
+                <div class="row align-items-center g-4">
+                  <div class="col-7">
+                    ${subtitle ? '<div class="hero-badge mb-2"><span class="material-symbols-rounded" style="font-size:.7rem;">verified</span>' + escH(subtitle) + '</div>' : ''}
+                    <h1 class="hero-title mb-2">${colorFirstWord(title)}</h1>
+                    ${desc ? '<p class="hero-subtitle mb-3">' + escH(desc) + '</p>' : ''}
+                    <div class="d-flex gap-2">
+                      <a class="btn btn-brand rounded-pill px-3 fw-bold shadow-sm" style="font-size:.72rem;">Get Started</a>
+                      <a class="btn btn-brand-outline rounded-pill px-3 fw-bold" style="font-size:.72rem;">Learn More</a>
                     </div>
-                    <div class="relative">
-                        <div class="bg-primary-container rounded-xl aspect-[4/5] overflow-hidden relative shadow-lg flex items-center justify-center">
-                            <span class="material-symbols-outlined text-primary/20" style="font-size: 80px;">account_balance</span>
-                            <div class="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur p-3 rounded shadow-lg">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-white"><span class="material-symbols-outlined text-sm">verified_user</span></div>
-                                    <div>
-                                        <div class="text-xs font-bold text-primary">500+ Members</div>
-                                        <div class="text-[10px] text-on-surface-variant">Loans Funded</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                  </div>
+                  <div class="col-5">
+                    <div class="hero-illus">
+                      <div class="hi-card">
+                        <div class="hi-icon hi-primary"><span class="material-symbols-rounded">check_circle</span></div>
+                        <div><div class="hi-label">Approved Loans</div><div class="hi-value">1,240</div></div>
+                      </div>
+                      <div class="hi-card">
+                        <div class="hi-icon hi-green"><span class="material-symbols-rounded">group</span></div>
+                        <div><div class="hi-label">Active Members</div><div class="hi-value">856</div></div>
+                      </div>
+                      <div class="hi-card">
+                        <div class="hi-icon hi-amber"><span class="material-symbols-rounded">trending_up</span></div>
+                        <div><div class="hi-label">Growth Rate</div><div class="hi-value">+24%</div></div>
+                      </div>
                     </div>
+                  </div>
                 </div>
-            </header>
+              </div>
+            </section>
 
-            <!-- Services Placeholder (Simulated) -->
+            <!-- Services -->
             ${showServices ? `
-            <section class="py-10 px-4 max-w-7xl mx-auto bg-white border-t border-outline-variant/30">
-                <span class="text-secondary font-bold text-[10px] tracking-widest uppercase mb-4 block">Our Services</span>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="bg-surface p-4 rounded-lg">
-                        <h3 class="font-bold text-primary text-sm mb-2">Personal Loans</h3>
-                        <p class="text-xs text-on-surface-variant">Flexible terms for your personal needs.</p>
-                    </div>
-                    <div class="bg-surface p-4 rounded-lg">
-                        <h3 class="font-bold text-primary text-sm mb-2">Business Loans</h3>
-                        <p class="text-xs text-on-surface-variant">Grow your enterprise with us.</p>
-                    </div>
+            <section class="py-4">
+              <div class="container">
+                <div class="text-center mb-3">
+                  <span class="text-brand fw-bold" style="font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;">What We Offer</span>
+                  <h2 class="headline fw-bold mt-1" style="font-size:1.1rem;">Our Services</h2>
                 </div>
+                <div class="row g-3">
+                  <div class="col-4">
+                    <div class="service-card">
+                      <div class="service-icon bg-brand bg-opacity-10"><span class="material-symbols-rounded text-brand" style="font-size:18px;">account_balance_wallet</span></div>
+                      <h5 class="fw-bold text-brand" style="font-size:.72rem;">Personal Loans</h5>
+                      <p style="font-size:.58rem; color:#64748b;">Flexible terms for your personal needs and goals.</p>
+                    </div>
+                  </div>
+                  <div class="col-4">
+                    <div class="service-card">
+                      <div class="service-icon" style="background:rgba(16,185,129,0.1);"><span class="material-symbols-rounded" style="font-size:18px; color:#10b981;">store</span></div>
+                      <h5 class="fw-bold text-brand" style="font-size:.72rem;">Business Loans</h5>
+                      <p style="font-size:.58rem; color:#64748b;">Grow your enterprise with competitive rates.</p>
+                    </div>
+                  </div>
+                  <div class="col-4">
+                    <div class="service-card">
+                      <div class="service-icon" style="background:rgba(245,158,11,0.1);"><span class="material-symbols-rounded" style="font-size:18px; color:#f59e0b;">emergency</span></div>
+                      <h5 class="fw-bold text-brand" style="font-size:.72rem;">Emergency Loans</h5>
+                      <p style="font-size:.58rem; color:#64748b;">Quick access when you need it most.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </section>
             ` : ''}
 
-            <!-- About Us -->
+            <!-- About -->
             ${showAbout ? `
-            <section class="py-10 px-4 max-w-7xl mx-auto bg-primary text-white rounded-lg my-4 mx-4">
-                <span class="text-white/70 font-bold text-[10px] tracking-widest uppercase mb-2 block">About Us</span>
-                <p class="font-headline font-bold text-base">${about ? about.replace(/\n/g, '<br>') : 'Our commitment to empowerment and community growth.'}</p>
+            <section class="py-4">
+              <div class="container">
+                <div class="about-wrap">
+                  <div class="row align-items-center g-3">
+                    <div class="col-7">
+                      <span style="font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; opacity:.7;">About Us</span>
+                      <h3 class="headline fw-bold mt-1 mb-2" style="font-size:1rem;">Who We Are</h3>
+                      <p style="font-size:.68rem; opacity:.85; line-height:1.6;">${about ? escH(about) : 'We are committed to empowering communities through accessible financial services and sustainable growth.'}</p>
+                    </div>
+                    <div class="col-5 text-center">
+                      <div style="display:flex; justify-content:center; margin-bottom:8px;">
+                        <div style="width:32px; height:32px; border-radius:50%; background:#10b981; border:2px solid #fff; display:flex; align-items:center; justify-content:center; font-size:.8rem;">👤</div>
+                        <div style="width:32px; height:32px; border-radius:50%; background:#f59e0b; border:2px solid #fff; margin-left:-8px; display:flex; align-items:center; justify-content:center; font-size:.8rem;">👤</div>
+                        <div style="width:32px; height:32px; border-radius:50%; background:#8b5cf6; border:2px solid #fff; margin-left:-8px; display:flex; align-items:center; justify-content:center; font-size:.8rem;">👤</div>
+                      </div>
+                      <div style="background:rgba(255,255,255,0.15); border-radius:12px; padding:10px; backdrop-filter:blur(6px);">
+                        <div style="font-size:1.3rem; font-weight:800;">500+</div>
+                        <div style="font-size:.52rem; text-transform:uppercase; letter-spacing:.08em; opacity:.7;">Happy Members</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+            ` : ''}
+
+            <!-- Download -->
+            ${showDownload ? `
+            <section class="py-4">
+              <div class="container">
+                <div class="download-section">
+                  <span class="material-symbols-rounded mb-2" style="font-size:2rem; display:block;">phone_android</span>
+                  <h3 class="headline fw-bold mb-1" style="font-size:1rem;">${escH(dlTitle)}</h3>
+                  <p style="font-size:.68rem; opacity:.85; margin-bottom:12px;">${escH(dlDesc)}</p>
+                  <a class="btn btn-light rounded-pill px-4 fw-bold shadow-sm" style="font-size:.72rem; color:var(--brand);">
+                    <span class="material-symbols-rounded me-1" style="font-size:.85rem;">download</span>${escH(dlBtn)}
+                  </a>
+                </div>
+              </div>
             </section>
             ` : ''}
 
             <!-- Footer -->
             ${showContact ? `
-            <footer class="bg-white border-t border-outline-variant/30 py-8 px-4 mt-8">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div>
-                        <div class="text-sm font-bold text-primary mb-2">${tenantName}</div>
-                        <p class="text-[10px] text-on-surface-variant max-w-xs">Your trusted partner in financial growth.</p>
+            <footer class="footer-section">
+              <div class="container">
+                <div class="row g-3">
+                  <div class="col-6">
+                    <div class="fw-bold text-brand mb-1" style="font-size:.82rem;">${escH(tenantName)}</div>
+                    <p style="font-size:.58rem; color:#64748b;">Your trusted partner in financial growth and community empowerment.</p>
+                  </div>
+                  <div class="col-6">
+                    <div class="fw-bold text-brand mb-1" style="font-size:.72rem;">Contact</div>
+                    <div style="font-size:.58rem; color:#64748b; line-height:1.8;">
+                      ${phone ? '<div><span class="material-symbols-rounded me-1" style="font-size:.7rem;">call</span>' + escH(phone) + '</div>' : ''}
+                      ${email ? '<div><span class="material-symbols-rounded me-1" style="font-size:.7rem;">mail</span>' + escH(email) + '</div>' : ''}
+                      ${addr ? '<div><span class="material-symbols-rounded me-1" style="font-size:.7rem;">location_on</span>' + escH(addr) + '</div>' : ''}
+                      ${hours ? '<div><span class="material-symbols-rounded me-1" style="font-size:.7rem;">schedule</span>' + escH(hours) + '</div>' : ''}
                     </div>
-                    <div class="flex flex-col space-y-1 text-xs text-on-surface-variant">
-                        <span class="font-bold text-primary">Contact</span>
-                        ${phone ? `<p>${phone}</p>` : ''}
-                        ${email ? `<p>${email}</p>` : ''}
-                        ${addr ? `<p>${addr}</p>` : ''}
-                        ${hours ? `<p>${hours}</p>` : ''}
-                    </div>
+                  </div>
                 </div>
+                <hr style="margin:12px 0 8px; border-color:#e2e8f0;">
+                <p class="text-center" style="font-size:.52rem; color:#94a3b8;">© ${new Date().getFullYear()} ${escH(tenantName)}. All rights reserved.</p>
+              </div>
             </footer>
-            ` : ''}
             `;
             return html;
         }

@@ -52,8 +52,11 @@ try {
             $stmt = $pdo->query("SELECT COALESCE(SUM(mrr), 0) AS total_mrr FROM tenants WHERE status = 'Active' AND deleted_at IS NULL");
             $data['total_mrr'] = number_format((float) $stmt->fetch(PDO::FETCH_ASSOC)['total_mrr'], 2);
 
-            $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE status IN ('Pending', 'Contacted') AND deleted_at IS NULL");
+            $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE request_type = 'tenant_application' AND status IN ('Pending', 'Contacted') AND deleted_at IS NULL");
             $data['pending_applications'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
+
+            $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE request_type = 'talk_to_expert' AND status IN ('Pending', 'Contacted') AND deleted_at IS NULL");
+            $data['pending_inquiries'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
 
             // Chart: User growth by tenant (daily line series)
             $labels = [];

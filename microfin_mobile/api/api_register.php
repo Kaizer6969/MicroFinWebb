@@ -53,10 +53,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $role_stmt->bind_param("s", $tenant_id);
         $role_stmt->execute();
         $role_res = $role_stmt->get_result();
+        
         if ($role_res->num_rows === 0) {
-            throw new Exception("Client role is not configured for this tenant.");
+            // Auto-create the Client role for this tenant if it doesn't exist
+            $insert_role_stmt = $conn->prepare("INSERT INTO user_roles (tenant_id, role_name, role_description) VALUES (?, 'Client', 'Default Client Role')");
+            $insert_role_stmt->bind_param("s", $tenant_id);
+            if (!$insert_role_stmt->execute()) {
+                throw new Exception("Failed to auto-create Client role: " . $insert_role_stmt->error);
+            }
+            $role_id = $insert_role_stmt->insert_id;
+            $insert_role_stmt->close();
+        } else {
+            $role_id = (int)$role_res->fetch_assoc()['role_id'];
         }
-        $role_id = (int)$role_res->fetch_assoc()['role_id'];
         $role_stmt->close();
 
         $user_type = 'Client'; 
@@ -71,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
 
         $client_code = 'CLT' . date('Y') . '-' . str_pad($user_id, 5, '0', STR_PAD_LEFT);
+        
         $stmt = $conn->prepare("INSERT INTO clients (user_id, tenant_id, client_code, first_name, middle_name, last_name, suffix, date_of_birth, contact_number, email_address, client_status, registration_date) VALUES (?, ?, ?, ?, ?, ?, ?, '1990-01-01', '', ?, 'Active', CURDATE())");
         $stmt->bind_param("isssssss", $user_id, $tenant_id, $client_code, $first_name, $middle_name, $last_name, $suffix, $email);
         if (!$stmt->execute()) {
@@ -79,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
 
         $conn->commit();
-        echo json_encode(['success' => true, 'message' => 'Registration successful! Welcome to the ' . ucfirst($tenant_id) . ' interface.']);
+        echo json_encode(['success' => true, 'message' => 'Registration successful!']);
     } catch (Exception $e) {
         $conn->rollback();
         echo json_encode(['success' => false, 'message' => $e->getMessage()]);

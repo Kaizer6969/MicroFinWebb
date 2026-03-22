@@ -187,6 +187,36 @@ body {
     height: 60%;
 }
 
+.nav-badge {
+    margin-left: auto;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    letter-spacing: 0;
+}
+
+.tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 8px;
+    min-width: 16px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
 /* Sidebar Section Labels */
 .nav-section-label {
     font-size: 0.65rem;
@@ -354,7 +384,7 @@ body {
 }
 
 .usage-cell {
-    min-width: 140px;
+    min-width: 100px;
 }
 
 .subscription-id-wrap,
@@ -366,7 +396,7 @@ body {
 }
 
 .subscription-tenant-cell {
-    min-width: 160px;
+    min-width: 140px;
 }
 
 .subscription-tenant-name {
@@ -520,10 +550,6 @@ body {
 @media (max-width: 900px) {
     .subscription-form-grid {
         grid-template-columns: 1fr;
-    }
-
-    .subscription-table {
-        min-width: 1050px;
     }
 }
 
@@ -896,6 +922,7 @@ body {
 [data-theme="light"] .badge-blue { color: #0284c7; }
 .badge-red { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
 [data-theme="light"] .badge-red { color: #e11d48; }
+.badge-outline { background: transparent; color: var(--text-main); border: 1px solid var(--text-muted); opacity: 0.8; }
 
 /* Activity List */
 .activity-list { list-style: none; }

@@ -154,6 +154,7 @@ $e = function($val) { return htmlspecialchars($val ?? '', ENT_QUOTES, 'UTF-8'); 
 $tenant_name = $data['tenant_name'];
 $layout = $data['layout_template'];
 $logo = $data['logo_path'] ?? '';
+$site_slug = $slug; // Alias used by all templates for login link hrefs
 
 $primary   = $data['theme_primary_color'] ?: '#dc2626';
 $secondary = $data['theme_secondary_color'] ?: '#991b1b';

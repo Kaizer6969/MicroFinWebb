@@ -70,7 +70,7 @@ tailwind.config = {
             </nav>
         </div>
         <div class="flex items-center gap-3">
-            <a href="../tenant_login/login.php?s=<?php echo urlencode($site_slug); ?>&auth=1" class="hidden md:inline-flex px-5 py-2.5 bg-surface text-primary border border-primary/20 text-sm font-bold rounded-xl hover:scale-105 transition-all no-underline flex items-center gap-2">Log In</a>
+            <a href="tenant_login/login.php?s=<?php echo urlencode($site_slug); ?>&auth=1" class="hidden md:inline-flex px-5 py-2.5 bg-surface text-primary border border-primary/20 text-sm font-bold rounded-xl hover:scale-105 transition-all no-underline flex items-center gap-2">Log In</a>
             <a href="<?php echo $e($hero_cta_url); ?>" class="px-5 py-2.5 bg-primary text-on-primary text-sm font-bold rounded-xl hover:scale-105 transition-all no-underline flex items-center gap-2">
                 <?php echo $e($hero_cta_text); ?>
                 <span class="material-symbols-outlined text-base">bolt</span>

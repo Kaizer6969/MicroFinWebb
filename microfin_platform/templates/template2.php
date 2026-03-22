@@ -63,7 +63,7 @@ tailwind.config = {
             </nav>
         </div>
         <div class="flex items-center gap-3">
-            <a href="../tenant_login/login.php?s=<?php echo urlencode($site_slug); ?>&auth=1" class="hidden md:inline-flex px-4 py-2 border border-primary text-primary text-sm font-bold rounded-sm hover:bg-primary/5 transition-all no-underline">Log In</a>
+            <a href="tenant_login/login.php?s=<?php echo urlencode($site_slug); ?>&auth=1" class="hidden md:inline-flex px-4 py-2 border border-primary text-primary text-sm font-bold rounded-sm hover:bg-primary/5 transition-all no-underline">Log In</a>
             <a href="<?php echo $e($hero_cta_url); ?>" class="hidden md:inline-flex px-4 py-2 bg-primary text-on-primary text-sm font-bold rounded-sm hover:opacity-90 transition-all no-underline">
                 <?php echo $e($hero_cta_text); ?>
             </a>

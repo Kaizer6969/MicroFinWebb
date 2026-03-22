@@ -464,6 +464,31 @@ document.addEventListener('DOMContentLoaded', () => {
         el('stat-inactive-users', data.inactive_users);
         el('stat-pending-apps', data.pending_applications ?? '0');
         el('stat-total-mrr', '₱' + data.total_mrr);
+        el('stat-revenue-total-mrr', '₱' + data.total_mrr);
+
+        // Update sidebar pending badge (total of applications + inquiries)
+        const badge = document.getElementById('sidebar-pending-badge');
+        if (badge) {
+            const count = parseInt(data.pending_applications ?? 0, 10) + parseInt(data.pending_inquiries ?? 0, 10);
+            badge.textContent = count;
+            badge.style.display = count > 0 ? '' : 'none';
+        }
+
+        // Update Applications tab badge
+        const appBadge = document.getElementById('tab-badge-applications');
+        if (appBadge) {
+            const c = parseInt(data.pending_applications ?? 0, 10);
+            appBadge.textContent = c;
+            appBadge.style.display = c > 0 ? '' : 'none';
+        }
+
+        // Update Inquiries tab badge
+        const inqBadge = document.getElementById('tab-badge-inquiries');
+        if (inqBadge) {
+            const c = parseInt(data.pending_inquiries ?? 0, 10);
+            inqBadge.textContent = c;
+            inqBadge.style.display = c > 0 ? '' : 'none';
+        }
 
         // Update charts
         if (chartUserGrowth && data.user_growth_chart) {
@@ -656,65 +681,6 @@ document.addEventListener('DOMContentLoaded', () => {
         subscriptionSearch.addEventListener('input', filterSubscriptionTable);
     }
 
-    subscriptionForms.forEach((form) => {
-        const planSelect = form.querySelector('.subscription-target-plan');
-        const timingSelect = form.querySelector('.subscription-change-timing');
-        const tenantName = form.dataset.tenantName || 'Tenant';
-        const currentPlan = form.dataset.currentPlan || '';
-
-        if (!planSelect || !timingSelect || !currentPlan) return;
-
-        const immediateOption = timingSelect.querySelector('option[value="immediate"]');
-
-        function applyTimingGuardrails() {
-            const selectedPlan = planSelect.value;
-            const isDowngrade = getSubscriptionPlanRank(selectedPlan) < getSubscriptionPlanRank(currentPlan);
-
-            if (immediateOption) {
-                immediateOption.disabled = isDowngrade;
-            }
-            if (isDowngrade) {
-                timingSelect.value = 'next_cycle';
-                timingSelect.title = 'Downgrades are always scheduled for next billing cycle.';
-            } else {
-                timingSelect.title = '';
-            }
-        }
-
-        planSelect.addEventListener('change', applyTimingGuardrails);
-        applyTimingGuardrails();
-
-        form.addEventListener('submit', (e) => {
-            const selectedPlan = planSelect.value;
-            const selectedTiming = timingSelect.value;
-            const currentRank = getSubscriptionPlanRank(currentPlan);
-            const targetRank = getSubscriptionPlanRank(selectedPlan);
-
-            if (selectedPlan === currentPlan) {
-                e.preventDefault();
-                alert('Selected plan is already active for this tenant.');
-                return;
-            }
-
-            const isUpgrade = targetRank > currentRank;
-            const isDowngrade = targetRank < currentRank;
-
-            let confirmMessage = '';
-            if (isDowngrade) {
-                timingSelect.value = 'next_cycle';
-                confirmMessage = `This will schedule a downgrade for ${tenantName} on the next billing cycle. Reduced limits may restrict staff/client capacity. Continue?`;
-            } else if (isUpgrade && selectedTiming === 'immediate') {
-                confirmMessage = `Apply upgrade immediately for ${tenantName}? This takes effect right away.`;
-            } else {
-                confirmMessage = `Schedule this plan change for ${tenantName} on the next billing cycle?`;
-            }
-
-            if (!window.confirm(confirmMessage)) {
-                e.preventDefault();
-            }
-        });
-    });
-
     // ============================================================
     // REPORTS: Load via AJAX
     // ============================================================
@@ -785,6 +751,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderSalesReport(data) {
+        // Update Stat Cards
+        const el = (id, val) => {
+            const e = document.getElementById(id);
+            if (e) e.textContent = val;
+        };
+        el('stat-revenue-actual-revenue', '₱' + (data.total_revenue || '0.00'));
+        el('stat-revenue-transactions', data.total_transactions || '0');
+        el('stat-revenue-avg-trans', '₱' + (data.avg_transaction || '0.00'));
+
         // Top tenants table
         const topTbody = document.querySelector('#top-tenants-table tbody');
         if (topTbody) {
@@ -1030,6 +1005,176 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!dateStr) return '—';
         const d = new Date(dateStr);
         return d.toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+
+    // ============================================================
+    // BACKUP: Stats, History, Create
+    // ============================================================
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function loadBackupInfo() {
+        fetch('api_backup.php?action=info')
+            .then(r => r.json())
+            .then(data => {
+                const el = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+                el('backup-stat-total', data.total_backups || 0);
+                el('backup-stat-last', data.last_backup ? formatDateTime(data.last_backup) : 'Never');
+                el('backup-stat-dbsize', formatBytes(data.db_size_bytes));
+                el('backup-stat-tables', data.table_count || '—');
+            })
+            .catch(e => console.error('Backup info error:', e));
+    }
+
+    function loadBackupHistory() {
+        fetch('api_backup.php?action=history')
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.querySelector('#backup-history-table tbody');
+                if (!tbody) return;
+                if (!data.logs || data.logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center; padding:2rem;"><span class="material-symbols-rounded" style="font-size:40px; display:block; margin-bottom:.5rem;">cloud_off</span>No backups have been created yet.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.logs.map(log => {
+                    const statusBadge = log.status === 'Success'
+                        ? '<span class="badge badge-green">Success</span>'
+                        : '<span class="badge badge-red" title="' + esc(log.error_message || '') + '">Failed</span>';
+                    const typeLabel = log.backup_type === 'tenant'
+                        ? '<span class="badge badge-blue">Tenant</span>'
+                        : '<span class="badge badge-purple">Full</span>';
+                    return `<tr>
+                        <td class="text-muted">${formatDateTime(log.created_at)}</td>
+                        <td>${typeLabel}</td>
+                        <td style="font-family:monospace; font-size:.85rem;">${esc(log.file_name)}</td>
+                        <td>${formatBytes(log.file_size_bytes)}</td>
+                        <td>${statusBadge}</td>
+                        <td>${esc(log.initiated_by_name || 'System')}</td>
+                    </tr>`;
+                }).join('');
+            })
+            .catch(e => console.error('Backup history error:', e));
+    }
+
+    function triggerBackupDownload(url, progressText) {
+        const progress = document.getElementById('backup-progress');
+        const pText = document.getElementById('backup-progress-text');
+        if (progress) progress.style.display = 'block';
+        if (pText) pText.textContent = progressText || 'Generating backup...';
+
+        // Use a hidden iframe to trigger the download without leaving the page
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+
+        // Poll to check if download started, then clean up
+        setTimeout(() => {
+            if (progress) progress.style.display = 'none';
+            loadBackupInfo();
+            loadBackupHistory();
+            setTimeout(() => iframe.remove(), 5000);
+        }, 3000);
+    }
+
+    // Full backup button
+    const btnBackupFull = document.getElementById('btn-backup-full');
+    if (btnBackupFull) {
+        btnBackupFull.addEventListener('click', () => {
+            triggerBackupDownload('api_backup.php?action=create', 'Generating full database backup...');
+        });
+    }
+
+    // Tenant export
+    const backupTenantSelect = document.getElementById('backup-tenant-select');
+    const btnBackupTenant = document.getElementById('btn-backup-tenant');
+    if (backupTenantSelect && btnBackupTenant) {
+        backupTenantSelect.addEventListener('change', () => {
+            btnBackupTenant.disabled = !backupTenantSelect.value;
+        });
+        btnBackupTenant.addEventListener('click', () => {
+            const tid = backupTenantSelect.value;
+            if (!tid) return;
+            const tenantName = backupTenantSelect.options[backupTenantSelect.selectedIndex].text;
+            triggerBackupDownload(
+                'api_backup.php?action=create&tenant_id=' + encodeURIComponent(tid),
+                'Exporting data for ' + tenantName + '...'
+            );
+        });
+    }
+
+    // Import SQL form
+    const importForm = document.getElementById('backup-import-form');
+    if (importForm) {
+        importForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('backup-import-file');
+            const resultDiv = document.getElementById('backup-import-result');
+            const btn = document.getElementById('btn-backup-import');
+            if (!fileInput || !fileInput.files[0]) return;
+
+            const origText = btn.innerHTML;
+            btn.innerHTML = '<span class="material-symbols-rounded" style="animation:spin 1s linear infinite;">sync</span> Importing...';
+            btn.disabled = true;
+            if (resultDiv) { resultDiv.style.display = 'none'; }
+
+            const formData = new FormData();
+            formData.append('sql_file', fileInput.files[0]);
+
+            try {
+                const res = await fetch('api_backup.php?action=import', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (resultDiv) {
+                    resultDiv.style.display = 'block';
+                    let html = '';
+                    if (data.success || (res.ok && !data.error)) {
+                        resultDiv.style.background = 'rgba(16,185,129,0.08)';
+                        resultDiv.style.border = '1px solid rgba(16,185,129,0.2)';
+                        html += '<div style="display:flex;align-items:center;gap:8px;"><span class="material-symbols-rounded" style="color:#10b981;">check_circle</span><span>' + esc(data.message || 'Import complete.') + '</span></div>';
+                    } else {
+                        resultDiv.style.background = 'rgba(239,68,68,0.08)';
+                        resultDiv.style.border = '1px solid rgba(239,68,68,0.2)';
+                        html += '<div style="display:flex;align-items:center;gap:8px;"><span class="material-symbols-rounded" style="color:#ef4444;">error</span><span>' + esc(data.error || data.message || 'Import failed.') + '</span></div>';
+                    }
+                    // Show schema mismatch warnings
+                    if (data.details && data.details.mismatches && data.details.mismatches.length > 0) {
+                        html += '<div style="margin-top:10px; padding:10px 12px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:6px;">';
+                        html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="material-symbols-rounded" style="color:#f59e0b;font-size:18px;">warning</span><strong style="font-size:.875rem;">Schema Mismatches Detected (' + data.details.mismatches.length + ')</strong></div>';
+                        html += '<ul style="margin:0;padding-left:18px;font-size:.825rem;line-height:1.7;">';
+                        data.details.mismatches.forEach(m => { html += '<li>' + esc(m) + '</li>'; });
+                        html += '</ul></div>';
+                    }
+                    resultDiv.innerHTML = html;
+                }
+
+                loadBackupInfo();
+                loadBackupHistory();
+            } catch (err) {
+                if (resultDiv) {
+                    resultDiv.style.display = 'block';
+                    resultDiv.style.background = 'rgba(239,68,68,0.08)';
+                    resultDiv.style.border = '1px solid rgba(239,68,68,0.2)';
+                    resultDiv.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><span class="material-symbols-rounded" style="color:#ef4444;">error</span><span>Network error: ' + esc(err.message) + '</span></div>';
+                }
+            } finally {
+                btn.innerHTML = origText;
+                btn.disabled = false;
+                fileInput.value = '';
+            }
+        });
+    }
+
+    // Load backup data on page load
+    if (document.getElementById('backup')) {
+        loadBackupInfo();
+        loadBackupHistory();
     }
 
 });

@@ -7,6 +7,10 @@ if (!isset($_SESSION['user_logged_in']) || $_SESSION['user_logged_in'] !== true 
 }
 
 require_once '../backend/db_connect.php';
+require_once '../backend/lazy_billing_resolver.php';
+
+// Resolve any pending tenant subscriptions automagically!
+resolve_tenant_billing($pdo);
 
 $tenant_id = $_SESSION['tenant_id'];
 $tenant_name = $_SESSION['tenant_name'] ?? 'Company Admin';
@@ -174,16 +178,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         ];
         
         if (array_key_exists($new_plan, $valid_plans)) {
-            $max_clients = (int)$valid_plans[$new_plan]['max_clients'];
-            $max_users = (int)$valid_plans[$new_plan]['max_users'];
+            $change_timing = $_POST['change_timing'] ?? 'next_cycle';
             
-            $upd = $pdo->prepare("UPDATE tenants SET plan_tier = ?, max_clients = ?, max_users = ? WHERE tenant_id = ?");
-            $upd->execute([$new_plan, $max_clients, $max_users, $tenant_id]);
+            $info_stmt = $pdo->prepare('SELECT plan_tier, billing_cycle, next_billing_date FROM tenants WHERE tenant_id = ?');
+            $info_stmt->execute([$tenant_id]);
+            $tenant_info = $info_stmt->fetch(PDO::FETCH_ASSOC);
             
-            $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_UPDATE', ?, ?)");
-            $log_stmt->execute([$tenant_id, $_SESSION['user_id'], "Subscription plan updated to $new_plan", $_SERVER['REMOTE_ADDR'] ?? '']);
-            
-            $_SESSION['admin_flash'] = "Subscription plan successfully updated to $new_plan.";
+            $plan_prices = [
+                'Starter' => 4999,
+                'Growth' => 9999,
+                'Pro' => 14999,
+                'Enterprise' => 22999,
+                'Unlimited' => 29999
+            ];
+            $mrr = $plan_prices[$new_plan] ?? 0;
+
+            if ($change_timing === 'immediate') {
+                $max_clients = (int)$valid_plans[$new_plan]['max_clients'];
+                $max_users = (int)$valid_plans[$new_plan]['max_users'];
+                
+                $upd = $pdo->prepare("UPDATE tenants SET plan_tier = ?, mrr = ?, max_clients = ?, max_users = ?, scheduled_plan_tier = NULL, scheduled_plan_effective_date = NULL WHERE tenant_id = ?");
+                $upd->execute([$new_plan, $mrr, $max_clients, $max_users, $tenant_id]);
+                
+                $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_UPDATE', ?, ?)");
+                $log_stmt->execute([$tenant_id, $_SESSION['user_id'], "Subscription plan updated instantly to $new_plan", $_SERVER['REMOTE_ADDR'] ?? '']);
+                
+                $_SESSION['admin_flash'] = "Subscription plan successfully applied instantly to $new_plan.";
+            } else {
+                $next = $tenant_info['next_billing_date'] ?? date('Y-m-d', strtotime('+30 days'));
+                if (empty($next) || $next < date('Y-m-d')) {
+                    $next = date('Y-m-d', strtotime('+30 days'));
+                }
+                
+                $upd = $pdo->prepare("UPDATE tenants SET scheduled_plan_tier = ?, scheduled_plan_effective_date = ? WHERE tenant_id = ?");
+                $upd->execute([$new_plan, $next, $tenant_id]);
+                
+                $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_SCHEDULED', ?, ?)");
+                $log_stmt->execute([$tenant_id, $_SESSION['user_id'], "Subscription plan scheduled to $new_plan on $next", $_SERVER['REMOTE_ADDR'] ?? '']);
+                
+                $_SESSION['admin_flash'] = "Subscription plan update to $new_plan is scheduled for your next billing cycle ($next).";
+            }
         } else {
             $_SESSION['admin_flash'] = "Invalid plan selected.";
         }
@@ -1367,6 +1401,8 @@ function hexToRgb($hex) {
                     $active_view = 'staff';
                 } elseif ($_GET['tab'] === 'billing') {
                     $active_view = 'billing';
+                } elseif ($_GET['tab'] === 'statements') {
+                    $active_view = 'statements';
                 } elseif ($_GET['tab'] === 'website') {
                     $active_view = 'website';
                 } elseif ($_GET['tab'] === 'personal') {
@@ -1385,6 +1421,7 @@ function hexToRgb($hex) {
                 'personal' => 'Personal Settings',
                 'features' => 'Feature Toggles',
                 'billing' => 'Billing & Subscription',
+                'statements' => 'Statements',
                 'loan_products' => 'Loan Products Settings',
                 'credit_settings' => 'Credit Assessment Settings'
             ];
@@ -1424,7 +1461,11 @@ function hexToRgb($hex) {
                 <span class="sidebar-section-title">Billing & Subscription</span>
                 <a href="#billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
                     <span class="material-symbols-rounded">receipt_long</span>
-                    <span>Billing</span>
+                    <span>Plan & Billing</span>
+                </a>
+                <a href="#statements" class="nav-item <?php echo $active_view === 'statements' ? 'active' : ''; ?>" data-target="statements" data-title="Statements">
+                    <span class="material-symbols-rounded">account_balance_wallet</span>
+                    <span>Statements</span>
                 </a>
 
                 <span class="sidebar-section-title">Account</span>
@@ -1898,17 +1939,43 @@ function hexToRgb($hex) {
                                     <div style="margin-top: auto; padding-top: 32px; z-index: 1;">
                                         <div style="background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 16px; border-radius: 12px;">
                                             <label style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; opacity: 0.9;">Manage Plan</label>
-                                            <form method="POST" action="admin.php" style="display: flex; gap: 12px; align-items: center;">
+                                            <form method="POST" action="admin.php" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                                                 <input type="hidden" name="action" value="update_subscription_plan">
-                                                <select name="new_plan" id="new-plan-select" style="flex: 1; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">
+                                                <select name="new_plan" id="new-plan-select" style="flex: 1; min-width: 140px; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">
                                                     <option value="Starter" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - ₱4,999/mo</option>
                                                     <option value="Growth" <?php echo $current_plan === 'Growth' ? 'selected' : ''; ?>>Growth - ₱9,999/mo</option>
                                                     <option value="Pro" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - ₱14,999/mo</option>
                                                     <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱22,999/mo</option>
                                                     <option value="Unlimited" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - ₱29,999/mo</option>
                                                 </select>
-                                                <button type="submit" style="background: white; color: var(--primary-color); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">Upgrade</button>
+                                                <select name="change_timing" style="min-width: 130px; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">
+                                                    <option value="immediate">Instantly Now</option>
+                                                    <option value="next_cycle" selected>Next Billing</option>
+                                                </select>
+                                                <button type="submit" id="plan-action-btn" style="background: white; color: var(--primary-color); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">Upgrade</button>
                                             </form>
+                                            <script>
+                                                document.addEventListener('DOMContentLoaded', () => {
+                                                    const planSelect = document.getElementById('new-plan-select');
+                                                    const actionBtn = document.getElementById('plan-action-btn');
+                                                    if (planSelect && actionBtn) {
+                                                        const ranks = { 'Starter': 1, 'Growth': 2, 'Pro': 3, 'Enterprise': 4, 'Unlimited': 5 };
+                                                        const currentPlan = '<?php echo addslashes($current_plan); ?>';
+                                                        const currentRank = ranks[currentPlan] || 0;
+                                                        planSelect.addEventListener('change', (e) => {
+                                                            const selectedRank = ranks[e.target.value] || 0;
+                                                            if (selectedRank < currentRank) {
+                                                                actionBtn.textContent = 'Downgrade';
+                                                            } else if (selectedRank > currentRank) {
+                                                                actionBtn.textContent = 'Upgrade';
+                                                            } else {
+                                                                actionBtn.textContent = 'Same Plan';
+                                                            }
+                                                        });
+                                                        planSelect.dispatchEvent(new Event('change'));
+                                                    }
+                                                });
+                                            </script>
                                         </div>
                                     </div>
                                     <?php endif; ?>
@@ -2122,6 +2189,61 @@ function hexToRgb($hex) {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Statements View -->
+                <section id="statements" class="view-section <?php echo $active_view === 'statements' ? 'active' : ''; ?>">
+                    <div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                        <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <div style="background: rgba(34, 197, 94, 0.1); color: #22c55e; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                    <span class="material-symbols-rounded" style="font-size: 20px;">account_balance_wallet</span>
+                                </div>
+                                <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;">Statement of Transactions</h3>
+                            </div>
+                            <p class="text-muted" style="margin: 0; font-size: 0.95rem;">Review all processed billing transactions and automatic payments for your subscription.</p>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Reference ID</th>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Payment Source</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $stmt = $pdo->prepare("SELECT * FROM payments WHERE tenant_id = ? ORDER BY payment_date DESC LIMIT 50");
+                                    $stmt->execute([$tenant_id]);
+                                    $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                    if (empty($transactions)):
+                                    ?>
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                            <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">receipt_long</span>
+                                            No transactions have been recorded yet.
+                                        </td>
+                                    </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($transactions as $txn): ?>
+                                        <tr>
+                                            <td style="font-weight: 500; font-family: monospace;"><?php echo htmlspecialchars($txn['payment_reference']); ?></td>
+                                            <td class="text-muted"><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($txn['payment_date']))); ?></td>
+                                            <td style="font-weight: 600;">₱<?php echo number_format($txn['payment_amount'], 2); ?></td>
+                                            <td class="text-muted"><?php echo htmlspecialchars($txn['payment_method'] ?? 'System Auto-Billing'); ?></td>
+                                            <td>
+                                                <span class="badge badge-green"><?php echo htmlspecialchars($txn['payment_status']); ?></span>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>

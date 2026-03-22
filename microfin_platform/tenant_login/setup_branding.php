@@ -671,6 +671,85 @@ $tenant_name = $_SESSION['tenant_name'] ?? 'Your Organization';
         .phone-nav-item .material-symbols-rounded { font-size: 16px; }
         .phone-nav-item.active { color: var(--theme-primary); }
 
+        /* ── Website Preview ── */
+        .website-preview-shell {
+            min-height: 340px;
+            background: var(--theme-bg-body);
+            overflow: hidden;
+        }
+        .wp-nav {
+            background: var(--theme-bg-card);
+            border-bottom: 1px solid var(--theme-border-color);
+            padding: 8px 14px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .wp-nav-brand { font-size: 0.72rem; font-weight: 800; color: var(--theme-primary); }
+        .wp-nav-links { display: flex; gap: 10px; }
+        .wp-nav-links a { font-size: 0.5rem; font-weight: 600; color: var(--theme-text-muted); text-decoration: none; }
+        .wp-nav-links a:hover { color: var(--theme-primary); }
+        .wp-nav-btns { display: flex; gap: 4px; }
+        .wp-nav-btns .btn-login {
+            font-size: 0.46rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+            border: 1.5px solid var(--theme-primary); color: var(--theme-primary); background: transparent;
+        }
+        .wp-nav-btns .btn-cta {
+            font-size: 0.46rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+            background: var(--theme-primary); color: #fff; border: none;
+        }
+        .wp-hero {
+            padding: 20px 14px 16px;
+            background: linear-gradient(135deg, var(--theme-bg-body), rgba(238,242,255,0.3), rgba(240,253,244,0.3));
+            display: grid; grid-template-columns: 1fr 120px; gap: 12px; align-items: center;
+        }
+        .wp-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 0.44rem; font-weight: 700; color: var(--theme-primary); background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.05); padding: 2px 8px; border-radius: 999px; margin-bottom: 6px; }
+        .wp-badge .material-symbols-rounded { font-size: 0.5rem; }
+        .wp-hero-title { font-size: 1.05rem; font-weight: 800; color: var(--theme-text-main); line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 5px; }
+        .wp-hero-title span { color: var(--theme-primary); }
+        .wp-hero-sub { font-size: 0.52rem; color: var(--theme-text-muted); margin-bottom: 8px; }
+        .wp-hero-actions { display: flex; gap: 4px; }
+        .wp-hero-actions .wp-btn-p { font-size: 0.44rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--theme-primary); color: #fff; border: none; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        .wp-hero-actions .wp-btn-s { font-size: 0.44rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--theme-primary); color: var(--theme-primary); background: transparent; }
+        .wp-illus { display: flex; flex-direction: column; gap: 4px; padding: 10px 8px; background: linear-gradient(145deg, rgba(0,0,0,0.02), var(--theme-bg-body)); border-radius: 12px; }
+        .wp-stat-card {
+            background: var(--theme-bg-card); border-radius: 8px; padding: 5px 8px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 6px; border: var(--theme-card-border-width) solid var(--theme-border-color);
+        }
+        .wp-stat-icon { width: 20px; height: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .wp-stat-icon .material-symbols-rounded { font-size: 10px; color: #fff; }
+        .wp-stat-label { font-size: 0.38rem; color: var(--theme-text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.03em; }
+        .wp-stat-value { font-size: 0.58rem; font-weight: 800; color: var(--theme-text-main); }
+        .wp-services {
+            padding: 12px 14px;
+        }
+        .wp-section-label { font-size: 0.42rem; font-weight: 700; color: var(--theme-primary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+        .wp-section-heading { font-size: 0.72rem; font-weight: 800; color: var(--theme-text-main); margin-bottom: 8px; }
+        .wp-svc-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+        .wp-svc-card {
+            background: var(--theme-bg-card); border: var(--theme-card-border-width) solid var(--theme-border-color);
+            border-radius: 10px; padding: 8px; box-shadow: var(--theme-card-shadow);
+        }
+        .wp-svc-card h6 { font-size: 0.5rem; font-weight: 700; color: var(--theme-primary); margin: 4px 0 2px; }
+        .wp-svc-card p { font-size: 0.4rem; color: var(--theme-text-muted); line-height: 1.4; margin: 0; }
+        .wp-svc-card .material-symbols-rounded { font-size: 14px; }
+        .wp-about {
+            margin: 0 14px 12px; padding: 14px;
+            background: var(--theme-primary); color: #fff; border-radius: 12px; position: relative; overflow: hidden;
+        }
+        .wp-about::before { content:''; position:absolute; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,0.06); top:-40px; right:-40px; }
+        .wp-about-label { font-size: 0.42rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.7; }
+        .wp-about-title { font-size: 0.68rem; font-weight: 800; margin: 2px 0 4px; }
+        .wp-about-body { font-size: 0.46rem; opacity: 0.85; line-height: 1.5; }
+        .wp-footer {
+            background: var(--theme-bg-card); border-top: 1px solid var(--theme-border-color);
+            padding: 10px 14px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+        }
+        .wp-footer-brand { font-size: 0.56rem; font-weight: 700; color: var(--theme-primary); margin-bottom: 2px; }
+        .wp-footer-desc { font-size: 0.4rem; color: var(--theme-text-muted); max-width: 180px; }
+        .wp-footer-contact-label { font-size: 0.48rem; font-weight: 700; color: var(--theme-primary); margin-bottom: 2px; }
+        .wp-footer-contact-item { font-size: 0.4rem; color: var(--theme-text-muted); display: flex; align-items: center; gap: 3px; }
+        .wp-footer-contact-item .material-symbols-rounded { font-size: 0.5rem; }
+
         @media (max-width: 1024px) {
             .wizard-layout { grid-template-columns: 1fr; }
             .preview-stage { min-height: 320px; }
@@ -834,6 +913,7 @@ $tenant_name = $_SESSION['tenant_name'] ?? 'Your Organization';
                             <button type="button" class="preview-btn active" data-view="admin">Admin View</button>
                             <button type="button" class="preview-btn" data-view="staff">Staff View</button>
                             <button type="button" class="preview-btn" data-view="mobile">Client App View</button>
+                            <button type="button" class="preview-btn" data-view="website">Website View</button>
                         </div>
 
                         <div class="preview-stage" id="preview-stage">
@@ -1044,6 +1124,92 @@ $tenant_name = $_SESSION['tenant_name'] ?? 'Your Organization';
                                         <div class="phone-nav-item"><span class="material-symbols-rounded">receipt_long</span>Loans</div>
                                         <div class="phone-nav-item"><span class="material-symbols-rounded">notifications</span>Alerts</div>
                                         <div class="phone-nav-item"><span class="material-symbols-rounded">person</span>Profile</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ═══ WEBSITE VIEW ═══ -->
+                            <div class="preview-screen" data-preview="website">
+                                <div class="preview-shell website-preview-shell">
+                                    <!-- Nav -->
+                                    <div class="wp-nav">
+                                        <div class="wp-nav-brand"><?php echo htmlspecialchars($tenant_name); ?></div>
+                                        <div class="wp-nav-links">
+                                            <a>Services</a>
+                                            <a>About Us</a>
+                                            <a>Contact</a>
+                                        </div>
+                                        <div class="wp-nav-btns">
+                                            <button class="btn-login">Log In</button>
+                                            <button class="btn-cta">Get Started</button>
+                                        </div>
+                                    </div>
+                                    <!-- Hero -->
+                                    <div class="wp-hero">
+                                        <div>
+                                            <div class="wp-badge"><span class="material-symbols-rounded">verified</span>Trusted Partner</div>
+                                            <div class="wp-hero-title"><span>Welcome</span> to <?php echo htmlspecialchars($tenant_name); ?></div>
+                                            <div class="wp-hero-sub">Your trusted microfinance partner for growth and empowerment.</div>
+                                            <div class="wp-hero-actions">
+                                                <button class="wp-btn-p">Get Started</button>
+                                                <button class="wp-btn-s">Learn More</button>
+                                            </div>
+                                        </div>
+                                        <div class="wp-illus">
+                                            <div class="wp-stat-card">
+                                                <div class="wp-stat-icon" style="background:var(--theme-primary);"><span class="material-symbols-rounded">check_circle</span></div>
+                                                <div><div class="wp-stat-label">Approved</div><div class="wp-stat-value">1,240</div></div>
+                                            </div>
+                                            <div class="wp-stat-card">
+                                                <div class="wp-stat-icon" style="background:#10b981;"><span class="material-symbols-rounded">group</span></div>
+                                                <div><div class="wp-stat-label">Members</div><div class="wp-stat-value">856</div></div>
+                                            </div>
+                                            <div class="wp-stat-card">
+                                                <div class="wp-stat-icon" style="background:#f59e0b;"><span class="material-symbols-rounded">trending_up</span></div>
+                                                <div><div class="wp-stat-label">Growth</div><div class="wp-stat-value">+24%</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Services -->
+                                    <div class="wp-services">
+                                        <div class="wp-section-label">What We Offer</div>
+                                        <div class="wp-section-heading">Our Services</div>
+                                        <div class="wp-svc-grid">
+                                            <div class="wp-svc-card">
+                                                <span class="material-symbols-rounded" style="color:var(--theme-primary);">account_balance_wallet</span>
+                                                <h6>Personal Loans</h6>
+                                                <p>Flexible terms for your needs.</p>
+                                            </div>
+                                            <div class="wp-svc-card">
+                                                <span class="material-symbols-rounded" style="color:#10b981;">store</span>
+                                                <h6>Business Loans</h6>
+                                                <p>Grow your enterprise.</p>
+                                            </div>
+                                            <div class="wp-svc-card">
+                                                <span class="material-symbols-rounded" style="color:#f59e0b;">emergency</span>
+                                                <h6>Emergency Loans</h6>
+                                                <p>Quick access when needed.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- About -->
+                                    <div class="wp-about">
+                                        <div class="wp-about-label">About Us</div>
+                                        <div class="wp-about-title">Who We Are</div>
+                                        <div class="wp-about-body">We are committed to empowering communities through accessible financial services and sustainable growth.</div>
+                                    </div>
+                                    <!-- Footer -->
+                                    <div class="wp-footer">
+                                        <div>
+                                            <div class="wp-footer-brand"><?php echo htmlspecialchars($tenant_name); ?></div>
+                                            <div class="wp-footer-desc">Your trusted partner in financial growth.</div>
+                                        </div>
+                                        <div>
+                                            <div class="wp-footer-contact-label">Contact</div>
+                                            <div class="wp-footer-contact-item"><span class="material-symbols-rounded">call</span>(02) 1234-5678</div>
+                                            <div class="wp-footer-contact-item"><span class="material-symbols-rounded">mail</span>info@example.com</div>
+                                            <div class="wp-footer-contact-item"><span class="material-symbols-rounded">schedule</span>Mon-Fri 8am-5pm</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

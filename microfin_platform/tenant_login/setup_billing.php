@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $exp_month = (int) ($_POST['exp_month'] ?? 0);
     $exp_year = (int) ($_POST['exp_year'] ?? 0);
     $card_brand = trim($_POST['card_brand'] ?? '');
+    $billing_cycle_preference = trim($_POST['billing_cycle_preference'] ?? '1');
 
     // Validate
     $card_clean = preg_replace('/\s+/', '', $card_number);
@@ -77,6 +78,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $pdo->prepare('INSERT INTO tenant_billing_payment_methods (tenant_id, last_four_digits, card_brand, cardholder_name, exp_month, exp_year, card_number_encrypted, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)');
         $stmt->execute([$tenant_id, $last_four, $card_brand, $cardholder_name, $exp_month, $exp_year, $encrypted_with_iv]);
+
+        if (!in_array($billing_cycle_preference, ['1', '15', 'original'], true)) {
+            $billing_cycle_preference = '1';
+        }
+        $set_stmt = $pdo->prepare("INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) VALUES (?, 'billing_anchor_date', ?, 'Billing', 'String') ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $set_stmt->execute([$tenant_id, $billing_cycle_preference]);
+
+        $next_billing = date('Y-m-d', strtotime('+1 month'));
+        if ($billing_cycle_preference === '1') {
+            $next_billing = date('Y-m-01', strtotime('+1 month'));
+        } elseif ($billing_cycle_preference === '15') {
+            $next_billing = date('Y-m-15', strtotime('+1 month'));
+        }
+        // Store next_billing_date in system_settings (not on tenants table)
+        $nbd_stmt = $pdo->prepare("INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) VALUES (?, 'next_billing_date', ?, 'Billing', 'String') ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $nbd_stmt->execute([$tenant_id, $next_billing]);
 
         $pdo->prepare('UPDATE tenants SET setup_current_step = 6, setup_completed = TRUE WHERE tenant_id = ? AND setup_current_step = 5')->execute([$tenant_id]);
 
@@ -182,6 +199,18 @@ $current_year = (int) date('Y');
                 </div>
 
                 <input type="hidden" name="card_brand" id="card_brand" value="">
+
+                <div class="form-group" style="padding: 16px; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px;">
+                    <label>Preferred Billing Cycle</label>
+                    <select class="form-control" name="billing_cycle_preference" id="billing_cycle_preference" required style="margin-bottom: 8px;">
+                        <option value="1">1st of the Month</option>
+                        <option value="15">15th of the Month</option>
+                    </select>
+                    <div style="font-size: 0.8rem; color: #b45309; display: flex; gap: 6px; align-items: flex-start; padding-top: 4px;">
+                        <span class="material-symbols-rounded" style="font-size: 16px;">warning</span>
+                        <p style="margin:0; line-height: 1.4;">Warning: This anchors your permanent billing cycle date and <strong>cannot be changed again</strong> after completion.</p>
+                    </div>
+                </div>
 
                 <div class="row-2">
                     <div class="form-group">

@@ -437,7 +437,7 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
       </div>
       <!-- CTA buttons -->
       <div class="d-flex gap-2 align-items-center">
-        <a href="../tenant_login/login.php?s=<?php echo urlencode($site_slug); ?>&auth=1" class="d-none d-md-inline-flex btn btn-brand-outline rounded-pill px-4 fw-600">Log In</a>
+        <a href="tenant_login/login.php?s=<?php echo urlencode($site_slug); ?>&auth=1" class="d-none d-md-inline-flex btn btn-brand-outline rounded-pill px-4 fw-600">Log In</a>
         <?php if ($show_download_section && $_download_href): ?>
         <a href="<?php echo $e($_download_href); ?>" target="_blank" class="btn btn-brand rounded-pill px-4 fw-700 shadow-sm">
           <span class="material-symbols-rounded me-1" style="font-size:1rem;">phone_android</span><?php echo $e($download_button_text ?: 'Get App'); ?>
@@ -467,7 +467,7 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
     <?php if ($show_contact): ?><a class="nav-link py-2" href="#contact" data-bs-dismiss="offcanvas">Contact</a><?php endif; ?>
     <?php if ($show_download_section): ?><a class="nav-link py-2" href="#download" data-bs-dismiss="offcanvas">📱 Download App</a><?php endif; ?>
     <hr>
-    <a href="tenant_login/login.php?s=<?php echo urlencode($slug ?? ''); ?>" class="btn btn-brand-outline rounded-pill fw-700">Log In</a>
+    <a href="tenant_login/login.php?s=<?php echo urlencode($site_slug ?? ''); ?>&auth=1" class="btn btn-brand-outline rounded-pill fw-700">Log In</a>
   </div>
 </div>
 

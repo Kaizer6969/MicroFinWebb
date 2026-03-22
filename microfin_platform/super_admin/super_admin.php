@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+require_once '../backend/db_connect.php';
+require_once '../backend/lazy_billing_resolver.php';
+
+// Resolve any pending tenant subscriptions automagically!
+resolve_tenant_billing($pdo);
+
 if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_in'] !== true) {
     header('Location: login.php');
     exit;
@@ -420,7 +426,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $email_status = " (Email failed: $result_msg) Manual login URL: {$private_url} | Temporary Password: {$temp_password}";
             }
 
-            $_SESSION['sa_flash'] = 'Tenant provisioned successfully. Tenant ID: ' . $tenant_id . '.' . $email_status;
+            $_SESSION['sa_flash'] = 'Tenant provisioned successfully.' . $email_status;
             header('Location: super_admin.php?section=tenants');
             exit;
         }
@@ -784,6 +790,9 @@ $inactive_users = (int) $stmt->fetch()['cnt'];
 $stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE request_type = 'tenant_application' AND status = 'Pending' AND deleted_at IS NULL");
 $pending_applications = (int) $stmt->fetch()['cnt'];
 
+$stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM tenants WHERE request_type = 'talk_to_expert' AND status IN ('Pending', 'Contacted') AND deleted_at IS NULL");
+$pending_inquiries = (int) $stmt->fetch()['cnt'];
+
 $stmt = $pdo->query("SELECT COALESCE(SUM(mrr), 0) AS total_mrr FROM tenants WHERE status = 'Active' AND deleted_at IS NULL");
 $total_mrr = number_format((float) $stmt->fetch()['total_mrr'], 2);
 
@@ -981,10 +990,16 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <a href="#tenants" class="nav-item" data-target="tenants">
                     <span class="material-symbols-rounded">domain</span>
                     <span>Tenants</span>
+                    <?php $sidebar_total = $pending_applications + $pending_inquiries; ?>
+                    <span class="nav-badge" id="sidebar-pending-badge" <?php if ($sidebar_total === 0) echo 'style="display:none;"'; ?>><?php echo $sidebar_total; ?></span>
                 </a>
                 <a href="#subscriptions" class="nav-item" data-target="subscriptions">
                     <span class="material-symbols-rounded">credit_card</span>
                     <span>Tenant Subscriptions</span>
+                </a>
+                <a href="#statements" class="nav-item" data-target="statements">
+                    <span class="material-symbols-rounded">account_balance_wallet</span>
+                    <span>Statements</span>
                 </a>
 
                 <div class="nav-section-label">System</div>
@@ -1103,7 +1118,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             </div>
                             <div class="stat-details">
                                 <p>Monthly MRR</p>
-                                <h3 id="stat-total-mrr">â‚±<?php echo $total_mrr; ?></h3>
+                                <h3 id="stat-total-mrr">₱<?php echo $total_mrr; ?></h3>
                             </div>
                         </div>
                     </div>
@@ -1167,22 +1182,22 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <?php foreach ($audit_logs as $log): ?>
                                             <tr>
                                                 <td><small><?php echo date('Y-m-d H:i:s', strtotime($log['created_at'])); ?></small></td>
-                                                <td><span style="font-family: monospace;"><?php echo htmlspecialchars($log['username'] ?? 'â€”'); ?></span></td>
+                                                <td><span style="font-family: monospace;"><?php echo htmlspecialchars($log['username'] ?? '—'); ?></span></td>
                                                 <td><?php echo htmlspecialchars($log['user_email'] ?? 'System'); ?></td>
                                                 <td><?php echo htmlspecialchars($log['tenant_name'] ?? 'Platform'); ?></td>
                                                 <td><span class="badge badge-blue"><?php echo htmlspecialchars($log['action_type']); ?></span></td>
-                                                <td><?php echo htmlspecialchars($log['entity_type'] ?? 'â€”'); ?></td>
+                                                <td><?php echo htmlspecialchars($log['entity_type'] ?? '—'); ?></td>
                                                 <td>
                                                     <button
                                                         type="button"
                                                         class="btn btn-outline btn-sm audit-detail-btn"
                                                         data-created-at="<?php echo htmlspecialchars((string)($log['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-username="<?php echo htmlspecialchars((string)($log['username'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-username="<?php echo htmlspecialchars((string)($log['username'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
                                                         data-user-email="<?php echo htmlspecialchars((string)($log['user_email'] ?? 'System'), ENT_QUOTES, 'UTF-8'); ?>"
                                                         data-tenant-name="<?php echo htmlspecialchars((string)($log['tenant_name'] ?? 'Platform'), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-action-type="<?php echo htmlspecialchars((string)($log['action_type'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-entity-type="<?php echo htmlspecialchars((string)($log['entity_type'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-description="<?php echo htmlspecialchars((string)($log['description'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-action-type="<?php echo htmlspecialchars((string)($log['action_type'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-entity-type="<?php echo htmlspecialchars((string)($log['entity_type'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-description="<?php echo htmlspecialchars((string)($log['description'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
                                                     >
                                                         <span class="material-symbols-rounded" style="font-size:16px;">visibility</span> View
                                                     </button>
@@ -1316,8 +1331,22 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <section id="tenants" class="view-section">
                     <div class="settings-tabs" style="margin-bottom: 16px;">
                         <button class="settings-tab tenant-intake-tab active" data-view="tenants">Tenants</button>
-                        <button class="settings-tab tenant-intake-tab" data-view="applications">Applications</button>
-                        <button class="settings-tab tenant-intake-tab" data-view="inquiries">Inquiries</button>
+                        <button class="settings-tab tenant-intake-tab" data-view="applications">
+                            Applications
+                            <?php if ($pending_applications > 0): ?>
+                            <span class="tab-badge" id="tab-badge-applications"><?php echo $pending_applications; ?></span>
+                            <?php else: ?>
+                            <span class="tab-badge" id="tab-badge-applications" style="display:none;">0</span>
+                            <?php endif; ?>
+                        </button>
+                        <button class="settings-tab tenant-intake-tab" data-view="inquiries">
+                            Inquiries
+                            <?php if ($pending_inquiries > 0): ?>
+                            <span class="tab-badge" id="tab-badge-inquiries"><?php echo $pending_inquiries; ?></span>
+                            <?php else: ?>
+                            <span class="tab-badge" id="tab-badge-inquiries" style="display:none;">0</span>
+                            <?php endif; ?>
+                        </button>
                     </div>
                     <div class="card">
                         <div class="card-header-flex mb-4">
@@ -1374,17 +1403,17 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                     <tr data-status="<?php echo htmlspecialchars($t['status']); ?>" data-request-type="<?php echo htmlspecialchars($t['request_type'] ?? 'tenant_application'); ?>">
                                         <td>
                                             <?php echo htmlspecialchars($t['tenant_name']); ?><br>
-                                            <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? 'â€”'); ?></small>
+                                            <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? '—'); ?></small>
                                         </td>
                                         <td>
                                             <?php
                                             $owner_name = trim((string)($t['owner_first_name'] ?? '') . ' ' . (string)($t['owner_last_name'] ?? ''));
                                             $owner_username = trim((string)($t['owner_username'] ?? ''));
-                                            echo htmlspecialchars($owner_name !== '' ? $owner_name : ($owner_username !== '' ? $owner_username : 'â€”'));
+                                            echo htmlspecialchars($owner_name !== '' ? $owner_name : ($owner_username !== '' ? $owner_username : '—'));
                                             ?><br>
-                                            <small class="text-muted">@<?php echo htmlspecialchars($owner_username !== '' ? $owner_username : 'â€”'); ?></small><br>
-                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_email'] ?? 'â€”'); ?></small><br>
-                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_phone'] ?? 'â€”'); ?></small>
+                                            <small class="text-muted">@<?php echo htmlspecialchars($owner_username !== '' ? $owner_username : '—'); ?></small><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_email'] ?? '—'); ?></small><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_phone'] ?? '—'); ?></small>
                                             <br>
                                             <?php $doc_count = (int)($t['legitimacy_document_count'] ?? 0); ?>
                                             <?php if ($doc_count > 0): ?>
@@ -1445,8 +1474,8 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                 <?php echo htmlspecialchars($normalized_status); ?>
                                             </span>
                                         </td>
-                                        <td><?php echo htmlspecialchars($t['plan_tier'] ?? 'â€”'); ?></td>
-                                        <td>â‚±<?php echo number_format((float)($t['mrr'] ?? 0), 2); ?></td>
+                                        <td><?php echo htmlspecialchars($t['plan_tier'] ?? '—'); ?></td>
+                                        <td>₱<?php echo number_format((float)($t['mrr'] ?? 0), 2); ?></td>
                                         <td><?php echo date('M d, Y', strtotime($t['created_at'])); ?></td>
                                         <td>
                                             <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
@@ -1601,8 +1630,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             <table class="admin-table subscription-table" id="tenant-subscriptions-table">
                                 <thead>
                                     <tr>
-                                        <th>Tenant ID</th>
-                                        <th>Tenant Name</th>
+                                        <th>Tenant</th>
                                         <th>Plan</th>
                                         <th>Billing Cycle</th>
                                         <th>Status</th>
@@ -1610,7 +1638,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                         <th>Staff Usage</th>
                                         <th>Client Usage</th>
                                         <th>Active Users</th>
-                                        <th>Manage Subscription</th>
+                                        <th>Billing Management</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1706,14 +1734,9 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             ?>
                                             <tr data-subscription-row="1">
                                                 <td>
-                                                    <div class="subscription-id-wrap">
-                                                        <code><?php echo htmlspecialchars($tenantId); ?></code>
-                                                        <small class="text-muted">tenant_id scope</small>
-                                                    </div>
-                                                </td>
-                                                <td>
                                                     <div class="subscription-tenant-cell">
                                                         <span class="subscription-tenant-name"><?php echo htmlspecialchars($tenantName); ?></span>
+                                                        
                                                     </div>
                                                 </td>
                                                 <td>
@@ -1765,30 +1788,10 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <form method="POST"
-                                                        class="subscription-change-form"
-                                                        data-tenant-name="<?php echo htmlspecialchars($tenantName); ?>"
-                                                        data-current-plan="<?php echo htmlspecialchars($planTier); ?>">
-                                                        <input type="hidden" name="action" value="update_subscription_plan">
-                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($tenantId); ?>">
-                                                        <div class="subscription-form-grid">
-                                                            <select name="target_plan_tier" class="form-control subscription-target-plan" required>
-                                                                <?php foreach ($plan_pricing_map as $planName => $planPrice): ?>
-                                                                    <option value="<?php echo htmlspecialchars($planName); ?>" <?php echo $planTier === $planName ? 'selected' : ''; ?>>
-                                                                        <?php echo htmlspecialchars($planName); ?>
-                                                                    </option>
-                                                                <?php endforeach; ?>
-                                                            </select>
-                                                            <select name="change_timing" class="form-control subscription-change-timing">
-                                                                <option value="immediate">Upgrade: Immediate</option>
-                                                                <option value="next_cycle">Next Billing Cycle</option>
-                                                            </select>
-                                                            <button type="submit" class="btn btn-primary btn-sm subscription-apply-btn">
-                                                                <span class="material-symbols-rounded" style="font-size:16px;">published_with_changes</span>
-                                                                Apply
-                                                            </button>
-                                                        </div>
-                                                    </form>
+                                                    <div class="subscription-management-info">
+                                                        <span class="badge badge-outline">Managed by Tenant</span>
+                                                        
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -1834,7 +1837,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                     <div class="card">
                         <h3>Tenant Activity Report</h3>
                         <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 12px 0;">
-                            <span class="badge badge-amber">Pending Application (Excluded)</span>
                             <span class="badge badge-green">Active</span>
                             <span class="badge badge-red">Inactive</span>
                         </div>
@@ -1862,14 +1864,41 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <!-- ============================================================ -->
                 <section id="sales" class="view-section">
                     <!-- Revenue Overview (Consolidated) -->
-                    <div class="stats-grid" style="grid-template-columns: repeat(1, 1fr); margin-bottom: 24px;">
+                    <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
                         <div class="stat-card">
                             <div class="stat-icon bg-purple">
                                 <span class="material-symbols-rounded">payments</span>
                             </div>
                             <div class="stat-details">
                                 <p>Total MRR</p>
-                                <h3>â‚±<?php echo htmlspecialchars($total_mrr); ?></h3>
+                                <h3 id="stat-revenue-total-mrr">₱<?php echo htmlspecialchars($total_mrr); ?></h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green">
+                                <span class="material-symbols-rounded">account_balance_wallet</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Total Revenue</p>
+                                <h3 id="stat-revenue-actual-revenue">₱0.00</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-blue">
+                                <span class="material-symbols-rounded">receipt_long</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Transactions</p>
+                                <h3 id="stat-revenue-transactions">0</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-amber">
+                                <span class="material-symbols-rounded">analytics</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Avg. Transaction</p>
+                                <h3 id="stat-revenue-avg-trans">₱0.00</h3>
                             </div>
                         </div>
                     </div>
@@ -1897,7 +1926,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                         </div>
                         <div class="card">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                                <h3 style="margin: 0;">Monthly Revenue</h3>
+                                <h3 style="margin: 0;">Revenue</h3>
                                 <select id="revenue-period-filter" class="form-control" style="width: auto;">
                                     <option value="monthly">Monthly</option>
                                     <option value="yearly">Yearly</option>
@@ -1940,16 +1969,116 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <!-- SECTION 6: BACKUP (Coming Soon) -->
                 <!-- ============================================================ -->
                 <section id="backup" class="view-section">
-                    <div class="card">
-                        <h3>Backup & Restore</h3>
-                        <p class="text-muted">Database backups, restore points, and recovery management.</p>
-                        <div class="placeholder-box" style="height: 300px;">
-                            <span class="material-symbols-rounded" style="font-size: 64px; color: var(--text-muted);">cloud_upload</span>
-                            <h3 style="color: var(--text-muted); margin: 0; font-size: 1.1rem;">Coming Soon</h3>
-                            <p class="text-muted" style="max-width: 400px; text-align: center;">This feature is under development. Backup history, stored files, and restore points will appear here.</p>
+                    <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-blue"><span class="material-symbols-rounded">cloud_done</span></div>
+                            <div class="stat-details"><p>Total Backups</p><h3 id="backup-stat-total">0</h3></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green"><span class="material-symbols-rounded">schedule</span></div>
+                            <div class="stat-details"><p>Last Backup</p><h3 id="backup-stat-last" style="font-size:.95rem;">Never</h3></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-purple"><span class="material-symbols-rounded">database</span></div>
+                            <div class="stat-details"><p>Database Size</p><h3 id="backup-stat-dbsize">&mdash;</h3></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-amber"><span class="material-symbols-rounded">table_chart</span></div>
+                            <div class="stat-details"><p>Total Tables</p><h3 id="backup-stat-tables">&mdash;</h3></div>
+                        </div>
+                    </div>
+                    <div class="card" style="margin-bottom:24px;">
+                        <div class="card-header-flex mb-4">
+                            <div><h3>Create Backup</h3><p class="text-muted">Generate a downloadable SQL backup of the database.</p></div>
+                        </div>
+                        <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="btn-backup-full" style="min-width:200px;">
+                                <span class="material-symbols-rounded">cloud_download</span> Full Database Backup
+                            </button>
+                            <div style="display:flex; gap:8px; align-items:flex-end;">
+                                <div class="form-group" style="margin:0; min-width:200px;">
+                                    <label style="font-size:.8rem;">Tenant-Specific Export</label>
+                                    <select class="form-control" id="backup-tenant-select">
+                                        <option value="">Select tenant...</option>
+                                        <?php foreach ($tenants_for_filter as $tf): ?>
+                                        <option value="<?php echo htmlspecialchars($tf['tenant_id']); ?>"><?php echo htmlspecialchars($tf['tenant_name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <button class="btn btn-outline" id="btn-backup-tenant" disabled>
+                                    <span class="material-symbols-rounded">download</span> Export Tenant
+                                </button>
+                            </div>
+                        </div>
+                        <div id="backup-progress" style="display:none; margin-top:16px; padding:12px 16px; background:rgba(2,132,199,0.08); border-radius:8px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-symbols-rounded" style="animation:spin 1s linear infinite; color:var(--primary);">sync</span>
+                                <span style="font-weight:500;" id="backup-progress-text">Generating backup...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card" style="margin-bottom:24px;">
+                        <div class="card-header-flex mb-4">
+                            <div><h3>Import SQL</h3></div>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:flex-start; padding:12px 14px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; margin-bottom:16px;">
+                            <span class="material-symbols-rounded" style="color:#f59e0b; font-size:20px; margin-top:1px;">warning</span>
+                            <p class="text-muted" style="margin:0; font-size:.875rem; line-height:1.55;">
+                                Upload a <code>.sql</code> backup file to import. Duplicate rows are automatically skipped. Schema mismatches (tables not in the current database) will be flagged before import completes.
+                            </p>
+                        </div>
+                        <form id="backup-import-form" enctype="multipart/form-data" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+                            <div class="form-group" style="margin:0; flex:1; min-width:250px;">
+                                <label style="font-size:.8rem;">Select SQL File</label>
+                                <input type="file" class="form-control" id="backup-import-file" accept=".sql" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary" id="btn-backup-import">
+                                <span class="material-symbols-rounded">upload_file</span> Import
+                            </button>
+                        </form>
+                        <div id="backup-import-result" style="display:none; margin-top:16px; padding:12px 16px; border-radius:8px;"></div>
+                    </div>
+                    <div class="card" style="margin-bottom:24px;">
+                        <div class="card-header-flex mb-4">
+                            <div><h3>Backup History</h3><p class="text-muted">Recent backup operations and their status.</p></div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="admin-table" id="backup-history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>File Name</th>
+                                        <th>Size</th>
+                                        <th>Status</th>
+                                        <th>Initiated By</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="6" class="text-muted" style="text-align:center; padding:2rem;">
+                                        <span class="material-symbols-rounded" style="font-size:40px; display:block; margin-bottom:.5rem;">cloud_off</span>
+                                        No backups have been created yet.
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card" style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.15);">
+                        <div style="display:flex; gap:12px; align-items:flex-start;">
+                            <span class="material-symbols-rounded" style="color:#f59e0b; font-size:24px; margin-top:2px;">info</span>
+                            <div>
+                                <h3 style="margin:0 0 4px; font-size:1rem;">How to Restore a Backup</h3>
+                                <p class="text-muted" style="margin:0; line-height:1.6;">
+                                    Download a backup file using the button above, then import it using one of these methods:<br>
+                                    <strong>phpMyAdmin:</strong> Go to Import tab, select the <code>.sql</code> file, click Go<br>
+                                    <strong>MySQL CLI:</strong> <code>mysql -u root -p microfin_db &lt; backup_file.sql</code><br>
+                                    <strong>Railway:</strong> Use the Railway CLI or connect via external MySQL client to import.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </section>
+
 
                 <!-- ============================================================ -->
                 <!-- SECTION 7: SETTINGS -->
@@ -1983,35 +2112,35 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <td>1,000</td>
                                             <td>250</td>
                                             <td>5.00 GB</td>
-                                            <td>â‚±4,999.00</td>
+                                            <td>₱4,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge" style="background:rgba(59,130,246,0.15); color:#3b82f6;">Growth</span></td>
                                             <td>2,500</td>
                                             <td>750</td>
                                             <td>10.00 GB</td>
-                                            <td>â‚±9,999.00</td>
+                                            <td>₱9,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge badge-blue">Pro</span></td>
                                             <td>5,000</td>
                                             <td>2,000</td>
                                             <td>25.00 GB</td>
-                                            <td>â‚±14,999.00</td>
+                                            <td>₱14,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge badge-purple">Enterprise</span></td>
                                             <td>10,000</td>
                                             <td>5,000</td>
                                             <td>50.00 GB</td>
-                                            <td>â‚±22,999.00</td>
+                                            <td>₱22,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge" style="background:rgba(244,114,182,0.15); color:#db2777;">Unlimited</span></td>
                                             <td>Unlimited</td>
                                             <td>Unlimited</td>
                                             <td>Unlimited</td>
-                                            <td>â‚±29,999.00</td>
+                                            <td>₱29,999.00</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -2072,6 +2201,69 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============================================================ -->
+                <!-- SECTION: STATEMENTS GLOBAL LEDGER -->
+                <!-- ============================================================ -->
+                <section id="statements" class="view-section">
+                    <div class="card">
+                        <div class="card-header-flex mb-4">
+                            <div>
+                                <h3>Statement of Transactions</h3>
+                                <p class="text-muted">Global ledger of all tenant subscription billing transactions.</p>
+                            </div>
+                        </div>
+                        <?php
+                        $all_payments_stmt = $pdo->prepare("
+                            SELECT p.payment_reference, p.payment_amount, p.payment_status, p.payment_date, p.payment_method,
+                                   t.tenant_name, t.plan_tier
+                            FROM payments p
+                            LEFT JOIN tenants t ON p.tenant_id = t.tenant_id
+                            ORDER BY p.payment_date DESC
+                            LIMIT 200
+                        ");
+                        $all_payments_stmt->execute();
+                        $all_payments = $all_payments_stmt->fetchAll(PDO::FETCH_ASSOC);
+                        ?>
+                        <div class="table-responsive">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Reference ID</th>
+                                        <th>Tenant</th>
+                                        <th>Plan</th>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Source</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($all_payments)): ?>
+                                    <tr>
+                                        <td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">
+                                            <span class="material-symbols-rounded" style="font-size:40px; display:block; margin-bottom:0.5rem;">receipt_long</span>
+                                            No billing transactions have been recorded yet.
+                                        </td>
+                                    </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($all_payments as $pay): ?>
+                                        <tr>
+                                            <td style="font-weight:500; font-family:monospace; font-size:0.85rem;"><?php echo htmlspecialchars($pay['payment_reference']); ?></td>
+                                            <td><?php echo htmlspecialchars($pay['tenant_name'] ?? '—'); ?></td>
+                                            <td><?php echo htmlspecialchars($pay['plan_tier'] ?? '—'); ?></td>
+                                            <td class="text-muted"><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($pay['payment_date']))); ?></td>
+                                            <td style="font-weight:600;">&#8369;<?php echo number_format((float)$pay['payment_amount'], 2); ?></td>
+                                            <td class="text-muted" style="font-size:0.85rem;"><?php echo htmlspecialchars($pay['payment_method'] ?? 'System Auto-Billing'); ?></td>
+                                            <td><span class="badge badge-green"><?php echo htmlspecialchars($pay['payment_status']); ?></span></td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>
