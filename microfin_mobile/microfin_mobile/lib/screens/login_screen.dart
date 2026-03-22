@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 import '../main.dart';
 import '../theme.dart';
 import 'main_layout.dart';
@@ -54,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
     
     try {
-      final url = Uri.parse('http://127.0.0.1/admin-draft-withmobile/admin-draft/microfin_mobile/api/api_login.php');
+      final url = AppConfig.apiUri('api_login.php');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -596,7 +597,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
     setState(() => _isLoading = true);
     
     try {
-      final url = Uri.parse('http://127.0.0.1/admin-draft-withmobile/admin-draft/microfin_mobile/api/api_register.php');
+      final url = AppConfig.apiUri('api_register.php');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -1016,7 +1017,7 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://127.0.0.1/admin-draft-withmobile/admin-draft/microfin_mobile/api/api_forgot_password.php'),
+        AppConfig.apiUri('api_forgot_password.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': _emailController.text,
@@ -1060,7 +1061,7 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://127.0.0.1/admin-draft-withmobile/admin-draft/microfin_mobile/api/api_reset_password.php'),
+        AppConfig.apiUri('api_reset_password.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': _emailController.text,
@@ -1312,4 +1313,3 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
     );
   }
 }
-
