@@ -195,6 +195,10 @@ try {
     $pdo->exec("ALTER TABLE tenants ADD COLUMN scheduled_plan_effective_date DATE NULL AFTER scheduled_plan_tier");
 } catch (Throwable $e) {
 }
+try {
+    $pdo->exec("ALTER TABLE tenants ADD COLUMN concern_category VARCHAR(150) NULL AFTER request_type");
+} catch (Throwable $e) {
+}
 
 try {
     $pdo->exec("
@@ -790,7 +794,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS tenant_legitimacy_documents (
 
 // Tenant Management: all tenants
 $tenant_rows_stmt = $pdo->query("
-    SELECT t.tenant_id, t.tenant_name, t.tenant_slug, t.company_address, t.status, t.request_type, t.plan_tier, t.mrr, t.created_at, t.setup_completed,
+    SELECT t.tenant_id, t.tenant_name, t.tenant_slug, t.company_address, t.status, t.request_type, t.concern_category, t.plan_tier, t.mrr, t.created_at, t.setup_completed,
         owner.owner_username,
         owner.owner_first_name,
         owner.owner_last_name,
@@ -1386,6 +1390,9 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                         <td>
                                             <?php echo htmlspecialchars($t['tenant_name']); ?><br>
                                             <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? '—'); ?></small>
+                                            <?php if (($t['request_type'] ?? '') === 'talk_to_expert' && !empty($t['concern_category'])): ?>
+                                                <br><small style="color: #8b5cf6; font-weight:500; font-size: 0.8rem;">Concern: <?php echo htmlspecialchars($t['concern_category']); ?></small>
+                                            <?php endif; ?>
                                         </td>
                                         <td>
                                             <?php

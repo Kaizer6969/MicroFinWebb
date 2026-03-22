@@ -9,7 +9,7 @@ $host = 'localhost';
 $port = 3306;
 $db = 'microfin_db';
 $user = 'root';
-$pass = '1234';
+$pass = '';
 $localHost = $host;
 $localPort = $port;
 $localDb = $db;
@@ -167,7 +167,8 @@ $options = [
 try {
     try {
         $pdo = new PDO($dsn, $user, $pass, $options);
-    } catch (\Throwable $primaryDbError) {
+    }
+    catch (\Throwable $primaryDbError) {
         $isAlreadyUsingLocalFallback = ($host === $localHost && (int)$port === (int)$localPort && $db === $localDb && $user === $localUser);
         if ($isAlreadyUsingLocalFallback) {
             throw $primaryDbError;
@@ -182,11 +183,12 @@ try {
             $user = $localUser;
             $pass = $localPass;
             error_log('Primary DB connection failed; switched to localhost fallback. Error: ' . $primaryDbError->getMessage());
-        } catch (\Throwable $fallbackDbError) {
+        }
+        catch (\Throwable $fallbackDbError) {
             throw new RuntimeException(
                 'Primary DB connection failed: ' . $primaryDbError->getMessage() .
                 ' | Local fallback failed: ' . $fallbackDbError->getMessage()
-            );
+                );
         }
     }
 
@@ -207,11 +209,13 @@ try {
         foreach ($websiteContentColumnMigrations as $migrationSql) {
             try {
                 $pdo->exec($migrationSql);
-            } catch (\PDOException $columnError) {
-                // Column already exists or DB flavor differs; safe to ignore.
+            }
+            catch (\PDOException $columnError) {
+            // Column already exists or DB flavor differs; safe to ignore.
             }
         }
-    } catch (\PDOException $migrationError) {
+    }
+    catch (\PDOException $migrationError) {
         error_log('Schema guard warning (tenant_website_content): ' . $migrationError->getMessage());
     }
 
@@ -219,8 +223,9 @@ try {
     try {
         $pdo->exec("ALTER TABLE tenant_website_content MODIFY COLUMN layout_template ENUM('template1', 'template2', 'template3') DEFAULT 'template1'");
         $pdo->exec("UPDATE tenant_website_content SET layout_template = 'template1' WHERE layout_template NOT IN ('template1','template2','template3') OR layout_template IS NULL");
-    } catch (\PDOException $e) {
-        // Already migrated or table does not exist yet.
+    }
+    catch (\PDOException $e) {
+    // Already migrated or table does not exist yet.
     }
 
     // Add setup step tracking column for onboarding wizard
@@ -237,24 +242,29 @@ try {
                     ELSE 0
                 END
         ");
-    } catch (\PDOException $migrationError) {
-        // Column already exists. Ignore.
+    }
+    catch (\PDOException $migrationError) {
+    // Column already exists. Ignore.
     }
 
     // Add card style columns to tenant_branding
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN theme_border_color VARCHAR(10) DEFAULT '#e2e8f0' COMMENT 'Card border/divider color'");
-    } catch (\PDOException $e) {
+    }
+    catch (\PDOException $e) {
     }
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_border_width TINYINT DEFAULT 1 COMMENT 'Card border width in px (0-3)'");
-    } catch (\PDOException $e) {
+    }
+    catch (\PDOException $e) {
     }
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_shadow VARCHAR(10) DEFAULT 'sm' COMMENT 'Card shadow: none, sm, md, lg'");
-    } catch (\PDOException $e) {
     }
-} catch (\Throwable $e) {
+    catch (\PDOException $e) {
+    }
+}
+catch (\Throwable $e) {
     error_log('Database Connection Failed: ' . $e->getMessage());
     header('Content-Type: application/json');
     http_response_code(500);
