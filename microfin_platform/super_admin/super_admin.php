@@ -121,30 +121,13 @@ function sa_build_tenant_login_url(string $tenantSlug): string
         return rtrim($explicitBase, '/') . '/tenant_login/login.php?s=' . $safeSlug;
     }
 
-    // Railway public URL support — include $basePath (/microfin_platform).
-    $railwayStaticUrl = trim((string)(getenv('RAILWAY_STATIC_URL') ?: ''));
-    if ($railwayStaticUrl !== '') {
-        if (!preg_match('#^https?://#i', $railwayStaticUrl)) {
-            $railwayStaticUrl = 'https://' . $railwayStaticUrl;
-        }
-        return rtrim($railwayStaticUrl, '/') . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
-    }
-
-    $railwayPublicDomain = trim((string)(getenv('RAILWAY_PUBLIC_DOMAIN') ?: ''));
-    if ($railwayPublicDomain !== '') {
-        return 'https://' . rtrim($railwayPublicDomain, '/') . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
-    }
-
-    // Fallback: use request host + computed basePath.
-    // On Railway, $basePath from PHP_SELF correctly resolves to /microfin_platform.
-    if (sa_is_railway_runtime()) {
-        $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
-        if ($requestHost !== '') {
-            return 'https://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
-        }
-    }
-
-    return 'http://localhost' . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
+    // The simplest and most robust approach for both XAMPP and Railway:
+    // Build the URL using the current request host and the derived base path.
+    // Railway handles the HTTPS protocol automatically, while XAMPP uses HTTP.
+    $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || getenv('RAILWAY_ENVIRONMENT') !== false ? 'https' : 'http';
+    $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    
+    return $protocol . '://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
 }
 
 $provision_success = '';
@@ -807,7 +790,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS tenant_legitimacy_documents (
 
 // Tenant Management: all tenants
 $tenant_rows_stmt = $pdo->query("
-    SELECT t.tenant_id, t.tenant_name, t.tenant_slug, t.company_address, t.status, t.request_type, t.plan_tier, t.mrr, t.created_at,
+    SELECT t.tenant_id, t.tenant_name, t.tenant_slug, t.company_address, t.status, t.request_type, t.plan_tier, t.mrr, t.created_at, t.setup_completed,
         owner.owner_username,
         owner.owner_first_name,
         owner.owner_last_name,
@@ -1538,6 +1521,18 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                         </button>
                                                     </form>
                                                 <?php elseif ($status === 'Active'): ?>
+                                                    <!-- View Website -->
+                                                    <?php $site_url = sa_build_tenant_login_url((string)$t['tenant_slug']); ?>
+                                                    <?php if (!empty($t['setup_completed'])): ?>
+                                                        <a href="<?php echo htmlspecialchars($site_url); ?>" target="_blank" class="btn btn-outline btn-sm" style="color:#0284c7; border-color:#7dd3fc; text-decoration:none;" title="View Website">
+                                                            <span class="material-symbols-rounded" style="font-size:16px;">language</span> View Site
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <button type="button" class="btn btn-outline btn-sm" style="color:#94a3b8; border-color:#cbd5e1; cursor:not-allowed;" title="Setup Incomplete">
+                                                            <span class="material-symbols-rounded" style="font-size:16px;">language</span> View Site
+                                                        </button>
+                                                    <?php endif; ?>
+
                                                     <!-- Suspend -->
                                                     <form method="POST" style="display:inline;">
                                                         <input type="hidden" name="action" value="toggle_status">
