@@ -1,9 +1,9 @@
 <?php
-$conn = new mysqli("localhost", "root", "");
+$conn = new mysqli("localhost", "root", "1234");
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 } else {
-    echo "Successfully connected to MySQL with empty password!\n";
+    echo "Successfully connected to MySQL!\n";
 }
 
 $conn->query("CREATE DATABASE IF NOT EXISTS microfin_db");
