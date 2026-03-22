@@ -968,16 +968,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $tenant_slug = $slug_stmt->fetchColumn();
             
             // Send the email
-            // Build login URL — On Railway the app is served from root (/),
-            // so we cannot use PHP_SELF to derive the base path (it reflects disk structure).
+            // Build login URL — detect Railway and use HTTPS, but keep basePath
+            // since the app is served under /microfin_platform/ on Railway.
             $isRailway = getenv('RAILWAY_ENVIRONMENT') !== false || getenv('RAILWAY_PUBLIC_DOMAIN') !== false
                       || getenv('RAILWAY_STATIC_URL') !== false || getenv('RAILWAY_PROJECT_ID') !== false;
-            if ($isRailway) {
-                $base_url = 'https://' . $_SERVER['HTTP_HOST'];
-            } else {
-                $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
-                $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname(dirname($_SERVER['PHP_SELF']));
-            }
+            $protocol = ($isRailway || (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')) ? "https" : "http";
+            $base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . dirname(dirname($_SERVER['PHP_SELF']));
             $login_url = $base_url . "/tenant_login/login.php?s=" . urlencode($tenant_slug);
             
             $subject = "Welcome to " . $_SESSION['tenant_name'] . " - Employee Logins";

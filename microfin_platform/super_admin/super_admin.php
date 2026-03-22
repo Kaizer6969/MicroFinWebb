@@ -135,15 +135,12 @@ function sa_build_tenant_login_url(string $tenantSlug): string
         return 'https://' . rtrim($railwayPublicDomain, '/') . '/tenant_login/login.php?s=' . $safeSlug;
     }
 
-    // Fallback behavior requested:
-    // - If running on Railway but URL vars are missing, use request host over HTTPS.
-    //   NOTE: On Railway the app is served from the root (/), so $basePath from PHP_SELF
-    //   would be wrong (it reflects the disk path, not the web root). Use / directly.
-    // - Otherwise, always use localhost for local/XAMPP runs.
+    // Fallback: use request host + computed basePath.
+    // On Railway, $basePath from PHP_SELF correctly resolves to /microfin_platform.
     if (sa_is_railway_runtime()) {
         $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
         if ($requestHost !== '') {
-            return 'https://' . $requestHost . '/tenant_login/login.php?s=' . $safeSlug;
+            return 'https://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
         }
     }
 
