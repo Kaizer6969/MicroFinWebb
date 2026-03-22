@@ -1,11 +1,4 @@
 <?php
-require_once "../vendor/PHPMailer/src/Exception.php";
-require_once "../vendor/PHPMailer/src/PHPMailer.php";
-require_once "../vendor/PHPMailer/src/SMTP.php";
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-
 session_start();
 
 if (!isset($_SESSION['user_logged_in']) || $_SESSION['user_logged_in'] !== true || empty($_SESSION['tenant_id'])) {
@@ -955,29 +948,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                      . "Best Regards,\n"
                      . $_SESSION['tenant_name'] . " Administration";
                      
-            $mail = new PHPMailer(true);
-            try {
-                $mail->isSMTP();
-                $mail->Host       = 'smtp.gmail.com';
-                $mail->SMTPAuth   = true;
-                $mail->Username   = SMTP_USER; 
-                $mail->Password   = SMTP_PASS; 
-                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                $mail->Port       = 587;
-
-                $mail->setFrom(SMTP_USER, $_SESSION['tenant_name'] . ' Administration');
-                $mail->addAddress($email, $first_name . ' ' . $last_name);
-
-                $mail->Subject = $subject;
-                $mail->Body    = $message;
-
-                $mail->send();
+            $result_msg = mf_send_brevo_email($email, $subject, nl2br($message));
+            if ($result_msg === 'Email sent successfully.') {
                 $_SESSION['admin_flash'] = "Staff account created! An email has been sent to them with instructions.";
-            } catch (Exception $e) {
-                // Fallback for local environments where mail() is not configured
-                $_SESSION['admin_flash'] = "Staff account created! (Note: Email failed to send due to SMTP error: {$mail->ErrorInfo}. Please manually distribute this Temporary Password: <strong>$temp_password</strong> and instruct them to log into your portal at: <strong>../tenant_login/login.php?s=$tenant_slug</strong>)";
+            } else {
+                $_SESSION['admin_flash'] = "Staff account created! (Note: Email failed to send: $result_msg. Please manually distribute this Temporary Password: <strong>$temp_password</strong> and instruct them to log into your portal at: <strong>../tenant_login/login.php?s=$tenant_slug</strong>)";
             }
-            
+
             header('Location: admin.php?tab=staff-list');
             exit;
         }

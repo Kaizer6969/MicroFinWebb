@@ -49,16 +49,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $conn->begin_transaction();
     try {
         $password_hash = password_hash($password, PASSWORD_ARGON2ID);
-        // Default falling back to 3 if no user_roles match
-        $role_id = 3; 
-        
-        $role_stmt = $conn->prepare("SELECT role_id FROM user_roles WHERE role_name IN ('Client', 'App User', 'User') AND tenant_id = ? LIMIT 1");
+        $role_stmt = $conn->prepare("SELECT role_id FROM user_roles WHERE role_name = 'Client' AND tenant_id = ? LIMIT 1");
         $role_stmt->bind_param("s", $tenant_id);
         $role_stmt->execute();
         $role_res = $role_stmt->get_result();
-        if ($role_res->num_rows > 0) {
-            $role_id = $role_res->fetch_assoc()['role_id'];
+        if ($role_res->num_rows === 0) {
+            throw new Exception("Client role is not configured for this tenant.");
         }
+        $role_id = (int)$role_res->fetch_assoc()['role_id'];
         $role_stmt->close();
 
         $user_type = 'Client'; 

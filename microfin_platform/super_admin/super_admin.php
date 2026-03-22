@@ -20,14 +20,6 @@ if (!empty($_SESSION['super_admin_id'])) {
     }
 }
 
-// Require PHPMailer manually
-require_once '../vendor/PHPMailer/src/Exception.php';
-require_once '../vendor/PHPMailer/src/PHPMailer.php';
-require_once '../vendor/PHPMailer/src/SMTP.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-
 function sa_column_exists(PDO $pdo, $table, $column)
 {
     static $cache = [];
@@ -208,7 +200,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, ?, 'tenant', ?, ?)");
             $log->execute([$_SESSION['super_admin_id'], $provision_action_type, "{$admin_name} had provisioned {$tenant_name} (ID: {$tenant_id}, Slug: {$tenant_slug}, Plan: {$plan_tier})", $tenant_id]);
 
-            $private_url = 'http://localhost/admin-draft/microfin_platform/tenant_login/login.php?s=' . urlencode($tenant_slug);
+            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $base_path = rtrim(dirname(dirname($_SERVER['PHP_SELF'])), '/\\');
+            $private_url = $protocol . '://' . $_SERVER['HTTP_HOST'] . $base_path . '/tenant_login/login.php?s=' . urlencode($tenant_slug);
 
             $message = "
             <html>
@@ -225,28 +219,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </html>
             ";
 
-            $mail = new PHPMailer(true);
-            $email_status = '';
-            try {
-                $mail->isSMTP();
-                $mail->Host       = 'smtp.gmail.com';
-                $mail->SMTPAuth   = true;
-                $mail->Username   = SMTP_USER;
-                $mail->Password   = SMTP_PASS;
-                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                $mail->Port       = 587;
-
-                $mail->setFrom('microfin.statements@gmail.com', 'MicroFin Provisioning');
-                $mail->addAddress($admin_email);
-
-                $mail->isHTML(true);
-                $mail->Subject = 'MicroFin - Your Instance is Ready!';
-                $mail->Body    = $message;
-
-                $mail->send();
+            $result_msg = mf_send_brevo_email($admin_email, 'MicroFin - Your Instance is Ready!', $message);
+            if ($result_msg === 'Email sent successfully.') {
                 $email_status = ' An email has been sent to the admin.';
-            } catch (Exception $e) {
-                $email_status = " (Email failed: {$mail->ErrorInfo})";
+            } else {
+                $email_status = " (Email failed: $result_msg)";
             }
 
             $_SESSION['sa_flash'] = 'Tenant provisioned successfully. Tenant ID: ' . $tenant_id . '.' . $email_status;
@@ -317,31 +294,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </html>
         ";
 
-        $mail = new PHPMailer(true);
-        try {
-            $mail->isSMTP();
-            $mail->Host = 'smtp.gmail.com';
-            $mail->SMTPAuth = true;
-            $mail->Username = 'microfin.statements@gmail.com';
-            $mail->Password = SMTP_PASS;
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port = 587;
-            $mail->setFrom('microfin.statements@gmail.com', 'MicroFin Consult Team');
-            $mail->addAddress((string)$lead['email']);
-            $mail->isHTML(true);
-            $mail->Subject = $subject;
-            $mail->Body = $body;
-            $mail->send();
+        $result_msg = mf_send_brevo_email((string)$lead['email'], $subject, $body);
 
+        if ($result_msg === 'Email sent successfully.') {
             $upd = $pdo->prepare("UPDATE tenants SET status = 'In Contact' WHERE tenant_id = ?");
             $upd->execute([$tenant_id]);
 
             $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'LEAD_EMAIL_SENT', 'tenant', ?, ?)");
             $log->execute([$_SESSION['super_admin_id'], "Inquiry email sent to {$lead['tenant_name']} ({$lead['email']}) with contact {$super_admin_email}", $tenant_id]);
 
-            $_SESSION['sa_flash'] = 'Consultation email sent successfully via microfin.statements@gmail.com.';
-        } catch (Throwable $e) {
-            $_SESSION['sa_error'] = 'Failed to send consultation email: ' . $mail->ErrorInfo;
+            $_SESSION['sa_flash'] = 'Consultation email sent successfully.';
+        } else {
+            $_SESSION['sa_error'] = 'Failed to send consultation email: ' . $result_msg;
         }
 
         header('Location: super_admin.php?section=tenants');
@@ -1171,10 +1135,6 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                                                         </button>
                                                     </form>
                                                 <?php elseif ($status === 'Active'): ?>
-                                                    <!-- Impersonate -->
-                                                    <a href="../tenant_login/login.php?s=<?php echo urlencode($t['tenant_slug']); ?>&impersonate=1" class="btn btn-outline btn-sm" target="_blank" title="Impersonate Tenant">
-                                                        <span class="material-symbols-rounded" style="font-size:16px;">login</span>
-                                                    </a>
                                                     <!-- Suspend -->
                                                     <form method="POST" style="display:inline;">
                                                         <input type="hidden" name="action" value="toggle_status">

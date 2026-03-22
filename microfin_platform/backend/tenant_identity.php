@@ -6,9 +6,8 @@
 function mf_normalize_tenant_slug($rawValue)
 {
     $slug = strtolower(trim((string) $rawValue));
-    $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
-    $slug = trim((string) $slug, '-');
-
+    $slug = preg_replace('/[^a-z0-9]+/', '', $slug); // Strip all spaces and non-alphanumeric chars
+    
     return $slug;
 }
 
@@ -46,7 +45,7 @@ function mf_generate_unique_tenant_slug(PDO $pdo, $baseSlug, $excludeTenantId = 
             throw new RuntimeException('Unable to generate a unique tenant slug.');
         }
 
-        $candidate = $base . '-' . strtolower(substr(bin2hex(random_bytes(2)), 0, 4));
+        $candidate = $base . strtolower(substr(bin2hex(random_bytes(2)), 0, 4));
     }
 
     return $candidate;

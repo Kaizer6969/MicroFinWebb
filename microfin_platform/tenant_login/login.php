@@ -1,6 +1,39 @@
 <?php
 session_start();
 require_once "../backend/db_connect.php";
+require_once "../backend/tenant_identity.php";
+
+function mf_extract_site_slug_from_query(array $query)
+{
+    // Preferred keys first.
+    foreach (['s', 'tenant', 'site', 'slug'] as $key) {
+        if (isset($query[$key]) && is_scalar($query[$key])) {
+            $value = trim((string)$query[$key]);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+    }
+
+    // Some email clients can mangle keys as "amp;s" when copied from HTML.
+    foreach ($query as $rawKey => $rawValue) {
+        if (!is_scalar($rawValue)) {
+            continue;
+        }
+        $key = strtolower(trim((string)$rawKey));
+        while (strpos($key, 'amp;') === 0) {
+            $key = substr($key, 4);
+        }
+        if (in_array($key, ['s', 'tenant', 'site', 'slug'], true)) {
+            $value = trim((string)$rawValue);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+    }
+
+    return '';
+}
 
 if (isset($_SESSION["user_logged_in"]) && $_SESSION["user_logged_in"] === true) {
     // Re-check force_password_change in case user closed browser during password reset
@@ -18,8 +51,10 @@ if (isset($_SESSION["user_logged_in"]) && $_SESSION["user_logged_in"] === true) 
 }
 
 // URL format: ?s=<slug>  — no key required
+// Also supports legacy aliases: ?tenant=, ?site=, ?slug= and tenant IDs.
 // Impersonate: ?s=<slug>&impersonate=1  (super admin, session-protected)
-$site_slug = trim($_GET["s"] ?? "");
+$site_slug = mf_extract_site_slug_from_query($_GET);
+$site_slug = trim(urldecode(urldecode($site_slug)));
 $tenant = null;
 $tenant_error = '';
 $login_error = '';
@@ -27,7 +62,7 @@ $login_error = '';
 // Check for Super Admin Impersonation (uses ?s=slug&impersonate=1)
 if ($site_slug !== '' && isset($_GET['impersonate']) && $_GET['impersonate'] == '1' && isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
     $tenant_stmt = $pdo->prepare('SELECT t.tenant_id, t.tenant_name, t.tenant_slug, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, b.logo_path FROM tenants t LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id WHERE t.tenant_slug = ?');
-    $tenant_stmt->execute([$site_slug]);
+    $tenant_stmt->execute([strtolower($site_slug)]);
     $tenant = $tenant_stmt->fetch();
     if ($tenant) {
         $_SESSION['user_logged_in'] = true;
@@ -48,34 +83,56 @@ if ($site_slug !== '' && isset($_GET['impersonate']) && $_GET['impersonate'] == 
 }
 
 // Regular access — only ?s=<slug> is required
-if ($site_slug === '') {
-    $tenant_error = 'Missing site identifier. Please use the login link provided to you.';
-} else {
-    $tenant_stmt = $pdo->prepare('SELECT t.tenant_id, t.tenant_name, t.tenant_slug, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, b.logo_path, t.status, t.setup_completed, t.setup_current_step, t.onboarding_deadline FROM tenants t LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id WHERE t.tenant_slug = ?');
-    $tenant_stmt->execute([$site_slug]);
+if ($site_slug !== '') {
+    $normalized_slug = mf_normalize_tenant_slug($site_slug);
+    $tenant_stmt = $pdo->prepare('SELECT t.tenant_id, t.tenant_name, t.tenant_slug, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, b.logo_path, t.status, t.setup_completed, t.setup_current_step, t.onboarding_deadline FROM tenants t LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id WHERE t.tenant_slug = ? OR LOWER(t.tenant_slug) = ? OR t.tenant_id = ? LIMIT 1');
+    $tenant_stmt->execute([$site_slug, $normalized_slug, $site_slug]);
     $tenant = $tenant_stmt->fetch();
+}
 
-    if (!$tenant) {
-        $tenant_error = 'Invalid login link. Please contact your administrator.';
-    } else {
-        // Enforce 30-day onboarding deadline
-        if ($tenant['status'] === 'Active' && !(bool)$tenant['setup_completed'] && $tenant['onboarding_deadline']) {
-            $deadline = new DateTime($tenant['onboarding_deadline']);
-            $now = new DateTime();
-            if ($now > $deadline) {
-                $pdo->prepare("UPDATE tenants SET status = 'Suspended' WHERE tenant_id = ?")->execute([$tenant['tenant_id']]);
-                $pdo->prepare("INSERT INTO audit_logs (action_type, entity_type, description, tenant_id) VALUES ('DEADLINE_EXPIRED', 'tenant', 'Tenant suspended due to 30-day onboarding deadline expiration', ?)")->execute([$tenant['tenant_id']]);
-                $tenant['status'] = 'Suspended';
-            }
-        }
-
-        if ($tenant['status'] !== 'Active') {
-            $tenant_error = 'This workspace is currently inactive or suspended. Please contact support.';
-            $tenant = null;
-        }
+if (!$tenant) {
+    // Fallback for local/single-tenant deployments where links may lose query params.
+    $single_stmt = $pdo->prepare("SELECT t.tenant_id, t.tenant_name, t.tenant_slug, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, b.logo_path, t.status, t.setup_completed, t.setup_current_step, t.onboarding_deadline FROM tenants t LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id WHERE t.status = 'Active' LIMIT 2");
+    $single_stmt->execute();
+    $single_tenants = $single_stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (count($single_tenants) === 1) {
+        $tenant = $single_tenants[0];
+        $site_slug = (string)$tenant['tenant_slug'];
     }
 }
 
+if (!$tenant) {
+    $tenant_error = ($site_slug === '')
+        ? 'Missing site identifier. Please use the login link provided to you.'
+        : 'Invalid login link. Please contact your administrator.';
+} else {
+    // Canonicalize the URL to ?s=<tenant_slug> so subsequent form posts are stable.
+    if (!isset($_GET['impersonate']) && strcasecmp($site_slug, (string)$tenant['tenant_slug']) !== 0) {
+        header('Location: login.php?s=' . urlencode((string)$tenant['tenant_slug']));
+        exit;
+    }
+
+    // Enforce 30-day onboarding deadline
+    if ($tenant['status'] === 'Active' && !(bool)$tenant['setup_completed'] && $tenant['onboarding_deadline']) {
+        $deadline = new DateTime($tenant['onboarding_deadline']);
+        $now = new DateTime();
+        if ($now > $deadline) {
+            $pdo->prepare("UPDATE tenants SET status = 'Suspended' WHERE tenant_id = ?")->execute([$tenant['tenant_id']]);
+            $pdo->prepare("INSERT INTO audit_logs (action_type, entity_type, description, tenant_id) VALUES ('DEADLINE_EXPIRED', 'tenant', 'Tenant suspended due to 30-day onboarding deadline expiration', ?)")->execute([$tenant['tenant_id']]);
+            $tenant['status'] = 'Suspended';
+        }
+    }
+
+    if ($tenant['status'] !== 'Active') {
+        $tenant_error = 'This workspace is currently inactive or suspended. Please contact support.';
+        $tenant = null;
+    }
+}
+
+if ($tenant && !empty($tenant['setup_completed']) && !isset($_GET['auth']) && !isset($_GET['impersonate']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header("Location: ../site.php?site=" . urlencode($tenant['tenant_slug']));
+    exit;
+}
 
 if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
@@ -395,7 +452,7 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
                 <h1 id="company-name"><?php echo htmlspecialchars($tenant['tenant_name']); ?> Workspace</h1>
             </div>
 
-            <form id="login-form" method="POST" action="login.php?s=<?php echo urlencode($site_slug); ?>">
+            <form id="login-form" method="POST" action="login.php?s=<?php echo urlencode($site_slug); ?><?php echo isset($_GET['auth']) ? '&auth=1' : ''; ?>">
                 <?php if ($login_error !== ''): ?>
                 <div style="background-color: #fee2e2; color: #b91c1c; padding: 0.75rem; border-radius: 8px; font-size: 0.875rem; margin-bottom: 1rem; text-align: left;">
                     <?php echo htmlspecialchars($login_error); ?>

@@ -35,7 +35,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $password_hash = password_hash($new_password, PASSWORD_ARGON2ID);
     
-    $stmt = $conn->prepare("UPDATE users SET password_hash = ? WHERE email = ? AND tenant_id = ?");
+    $stmt = $conn->prepare("
+        UPDATE users u
+        INNER JOIN clients c
+            ON c.user_id = u.user_id
+           AND c.tenant_id = u.tenant_id
+        SET u.password_hash = ?
+        WHERE u.email = ?
+          AND u.tenant_id = ?
+          AND u.user_type = 'Client'
+          AND c.client_status = 'Active'
+    ");
     $stmt->bind_param("sss", $password_hash, $email, $tenant_id);
     
     if ($stmt->execute()) {

@@ -85,6 +85,13 @@ $t_muted = ($tenant_brand && $tenant_brand['theme_text_muted']) ? $tenant_brand[
 $t_bg = ($tenant_brand && $tenant_brand['theme_bg_body']) ? $tenant_brand['theme_bg_body'] : '#f8fafc';
 $t_card = ($tenant_brand && $tenant_brand['theme_bg_card']) ? $tenant_brand['theme_bg_card'] : '#ffffff';
 $t_font = ($tenant_brand && $tenant_brand['font_family']) ? $tenant_brand['font_family'] : 'Inter';
+
+$is_onboarding = false;
+if ($tenant_id) {
+    $onb_chk = $pdo->prepare('SELECT setup_completed FROM tenants WHERE tenant_id = ?');
+    $onb_chk->execute([$tenant_id]);
+    $is_onboarding = !(bool)$onb_chk->fetchColumn();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -105,10 +112,21 @@ $t_font = ($tenant_brand && $tenant_brand['font_family']) ? $tenant_brand['font_
         button { width: 100%; padding: 12px; background: <?php echo htmlspecialchars($t_primary); ?>; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         button:hover { filter: brightness(0.9); }
         .error { color: #ef4444; background: #fef2f2; border: 1px solid #fecaca; padding: 10px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
+        .step-indicator { display: flex; gap: 8px; margin-bottom: 24px; justify-content: center; }
+        .step { width: 44px; height: 4px; border-radius: 2px; background: #cbd5e1; }
+        .step.active { background: <?php echo htmlspecialchars($t_primary); ?>; }
     </style>
 </head>
 <body>
     <div class="container">
+        <?php if($is_onboarding): ?>
+            <div class="step-indicator">
+                <div class="step active"></div>
+                <div class="step"></div>
+                <div class="step"></div>
+                <div class="step"></div>
+            </div>
+        <?php endif; ?>
         <h2>Change Your Password</h2>
         <p>For your security, you must change your temporary password before accessing your account.</p>
         

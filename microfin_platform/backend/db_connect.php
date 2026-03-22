@@ -11,13 +11,25 @@ $db = 'microfin_db';
 $user = 'root';
 $pass = '1234';
 
-// Railway/hosted override via DATABASE_URL
-$databaseUrl = getenv('DATABASE_URL');
-if (is_string($databaseUrl) && trim($databaseUrl) !== '') {
+function mf_env_first(array $keys)
+{
+    foreach ($keys as $key) {
+        $value = getenv($key);
+        if ($value !== false && trim((string)$value) !== '') {
+            return (string)$value;
+        }
+    }
+
+    return null;
+}
+
+// Hosted override via URL-style DB variables.
+$databaseUrl = mf_env_first(['DATABASE_URL', 'MYSQL_URL', 'MYSQL_PUBLIC_URL', 'MYSQL_PRIVATE_URL']);
+if ($databaseUrl !== null) {
     $parts = parse_url($databaseUrl);
     if ($parts !== false) {
         if (!empty($parts['host'])) {
-            $host = $parts['host'];
+            $host = (string)$parts['host'];
         }
         if (!empty($parts['port'])) {
             $port = (int)$parts['port'];
@@ -33,6 +45,13 @@ if (is_string($databaseUrl) && trim($databaseUrl) !== '') {
         }
     }
 }
+
+// Railway plugin-style discrete variables.
+$host = mf_env_first(['MYSQLHOST', 'DB_HOST']) ?: $host;
+$port = (int)(mf_env_first(['MYSQLPORT', 'DB_PORT']) ?: $port);
+$db = mf_env_first(['MYSQLDATABASE', 'DB_NAME']) ?: $db;
+$user = mf_env_first(['MYSQLUSER', 'DB_USER']) ?: $user;
+$pass = mf_env_first(['MYSQLPASSWORD', 'DB_PASSWORD']) ?: $pass;
 
 if (!defined('BREVO_API_KEY')) {
     define('BREVO_API_KEY', getenv('BREVO_API_KEY') ?: '');
@@ -116,6 +135,12 @@ $options = [
 ];
 
 try {
+    $runningOnRailway = mf_env_first(['RAILWAY_ENVIRONMENT', 'RAILWAY_PROJECT_ID']) !== null;
+    $usingLocalDefaults = ($host === 'localhost' || $host === '127.0.0.1') && $db === 'microfin_db' && $user === 'root';
+    if ($runningOnRailway && $usingLocalDefaults) {
+        throw new RuntimeException('Database environment variables are missing. Set DATABASE_URL or MYSQLHOST/MYSQLPORT/MYSQLDATABASE/MYSQLUSER/MYSQLPASSWORD.');
+    }
+
     $pdo = new PDO($dsn, $user, $pass, $options);
 
     // Schema guard for newer website customization flows.
@@ -182,7 +207,7 @@ try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_shadow VARCHAR(10) DEFAULT 'sm' COMMENT 'Card shadow: none, sm, md, lg'");
     } catch (\PDOException $e) {
     }
-} catch (\PDOException $e) {
+} catch (\Throwable $e) {
     error_log('Database Connection Failed: ' . $e->getMessage());
     header('Content-Type: application/json');
     http_response_code(500);
