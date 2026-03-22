@@ -1,5 +1,5 @@
 <?php
-$conn = new mysqli("localhost", "root", "");
+$conn = new mysqli("localhost", "root", "1234");
 
 $sql = "
 CREATE DATABASE IF NOT EXISTS microfin_db;
