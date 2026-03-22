@@ -2,7 +2,7 @@
 // db.php
 $servername = "localhost";
 $username = "root";
-$password = ""; 
+$password = "1234"; 
 $dbname = "microfin_db";
 
 try {
