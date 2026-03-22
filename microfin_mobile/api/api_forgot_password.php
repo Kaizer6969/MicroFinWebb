@@ -21,6 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+    $tenant_stmt->bind_param("s", $tenant_id);
+    $tenant_stmt->execute();
+    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
+    $tenant_stmt->close();
+
+    if (!$tenant_exists) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
+        exit;
+    }
+
     $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND tenant_id = ?");
     $stmt->bind_param("ss", $email, $tenant_id);
     $stmt->execute();

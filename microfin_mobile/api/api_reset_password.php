@@ -22,6 +22,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+    $tenant_stmt->bind_param("s", $tenant_id);
+    $tenant_stmt->execute();
+    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
+    $tenant_stmt->close();
+
+    if (!$tenant_exists) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
+        exit;
+    }
+
     $password_hash = password_hash($new_password, PASSWORD_ARGON2ID);
     
     $stmt = $conn->prepare("UPDATE users SET password_hash = ? WHERE email = ? AND tenant_id = ?");
