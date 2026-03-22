@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Holds branding data for a single tenant.
 class TenantBranding {
+  final String tenantId;
   final String slug;
   final String appName;
   final String tagline;
@@ -12,6 +13,7 @@ class TenantBranding {
   final String logo;
 
   const TenantBranding({
+    required this.tenantId,
     required this.slug,
     required this.appName,
     required this.tagline,
@@ -27,6 +29,7 @@ class TenantBranding {
   Color get primaryExtraLight => primaryColor.withOpacity(0.08);
 
   static const TenantBranding fundline = TenantBranding(
+    tenantId: 'fundline',
     slug: 'fundline',
     appName: 'Fundline Mobile',
     tagline: 'Your trusted lending partner',
@@ -38,6 +41,7 @@ class TenantBranding {
   );
 
   static const TenantBranding plaridel = TenantBranding(
+    tenantId: 'plaridel',
     slug: 'plaridel',
     appName: 'PlaridelMFB',
     tagline: 'Banking for every Filipino',
@@ -49,6 +53,7 @@ class TenantBranding {
   );
 
   static const TenantBranding sacredheart = TenantBranding(
+    tenantId: 'sacredheart',
     slug: 'sacredheart',
     appName: 'Sacred Heart Coop',
     tagline: 'Community-driven microfinance',
@@ -72,6 +77,7 @@ class TenantBranding {
 
   /// Builds branding from API tenant rows while preserving known defaults.
   static TenantBranding fromApiTenant(Map<String, dynamic> row) {
+    final tenantId = (row['tenant_id'] ?? '').toString().trim();
     final slug = (row['tenant_slug'] ?? '').toString().trim().toLowerCase();
     final tenantName = (row['tenant_name'] ?? slug).toString().trim();
     final staticMatch = fromTenantId(slug);
@@ -80,6 +86,7 @@ class TenantBranding {
 
     if (staticMatch != null) {
       return TenantBranding(
+        tenantId: tenantId.isNotEmpty ? tenantId : staticMatch.tenantId,
         slug: staticMatch.slug,
         appName: tenantName.isNotEmpty ? tenantName : staticMatch.appName,
         tagline: staticMatch.tagline,
@@ -93,7 +100,11 @@ class TenantBranding {
 
     const fallbackPrimary = Color(0xFF2563EB);
     const fallbackSecondary = Color(0xFF1E3A8A);
+    final fallbackId = tenantId.isEmpty
+        ? (slug.isEmpty ? 'tenant' : slug)
+        : tenantId;
     return TenantBranding(
+      tenantId: fallbackId,
       slug: slug.isEmpty ? 'tenant' : slug,
       appName: tenantName.isEmpty ? 'Unknown Tenant' : tenantName,
       tagline: 'Active tenant',
