@@ -20,10 +20,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $middle_name = $data['middle_name'] ?? '';
     $last_name = $data['last_name'] ?? '';
     $suffix = $data['suffix'] ?? '';
-    $tenant_id = $data['tenant_id'] ?? 'fundline';
+    $tenant_id = trim((string)($data['tenant_id'] ?? ''));
     
-    if(empty($username) || empty($email) || empty($password) || empty($first_name) || empty($last_name)) {
+    if(empty($username) || empty($email) || empty($password) || empty($first_name) || empty($last_name) || empty($tenant_id)) {
         echo json_encode(['success' => false, 'message' => 'Required fields are missing']);
+        exit;
+    }
+
+    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+    $tenant_stmt->bind_param("s", $tenant_id);
+    $tenant_stmt->execute();
+    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
+    $tenant_stmt->close();
+
+    if (!$tenant_exists) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
         exit;
     }
     $stmt = $conn->prepare("SELECT user_id FROM users WHERE tenant_id = ? AND (username = ? OR email = ?)");
