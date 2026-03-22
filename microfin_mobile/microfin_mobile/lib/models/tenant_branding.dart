@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 /// Holds branding data for a single tenant.
 class TenantBranding {
@@ -59,11 +59,7 @@ class TenantBranding {
     logo: 'images/sacred_logo.jpg',
   );
 
-  static const List<TenantBranding> tenants = [
-    fundline,
-    plaridel,
-    sacredheart,
-  ];
+  static const List<TenantBranding> tenants = [fundline, plaridel, sacredheart];
 
   static TenantBranding? fromTenantId(String id) {
     final normalized = id.toLowerCase();
