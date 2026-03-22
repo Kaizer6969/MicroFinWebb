@@ -2,12 +2,6 @@
 session_start();
 require_once '../backend/db_connect.php';
 require_once '../backend/tenant_identity.php';
-require_once '../vendor/PHPMailer/src/Exception.php';
-require_once '../vendor/PHPMailer/src/PHPMailer.php';
-require_once '../vendor/PHPMailer/src/SMTP.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
 
 $form_success = false;
 $form_error = '';
@@ -44,7 +38,7 @@ function demo_generate_username_base($preferredLastName, $fallbackInstitutionNam
 
 function demo_send_acknowledgement_email($toEmail, $institutionName, $isTalkToExpert)
 {
-    if (!defined('SMTP_USER') || !defined('SMTP_PASS') || trim((string)$toEmail) === '') {
+    if (trim((string)$toEmail) === '') {
         return;
     }
 
@@ -76,20 +70,10 @@ function demo_send_acknowledgement_email($toEmail, $institutionName, $isTalkToEx
         ";
     }
 
-    $mail = new PHPMailer(true);
-    $mail->isSMTP();
-    $mail->Host = 'smtp.gmail.com';
-    $mail->SMTPAuth = true;
-    $mail->Username = SMTP_USER;
-    $mail->Password = SMTP_PASS;
-    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port = 587;
-    $mail->setFrom('microfin.statements@gmail.com', 'MicroFin Team');
-    $mail->addAddress($toEmail);
-    $mail->isHTML(true);
-    $mail->Subject = $subject;
-    $mail->Body = $body;
-    $mail->send();
+    $result_msg = mf_send_brevo_email($toEmail, $subject, $body);
+    if ($result_msg !== 'Email sent successfully.') {
+        error_log('Demo acknowledgement email failed: ' . $result_msg);
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'request_demo') {

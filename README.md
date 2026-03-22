@@ -25,3 +25,16 @@ MicroFinWebb is a multi-tenant microfinance platform with web administration and
 
 - This repository includes both web and mobile components in a single codebase.
 - Tenant-specific branding, website content, and access are managed in the platform modules.
+
+## Railway Deployment (Web)
+
+The web app is deployable from this repository root with `railway.toml`.
+
+Required Railway environment variables:
+
+- `DATABASE_URL` (MySQL connection string, example: `mysql://user:pass@host:3306/dbname`)
+- `BREVO_API_KEY`
+- `BREVO_SENDER_EMAIL`
+- `BREVO_SENDER_NAME`
+
+Email sending for web flows now uses Brevo centrally via `microfin_platform/backend/db_connect.php` (OTP, password reset, tenant/admin notifications, and demo acknowledgement).

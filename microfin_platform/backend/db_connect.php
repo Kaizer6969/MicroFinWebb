@@ -4,26 +4,115 @@
 
 $charset = 'utf8mb4';
 
-// Database configuration (Localhost)
+// Local fallback DB configuration.
 $host = 'localhost';
 $port = 3306;
-$db   = 'microfin_db';
+$db = 'microfin_db';
 $user = 'root';
 $pass = '1234';
 
-// SMTP Global Configuration
-define('SMTP_USER', 'microfin.statements@gmail.com');
-define('SMTP_PASS', 'ttnq cabw jcbs kbfg');
+// Railway/hosted override via DATABASE_URL
+$databaseUrl = getenv('DATABASE_URL');
+if (is_string($databaseUrl) && trim($databaseUrl) !== '') {
+    $parts = parse_url($databaseUrl);
+    if ($parts !== false) {
+        if (!empty($parts['host'])) {
+            $host = $parts['host'];
+        }
+        if (!empty($parts['port'])) {
+            $port = (int)$parts['port'];
+        }
+        if (array_key_exists('user', $parts)) {
+            $user = urldecode((string)$parts['user']);
+        }
+        if (array_key_exists('pass', $parts)) {
+            $pass = urldecode((string)$parts['pass']);
+        }
+        if (!empty($parts['path'])) {
+            $db = ltrim((string)$parts['path'], '/');
+        }
+    }
+}
+
+if (!defined('BREVO_API_KEY')) {
+    define('BREVO_API_KEY', getenv('BREVO_API_KEY') ?: '');
+}
+if (!defined('BREVO_SENDER_EMAIL')) {
+    define('BREVO_SENDER_EMAIL', getenv('BREVO_SENDER_EMAIL') ?: 'microfin.statements@gmail.com');
+}
+if (!defined('BREVO_SENDER_NAME')) {
+    define('BREVO_SENDER_NAME', getenv('BREVO_SENDER_NAME') ?: 'MicroFin');
+}
+
+function mf_send_brevo_email($toEmail, $subject, $htmlContent)
+{
+    $recipient = trim((string)$toEmail);
+    if ($recipient === '' || !filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+        return 'Invalid recipient email address.';
+    }
+
+    $apiKey = trim((string)BREVO_API_KEY);
+    if ($apiKey === '' || stripos($apiKey, 'YOUR_BREVO_API_KEY') !== false) {
+        return 'Brevo API key is not configured.';
+    }
+
+    $payload = json_encode([
+        'sender' => [
+            'name' => (string)BREVO_SENDER_NAME,
+            'email' => (string)BREVO_SENDER_EMAIL,
+        ],
+        'to' => [['email' => $recipient]],
+        'subject' => (string)$subject,
+        'htmlContent' => (string)$htmlContent,
+    ]);
+
+    if ($payload === false) {
+        return 'Failed to encode Brevo payload.';
+    }
+
+    $ch = curl_init('https://api.brevo.com/v3/smtp/email');
+    if ($ch === false) {
+        return 'Failed to initialize cURL for Brevo.';
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER => [
+            'api-key: ' . $apiKey,
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+    ]);
+
+    $result = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlError !== '') {
+        return 'cURL Error: ' . $curlError;
+    }
+
+    if ($httpCode >= 200 && $httpCode < 300) {
+        return 'Email sent successfully.';
+    }
+
+    return 'API Error: HTTP ' . $httpCode . ' - ' . (is_string($result) ? $result : '');
+}
 
 // Data Source Name
 $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=$charset";
 
 // PDO Options
 $options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-    PDO::ATTR_PERSISTENT         => false,
+    PDO::ATTR_EMULATE_PREPARES => false,
+    PDO::ATTR_PERSISTENT => false,
 ];
 
 try {
@@ -41,7 +130,7 @@ try {
             "ALTER TABLE tenant_website_content ADD COLUMN stats_heading VARCHAR(255) NULL AFTER stats_json",
             "ALTER TABLE tenant_website_content ADD COLUMN stats_subheading VARCHAR(255) NULL AFTER stats_heading",
             "ALTER TABLE tenant_website_content ADD COLUMN stats_image_path VARCHAR(500) NULL AFTER stats_subheading",
-            "ALTER TABLE tenant_website_content ADD COLUMN footer_description TEXT NULL AFTER contact_hours"
+            "ALTER TABLE tenant_website_content ADD COLUMN footer_description TEXT NULL AFTER contact_hours",
         ];
         foreach ($websiteContentColumnMigrations as $migrationSql) {
             try {
@@ -59,7 +148,7 @@ try {
         $pdo->exec("ALTER TABLE tenant_website_content MODIFY COLUMN layout_template ENUM('template1', 'template2', 'template3') DEFAULT 'template1'");
         $pdo->exec("UPDATE tenant_website_content SET layout_template = 'template1' WHERE layout_template NOT IN ('template1','template2','template3') OR layout_template IS NULL");
     } catch (\PDOException $e) {
-        // Already migrated or table doesn't exist yet
+        // Already migrated or table does not exist yet.
     }
 
     // Add setup step tracking column for onboarding wizard
@@ -77,28 +166,31 @@ try {
                 END
         ");
     } catch (\PDOException $migrationError) {
-        // Column already exists — ignore
+        // Column already exists. Ignore.
     }
 
     // Add card style columns to tenant_branding
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN theme_border_color VARCHAR(10) DEFAULT '#e2e8f0' COMMENT 'Card border/divider color'");
-    } catch (\PDOException $e) {}
+    } catch (\PDOException $e) {
+    }
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_border_width TINYINT DEFAULT 1 COMMENT 'Card border width in px (0-3)'");
-    } catch (\PDOException $e) {}
+    } catch (\PDOException $e) {
+    }
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_shadow VARCHAR(10) DEFAULT 'sm' COMMENT 'Card shadow: none, sm, md, lg'");
-    } catch (\PDOException $e) {}
+    } catch (\PDOException $e) {
+    }
 } catch (\PDOException $e) {
-    error_log("Database Connection Failed: " . $e->getMessage());
+    error_log('Database Connection Failed: ' . $e->getMessage());
     header('Content-Type: application/json');
     http_response_code(500);
-        echo json_encode([
-            'status' => 'error',
-            'message' => 'Critical System Error: Unable to establish database connection.',
-            'debug' => $e->getMessage()
-        ]);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Critical System Error: Unable to establish database connection.',
+        'debug' => $e->getMessage(),
+    ]);
     exit;
 }
 ?>

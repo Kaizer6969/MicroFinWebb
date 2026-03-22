@@ -2,14 +2,6 @@
 session_start();
 require_once "../backend/db_connect.php";
 
-// Load PHPMailer
-require '../vendor/PHPMailer/src/Exception.php';
-require '../vendor/PHPMailer/src/PHPMailer.php';
-require '../vendor/PHPMailer/src/SMTP.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-
 $site_slug = trim($_GET["s"] ?? "");
 $tenant = null;
 $message = '';
@@ -49,61 +41,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
             $update->execute([$token, $expiry, $user['user_id']]);
 
             // Send Email
-            $mail = new PHPMailer(true);
-            try {
-                $mail->isSMTP();
-                $mail->Host       = 'smtp.gmail.com';
-                $mail->SMTPAuth   = true;
-                $mail->Username   = SMTP_USER;
-                $mail->Password   = SMTP_PASS;
-                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                $mail->Port       = 587;
-                
-                // Allow local XAMPP to bypass SSL verifications if certs are missing
-                $mail->SMTPOptions = array(
-                    'ssl' => array(
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
-                        'allow_self_signed' => true
-                    )
-                );
+            $forwardedProto = strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+            $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || $forwardedProto === 'https';
+            $protocol = $isHttps ? "https://" : "http://";
+            $domainName = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/microfin_platform/tenant_login/forgot_password.php'));
+            $resetPath = rtrim($scriptDir, '/') . '/reset_password.php';
+            $reset_link = $protocol . $domainName . $resetPath . '?token=' . urlencode($token);
 
-                $mail->setFrom(SMTP_USER, $tenant['tenant_name'] . ' System');
-                $mail->addAddress($email);
-
-                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-                $domainName = $_SERVER['HTTP_HOST'];
-                $reset_link = $protocol . $domainName . "/admin-draft/microfin_platform/tenant_login/reset_password.php?token=" . $token;
-
-                $mail->isHTML(true);
-                $mail->Subject = 'Password Reset Request';
-                
-                $htmlBody = "
-                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;'>
-                    <h2>Reset Your Password</h2>
-                    <p>Hello,</p>
-                    <p>We received a request to reset the password for your account at <strong>{$tenant['tenant_name']}</strong>.</p>
-                    <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
-                    <div style='text-align: center; margin: 30px 0;'>
-                        <a href='{$reset_link}' style='background-color: {$theme_color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Reset Password</a>
-                    </div>
-                    <p>If the button doesn't work, copy and paste this link into your browser:</p>
-                    <p style='word-break: break-all; color: #666;'>{$reset_link}</p>
-                    <hr style='border: none; border-top: 1px solid #eee; margin: 30px 0;' />
-                    <p style='font-size: 12px; color: #999;'>If you didn't request a password reset, you can safely ignore this email.</p>
+            $htmlBody = "
+            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;'>
+                <h2>Reset Your Password</h2>
+                <p>Hello,</p>
+                <p>We received a request to reset the password for your account at <strong>{$tenant['tenant_name']}</strong>.</p>
+                <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
+                <div style='text-align: center; margin: 30px 0;'>
+                    <a href='{$reset_link}' style='background-color: {$theme_color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Reset Password</a>
                 </div>
-                ";
+                <p>If the button doesn't work, copy and paste this link into your browser:</p>
+                <p style='word-break: break-all; color: #666;'>{$reset_link}</p>
+                <hr style='border: none; border-top: 1px solid #eee; margin: 30px 0;' />
+                <p style='font-size: 12px; color: #999;'>If you didn't request a password reset, you can safely ignore this email.</p>
+            </div>
+            ";
 
-                $mail->Body = $htmlBody;
-                $mail->AltBody = "Reset your password using this link: {$reset_link} (Expires in 1 hour)";
-
-                $mail->send();
-            } catch (Exception $e) {
-                // Log and show for debugging
-                $email_send_error = $mail->ErrorInfo;
+            $result_msg = mf_send_brevo_email($email, 'Password Reset Request', $htmlBody);
+            
+            if ($result_msg !== 'Email sent successfully.') {
+                $email_send_error = $result_msg;
             }
         }
-        
+
         if (isset($email_send_error)) {
             $message_type = 'error';
             $message = 'Failed to send email. Error: ' . $email_send_error;
