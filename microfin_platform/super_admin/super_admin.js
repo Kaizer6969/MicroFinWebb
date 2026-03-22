@@ -466,12 +466,20 @@ document.addEventListener('DOMContentLoaded', () => {
         el('stat-total-mrr', '₱' + data.total_mrr);
         el('stat-revenue-total-mrr', '₱' + data.total_mrr);
 
-        // Update sidebar pending badge (total of applications + inquiries)
+        // Update sidebar pending badge (applications only)
         const badge = document.getElementById('sidebar-pending-badge');
         if (badge) {
-            const count = parseInt(data.pending_applications ?? 0, 10) + parseInt(data.pending_inquiries ?? 0, 10);
+            const count = parseInt(data.pending_applications ?? 0, 10);
             badge.textContent = count;
             badge.style.display = count > 0 ? '' : 'none';
+        }
+
+        // Update sidebar inquiry badge (inquiries only)
+        const inquiryBadge = document.getElementById('sidebar-inquiry-badge');
+        if (inquiryBadge) {
+            const count = parseInt(data.pending_inquiries ?? 0, 10);
+            inquiryBadge.textContent = count;
+            inquiryBadge.style.display = count > 0 ? '' : 'none';
         }
 
         // Update Applications tab badge
@@ -685,39 +693,136 @@ document.addEventListener('DOMContentLoaded', () => {
     // REPORTS: Load via AJAX
     // ============================================================
     const btnApplyReportFilter = document.getElementById('btn-apply-report-filter');
+    const reportDateFromInput = document.getElementById('report-date-from');
+    const reportDateToInput = document.getElementById('report-date-to');
+    const reportTenantFilter = document.getElementById('report-tenant-filter');
+
+    function initializeReportFilters() {
+        if (!reportDateFromInput || !reportDateToInput) return;
+
+        const today = new Date();
+        const yearStart = new Date(today.getFullYear(), 0, 1);
+
+        if (!reportDateFromInput.value) reportDateFromInput.value = toYmd(yearStart);
+        if (!reportDateToInput.value) reportDateToInput.value = toYmd(today);
+    }
+
+    function loadReports() {
+        const params = new URLSearchParams({ action: 'reports' });
+        if (reportDateFromInput && reportDateFromInput.value) params.set('date_from', reportDateFromInput.value);
+        if (reportDateToInput && reportDateToInput.value) params.set('date_to', reportDateToInput.value);
+        if (reportTenantFilter && reportTenantFilter.value) params.set('tenant_id', reportTenantFilter.value);
+
+        fetch('api_dashboard_stats.php?' + params.toString())
+            .then(r => r.json())
+            .then(data => renderReports(data))
+            .catch(e => {
+                console.error('Reports error:', e);
+                renderReports({ tenant_activity: [] });
+            });
+    }
 
     if (btnApplyReportFilter) {
-        btnApplyReportFilter.addEventListener('click', () => {
-            const dateFrom = document.getElementById('report-date-from').value;
-            const dateTo = document.getElementById('report-date-to').value;
-            const tenantId = document.getElementById('report-tenant-filter').value;
+        btnApplyReportFilter.addEventListener('click', loadReports);
+    }
 
-            const params = new URLSearchParams({ action: 'reports' });
-            if (dateFrom) params.set('date_from', dateFrom);
-            if (dateTo) params.set('date_to', dateTo);
-            if (tenantId) params.set('tenant_id', tenantId);
-
-            fetch('api_dashboard_stats.php?' + params.toString())
-                .then(r => r.json())
-                .then(data => renderReports(data))
-                .catch(e => console.error('Reports error:', e));
-        });
+    if (document.getElementById('reports')) {
+        initializeReportFilters();
+        loadReports();
     }
 
     function renderReports(data) {
+        const summary = data.summary || {};
+        const filters = data.filters || {};
+        const setEl = (id, value) => {
+            const node = document.getElementById(id);
+            if (node) node.textContent = value;
+        };
+
+        setEl('report-stat-total-tenants', String(summary.total_tenants ?? 0));
+        setEl('report-stat-active-tenants', String(summary.active_tenants ?? 0));
+        setEl('report-stat-active-super-admins', String(summary.active_super_admin_accounts ?? 0));
+        setEl('report-stat-pending-applications', String(summary.pending_applications ?? 0));
+        setEl('report-stat-open-inquiries', String(summary.open_inquiries ?? 0));
+        setEl('report-stat-current-mrr', formatCurrency(summary.current_mrr ?? 0));
+        setEl('report-stat-range-revenue', formatCurrency(summary.range_revenue ?? 0));
+        setEl('report-stat-range-transactions', String(summary.range_transactions ?? 0));
+
+        const filterSummary = document.getElementById('report-filter-summary');
+        if (filterSummary) {
+            const fromText = filters.date_from ? formatDate(filters.date_from) : (reportDateFromInput && reportDateFromInput.value ? formatDate(reportDateFromInput.value) : 'the selected start date');
+            const toText = filters.date_to ? formatDate(filters.date_to) : (reportDateToInput && reportDateToInput.value ? formatDate(reportDateToInput.value) : 'the selected end date');
+            const tenantText = filters.tenant_name ? ` for ${filters.tenant_name}` : '';
+            filterSummary.textContent = `Showing current platform summary plus filtered activity from ${fromText} to ${toText}${tenantText}.`;
+        }
+
         // Tenant Activity
         const taTbody = document.querySelector('#report-tenant-activity tbody');
         if (taTbody) {
             if (!data.tenant_activity || data.tenant_activity.length === 0) {
-                taTbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">No data found for the selected filters.</td></tr>';
+                taTbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">No tenant activity found for the selected filters.</td></tr>';
             } else {
                 taTbody.innerHTML = data.tenant_activity.map(t => `
                     <tr>
                         <td>${esc(t.tenant_name)}</td>
-                        <td><span class="badge">${esc(t.status)}</span></td>
+                        <td><span class="badge">${esc(t.status || 'Unknown')}</span></td>
                         <td><span class="badge ${t.status_legend === 'Active' ? 'badge-green' : (t.status_legend === 'Pending Application' ? 'badge-amber' : 'badge-red')}">${esc(t.status_legend || 'Inactive')}</span></td>
-                        <td>${esc(t.plan_tier)}</td>
+                        <td>${esc(t.plan_tier || '—')}</td>
                         <td>${formatDate(t.created_at)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        const inquiryTbody = document.querySelector('#report-inquiry-activity tbody');
+        if (inquiryTbody) {
+            if (!data.inquiry_activity || data.inquiry_activity.length === 0) {
+                inquiryTbody.innerHTML = '<tr><td colspan="4" class="text-muted" style="text-align:center; padding:2rem;">No inquiry activity found for the selected filters.</td></tr>';
+            } else {
+                inquiryTbody.innerHTML = data.inquiry_activity.map(t => {
+                    const stage = t.inquiry_stage || 'Inactive';
+                    const stageClass = stage === 'Open' ? 'badge-amber' : (stage === 'Closed' ? 'badge-green' : 'badge-red');
+                    return `
+                    <tr>
+                        <td>${esc(t.tenant_name)}</td>
+                        <td><span class="badge">${esc(t.status || 'Unknown')}</span></td>
+                        <td><span class="badge ${stageClass}">${esc(stage)}</span></td>
+                        <td>${formatDate(t.created_at)}</td>
+                    </tr>
+                `;
+                }).join('');
+            }
+        }
+
+        const planTbody = document.querySelector('#report-plan-summary tbody');
+        if (planTbody) {
+            if (!data.plan_summary || data.plan_summary.length === 0) {
+                planTbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">No plan summary is available for the selected filters.</td></tr>';
+            } else {
+                planTbody.innerHTML = data.plan_summary.map(plan => `
+                    <tr>
+                        <td>${esc(plan.plan_tier || 'Unassigned')}</td>
+                        <td>${Number(plan.total_tenants || 0)}</td>
+                        <td>${Number(plan.active_tenants || 0)}</td>
+                        <td>${formatCurrency(plan.total_mrr || 0)}</td>
+                        <td>${Number(plan.total_users || 0)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        const billingTbody = document.querySelector('#report-billing-summary tbody');
+        if (billingTbody) {
+            if (!data.billing_summary || data.billing_summary.length === 0) {
+                billingTbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">No billing activity found for the selected filters.</td></tr>';
+            } else {
+                billingTbody.innerHTML = data.billing_summary.map(row => `
+                    <tr>
+                        <td>${esc(row.tenant_name)}</td>
+                        <td>${esc(row.plan_tier || '—')}</td>
+                        <td>${formatCurrency(row.total_revenue || 0)}</td>
+                        <td>${Number(row.transaction_count || 0)}</td>
+                        <td>${row.latest_payment ? formatDateTime(row.latest_payment) : '—'}</td>
                     </tr>
                 `).join('');
             }
@@ -756,7 +861,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const e = document.getElementById(id);
             if (e) e.textContent = val;
         };
-        el('stat-revenue-actual-revenue', '₱' + (data.total_revenue || '0.00'));
         el('stat-revenue-transactions', data.total_transactions || '0');
         el('stat-revenue-avg-trans', '₱' + (data.avg_transaction || '0.00'));
 
@@ -999,6 +1103,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!dateStr) return '—';
         const d = new Date(dateStr);
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function formatCurrency(amount) {
+        const value = Number(amount || 0);
+        return '₱' + value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function formatDateTime(dateStr) {

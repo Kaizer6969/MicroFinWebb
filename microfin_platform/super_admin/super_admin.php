@@ -782,6 +782,13 @@ $pending_inquiries = (int) $stmt->fetch()['cnt'];
 $stmt = $pdo->query("SELECT COALESCE(SUM(mrr), 0) AS total_mrr FROM tenants WHERE status = 'Active' AND deleted_at IS NULL");
 $total_mrr = number_format((float) $stmt->fetch()['total_mrr'], 2);
 
+// Revenue stats from actual paid invoices
+$rev_stmt = $pdo->query("SELECT COALESCE(SUM(amount), 0) AS total_revenue, COUNT(*) AS total_transactions FROM tenant_billing_invoices WHERE status = 'Paid'");
+$rev_data = $rev_stmt->fetch(PDO::FETCH_ASSOC);
+$total_revenue = number_format((float)$rev_data['total_revenue'], 2);
+$total_transactions = (int)$rev_data['total_transactions'];
+$avg_transaction = $total_transactions > 0 ? number_format((float)$rev_data['total_revenue'] / $total_transactions, 2) : '0.00';
+
 $pdo->exec("CREATE TABLE IF NOT EXISTS tenant_legitimacy_documents (
     document_id INT PRIMARY KEY AUTO_INCREMENT,
     tenant_id VARCHAR(50) NOT NULL,
@@ -913,7 +920,7 @@ $tenant_subscriptions_stmt = $pdo->query("
         WHERE u.tenant_id IS NOT NULL AND u.deleted_at IS NULL
         GROUP BY u.tenant_id
     ) u_stats ON u_stats.tenant_id = t.tenant_id
-    WHERE t.deleted_at IS NULL
+    WHERE t.deleted_at IS NULL AND t.status NOT IN ('Pending', 'New', 'In Contact', 'Rejected', 'Closed')
     ORDER BY t.tenant_name ASC
 ");
 $tenant_subscriptions = $tenant_subscriptions_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -976,8 +983,12 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <a href="#tenants" class="nav-item" data-target="tenants">
                     <span class="material-symbols-rounded">domain</span>
                     <span>Tenants</span>
-                    <?php $sidebar_total = $pending_applications + $pending_inquiries; ?>
-                    <span class="nav-badge" id="sidebar-pending-badge" <?php if ($sidebar_total === 0) echo 'style="display:none;"'; ?>><?php echo $sidebar_total; ?></span>
+                    <span class="nav-badge" id="sidebar-pending-badge" <?php if ($pending_applications === 0) echo 'style="display:none;"'; ?>><?php echo $pending_applications; ?></span>
+                </a>
+                <a href="#inquiries" class="nav-item" data-target="inquiries">
+                    <span class="material-symbols-rounded">support_agent</span>
+                    <span>Inquiries</span>
+                    <span class="nav-badge" id="sidebar-inquiry-badge" <?php if ($pending_inquiries === 0) echo 'style="display:none;"'; ?>><?php echo $pending_inquiries; ?></span>
                 </a>
                 <a href="#subscriptions" class="nav-item" data-target="subscriptions">
                     <span class="material-symbols-rounded">credit_card</span>
@@ -1267,7 +1278,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             <div class="card">
                                 <div class="card-header-flex" style="margin-bottom: 16px;">
                                     <h3 style="margin-bottom: 0;">Recent Inquiries</h3>
-                                    <a href="#tenants" class="btn-text" onclick="document.querySelector('.nav-item[data-target=tenants]').click(); setTimeout(()=>document.querySelector('.tenant-intake-tab[data-view=inquiries]').click(), 100);">View Inquiries</a>
+                                    <a href="#inquiries" class="btn-text" onclick="document.querySelector('.nav-item[data-target=inquiries]').click();">View Inquiries</a>
                                 </div>
                                 <div class="recent-tenants-list">
                                     <?php if (count($recent_inquiries) === 0): ?>
@@ -1325,20 +1336,12 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             <span class="tab-badge" id="tab-badge-applications" style="display:none;">0</span>
                             <?php endif; ?>
                         </button>
-                        <button class="settings-tab tenant-intake-tab" data-view="inquiries">
-                            Inquiries
-                            <?php if ($pending_inquiries > 0): ?>
-                            <span class="tab-badge" id="tab-badge-inquiries"><?php echo $pending_inquiries; ?></span>
-                            <?php else: ?>
-                            <span class="tab-badge" id="tab-badge-inquiries" style="display:none;">0</span>
-                            <?php endif; ?>
-                        </button>
                     </div>
                     <div class="card">
                         <div class="card-header-flex mb-4">
                             <div>
                                 <h3>Tenant Management</h3>
-                                <p class="text-muted">Manage all tenant organizations and inquiries.</p>
+                                <p class="text-muted">Manage all tenant organizations and applications.</p>
                             </div>
                             <div class="actions-flex">
                                 <select id="tenant-status-filter" class="form-control" style="width: 200px;">
@@ -1350,12 +1353,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                     <option value="all">All Application Statuses</option>
                                     <option value="pending">Pending</option>
                                     <option value="rejected">Rejected</option>
-                                </select>
-                                <select id="inquiry-status-filter" class="form-control" style="width: 200px; display: none;">
-                                    <option value="all">All Inquiry Statuses</option>
-                                    <option value="new">New</option>
-                                    <option value="in_contact">In Contact</option>
-                                    <option value="closed">Closed</option>
                                 </select>
                                 <div class="search-box">
                                     <span class="material-symbols-rounded">search</span>
@@ -1559,6 +1556,119 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                             <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span> Reactivate
                                                         </button>
                                                     </form>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============================================================ -->
+                <!-- SECTION: INQUIRIES (Talk to an Expert) -->
+                <!-- ============================================================ -->
+                <section id="inquiries" class="view-section">
+                    <div class="card">
+                        <div class="card-header-flex mb-4">
+                            <div>
+                                <h3>Inquiries</h3>
+                                <p class="text-muted">Manage all Talk to an Expert inquiries.</p>
+                            </div>
+                            <div class="actions-flex">
+                                <select id="inquiry-status-filter" class="form-control" style="width: 200px;">
+                                    <option value="all">All Statuses</option>
+                                    <option value="new">New</option>
+                                    <option value="in_contact">In Contact</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                                <div class="search-box">
+                                    <span class="material-symbols-rounded">search</span>
+                                    <input type="text" id="inquiry-search" placeholder="Search inquiries...">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="admin-table" id="inquiries-table">
+                                <thead>
+                                    <tr>
+                                        <th>Institution</th>
+                                        <th>Contact</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    $inquiry_rows = array_filter($tenant_rows, function ($t) {
+                                        return ($t['request_type'] ?? 'tenant_application') === 'talk_to_expert';
+                                    });
+                                    ?>
+                                    <?php if (count($inquiry_rows) === 0): ?>
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                                            <span class="material-symbols-rounded" style="font-size:40px; display:block; margin-bottom:0.5rem;">support_agent</span>
+                                            No inquiries found.
+                                        </td>
+                                    </tr>
+                                    <?php else: ?>
+                                    <?php foreach ($inquiry_rows as $iq):
+                                        $iq_status = (string)($iq['status'] ?? 'Pending');
+                                        if (in_array($iq_status, ['Pending', 'New'], true)) {
+                                            $iq_normalized = 'New';
+                                            $iq_badge_style = 'background:#dbeafe; color:#1e3a8a;';
+                                        } elseif (in_array($iq_status, ['Contacted', 'In Contact'], true)) {
+                                            $iq_normalized = 'In Contact';
+                                            $iq_badge_style = 'background:#fef3c7; color:#b45309;';
+                                        } else {
+                                            $iq_normalized = 'Closed';
+                                            $iq_badge_style = 'background:#e5e7eb; color:#374151;';
+                                        }
+                                        $iq_data_status = $iq_normalized === 'New' ? 'new' : ($iq_normalized === 'In Contact' ? 'in_contact' : 'closed');
+                                    ?>
+                                    <tr data-inquiry-status="<?php echo $iq_data_status; ?>">
+                                        <td>
+                                            <?php echo htmlspecialchars($iq['tenant_name']); ?><br>
+                                            <small class="text-muted">ID: <?php echo htmlspecialchars($iq['tenant_id'] ?? '—'); ?></small>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            $iq_owner_name = trim((string)($iq['owner_first_name'] ?? '') . ' ' . (string)($iq['owner_last_name'] ?? ''));
+                                            echo htmlspecialchars($iq_owner_name !== '' ? $iq_owner_name : '—');
+                                            ?><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($iq['owner_email'] ?? '—'); ?></small><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($iq['owner_phone'] ?? '—'); ?></small>
+                                        </td>
+                                        <td>
+                                            <span class="badge" style="<?php echo $iq_badge_style; ?>">
+                                                <?php echo htmlspecialchars($iq_normalized); ?>
+                                            </span>
+                                        </td>
+                                        <td><?php echo date('M d, Y', strtotime($iq['created_at'])); ?></td>
+                                        <td>
+                                            <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
+                                                <?php if (in_array($iq_status, ['Pending', 'Contacted', 'New', 'In Contact'])): ?>
+                                                    <form method="POST" style="display:inline;">
+                                                        <input type="hidden" name="action" value="send_talk_email">
+                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($iq['tenant_id']); ?>">
+                                                        <button type="submit" class="btn btn-outline btn-sm" title="Send Consultation Email">
+                                                            <span class="material-symbols-rounded" style="font-size:16px;">email</span> Email
+                                                        </button>
+                                                    </form>
+
+                                                    <form method="POST" style="display:inline;">
+                                                        <input type="hidden" name="action" value="close_inquiry">
+                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($iq['tenant_id']); ?>">
+                                                        <button type="submit" class="btn btn-outline btn-sm" title="Close Inquiry">
+                                                            <span class="material-symbols-rounded" style="font-size:16px;">task_alt</span> Close
+                                                        </button>
+                                                    </form>
+                                                <?php else: ?>
+                                                    <span class="text-muted" style="font-size: 0.85rem;">No actions available</span>
                                                 <?php endif; ?>
                                             </div>
                                         </td>
@@ -1832,30 +1942,176 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                 </button>
                             </div>
                         </div>
+                        <p id="report-filter-summary" class="text-muted" style="margin-top: 12px;">Loading consolidated report summary...</p>
                     </div>
 
-                    <!-- Tenant Activity Report -->
-                    <div class="card">
-                        <h3>Tenant Activity Report</h3>
-                        <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 12px 0;">
-                            <span class="badge badge-green">Active</span>
-                            <span class="badge badge-red">Inactive</span>
+                    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 24px;">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-blue">
+                                <span class="material-symbols-rounded">domain</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Total Tenants</p>
+                                <h3 id="report-stat-total-tenants">--</h3>
+                            </div>
                         </div>
-                        <div class="table-responsive">
-                            <table class="admin-table" id="report-tenant-activity">
-                                <thead>
-                                    <tr>
-                                        <th>Tenant Name</th>
-                                        <th>Status</th>
-                                        <th>Legend</th>
-                                        <th>Plan</th>
-                                        <th>Created</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">Click "Apply Filter" to load report data.</td></tr>
-                                </tbody>
-                            </table>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green">
+                                <span class="material-symbols-rounded">verified</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Active Tenants</p>
+                                <h3 id="report-stat-active-tenants">--</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-purple">
+                                <span class="material-symbols-rounded">admin_panel_settings</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Active Super Admins</p>
+                                <h3 id="report-stat-active-super-admins">--</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-amber">
+                                <span class="material-symbols-rounded">pending_actions</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Pending Applications</p>
+                                <h3 id="report-stat-pending-applications">--</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-red">
+                                <span class="material-symbols-rounded">support_agent</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Open Inquiries</p>
+                                <h3 id="report-stat-open-inquiries">--</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-purple">
+                                <span class="material-symbols-rounded">payments</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Current MRR</p>
+                                <h3 id="report-stat-current-mrr">--</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green">
+                                <span class="material-symbols-rounded">account_balance_wallet</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Revenue in Range</p>
+                                <h3 id="report-stat-range-revenue">--</h3>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-blue">
+                                <span class="material-symbols-rounded">receipt_long</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Transactions in Range</p>
+                                <h3 id="report-stat-range-transactions">--</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid-2">
+                        <div class="card">
+                            <h3>Tenant Activity</h3>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 12px 0;">
+                                <span class="badge badge-green">Active</span>
+                                <span class="badge badge-amber">Pending Application</span>
+                                <span class="badge badge-red">Inactive</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="admin-table" id="report-tenant-activity">
+                                    <thead>
+                                        <tr>
+                                            <th>Tenant Name</th>
+                                            <th>Status</th>
+                                            <th>Legend</th>
+                                            <th>Plan</th>
+                                            <th>Created</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">Loading tenant activity...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h3>Inquiry Activity</h3>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 12px 0;">
+                                <span class="badge badge-amber">Open</span>
+                                <span class="badge badge-green">Closed</span>
+                                <span class="badge badge-red">Inactive</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="admin-table" id="report-inquiry-activity">
+                                    <thead>
+                                        <tr>
+                                            <th>Tenant Name</th>
+                                            <th>Status</th>
+                                            <th>Stage</th>
+                                            <th>Created</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="4" class="text-muted" style="text-align:center; padding:2rem;">Loading inquiry activity...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid-2" style="margin-top: 24px;">
+                        <div class="card">
+                            <h3>Current Plan Summary</h3>
+                            <p class="text-muted" style="margin: 0 0 16px 0;">Snapshot of tenant subscriptions and user footprint by plan.</p>
+                            <div class="table-responsive">
+                                <table class="admin-table" id="report-plan-summary">
+                                    <thead>
+                                        <tr>
+                                            <th>Plan</th>
+                                            <th>Tenants</th>
+                                            <th>Active</th>
+                                            <th>Current MRR</th>
+                                            <th>Total Users</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">Loading plan summary...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h3>Billing Summary</h3>
+                            <p class="text-muted" style="margin: 0 0 16px 0;">Revenue and billing activity for the selected report range.</p>
+                            <div class="table-responsive">
+                                <table class="admin-table" id="report-billing-summary">
+                                    <thead>
+                                        <tr>
+                                            <th>Tenant</th>
+                                            <th>Plan</th>
+                                            <th>Revenue</th>
+                                            <th>Transactions</th>
+                                            <th>Latest Payment</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="5" class="text-muted" style="text-align:center; padding:2rem;">Loading billing summary...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -1865,7 +2121,8 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <!-- ============================================================ -->
                 <section id="sales" class="view-section">
                     <!-- Revenue Overview (Consolidated) -->
-                    <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+                    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;">
+                        
                         <div class="stat-card">
                             <div class="stat-icon bg-purple">
                                 <span class="material-symbols-rounded">payments</span>
@@ -1876,21 +2133,12 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon bg-green">
-                                <span class="material-symbols-rounded">account_balance_wallet</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Total Revenue</p>
-                                <h3 id="stat-revenue-actual-revenue">₱0.00</h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
                             <div class="stat-icon bg-blue">
                                 <span class="material-symbols-rounded">receipt_long</span>
                             </div>
                             <div class="stat-details">
                                 <p>Transactions</p>
-                                <h3 id="stat-revenue-transactions">0</h3>
+                                <h3 id="stat-revenue-transactions"><?php echo $total_transactions; ?></h3>
                             </div>
                         </div>
                         <div class="stat-card">
@@ -1899,7 +2147,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             </div>
                             <div class="stat-details">
                                 <p>Avg. Transaction</p>
-                                <h3 id="stat-revenue-avg-trans">₱0.00</h3>
+                                <h3 id="stat-revenue-avg-trans">₱<?php echo htmlspecialchars($avg_transaction); ?></h3>
                             </div>
                         </div>
                     </div>
@@ -2216,50 +2464,160 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                 <h3>Statement of Transactions</h3>
                                 <p class="text-muted">Global ledger of all tenant subscription billing transactions.</p>
                             </div>
+                            <?php
+                            $stmt_filter_period = trim((string) ($_GET['statement_period'] ?? 'monthly'));
+                            if (!in_array($stmt_filter_period, ['monthly', 'yearly'], true)) {
+                                $stmt_filter_period = 'monthly';
+                            }
+                            $stmt_filter_year = (int) date('Y');
+                            $stmt_filter_month_num = (int) date('n');
+                            $legacy_stmt_filter_month = trim((string) ($_GET['statement_month'] ?? ''));
+
+                            if (preg_match('/^\d{4}-\d{2}$/', $legacy_stmt_filter_month) === 1) {
+                                [$legacy_year, $legacy_month_num] = array_map('intval', explode('-', $legacy_stmt_filter_month));
+                                if ($legacy_year >= 2000 && $legacy_year <= 9999 && $legacy_month_num >= 1 && $legacy_month_num <= 12) {
+                                    $stmt_filter_year = $legacy_year;
+                                    $stmt_filter_month_num = $legacy_month_num;
+                                }
+                            }
+
+                            $requested_stmt_month_num = (int) ($_GET['statement_month_num'] ?? $stmt_filter_month_num);
+                            if ($requested_stmt_month_num >= 1 && $requested_stmt_month_num <= 12) {
+                                $stmt_filter_month_num = $requested_stmt_month_num;
+                            }
+
+                            $requested_stmt_year = trim((string) ($_GET['statement_year'] ?? ''));
+                            if (preg_match('/^\d{4}$/', $requested_stmt_year) === 1) {
+                                $stmt_filter_year = (int) $requested_stmt_year;
+                            }
+
+                            $stmt_filter_month = sprintf('%04d-%02d', $stmt_filter_year, $stmt_filter_month_num);
+                            $statement_month_labels = [
+                                1 => 'January',
+                                2 => 'February',
+                                3 => 'March',
+                                4 => 'April',
+                                5 => 'May',
+                                6 => 'June',
+                                7 => 'July',
+                                8 => 'August',
+                                9 => 'September',
+                                10 => 'October',
+                                11 => 'November',
+                                12 => 'December',
+                            ];
+                            ?>
+                            <form method="GET" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+                                <input type="hidden" name="section" value="statements">
+                                <div class="form-group" style="margin:0; min-width:160px;">
+                                    <label style="font-size:.8rem;">Statement Type</label>
+                                    <select name="statement_period" class="form-control">
+                                        <option value="monthly" <?php echo $stmt_filter_period === 'monthly' ? 'selected' : ''; ?>>Monthly</option>
+                                        <option value="yearly" <?php echo $stmt_filter_period === 'yearly' ? 'selected' : ''; ?>>Yearly</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin:0; min-width:180px;">
+                                    <label style="font-size:.8rem;">Month (Monthly only)</label>
+                                    <select name="statement_month_num" class="form-control">
+                                        <?php foreach ($statement_month_labels as $month_number => $month_label): ?>
+                                            <option value="<?php echo $month_number; ?>" <?php echo $month_number === $stmt_filter_month_num ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($month_label, ENT_QUOTES, 'UTF-8'); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin:0; min-width:130px;">
+                                    <label style="font-size:.8rem;">Year</label>
+                                    <input
+                                        type="number"
+                                        name="statement_year"
+                                        class="form-control"
+                                        min="2000"
+                                        max="9999"
+                                        step="1"
+                                        value="<?php echo htmlspecialchars((string) $stmt_filter_year, ENT_QUOTES, 'UTF-8'); ?>"
+                                    >
+                                </div>
+                                <button type="submit" class="btn btn-primary" style="padding:8px 16px;">Filter</button>
+                            </form>
                         </div>
                         <?php
-                        $all_payments_stmt = $pdo->prepare("
-                            SELECT p.payment_reference, p.payment_amount, p.payment_status, p.payment_date, p.payment_method,
-                                   t.tenant_name, t.plan_tier
-                            FROM payments p
-                            LEFT JOIN tenants t ON p.tenant_id = t.tenant_id
-                            ORDER BY p.payment_date DESC
-                            LIMIT 200
+                        if ($stmt_filter_period === 'yearly') {
+                            $stmt_start = sprintf('%04d-01-01', $stmt_filter_year);
+                            $stmt_end = sprintf('%04d-12-31', $stmt_filter_year);
+                            $stmt_period_label = (string) $stmt_filter_year;
+                        } else {
+                            $stmt_start = $stmt_filter_month . '-01';
+                            $stmt_end = date('Y-m-t', strtotime($stmt_start));
+                            $stmt_period_label = date('F Y', strtotime($stmt_start));
+                        }
+                        $all_statements_stmt = $pdo->prepare("
+                            SELECT t.tenant_id,
+                                   t.tenant_name, 
+                                   t.plan_tier,
+                                   SUM(p.amount) AS total_amount,
+                                   COUNT(p.invoice_id) AS invoice_count,
+                                   MAX(p.created_at) AS latest_date,
+                                   GROUP_CONCAT(p.status) AS statuses
+                            FROM tenant_billing_invoices p
+                            JOIN tenants t ON p.tenant_id = t.tenant_id
+                            WHERE DATE(p.created_at) BETWEEN ? AND ?
+                            GROUP BY t.tenant_id, t.tenant_name, t.plan_tier
+                            ORDER BY t.tenant_name ASC
                         ");
-                        $all_payments_stmt->execute();
-                        $all_payments = $all_payments_stmt->fetchAll(PDO::FETCH_ASSOC);
+                        $all_statements_stmt->execute([$stmt_start, $stmt_end]);
+                        $all_statements = $all_statements_stmt->fetchAll(PDO::FETCH_ASSOC);
+                        $stmt_month_total = 0;
+                        $total_tenant_statements = count($all_statements);
+                        foreach ($all_statements as $sp) { $stmt_month_total += (float)$sp['total_amount']; }
                         ?>
+                        <div style="display:flex; gap:24px; margin-bottom:16px; padding:12px 16px; background:rgba(2,132,199,0.06); border-radius:8px;">
+                            <div><span class="text-muted" style="font-size:.82rem;">Revenue for <?php echo htmlspecialchars($stmt_period_label, ENT_QUOTES, 'UTF-8'); ?></span><br><strong style="font-size:1.1rem;">&#8369;<?php echo number_format($stmt_month_total, 2); ?></strong></div>
+                            <div><span class="text-muted" style="font-size:.82rem;">Tenant Statements</span><br><strong style="font-size:1.1rem;"><?php echo $total_tenant_statements; ?></strong></div>
+                        </div>
                         <div class="table-responsive">
                             <table class="admin-table">
                                 <thead>
                                     <tr>
-                                        <th>Reference ID</th>
                                         <th>Tenant</th>
                                         <th>Plan</th>
-                                        <th>Date</th>
-                                        <th>Amount</th>
-                                        <th>Source</th>
+                                        <th>Statement Period</th>
+                                        <th>Invoices</th>
+                                        <th>Total Amount</th>
                                         <th>Status</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php if (empty($all_payments)): ?>
+                                    <?php if (empty($all_statements)): ?>
                                     <tr>
                                         <td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">
                                             <span class="material-symbols-rounded" style="font-size:40px; display:block; margin-bottom:0.5rem;">receipt_long</span>
-                                            No billing transactions have been recorded yet.
+                                            No tenant statements available for <?php echo htmlspecialchars($stmt_period_label, ENT_QUOTES, 'UTF-8'); ?>.
                                         </td>
                                     </tr>
                                     <?php else: ?>
-                                        <?php foreach ($all_payments as $pay): ?>
+                                        <?php foreach ($all_statements as $pay): 
+                                            $sts = explode(',', $pay['statuses']);
+                                            $is_paid = true;
+                                            foreach($sts as $s) { if(strtolower(trim($s)) !== 'paid') { $is_paid = false; break; } }
+                                            $disp_status = $is_paid ? 'Paid' : 'Unpaid';
+                                            $badge_class = $is_paid ? 'badge-green' : 'badge-red';
+                                            $statement_pdf_url = 'statement_pdf.php?' . http_build_query([
+                                                'tenant_id' => (string) ($pay['tenant_id'] ?? ''),
+                                                'statement_period' => $stmt_filter_period,
+                                                'statement_month_num' => $stmt_filter_month_num,
+                                                'statement_year' => $stmt_filter_year,
+                                            ]);
+                                        ?>
                                         <tr>
-                                            <td style="font-weight:500; font-family:monospace; font-size:0.85rem;"><?php echo htmlspecialchars($pay['payment_reference']); ?></td>
-                                            <td><?php echo htmlspecialchars($pay['tenant_name'] ?? '—'); ?></td>
+                                            <td style="font-weight:500;"><?php echo htmlspecialchars($pay['tenant_name'] ?? '—'); ?></td>
                                             <td><?php echo htmlspecialchars($pay['plan_tier'] ?? '—'); ?></td>
-                                            <td class="text-muted"><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($pay['payment_date']))); ?></td>
-                                            <td style="font-weight:600;">&#8369;<?php echo number_format((float)$pay['payment_amount'], 2); ?></td>
-                                            <td class="text-muted" style="font-size:0.85rem;"><?php echo htmlspecialchars($pay['payment_method'] ?? 'System Auto-Billing'); ?></td>
-                                            <td><span class="badge badge-green"><?php echo htmlspecialchars($pay['payment_status']); ?></span></td>
+                                            <td class="text-muted"><?php echo htmlspecialchars($stmt_period_label, ENT_QUOTES, 'UTF-8'); ?></td>
+                                            <td style="font-weight:500;"><?php echo $pay['invoice_count']; ?></td>
+                                            <td style="font-weight:600;">&#8369;<?php echo number_format((float)$pay['total_amount'], 2); ?></td>
+                                            <td><span class="badge <?php echo $badge_class; ?>"><?php echo $disp_status; ?></span></td>
+                                            <td><a href="<?php echo htmlspecialchars($statement_pdf_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener" class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;">View PDF</a></td>
                                         </tr>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
@@ -2340,11 +2698,11 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                     <div>
                         <label>Plan Tier</label>
                         <select class="form-control" name="plan_tier">
-                            <option value="Starter">Starter (â‚±4,999/mo)</option>
-                            <option value="Growth">Growth (â‚±9,999/mo)</option>
-                            <option value="Pro">Pro (â‚±14,999/mo)</option>
-                            <option value="Enterprise">Enterprise (â‚±22,999/mo)</option>
-                            <option value="Unlimited">Unlimited (â‚±29,999/mo)</option>
+                            <option value="Starter">Starter (₱4,999/mo)</option>
+                            <option value="Growth">Growth (₱9,999/mo)</option>
+                            <option value="Pro">Pro (₱14,999/mo)</option>
+                            <option value="Enterprise">Enterprise (₱22,999/mo)</option>
+                            <option value="Unlimited">Unlimited (₱29,999/mo)</option>
                         </select>
                     </div>
                 </div>

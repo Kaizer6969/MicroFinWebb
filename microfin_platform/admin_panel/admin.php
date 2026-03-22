@@ -19,14 +19,19 @@ $is_admin_account = strcasecmp($role_name, 'Admin') === 0;
 $ui_theme = (($_SESSION['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
 
 // Check if user still needs to change their password (e.g. closed browser during force change)
+$can_manage_billing = false;
 $user_id_check = $_SESSION['user_id'] ?? 0;
 if ($user_id_check > 0) {
-    $fpc_stmt = $pdo->prepare('SELECT force_password_change, ui_theme FROM users WHERE user_id = ?');
+    $fpc_stmt = $pdo->prepare('SELECT force_password_change, ui_theme, can_manage_billing FROM users WHERE user_id = ?');
     $fpc_stmt->execute([$user_id_check]);
     $fpc_row = $fpc_stmt->fetch(PDO::FETCH_ASSOC);
     if ($fpc_row && isset($fpc_row['ui_theme'])) {
         $ui_theme = ($fpc_row['ui_theme'] === 'dark') ? 'dark' : 'light';
         $_SESSION['ui_theme'] = $ui_theme;
+    }
+    if ($fpc_row && isset($fpc_row['can_manage_billing'])) {
+        $can_manage_billing = (bool)$fpc_row['can_manage_billing'];
+        $_SESSION['can_manage_billing'] = $can_manage_billing;
     }
     if ($fpc_row && (bool)$fpc_row['force_password_change']) {
         header('Location: ../tenant_login/force_change_password.php');
@@ -160,7 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 // POST Handler — Update Subscription Plan
 // ==========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_subscription_plan') {
-    if ($is_admin_account) {
+    if ($can_manage_billing) {
         $new_plan = trim($_POST['new_plan'] ?? '');
         $plan_aliases = [
             'Professional' => 'Pro',
@@ -232,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 // POST Handler — Update Payment Method
 // ==========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_payment_method') {
-    if (!$is_admin_account) {
+    if (!$can_manage_billing) {
         $_SESSION['admin_flash'] = 'You do not have permission to edit payment methods.';
         header('Location: admin.php?tab=billing');
         exit;
@@ -293,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 // POST Handler — Delete Payment Method
 // ==========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_payment_method') {
-    if (!$is_admin_account) {
+    if (!$can_manage_billing) {
         $_SESSION['admin_flash'] = 'You do not have permission to edit payment methods.';
         header('Location: admin.php?tab=billing');
         exit;
@@ -345,6 +350,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
         $_SESSION['admin_flash'] = $e->getMessage();
     }
 
+    header('Location: admin.php?tab=billing');
+    exit;
+}
+
+// ==========================================
+// POST Handler — Cancel Subscription
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cancel_subscription') {
+    if (!$can_manage_billing) {
+        $_SESSION['admin_flash'] = 'You do not have permission to cancel the subscription.';
+        header('Location: admin.php?tab=billing');
+        exit;
+    }
+
+    try {
+        $pdo->prepare('UPDATE tenants SET cancel_at_period_end = 1 WHERE tenant_id = ?')->execute([$tenant_id]);
+        
+        $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_CANCELLED', ?, ?)");
+        $log_stmt->execute([$tenant_id, $_SESSION['user_id'] ?? null, 'Subscription was marked for cancellation at the end of the billing period.', $_SERVER['REMOTE_ADDR'] ?? '']);
+        
+        $_SESSION['admin_flash'] = 'Subscription successfully cancelled. You will have access until your next billing date.';
+    } catch (Exception $e) {
+        $_SESSION['admin_flash'] = 'Failed to cancel subscription: ' . $e->getMessage();
+    }
+    
     header('Location: admin.php?tab=billing');
     exit;
 }
@@ -890,9 +920,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $first_name = trim($_POST['first_name'] ?? '');
             $last_name = trim($_POST['last_name'] ?? '');
             $email = trim($_POST['email'] ?? '');
-            $role_id = (int)($_POST['role_id'] ?? 0);
-            $status = $_POST['status'] ?? 'Active';
+            $status = 'Active'; // Automatically active
             $create_as_admin = isset($_POST['create_as_admin']) && $_POST['create_as_admin'] === '1';
+
+            if ($create_as_admin) {
+                $can_manage_billing_input = isset($_POST['can_manage_billing']) && $_POST['can_manage_billing'] === '1' ? 1 : 0;
+            } else {
+                $can_manage_billing_input = 0;
+            }
 
             if ($create_as_admin) {
                 $admin_role_stmt = $pdo->prepare("SELECT role_id FROM user_roles WHERE tenant_id = ? AND role_name = 'Admin' LIMIT 1");
@@ -902,6 +937,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     throw new Exception('Admin role could not be found for this tenant.');
                 }
                 $role_id = $admin_role_id;
+            } else {
+                $role_id = (int)($_POST['role_id'] ?? 0);
             }
 
             if (empty($first_name) || empty($last_name) || empty($email) || empty($role_id)) {
@@ -952,8 +989,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             $pdo->beginTransaction();
 
-            $user_stmt = $pdo->prepare('INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status) VALUES (?, ?, ?, ?, TRUE, ?, \'Employee\', ?)');
-            $user_stmt->execute([$tenant_id, $username, $email, $password_hash, $role_id, $status]);
+            $user_stmt = $pdo->prepare('INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, can_manage_billing) VALUES (?, ?, ?, ?, TRUE, ?, \'Employee\', ?, ?)');
+            $user_stmt->execute([$tenant_id, $username, $email, $password_hash, $role_id, $status, $can_manage_billing_input]);
             $new_user_id = $pdo->lastInsertId();
 
             $emp_stmt = $pdo->prepare('INSERT INTO employees (user_id, tenant_id, first_name, last_name, department, hire_date) VALUES (?, ?, ?, ?, \'Admin\', CURDATE())');
@@ -1465,6 +1502,7 @@ function hexToRgb($hex) {
                     <span>Feature Toggles</span>
                 </a>
 
+                <?php if ($can_manage_billing): ?>
                 <span class="sidebar-section-title">Billing & Subscription</span>
                 <a href="#billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
                     <span class="material-symbols-rounded">receipt_long</span>
@@ -1474,6 +1512,8 @@ function hexToRgb($hex) {
                     <span class="material-symbols-rounded">account_balance_wallet</span>
                     <span>Statements</span>
                 </a>
+                <?php endif; ?>
+
 
                 <span class="sidebar-section-title">Account</span>
                 <a href="#settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Settings">
@@ -1866,9 +1906,12 @@ function hexToRgb($hex) {
                     <!-- 1. Overview Tab -->
                     <div id="billing-overview" class="tab-content <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>">
                             <?php
-                                $plan_stmt = $pdo->prepare('SELECT plan_tier, max_clients, max_users FROM tenants WHERE tenant_id = ?');
+                                $plan_stmt = $pdo->prepare('SELECT plan_tier, max_clients, max_users, cancel_at_period_end, next_billing_date FROM tenants WHERE tenant_id = ?');
                                 $plan_stmt->execute([$tenant_id]);
-                                $tenant_plan = $plan_stmt->fetch(PDO::FETCH_ASSOC) ?: ['plan_tier' => 'Starter', 'max_clients' => 1000, 'max_users' => 250];
+                                $tenant_plan = $plan_stmt->fetch(PDO::FETCH_ASSOC) ?: ['plan_tier' => 'Starter', 'max_clients' => 1000, 'max_users' => 250, 'cancel_at_period_end' => 0, 'next_billing_date' => date('Y-m-d', strtotime('+30 days'))];
+                                
+                                $cancel_at_period_end = (bool)$tenant_plan['cancel_at_period_end'];
+                                $next_billing_date_formatted = $tenant_plan['next_billing_date'] ? date('M j, Y', strtotime($tenant_plan['next_billing_date'])) : 'N/A';
                                 
                                 $current_plan = $tenant_plan['plan_tier'];
                                 $plan_aliases = ['Professional' => 'Pro', 'Elite' => 'Enterprise'];
@@ -1914,6 +1957,13 @@ function hexToRgb($hex) {
                                                 <span style="text-transform: uppercase; font-size: 0.75rem; font-weight: 700; opacity: 0.9; letter-spacing: 0.05em;">Active Subscription</span>
                                             </div>
                                             <h3 style="font-size: 2.25rem; font-weight: 800; margin: 0; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.1);"><?php echo htmlspecialchars($current_plan); ?></h3>
+                                            <div style="font-size: 0.85rem; margin-top: 4px; opacity: 0.9;">
+                                                <?php if ($cancel_at_period_end): ?>
+                                                    <span style="color: #fca5a5; font-weight: 600;">Cancels on <?php echo $next_billing_date_formatted; ?></span>
+                                                <?php else: ?>
+                                                    Next Due: <strong><?php echo $next_billing_date_formatted; ?></strong>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                         <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); padding: 8px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); text-align: right;">
                                             <div style="font-weight: 800; font-size: 1.25rem;">₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 0); ?></div>
@@ -1942,7 +1992,7 @@ function hexToRgb($hex) {
                                         </div>
                                     </div>
                                     
-                                    <?php if ($is_admin_account): ?>
+                                    <?php if ($can_manage_billing): ?>
                                     <div style="margin-top: auto; padding-top: 32px; z-index: 1;">
                                         <div style="background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 16px; border-radius: 12px;">
                                             <label style="display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; opacity: 0.9;">Manage Plan</label>
@@ -1984,6 +2034,17 @@ function hexToRgb($hex) {
                                                 });
                                             </script>
                                         </div>
+                                        <?php if (!$cancel_at_period_end): ?>
+                                        <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+                                            <form method="POST" action="admin.php" data-confirm-title="Cancel Subscription" data-confirm-message="Are you sure you want to cancel your subscription? You will still retain access to the system until your next billing due date, after which your account will be suspended." data-confirm-button="Yes, Cancel Subscription">
+                                                <input type="hidden" name="action" value="cancel_subscription">
+                                                <button type="submit" class="btn btn-outline" style="border-color: rgba(255,255,255,0.3); color: white; padding: 6px 12px; font-size: 0.85rem; border-radius: 6px;">
+                                                    Cancel Subscription
+                                                </button>
+                                            </form>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
                                     </div>
                                     <?php endif; ?>
                                 </div>
@@ -2280,10 +2341,16 @@ function hexToRgb($hex) {
                                         var flag = document.getElementById('create-as-admin-flag');
                                         var title = document.getElementById('add-staff-modal-title');
                                         var submit = document.getElementById('add-staff-submit-btn');
+                                        var roleGroup = document.getElementById('role-group');
+                                        var billingToggle = document.getElementById('billing-toggle-group');
+
                                         if (flag) flag.value = '0';
                                         if (title) title.textContent = 'Add Staff Member';
                                         if (submit) submit.textContent = 'Add Staff';
-                                        m.style.display='flex';
+                                        if (roleGroup) roleGroup.style.display = 'block';
+                                        if (billingToggle) billingToggle.style.display = 'none';
+
+                                        m.style.display = 'flex';
                                     }
                                     function openAddAdminModal() {
                                         var m = document.getElementById('add-staff-modal');
@@ -2291,15 +2358,22 @@ function hexToRgb($hex) {
                                         var flag = document.getElementById('create-as-admin-flag');
                                         var title = document.getElementById('add-staff-modal-title');
                                         var submit = document.getElementById('add-staff-submit-btn');
+                                        var roleGroup = document.getElementById('role-group');
+                                        var billingToggle = document.getElementById('billing-toggle-group');
+
                                         if (sel) {
                                             for(var i=0; i<sel.options.length; i++) {
                                                 if(sel.options[i].text === 'Admin') sel.selectedIndex = i;
                                             }
                                         }
+
                                         if (flag) flag.value = '1';
                                         if (title) title.textContent = 'Create Admin Account';
                                         if (submit) submit.textContent = 'Create Admin';
-                                        m.style.display='flex';
+                                        if (roleGroup) roleGroup.style.display = 'none';
+                                        if (billingToggle) billingToggle.style.display = 'flex';
+
+                                        m.style.display = 'flex';
                                     }
                                 </script>
                             </div>
@@ -2502,7 +2576,7 @@ function hexToRgb($hex) {
                                                             </h4>
                                                             <div class="toggle-list">
                                                                 <?php foreach ($perms as $p): 
-                                                                    if ($p['permission_code'] === 'EDIT_BILLING' && !$is_admin_role) {
+                                                                    if ($p['permission_code'] === 'EDIT_BILLING') {
                                                                         continue;
                                                                     }
                                                                     $is_checked = $is_admin_role || in_array($p['permission_code'], $panel_active_codes);
@@ -3131,7 +3205,7 @@ function hexToRgb($hex) {
                         <input type="email" class="form-control" name="email" required>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" id="role-group">
                         <label>Role <span style="color:var(--danger-color);">*</span></label>
                         <select name="role_id" class="form-control" required>
                             <option value="">Select a role...</option>
@@ -3141,13 +3215,15 @@ function hexToRgb($hex) {
                         </select>
                     </div>
 
-                    <div class="form-group">
-                        <label>Status</label>
-                        <select name="status" class="form-control">
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                            <option value="Suspended">Suspended</option>
-                        </select>
+                    <div class="form-group" id="billing-toggle-group" style="display: none; align-items: center; justify-content: space-between; padding: 12px; background: rgba(var(--primary-rgb), 0.05); border-radius: 8px; border: 1px solid rgba(var(--primary-rgb), 0.1);">
+                        <div>
+                            <span style="display: block; font-weight: 500; font-size: 0.95rem;">Manage Plan & Billing</span>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Allow this admin to change subscription and edit payment methods.</span>
+                        </div>
+                        <label class="switch" style="transform: scale(0.9);">
+                            <input type="checkbox" name="can_manage_billing" value="1" checked>
+                            <span class="slider round"></span>
+                        </label>
                     </div>
                 </div>
                 <div class="modal-footer">
