@@ -32,7 +32,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND tenant_id = ?");
+    $stmt = $conn->prepare("
+        SELECT u.user_id
+        FROM users u
+        INNER JOIN clients c
+            ON c.user_id = u.user_id
+           AND c.tenant_id = u.tenant_id
+        WHERE u.email = ?
+          AND u.tenant_id = ?
+          AND u.user_type = 'Client'
+          AND c.client_status = 'Active'
+        LIMIT 1
+    ");
     $stmt->bind_param("ss", $email, $tenant_id);
     $stmt->execute();
     $res = $stmt->get_result();

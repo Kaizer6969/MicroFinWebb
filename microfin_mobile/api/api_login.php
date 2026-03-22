@@ -34,7 +34,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $stmt = $conn->prepare("SELECT user_id, password_hash, status FROM users WHERE (username = ? OR email = ?) AND tenant_id = ?");
+    $stmt = $conn->prepare("
+        SELECT u.user_id, u.password_hash, u.status, c.client_status
+        FROM users u
+        INNER JOIN clients c
+            ON c.user_id = u.user_id
+           AND c.tenant_id = u.tenant_id
+        WHERE (u.username = ? OR u.email = ?)
+          AND u.tenant_id = ?
+          AND u.user_type = 'Client'
+        LIMIT 1
+    ");
     $stmt->bind_param("sss", $username, $username, $tenant_id);
     $stmt->execute();
     $res = $stmt->get_result();
@@ -43,6 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $res->fetch_assoc();
         if ($user['status'] !== 'Active') {
             echo json_encode(['success' => false, 'message' => 'Account is not active.']);
+        } elseif ($user['client_status'] !== 'Active') {
+            echo json_encode(['success' => false, 'message' => 'Client profile is not active.']);
         } elseif (password_verify($password, $user['password_hash'])) {
             // Password matches
             echo json_encode(['success' => true, 'message' => 'Login successful!', 'user_id' => $user['user_id']]);
@@ -50,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['success' => false, 'message' => 'Invalid username or password.']);
         }
     } else {
-        echo json_encode(['success' => false, 'message' => 'Invalid username or password for this tenant.']);
+        echo json_encode(['success' => false, 'message' => 'Invalid client credentials for this tenant.']);
     }
     
     $stmt->close();
