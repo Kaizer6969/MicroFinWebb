@@ -22,13 +22,19 @@ if ($step_data && (bool)$step_data['setup_completed']) {
 }
 
 if ($current_step !== 4) {
-    $setup_routes = [0 => 'force_change_password.php', 1 => 'setup_loan_products.php', 2 => 'setup_credit.php', 3 => 'setup_website.php', 5 => 'setup_billing.php'];
-    if (isset($setup_routes[$current_step])) {
-        header('Location: ' . $setup_routes[$current_step]);
+    if (in_array($current_step, [1, 2])) {
+        // Upgrade any tenants stuck on removed steps 1 or 2 up to step 4
+        $pdo->prepare('UPDATE tenants SET setup_current_step = 4 WHERE tenant_id = ?')->execute([$tenant_id]);
+        $current_step = 4;
     } else {
-        header('Location: ../admin_panel/admin.php');
+        $setup_routes = [0 => 'force_change_password.php', 3 => 'setup_website.php', 5 => 'setup_billing.php'];
+        if (isset($setup_routes[$current_step])) {
+            header('Location: ' . $setup_routes[$current_step]);
+        } else {
+            header('Location: ../admin_panel/admin.php');
+        }
+        exit;
     }
-    exit;
 }
 
 $error = '';
@@ -680,8 +686,6 @@ $tenant_name = $_SESSION['tenant_name'] ?? 'Your Organization';
                 <div class="step active"></div>
                 <div class="step active"></div>
                 <div class="step active"></div>
-                <div class="step active"></div>
-                <div class="step"></div>
                 <div class="step"></div>
             </div>
         </div>

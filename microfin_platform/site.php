@@ -205,7 +205,8 @@ $website_settings = [
     'website_stats_auto' => '1',
     'website_show_loan_calc' => '1',
     'website_show_partners' => '0',
-    'website_partners_json' => '[]'
+    'website_partners_json' => '[]',
+    'mobile_app_web_url' => ''
 ];
 $settings_stmt = $pdo->prepare("
     SELECT setting_key, setting_value
@@ -225,7 +226,8 @@ $settings_stmt = $pdo->prepare("
         'website_stats_auto',
         'website_show_loan_calc',
         'website_show_partners',
-        'website_partners_json'
+        'website_partners_json',
+        'mobile_app_web_url'
       )
 ");
 $settings_stmt->execute([$data['tenant_id']]);
@@ -250,6 +252,10 @@ $download_description = trim($website_settings['website_download_description']);
 $download_button_text = trim($website_settings['website_download_button_text']);
 $download_url = trim($website_settings['website_download_url']);
 $hero_bg_path = trim($website_settings['website_hero_background']);
+
+// Flutter Web App URL — e.g. http://localhost:PORT or https://app.microfin.com
+// The tenant slug is automatically appended as ?tenant={slug} by the template.
+$mobile_app_web_url = trim($website_settings['mobile_app_web_url']);
 
 // Fetch tenant stats for display
 $stats_stmt = $pdo->prepare("SELECT COUNT(*) as total_clients FROM clients WHERE tenant_id = ? AND client_status = 'Active'");
@@ -280,7 +286,8 @@ if ($stats_auto) {
     }
 }
 
-$show_download_section = $show_download && $download_url !== '';
+// Show the download section whenever the toggle is enabled (shows "coming soon" if no URL)
+$show_download_section = $show_download;
 
 // Fetch active loan products for loan calculator
 $loan_products = [];

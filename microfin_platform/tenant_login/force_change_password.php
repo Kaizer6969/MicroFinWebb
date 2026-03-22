@@ -23,16 +23,15 @@ if (!$user || !(bool)$user["force_password_change"]) {
 
     if ($step_data && !(bool)$step_data['setup_completed']) {
         $setup_step = (int)($step_data['setup_current_step'] ?? 0);
-        // If still at step 0 after password change, move to step 1
-        if ($setup_step === 0 && !empty($step_data) && !(bool)$step_data['setup_completed']) {
-            $pdo->prepare('UPDATE tenants SET setup_current_step = 1 WHERE tenant_id = ?')->execute([$tenant_id]);
-            $setup_step = 1;
+        // If still at step 0 after password change, move to step 3
+        if (in_array($setup_step, [0, 1, 2]) && !empty($step_data) && !(bool)$step_data['setup_completed']) {
+            $pdo->prepare('UPDATE tenants SET setup_current_step = 3 WHERE tenant_id = ?')->execute([$tenant_id]);
+            $setup_step = 3;
         }
         $setup_routes = [
-            1 => 'setup_loan_products.php',
-            2 => 'setup_credit.php',
             3 => 'setup_website.php',
             4 => 'setup_branding.php',
+            5 => 'setup_billing.php',
         ];
         if (isset($setup_routes[$setup_step])) {
             header('Location: ' . $setup_routes[$setup_step]);
@@ -62,11 +61,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $log = $pdo->prepare("INSERT INTO audit_logs (action_type, entity_type, description, tenant_id) VALUES (?, ?, ?, ?)");
             $log->execute(["PASSWORD_CHANGED", "user", "User completed forced password reset", $_SESSION["tenant_id"]]);
             
-            // After password change, progress to step 1 (loan products)
+            // After password change, progress to step 3 (website setup)
             $tenant_id = $_SESSION['tenant_id'] ?? '';
-            $pdo->prepare('UPDATE tenants SET setup_current_step = 1 WHERE tenant_id = ?')->execute([$tenant_id]);
+            $pdo->prepare('UPDATE tenants SET setup_current_step = 3 WHERE tenant_id = ?')->execute([$tenant_id]);
             
-            header('Location: setup_loan_products.php');
+            header('Location: setup_website.php');
             exit;
         } else {
             $error = "Failed to update password. Please try again.";

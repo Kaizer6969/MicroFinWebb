@@ -41,19 +41,30 @@ if ($step_data && (bool)$step_data['setup_completed']) {
 }
 
 if ($current_step !== 3) {
-    $setup_routes = [0 => 'force_change_password.php', 1 => 'setup_loan_products.php', 2 => 'setup_credit.php', 4 => 'setup_branding.php'];
-    if (isset($setup_routes[$current_step])) {
-        header('Location: ' . $setup_routes[$current_step]);
+    if (in_array($current_step, [1, 2])) {
+        // Upgrade any tenants stuck on removed steps 1 or 2 up to step 3
+        $pdo->prepare('UPDATE tenants SET setup_current_step = 3 WHERE tenant_id = ?')->execute([$tenant_id]);
+        $current_step = 3;
     } else {
-        header('Location: ../admin_panel/admin.php');
+        $setup_routes = [0 => 'force_change_password.php', 4 => 'setup_branding.php', 5 => 'setup_billing.php'];
+        if (isset($setup_routes[$current_step])) {
+            header('Location: ' . $setup_routes[$current_step]);
+        } else {
+            header('Location: ../admin_panel/admin.php');
+        }
+        exit;
     }
-    exit;
 }
 
 $download_url_setting_stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'website_download_url' LIMIT 1");
 $download_url_setting_stmt->execute([$tenant_id]);
 $download_url_setting = $download_url_setting_stmt->fetchColumn();
 $system_download_url = trim((string) ($download_url_setting ?: ''));
+
+$mobile_app_url_stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'mobile_app_web_url' LIMIT 1");
+$mobile_app_url_stmt->execute([$tenant_id]);
+$mobile_app_url_setting = $mobile_app_url_stmt->fetchColumn();
+$system_mobile_app_url = trim((string) ($mobile_app_url_setting ?: ''));
 
 $bg_stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'website_hero_background' LIMIT 1");
 $bg_stmt->execute([$tenant_id]);
@@ -77,7 +88,8 @@ $defaults = [
     'website_download_title' => 'Download Our App',
     'website_download_description' => 'Get the app for faster loan tracking and updates.',
     'website_download_button_text' => 'Download App',
-    'website_download_url' => $system_download_url
+    'website_download_url' => $system_download_url,
+    'mobile_app_web_url' => $system_mobile_app_url
 ];
 
 $form = $defaults;
@@ -105,6 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $download_url = $system_download_url;
     if ($download_url !== '' && filter_var($download_url, FILTER_VALIDATE_URL) === false) {
         $download_url = '';
+    }
+
+    $mobile_app_web_url = trim($_POST['mobile_app_web_url'] ?? '');
+    if ($mobile_app_web_url !== '' && filter_var($mobile_app_web_url, FILTER_VALIDATE_URL) === false) {
+        $mobile_app_web_url = '';
     }
 
     $hero_background_path = $system_hero_background;
@@ -144,7 +161,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'website_download_title' => $download_title,
         'website_download_description' => $download_description,
         'website_download_button_text' => $download_button_text,
-        'website_download_url' => $download_url
+        'website_download_url' => $download_url,
+        'mobile_app_web_url' => $mobile_app_web_url
     ];
 
     if ($hero_title === '') {
@@ -217,7 +235,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'website_download_description' => ($download_description !== '' ? $download_description : 'Get the app for faster loan tracking and updates.'),
             'website_download_button_text' => ($download_button_text !== '' ? $download_button_text : 'Download App'),
             'website_download_url' => $download_url,
-            'website_hero_background' => $hero_background_path
+            'website_hero_background' => $hero_background_path,
+            'mobile_app_web_url' => $mobile_app_web_url
         ];
 
         $boolean_setting_keys = [
@@ -449,8 +468,6 @@ $e = function ($val) {
             <div class="step-indicator">
                 <div class="step active"></div>
                 <div class="step active"></div>
-                <div class="step active"></div>
-                <div class="step"></div>
                 <div class="step"></div>
                 <div class="step"></div>
             </div>
@@ -553,6 +570,20 @@ $e = function ($val) {
                         <div class="form-group">
                             <label>Download Description</label>
                             <textarea name="website_download_description" oninput="updatePreview()"><?php echo $e($form['website_download_description']); ?></textarea>
+                        </div>
+                        <div class="form-group" style="margin-top:14px;padding-top:14px;border-top:1px dashed #e2e8f0;">
+                            <label style="display:flex;align-items:center;gap:6px;">
+                                <span style="background:#0284c7;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:99px;letter-spacing:.05em;">FLUTTER</span>
+                                Mobile App Web URL
+                            </label>
+                            <input class="form-control" type="url" name="mobile_app_web_url"
+                                value="<?php echo $e($form['mobile_app_web_url'] ?? ''); ?>"
+                                placeholder="e.g. http://localhost:PORT  or  https://app.yourcompany.com">
+                            <p style="margin-top:6px;font-size:0.78rem;color:#64748b;">
+                                Paste your Flutter web app URL here. When visitors click "Download App", the app will open 
+                                <strong>already directed to <em><?php echo $e($tenant_name); ?></em></strong> 
+                                (the URL parameter <code>?tenant=<?php echo $e($_SESSION['tenant_id'] ?? ''); ?></code> is added automatically).
+                            </p>
                         </div>
                     </div>
 
