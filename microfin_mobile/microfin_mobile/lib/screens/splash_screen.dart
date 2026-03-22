@@ -62,9 +62,8 @@ class _SplashScreenState extends State<SplashScreen> {
       final tenants = rawTenants
           .whereType<Map>()
           .map(
-            (row) => TenantBranding.fromApiTenant(
-              Map<String, dynamic>.from(row as Map<dynamic, dynamic>),
-            ),
+            (row) =>
+                TenantBranding.fromApiTenant(Map<String, dynamic>.from(row)),
           )
           .toList();
 
@@ -78,10 +77,11 @@ class _SplashScreenState extends State<SplashScreen> {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -91,11 +91,16 @@ class _SplashScreenState extends State<SplashScreen> {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 350),
-        pageBuilder: (_, __, ___) => const LoginScreen(),
-        transitionsBuilder: (_, animation, __, child) => FadeTransition(
-          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
-          child: child,
-        ),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const LoginScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(
+              opacity: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOut,
+              ),
+              child: child,
+            ),
       ),
     );
   }
@@ -248,8 +253,8 @@ class _SplashScreenState extends State<SplashScreen> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
       itemCount: _activeTenants.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, index) {
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
         final tenant = _activeTenants[index];
         return _TenantDebugCard(
           tenant: tenant,
