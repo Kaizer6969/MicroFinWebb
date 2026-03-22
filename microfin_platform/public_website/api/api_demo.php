@@ -51,7 +51,7 @@ if ($action === 'send_otp') {
                          $response['success'] = true;
                          $response['delivery_mode'] = 'brevo';
                      } else {
-                         // All methods failed - expire the OTP and return error
+                         error_log('OTP email delivery failed for ' . $email . ': ' . $emailSent);
                          $pdo->prepare("UPDATE otp_verifications SET status = 'Expired' WHERE email = ? AND otp_code = ?")->execute([$email, $otp]);
                          $response['message'] = 'Unable to send verification email. Please try again later.';
                      }

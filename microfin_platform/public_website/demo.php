@@ -1213,7 +1213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         btnSendOtp.style.borderColor = '#10b981';
                         otpMsg.style.color = '#10b981';
 
-                        otpMsg.innerText = data.message;
+                        otpMsg.innerText = data.message || 'OTP sent.';
 
                         if (emailHelpText) {
                             emailHelpText.style.color = '#10b981';

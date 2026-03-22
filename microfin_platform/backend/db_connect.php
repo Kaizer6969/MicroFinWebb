@@ -10,6 +10,11 @@ $port = 3306;
 $db = 'microfin_db';
 $user = 'root';
 $pass = '1234';
+$localHost = $host;
+$localPort = $port;
+$localDb = $db;
+$localUser = $user;
+$localPass = $pass;
 
 function mf_env_first(array $keys)
 {
@@ -21,6 +26,27 @@ function mf_env_first(array $keys)
     }
 
     return null;
+}
+
+$mf_local_mail_config = [];
+$mf_local_mail_config_path = __DIR__ . DIRECTORY_SEPARATOR . 'local_mail_config.php';
+if (is_file($mf_local_mail_config_path)) {
+    $loaded_cfg = require $mf_local_mail_config_path;
+    if (is_array($loaded_cfg)) {
+        $mf_local_mail_config = $loaded_cfg;
+    }
+}
+
+function mf_local_config_value(string $key, string $default = ''): string
+{
+    global $mf_local_mail_config;
+    if (isset($mf_local_mail_config[$key])) {
+        $value = trim((string)$mf_local_mail_config[$key]);
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    return $default;
 }
 
 // Hosted override via URL-style DB variables.
@@ -53,14 +79,18 @@ $db = mf_env_first(['MYSQLDATABASE', 'DB_NAME']) ?: $db;
 $user = mf_env_first(['MYSQLUSER', 'DB_USER']) ?: $user;
 $pass = mf_env_first(['MYSQLPASSWORD', 'DB_PASSWORD']) ?: $pass;
 
+$resolvedBrevoApiKey = mf_env_first(['BREVO_API_KEY']) ?? mf_local_config_value('BREVO_API_KEY', '');
+$resolvedBrevoSenderEmail = mf_env_first(['BREVO_SENDER_EMAIL']) ?? mf_local_config_value('BREVO_SENDER_EMAIL', 'microfin.statements@gmail.com');
+$resolvedBrevoSenderName = mf_env_first(['BREVO_SENDER_NAME']) ?? mf_local_config_value('BREVO_SENDER_NAME', 'MicroFin');
+
 if (!defined('BREVO_API_KEY')) {
-    define('BREVO_API_KEY', getenv('BREVO_API_KEY') ?: '');
+    define('BREVO_API_KEY', $resolvedBrevoApiKey);
 }
 if (!defined('BREVO_SENDER_EMAIL')) {
-    define('BREVO_SENDER_EMAIL', getenv('BREVO_SENDER_EMAIL') ?: 'microfin.statements@gmail.com');
+    define('BREVO_SENDER_EMAIL', $resolvedBrevoSenderEmail);
 }
 if (!defined('BREVO_SENDER_NAME')) {
-    define('BREVO_SENDER_NAME', getenv('BREVO_SENDER_NAME') ?: 'MicroFin');
+    define('BREVO_SENDER_NAME', $resolvedBrevoSenderName);
 }
 
 function mf_send_brevo_email($toEmail, $subject, $htmlContent)
@@ -135,13 +165,30 @@ $options = [
 ];
 
 try {
-    $runningOnRailway = mf_env_first(['RAILWAY_ENVIRONMENT', 'RAILWAY_PROJECT_ID']) !== null;
-    $usingLocalDefaults = ($host === 'localhost' || $host === '127.0.0.1') && $db === 'microfin_db' && $user === 'root';
-    if ($runningOnRailway && $usingLocalDefaults) {
-        throw new RuntimeException('Database environment variables are missing. Set DATABASE_URL or MYSQLHOST/MYSQLPORT/MYSQLDATABASE/MYSQLUSER/MYSQLPASSWORD.');
-    }
+    try {
+        $pdo = new PDO($dsn, $user, $pass, $options);
+    } catch (\Throwable $primaryDbError) {
+        $isAlreadyUsingLocalFallback = ($host === $localHost && (int)$port === (int)$localPort && $db === $localDb && $user === $localUser);
+        if ($isAlreadyUsingLocalFallback) {
+            throw $primaryDbError;
+        }
 
-    $pdo = new PDO($dsn, $user, $pass, $options);
+        $fallbackDsn = "mysql:host=$localHost;port=$localPort;dbname=$localDb;charset=$charset";
+        try {
+            $pdo = new PDO($fallbackDsn, $localUser, $localPass, $options);
+            $host = $localHost;
+            $port = $localPort;
+            $db = $localDb;
+            $user = $localUser;
+            $pass = $localPass;
+            error_log('Primary DB connection failed; switched to localhost fallback. Error: ' . $primaryDbError->getMessage());
+        } catch (\Throwable $fallbackDbError) {
+            throw new RuntimeException(
+                'Primary DB connection failed: ' . $primaryDbError->getMessage() .
+                ' | Local fallback failed: ' . $fallbackDbError->getMessage()
+            );
+        }
+    }
 
     // Schema guard for newer website customization flows.
     // This keeps older databases compatible without a manual migration step.

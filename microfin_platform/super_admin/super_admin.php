@@ -35,6 +35,113 @@ function sa_column_exists(PDO $pdo, $table, $column)
     return $cache[$key];
 }
 
+function sa_plan_rank(string $planTier): int
+{
+    static $planRankMap = [
+        'Starter' => 1,
+        'Growth' => 2,
+        'Pro' => 3,
+        'Enterprise' => 4,
+        'Unlimited' => 5,
+    ];
+
+    return $planRankMap[$planTier] ?? 0;
+}
+
+function sa_normalize_billing_cycle(string $billingCycle): string
+{
+    $normalized = trim($billingCycle);
+    if (!in_array($normalized, ['Monthly', 'Quarterly', 'Yearly'], true)) {
+        return 'Monthly';
+    }
+    return $normalized;
+}
+
+function sa_compute_next_billing_date(string $billingCycle, ?string $baseDate = null): string
+{
+    $cycle = sa_normalize_billing_cycle($billingCycle);
+    $base = null;
+
+    if ($baseDate !== null && trim($baseDate) !== '') {
+        $parsed = DateTime::createFromFormat('Y-m-d', $baseDate);
+        if ($parsed instanceof DateTime) {
+            $base = $parsed;
+        }
+    }
+
+    if (!$base) {
+        $base = new DateTime('today');
+    }
+
+    if ($cycle === 'Yearly') {
+        $base->modify('+1 year');
+    } elseif ($cycle === 'Quarterly') {
+        $base->modify('+3 months');
+    } else {
+        $base->modify('+1 month');
+    }
+
+    return $base->format('Y-m-d');
+}
+
+function sa_is_railway_runtime(): bool
+{
+    $keys = [
+        'RAILWAY_ENVIRONMENT',
+        'RAILWAY_PROJECT_ID',
+        'RAILWAY_SERVICE_ID',
+        'RAILWAY_PUBLIC_DOMAIN',
+        'RAILWAY_STATIC_URL',
+    ];
+    foreach ($keys as $key) {
+        $value = getenv($key);
+        if ($value !== false && trim((string)$value) !== '') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function sa_build_tenant_login_url(string $tenantSlug): string
+{
+    $tenantSlug = trim($tenantSlug);
+    $safeSlug = urlencode($tenantSlug);
+    $defaultScript = '/admin-draft-withmobile/admin-draft/microfin_platform/super_admin/super_admin.php';
+    $basePath = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['PHP_SELF'] ?? $defaultScript))), '/\\');
+
+    // Optional explicit override, useful if a custom domain is used.
+    $explicitBase = trim((string)(getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
+    if ($explicitBase !== '') {
+        return rtrim($explicitBase, '/') . '/tenant_login/login.php?s=' . $safeSlug;
+    }
+
+    // Railway public URL support.
+    $railwayStaticUrl = trim((string)(getenv('RAILWAY_STATIC_URL') ?: ''));
+    if ($railwayStaticUrl !== '') {
+        if (!preg_match('#^https?://#i', $railwayStaticUrl)) {
+            $railwayStaticUrl = 'https://' . $railwayStaticUrl;
+        }
+        return rtrim($railwayStaticUrl, '/') . '/tenant_login/login.php?s=' . $safeSlug;
+    }
+
+    $railwayPublicDomain = trim((string)(getenv('RAILWAY_PUBLIC_DOMAIN') ?: ''));
+    if ($railwayPublicDomain !== '') {
+        return 'https://' . rtrim($railwayPublicDomain, '/') . '/tenant_login/login.php?s=' . $safeSlug;
+    }
+
+    // Fallback behavior requested:
+    // - If running on Railway but URL vars are missing, use request host over HTTPS.
+    // - Otherwise, always use localhost for local/XAMPP runs.
+    if (sa_is_railway_runtime()) {
+        $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+        if ($requestHost !== '') {
+            return 'https://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
+        }
+    }
+
+    return 'http://localhost' . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
+}
+
 $provision_success = '';
 $provision_error = '';
 
@@ -56,6 +163,14 @@ $plan_pricing_map = [
     'Unlimited' => 29999.00,
 ];
 
+$plan_limits_map = [
+    'Starter' => ['clients' => 1000, 'users' => 250],
+    'Growth' => ['clients' => 2500, 'users' => 750],
+    'Pro' => ['clients' => 5000, 'users' => 2000],
+    'Enterprise' => ['clients' => 10000, 'users' => 5000],
+    'Unlimited' => ['clients' => -1, 'users' => -1],
+];
+
 try {
     $pdo->exec("ALTER TABLE tenants ADD COLUMN request_type ENUM('tenant_application', 'talk_to_expert') NOT NULL DEFAULT 'tenant_application' AFTER status");
 } catch (Throwable $e) {
@@ -75,6 +190,94 @@ try {
 try {
     $pdo->exec("ALTER TABLE tenants ADD INDEX idx_assigned_expert_user (assigned_expert_user_id)");
 } catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD COLUMN billing_cycle ENUM('Monthly', 'Quarterly', 'Yearly') DEFAULT 'Monthly' AFTER mrr");
+} catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD COLUMN next_billing_date DATE NULL AFTER billing_cycle");
+} catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD COLUMN scheduled_plan_tier VARCHAR(50) NULL AFTER plan_tier");
+} catch (Throwable $e) {
+}
+try {
+    $pdo->exec("ALTER TABLE tenants ADD COLUMN scheduled_plan_effective_date DATE NULL AFTER scheduled_plan_tier");
+} catch (Throwable $e) {
+}
+
+try {
+    $pdo->exec("
+        UPDATE tenants
+        SET next_billing_date = CASE billing_cycle
+            WHEN 'Yearly' THEN DATE_ADD(CURDATE(), INTERVAL 1 YEAR)
+            WHEN 'Quarterly' THEN DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
+            ELSE DATE_ADD(CURDATE(), INTERVAL 1 MONTH)
+        END
+        WHERE deleted_at IS NULL
+          AND (next_billing_date IS NULL OR next_billing_date = '0000-00-00')
+    ");
+} catch (Throwable $e) {
+}
+
+// Apply any scheduled plan changes that are due today.
+try {
+    $dueChangesStmt = $pdo->query("
+        SELECT tenant_id, tenant_name, billing_cycle, scheduled_plan_tier, scheduled_plan_effective_date
+        FROM tenants
+        WHERE deleted_at IS NULL
+          AND scheduled_plan_tier IS NOT NULL
+          AND scheduled_plan_effective_date IS NOT NULL
+          AND scheduled_plan_effective_date <= CURDATE()
+    ");
+    $dueChanges = $dueChangesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($dueChanges)) {
+        $applyStmt = $pdo->prepare("
+            UPDATE tenants
+            SET plan_tier = ?,
+                mrr = ?,
+                max_clients = ?,
+                max_users = ?,
+                next_billing_date = ?,
+                scheduled_plan_tier = NULL,
+                scheduled_plan_effective_date = NULL
+            WHERE tenant_id = ?
+        ");
+        $logStmt = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'TENANT_PLAN_APPLIED', 'tenant', ?, ?)");
+
+        foreach ($dueChanges as $changeRow) {
+            $scheduledPlan = trim((string)($changeRow['scheduled_plan_tier'] ?? ''));
+            if ($scheduledPlan === '' || !isset($plan_pricing_map[$scheduledPlan], $plan_limits_map[$scheduledPlan])) {
+                continue;
+            }
+
+            $billingCycle = sa_normalize_billing_cycle((string)($changeRow['billing_cycle'] ?? 'Monthly'));
+            $effectiveDate = (string)($changeRow['scheduled_plan_effective_date'] ?? '');
+            $nextBillingDate = sa_compute_next_billing_date($billingCycle, $effectiveDate);
+            $limits = $plan_limits_map[$scheduledPlan];
+
+            $applyStmt->execute([
+                $scheduledPlan,
+                $plan_pricing_map[$scheduledPlan],
+                $limits['clients'],
+                $limits['users'],
+                $nextBillingDate,
+                (string)$changeRow['tenant_id'],
+            ]);
+
+            $actorId = (int)($_SESSION['super_admin_id'] ?? 0);
+            $logStmt->execute([
+                $actorId > 0 ? $actorId : null,
+                "Scheduled plan applied: {$scheduledPlan} (effective {$effectiveDate})",
+                (string)$changeRow['tenant_id'],
+            ]);
+        }
+    }
+} catch (Throwable $e) {
+    error_log('Subscription schedule apply warning: ' . $e->getMessage());
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -99,13 +302,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $plan_tier = 'Starter';
         }
 
-        $plan_limits_map = [
-            'Starter' => ['clients' => 1000, 'users' => 250],
-            'Growth' => ['clients' => 2500, 'users' => 750],
-            'Pro' => ['clients' => 5000, 'users' => 2000],
-            'Enterprise' => ['clients' => 10000, 'users' => 5000],
-            'Unlimited' => ['clients' => -1, 'users' => -1],
-        ];
         $max_c = $plan_limits_map[$plan_tier]['clients'];
         $max_u = $plan_limits_map[$plan_tier]['users'];
         $first_name = trim($_POST['first_name'] ?? '');
@@ -200,9 +396,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, ?, 'tenant', ?, ?)");
             $log->execute([$_SESSION['super_admin_id'], $provision_action_type, "{$admin_name} had provisioned {$tenant_name} (ID: {$tenant_id}, Slug: {$tenant_slug}, Plan: {$plan_tier})", $tenant_id]);
 
-            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $base_path = rtrim(dirname(dirname($_SERVER['PHP_SELF'])), '/\\');
-            $private_url = $protocol . '://' . $_SERVER['HTTP_HOST'] . $base_path . '/tenant_login/login.php?s=' . urlencode($tenant_slug);
+            $private_url = sa_build_tenant_login_url($tenant_slug);
 
             $message = "
             <html>
@@ -223,7 +417,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result_msg === 'Email sent successfully.') {
                 $email_status = ' An email has been sent to the admin.';
             } else {
-                $email_status = " (Email failed: $result_msg)";
+                $email_status = " (Email failed: $result_msg) Manual login URL: {$private_url} | Temporary Password: {$temp_password}";
             }
 
             $_SESSION['sa_flash'] = 'Tenant provisioned successfully. Tenant ID: ' . $tenant_id . '.' . $email_status;
@@ -339,6 +533,134 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $log->execute([$_SESSION['super_admin_id'], "Inquiry closed for {$tenant_name}", $tenant_id]);
         $_SESSION['sa_flash'] = 'Inquiry closed.';
         header('Location: super_admin.php?section=tenants');
+        exit;
+    } elseif ($action === 'update_subscription_plan') {
+        $tenant_id = trim((string)($_POST['tenant_id'] ?? ''));
+        $target_plan_tier = trim((string)($_POST['target_plan_tier'] ?? ''));
+        $change_timing = trim((string)($_POST['change_timing'] ?? 'next_cycle'));
+
+        if ($tenant_id === '' || $target_plan_tier === '') {
+            $_SESSION['sa_error'] = 'Tenant and target plan are required.';
+            header('Location: super_admin.php?section=subscriptions');
+            exit;
+        }
+        if (!isset($plan_pricing_map[$target_plan_tier], $plan_limits_map[$target_plan_tier])) {
+            $_SESSION['sa_error'] = 'Invalid plan tier selected.';
+            header('Location: super_admin.php?section=subscriptions');
+            exit;
+        }
+        if (!in_array($change_timing, ['immediate', 'next_cycle'], true)) {
+            $change_timing = 'next_cycle';
+        }
+
+        $tenantSubscriptionStmt = $pdo->prepare("
+            SELECT tenant_id, tenant_name, plan_tier, billing_cycle, status, next_billing_date, scheduled_plan_tier
+            FROM tenants
+            WHERE tenant_id = ? AND deleted_at IS NULL
+            LIMIT 1
+        ");
+        $tenantSubscriptionStmt->execute([$tenant_id]);
+        $tenantSubscription = $tenantSubscriptionStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$tenantSubscription) {
+            $_SESSION['sa_error'] = 'Tenant not found for subscription update.';
+            header('Location: super_admin.php?section=subscriptions');
+            exit;
+        }
+
+        $currentPlanTier = (string)($tenantSubscription['plan_tier'] ?? 'Starter');
+        if (!isset($plan_pricing_map[$currentPlanTier], $plan_limits_map[$currentPlanTier])) {
+            $currentPlanTier = 'Starter';
+        }
+        if ($currentPlanTier === $target_plan_tier) {
+            $_SESSION['sa_flash'] = 'Selected plan is already active for this tenant.';
+            header('Location: super_admin.php?section=subscriptions');
+            exit;
+        }
+
+        $currentRank = sa_plan_rank($currentPlanTier);
+        $targetRank = sa_plan_rank($target_plan_tier);
+        $isUpgrade = $targetRank > $currentRank;
+        $isDowngrade = $targetRank < $currentRank;
+        $billingCycle = sa_normalize_billing_cycle((string)($tenantSubscription['billing_cycle'] ?? 'Monthly'));
+        $today = (new DateTime('today'))->format('Y-m-d');
+        $existingNextBillingDate = trim((string)($tenantSubscription['next_billing_date'] ?? ''));
+
+        $nextBillingDateObj = DateTime::createFromFormat('Y-m-d', $existingNextBillingDate);
+        $nextBillingDate = ($nextBillingDateObj instanceof DateTime)
+            ? $nextBillingDateObj->format('Y-m-d')
+            : '';
+
+        if ($nextBillingDate === '' || $nextBillingDate < $today) {
+            $nextBillingDate = sa_compute_next_billing_date($billingCycle);
+        }
+
+        $tenantName = (string)($tenantSubscription['tenant_name'] ?? $tenant_id);
+
+        if ($isUpgrade && $change_timing === 'immediate') {
+            $targetLimits = $plan_limits_map[$target_plan_tier];
+            $applyNowStmt = $pdo->prepare("
+                UPDATE tenants
+                SET plan_tier = ?,
+                    mrr = ?,
+                    max_clients = ?,
+                    max_users = ?,
+                    billing_cycle = ?,
+                    next_billing_date = ?,
+                    scheduled_plan_tier = NULL,
+                    scheduled_plan_effective_date = NULL
+                WHERE tenant_id = ?
+            ");
+            $applyNowStmt->execute([
+                $target_plan_tier,
+                $plan_pricing_map[$target_plan_tier],
+                $targetLimits['clients'],
+                $targetLimits['users'],
+                $billingCycle,
+                $nextBillingDate,
+                $tenant_id,
+            ]);
+
+            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'TENANT_PLAN_UPGRADE_IMMEDIATE', 'tenant', ?, ?)");
+            $log->execute([$_SESSION['super_admin_id'], "Plan upgraded immediately for {$tenantName}: {$currentPlanTier} -> {$target_plan_tier}", $tenant_id]);
+
+            $_SESSION['sa_flash'] = "Upgrade applied immediately: {$tenantName} is now on {$target_plan_tier}.";
+        } else {
+            // Downgrades are always scheduled; upgrades can also be scheduled.
+            $effectiveDate = $nextBillingDate;
+            $scheduleStmt = $pdo->prepare("
+                UPDATE tenants
+                SET billing_cycle = ?,
+                    next_billing_date = ?,
+                    scheduled_plan_tier = ?,
+                    scheduled_plan_effective_date = ?
+                WHERE tenant_id = ?
+            ");
+            $scheduleStmt->execute([
+                $billingCycle,
+                $nextBillingDate,
+                $target_plan_tier,
+                $effectiveDate,
+                $tenant_id,
+            ]);
+
+            $actionType = $isDowngrade ? 'TENANT_PLAN_DOWNGRADE_SCHEDULED' : 'TENANT_PLAN_UPGRADE_SCHEDULED';
+            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, ?, 'tenant', ?, ?)");
+            $log->execute([
+                $_SESSION['super_admin_id'],
+                $actionType,
+                "Plan change scheduled for {$tenantName}: {$currentPlanTier} -> {$target_plan_tier} on {$effectiveDate}",
+                $tenant_id
+            ]);
+
+            if ($isDowngrade) {
+                $_SESSION['sa_flash'] = "Downgrade scheduled for next billing date ({$effectiveDate}). Reduced limits will apply then.";
+            } else {
+                $_SESSION['sa_flash'] = "Upgrade scheduled for next billing date ({$effectiveDate}).";
+            }
+        }
+
+        header('Location: super_admin.php?section=subscriptions');
         exit;
     } elseif ($action === 'toggle_status') {
         $tenant_id = $_POST['tenant_id'] ?? '';
@@ -566,6 +888,55 @@ $recent_inquiries_stmt = $pdo->query("
         LIMIT 5
 ");
 $recent_inquiries = $recent_inquiries_stmt->fetchAll();
+
+// Tenant Subscriptions: per-tenant usage + limits comparison
+$tenant_subscriptions_stmt = $pdo->query("
+    SELECT
+        t.tenant_id,
+        t.tenant_name,
+        t.plan_tier,
+        t.billing_cycle,
+        t.status,
+        t.next_billing_date,
+        t.max_users,
+        t.max_clients,
+        t.scheduled_plan_tier,
+        t.scheduled_plan_effective_date,
+        COALESCE(u_stats.staff_accounts, 0) AS staff_accounts,
+        COALESCE(u_stats.client_accounts, 0) AS client_accounts,
+        COALESCE(u_stats.active_users, 0) AS active_users,
+        COALESCE(u_stats.total_users, 0) AS total_users
+    FROM tenants t
+    LEFT JOIN (
+        SELECT
+            u.tenant_id,
+            SUM(CASE WHEN u.user_type IN ('Employee', 'Admin') THEN 1 ELSE 0 END) AS staff_accounts,
+            SUM(CASE WHEN u.user_type = 'Client' THEN 1 ELSE 0 END) AS client_accounts,
+            SUM(CASE WHEN u.status = 'Active' THEN 1 ELSE 0 END) AS active_users,
+            COUNT(*) AS total_users
+        FROM users u
+        WHERE u.tenant_id IS NOT NULL AND u.deleted_at IS NULL
+        GROUP BY u.tenant_id
+    ) u_stats ON u_stats.tenant_id = t.tenant_id
+    WHERE t.deleted_at IS NULL
+    ORDER BY t.tenant_name ASC
+");
+$tenant_subscriptions = $tenant_subscriptions_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$subscription_total_tenants = count($tenant_subscriptions);
+$subscription_total_users = 0;
+$subscription_total_active_users = 0;
+$subscription_plan_distribution = [];
+
+foreach ($tenant_subscriptions as $subscriptionRow) {
+    $subscription_total_users += (int)($subscriptionRow['total_users'] ?? 0);
+    $subscription_total_active_users += (int)($subscriptionRow['active_users'] ?? 0);
+    $rowPlan = (string)($subscriptionRow['plan_tier'] ?? 'Starter');
+    if (!isset($subscription_plan_distribution[$rowPlan])) {
+        $subscription_plan_distribution[$rowPlan] = 0;
+    }
+    $subscription_plan_distribution[$rowPlan]++;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo htmlspecialchars($ui_theme, ENT_QUOTES, 'UTF-8'); ?>">
@@ -610,6 +981,10 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                 <a href="#tenants" class="nav-item" data-target="tenants">
                     <span class="material-symbols-rounded">domain</span>
                     <span>Tenants</span>
+                </a>
+                <a href="#subscriptions" class="nav-item" data-target="subscriptions">
+                    <span class="material-symbols-rounded">credit_card</span>
+                    <span>Tenant Subscriptions</span>
                 </a>
 
                 <div class="nav-section-label">System</div>
@@ -728,7 +1103,7 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                             </div>
                             <div class="stat-details">
                                 <p>Monthly MRR</p>
-                                <h3 id="stat-total-mrr">₱<?php echo $total_mrr; ?></h3>
+                                <h3 id="stat-total-mrr">â‚±<?php echo $total_mrr; ?></h3>
                             </div>
                         </div>
                     </div>
@@ -792,22 +1167,22 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                                             <?php foreach ($audit_logs as $log): ?>
                                             <tr>
                                                 <td><small><?php echo date('Y-m-d H:i:s', strtotime($log['created_at'])); ?></small></td>
-                                                <td><span style="font-family: monospace;"><?php echo htmlspecialchars($log['username'] ?? '—'); ?></span></td>
+                                                <td><span style="font-family: monospace;"><?php echo htmlspecialchars($log['username'] ?? 'â€”'); ?></span></td>
                                                 <td><?php echo htmlspecialchars($log['user_email'] ?? 'System'); ?></td>
                                                 <td><?php echo htmlspecialchars($log['tenant_name'] ?? 'Platform'); ?></td>
                                                 <td><span class="badge badge-blue"><?php echo htmlspecialchars($log['action_type']); ?></span></td>
-                                                <td><?php echo htmlspecialchars($log['entity_type'] ?? '—'); ?></td>
+                                                <td><?php echo htmlspecialchars($log['entity_type'] ?? 'â€”'); ?></td>
                                                 <td>
                                                     <button
                                                         type="button"
                                                         class="btn btn-outline btn-sm audit-detail-btn"
                                                         data-created-at="<?php echo htmlspecialchars((string)($log['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-username="<?php echo htmlspecialchars((string)($log['username'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-username="<?php echo htmlspecialchars((string)($log['username'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
                                                         data-user-email="<?php echo htmlspecialchars((string)($log['user_email'] ?? 'System'), ENT_QUOTES, 'UTF-8'); ?>"
                                                         data-tenant-name="<?php echo htmlspecialchars((string)($log['tenant_name'] ?? 'Platform'), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-action-type="<?php echo htmlspecialchars((string)($log['action_type'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-entity-type="<?php echo htmlspecialchars((string)($log['entity_type'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
-                                                        data-description="<?php echo htmlspecialchars((string)($log['description'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-action-type="<?php echo htmlspecialchars((string)($log['action_type'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-entity-type="<?php echo htmlspecialchars((string)($log['entity_type'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-description="<?php echo htmlspecialchars((string)($log['description'] ?? 'â€”'), ENT_QUOTES, 'UTF-8'); ?>"
                                                     >
                                                         <span class="material-symbols-rounded" style="font-size:16px;">visibility</span> View
                                                     </button>
@@ -999,17 +1374,17 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                                     <tr data-status="<?php echo htmlspecialchars($t['status']); ?>" data-request-type="<?php echo htmlspecialchars($t['request_type'] ?? 'tenant_application'); ?>">
                                         <td>
                                             <?php echo htmlspecialchars($t['tenant_name']); ?><br>
-                                            <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? '—'); ?></small>
+                                            <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? 'â€”'); ?></small>
                                         </td>
                                         <td>
                                             <?php
                                             $owner_name = trim((string)($t['owner_first_name'] ?? '') . ' ' . (string)($t['owner_last_name'] ?? ''));
                                             $owner_username = trim((string)($t['owner_username'] ?? ''));
-                                            echo htmlspecialchars($owner_name !== '' ? $owner_name : ($owner_username !== '' ? $owner_username : '—'));
+                                            echo htmlspecialchars($owner_name !== '' ? $owner_name : ($owner_username !== '' ? $owner_username : 'â€”'));
                                             ?><br>
-                                            <small class="text-muted">@<?php echo htmlspecialchars($owner_username !== '' ? $owner_username : '—'); ?></small><br>
-                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_email'] ?? '—'); ?></small><br>
-                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_phone'] ?? '—'); ?></small>
+                                            <small class="text-muted">@<?php echo htmlspecialchars($owner_username !== '' ? $owner_username : 'â€”'); ?></small><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_email'] ?? 'â€”'); ?></small><br>
+                                            <small class="text-muted"><?php echo htmlspecialchars($t['owner_phone'] ?? 'â€”'); ?></small>
                                             <br>
                                             <?php $doc_count = (int)($t['legitimacy_document_count'] ?? 0); ?>
                                             <?php if ($doc_count > 0): ?>
@@ -1070,8 +1445,8 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                                                 <?php echo htmlspecialchars($normalized_status); ?>
                                             </span>
                                         </td>
-                                        <td><?php echo htmlspecialchars($t['plan_tier'] ?? '—'); ?></td>
-                                        <td>₱<?php echo number_format((float)($t['mrr'] ?? 0), 2); ?></td>
+                                        <td><?php echo htmlspecialchars($t['plan_tier'] ?? 'â€”'); ?></td>
+                                        <td>â‚±<?php echo number_format((float)($t['mrr'] ?? 0), 2); ?></td>
                                         <td><?php echo date('M d, Y', strtotime($t['created_at'])); ?></td>
                                         <td>
                                             <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
@@ -1167,7 +1542,265 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                 </section>
 
                 <!-- ============================================================ -->
-                <!-- SECTION 3: REPORTS -->
+                <!-- SECTION 3: TENANT SUBSCRIPTIONS -->
+                <!-- ============================================================ -->
+                <section id="subscriptions" class="view-section">
+                    <div class="card subscription-hero-card">
+                        <div class="card-header-flex mb-4">
+                            <div>
+                                <h3>Tenant Subscriptions</h3>
+                                <p class="text-muted">Centralized subscription command center with tenant-isolated usage metrics and safe plan controls.</p>
+                            </div>
+                        </div>
+
+                        <div class="subscription-overview-grid">
+                            <div class="subscription-overview-card">
+                                <div class="subscription-overview-icon"><span class="material-symbols-rounded">domain</span></div>
+                                <p>Total Tenants</p>
+                                <h3><?php echo number_format($subscription_total_tenants); ?></h3>
+                            </div>
+                            <div class="subscription-overview-card">
+                                <div class="subscription-overview-icon"><span class="material-symbols-rounded">group</span></div>
+                                <p>Total Users</p>
+                                <h3><?php echo number_format($subscription_total_users); ?></h3>
+                            </div>
+                            <div class="subscription-overview-card">
+                                <div class="subscription-overview-icon"><span class="material-symbols-rounded">how_to_reg</span></div>
+                                <p>Total Active Users</p>
+                                <h3><?php echo number_format($subscription_total_active_users); ?></h3>
+                            </div>
+                        </div>
+
+                        <div class="subscription-plan-distribution">
+                            <span class="distribution-label">Plan Distribution:</span>
+                            <?php if (empty($subscription_plan_distribution)): ?>
+                                <span class="badge">No tenants yet</span>
+                            <?php else: ?>
+                                <?php foreach ($subscription_plan_distribution as $planName => $planCount): ?>
+                                    <span class="badge badge-blue subscription-plan-chip"><?php echo htmlspecialchars($planName); ?> <strong><?php echo (int)$planCount; ?></strong></span>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header-flex mb-4">
+                            <div>
+                                <h3>Per-Tenant Subscription Matrix</h3>
+                                <p class="text-muted">Usage metrics and plan limits are tenant-scoped and isolated by tenant_id.</p>
+                            </div>
+                            <div class="actions-flex">
+                                <div class="search-box">
+                                    <span class="material-symbols-rounded">search</span>
+                                    <input type="text" id="subscription-search" placeholder="Search tenant ID or name...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="admin-table subscription-table" id="tenant-subscriptions-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tenant ID</th>
+                                        <th>Tenant Name</th>
+                                        <th>Plan</th>
+                                        <th>Billing Cycle</th>
+                                        <th>Status</th>
+                                        <th>Next Billing</th>
+                                        <th>Staff Usage</th>
+                                        <th>Client Usage</th>
+                                        <th>Active Users</th>
+                                        <th>Manage Subscription</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($tenant_subscriptions)): ?>
+                                        <tr>
+                                            <td colspan="10" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                                No tenant subscription records found.
+                                            </td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($tenant_subscriptions as $subscription): ?>
+                                            <?php
+                                            $tenantId = (string)($subscription['tenant_id'] ?? '');
+                                            $tenantName = (string)($subscription['tenant_name'] ?? '-');
+                                            $planTier = (string)($subscription['plan_tier'] ?? 'Starter');
+                                            if (!isset($plan_pricing_map[$planTier])) {
+                                                $planTier = 'Starter';
+                                            }
+                                            $billingCycle = sa_normalize_billing_cycle((string)($subscription['billing_cycle'] ?? 'Monthly'));
+                                            $statusLabel = (string)($subscription['status'] ?? 'Pending');
+                                            $nextBillingDate = trim((string)($subscription['next_billing_date'] ?? ''));
+                                            $scheduledPlanTier = trim((string)($subscription['scheduled_plan_tier'] ?? ''));
+                                            $scheduledEffectiveDate = trim((string)($subscription['scheduled_plan_effective_date'] ?? ''));
+
+                                            $staffCurrent = (int)($subscription['staff_accounts'] ?? 0);
+                                            $clientCurrent = (int)($subscription['client_accounts'] ?? 0);
+                                            $activeUsersCurrent = (int)($subscription['active_users'] ?? 0);
+                                            $totalUsersCurrent = (int)($subscription['total_users'] ?? 0);
+                                            $staffLimit = (int)($subscription['max_users'] ?? 0);
+                                            $clientLimit = (int)($subscription['max_clients'] ?? 0);
+                                            $staffLimitDisplay = $staffLimit < 0 ? 'Unlimited' : number_format($staffLimit);
+                                            $clientLimitDisplay = $clientLimit < 0 ? 'Unlimited' : number_format($clientLimit);
+                                            $staffUsagePercent = $staffLimit > 0 ? (int)min(100, round(($staffCurrent / max($staffLimit, 1)) * 100)) : null;
+                                            $clientUsagePercent = $clientLimit > 0 ? (int)min(100, round(($clientCurrent / max($clientLimit, 1)) * 100)) : null;
+                                            $activeUsagePercent = $totalUsersCurrent > 0 ? (int)min(100, round(($activeUsersCurrent / max($totalUsersCurrent, 1)) * 100)) : null;
+                                            $planPriceLabel = 'PHP ' . number_format((float)$plan_pricing_map[$planTier], 2) . '/mo';
+
+                                            $staffUsageClass = 'usage-meter usage-meter-safe';
+                                            if ($staffUsagePercent !== null && $staffUsagePercent >= 90) {
+                                                $staffUsageClass = 'usage-meter usage-meter-critical';
+                                            } elseif ($staffUsagePercent !== null && $staffUsagePercent >= 70) {
+                                                $staffUsageClass = 'usage-meter usage-meter-warn';
+                                            }
+
+                                            $clientUsageClass = 'usage-meter usage-meter-safe';
+                                            if ($clientUsagePercent !== null && $clientUsagePercent >= 90) {
+                                                $clientUsageClass = 'usage-meter usage-meter-critical';
+                                            } elseif ($clientUsagePercent !== null && $clientUsagePercent >= 70) {
+                                                $clientUsageClass = 'usage-meter usage-meter-warn';
+                                            }
+
+                                            $activeUsageClass = 'usage-meter usage-meter-safe';
+                                            if ($activeUsagePercent !== null && $activeUsagePercent >= 90) {
+                                                $activeUsageClass = 'usage-meter usage-meter-critical';
+                                            } elseif ($activeUsagePercent !== null && $activeUsagePercent >= 70) {
+                                                $activeUsageClass = 'usage-meter usage-meter-warn';
+                                            }
+
+                                            $statusClass = 'badge-amber';
+                                            if (in_array($statusLabel, ['Active'], true)) {
+                                                $statusClass = 'badge-green';
+                                            } elseif (in_array($statusLabel, ['Suspended', 'Rejected', 'Archived'], true)) {
+                                                $statusClass = 'badge-red';
+                                            } elseif (in_array($statusLabel, ['In Contact'], true)) {
+                                                $statusClass = 'badge-blue';
+                                            }
+
+                                            $planClass = 'plan-pill plan-starter';
+                                            if ($planTier === 'Growth') {
+                                                $planClass = 'plan-pill plan-growth';
+                                            } elseif ($planTier === 'Pro') {
+                                                $planClass = 'plan-pill plan-pro';
+                                            } elseif ($planTier === 'Enterprise') {
+                                                $planClass = 'plan-pill plan-enterprise';
+                                            } elseif ($planTier === 'Unlimited') {
+                                                $planClass = 'plan-pill plan-unlimited';
+                                            }
+
+                                            $nextBillingLabel = '-';
+                                            $nextBillingMeta = 'Billing date not available';
+                                            if ($nextBillingDate !== '' && strtotime($nextBillingDate) !== false) {
+                                                $nextBillingTimestamp = (int)strtotime($nextBillingDate);
+                                                $nextBillingLabel = date('M d, Y', $nextBillingTimestamp);
+                                                $daysUntil = (int)floor(($nextBillingTimestamp - strtotime('today')) / 86400);
+                                                if ($daysUntil > 0) {
+                                                    $nextBillingMeta = 'in ' . $daysUntil . ' day' . ($daysUntil === 1 ? '' : 's');
+                                                } elseif ($daysUntil === 0) {
+                                                    $nextBillingMeta = 'due today';
+                                                } else {
+                                                    $nextBillingMeta = abs($daysUntil) . ' day' . (abs($daysUntil) === 1 ? '' : 's') . ' overdue';
+                                                }
+                                            }
+                                            ?>
+                                            <tr data-subscription-row="1">
+                                                <td>
+                                                    <div class="subscription-id-wrap">
+                                                        <code><?php echo htmlspecialchars($tenantId); ?></code>
+                                                        <small class="text-muted">tenant_id scope</small>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="subscription-tenant-cell">
+                                                        <span class="subscription-tenant-name"><?php echo htmlspecialchars($tenantName); ?></span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="subscription-plan-cell">
+                                                        <span class="<?php echo htmlspecialchars($planClass); ?>"><?php echo htmlspecialchars($planTier); ?></span>
+                                                        <small class="subscription-plan-price"><?php echo htmlspecialchars($planPriceLabel); ?></small>
+                                                        <?php if ($scheduledPlanTier !== ''): ?>
+                                                            <small class="subscription-plan-scheduled">Scheduled: <?php echo htmlspecialchars($scheduledPlanTier); ?> (<?php echo htmlspecialchars($scheduledEffectiveDate !== '' ? date('M d, Y', strtotime($scheduledEffectiveDate)) : 'Next cycle'); ?>)</small>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="subscription-cycle-chip"><?php echo htmlspecialchars($billingCycle); ?></span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge <?php echo htmlspecialchars($statusClass); ?> subscription-status-badge">
+                                                        <span class="subscription-status-dot"></span>
+                                                        <?php echo htmlspecialchars($statusLabel); ?>
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div class="subscription-next-billing">
+                                                        <strong><?php echo htmlspecialchars($nextBillingLabel); ?></strong>
+                                                        <small class="text-muted"><?php echo htmlspecialchars($nextBillingMeta); ?></small>
+                                                    </div>
+                                                </td>
+                                                <td class="usage-cell">
+                                                    <div class="usage-metric"><?php echo number_format($staffCurrent); ?> / <?php echo htmlspecialchars($staffLimitDisplay); ?></div>
+                                                    <?php if ($staffUsagePercent !== null): ?>
+                                                        <div class="<?php echo htmlspecialchars($staffUsageClass); ?>"><span style="width: <?php echo $staffUsagePercent; ?>%;"></span></div>
+                                                    <?php else: ?>
+                                                        <small class="usage-unlimited">Unlimited cap</small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="usage-cell">
+                                                    <div class="usage-metric"><?php echo number_format($clientCurrent); ?> / <?php echo htmlspecialchars($clientLimitDisplay); ?></div>
+                                                    <?php if ($clientUsagePercent !== null): ?>
+                                                        <div class="<?php echo htmlspecialchars($clientUsageClass); ?>"><span style="width: <?php echo $clientUsagePercent; ?>%;"></span></div>
+                                                    <?php else: ?>
+                                                        <small class="usage-unlimited">Unlimited cap</small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="usage-cell">
+                                                    <div class="usage-metric"><?php echo number_format($activeUsersCurrent); ?> / <?php echo number_format($totalUsersCurrent); ?></div>
+                                                    <?php if ($activeUsagePercent !== null): ?>
+                                                        <div class="<?php echo htmlspecialchars($activeUsageClass); ?>"><span style="width: <?php echo $activeUsagePercent; ?>%;"></span></div>
+                                                    <?php else: ?>
+                                                        <small class="usage-unlimited">No users yet</small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <form method="POST"
+                                                        class="subscription-change-form"
+                                                        data-tenant-name="<?php echo htmlspecialchars($tenantName); ?>"
+                                                        data-current-plan="<?php echo htmlspecialchars($planTier); ?>">
+                                                        <input type="hidden" name="action" value="update_subscription_plan">
+                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($tenantId); ?>">
+                                                        <div class="subscription-form-grid">
+                                                            <select name="target_plan_tier" class="form-control subscription-target-plan" required>
+                                                                <?php foreach ($plan_pricing_map as $planName => $planPrice): ?>
+                                                                    <option value="<?php echo htmlspecialchars($planName); ?>" <?php echo $planTier === $planName ? 'selected' : ''; ?>>
+                                                                        <?php echo htmlspecialchars($planName); ?>
+                                                                    </option>
+                                                                <?php endforeach; ?>
+                                                            </select>
+                                                            <select name="change_timing" class="form-control subscription-change-timing">
+                                                                <option value="immediate">Upgrade: Immediate</option>
+                                                                <option value="next_cycle">Next Billing Cycle</option>
+                                                            </select>
+                                                            <button type="submit" class="btn btn-primary btn-sm subscription-apply-btn">
+                                                                <span class="material-symbols-rounded" style="font-size:16px;">published_with_changes</span>
+                                                                Apply
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============================================================ -->
+                <!-- SECTION 4: REPORTS -->
                 <!-- ============================================================ -->
                 <section id="reports" class="view-section">
                     <div class="card filter-bar">
@@ -1236,7 +1869,7 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                             </div>
                             <div class="stat-details">
                                 <p>Total MRR</p>
-                                <h3>₱<?php echo htmlspecialchars($total_mrr); ?></h3>
+                                <h3>â‚±<?php echo htmlspecialchars($total_mrr); ?></h3>
                             </div>
                         </div>
                     </div>
@@ -1350,35 +1983,35 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                                             <td>1,000</td>
                                             <td>250</td>
                                             <td>5.00 GB</td>
-                                            <td>₱4,999.00</td>
+                                            <td>â‚±4,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge" style="background:rgba(59,130,246,0.15); color:#3b82f6;">Growth</span></td>
                                             <td>2,500</td>
                                             <td>750</td>
                                             <td>10.00 GB</td>
-                                            <td>₱9,999.00</td>
+                                            <td>â‚±9,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge badge-blue">Pro</span></td>
                                             <td>5,000</td>
                                             <td>2,000</td>
                                             <td>25.00 GB</td>
-                                            <td>₱14,999.00</td>
+                                            <td>â‚±14,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge badge-purple">Enterprise</span></td>
                                             <td>10,000</td>
                                             <td>5,000</td>
                                             <td>50.00 GB</td>
-                                            <td>₱22,999.00</td>
+                                            <td>â‚±22,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge" style="background:rgba(244,114,182,0.15); color:#db2777;">Unlimited</span></td>
                                             <td>Unlimited</td>
                                             <td>Unlimited</td>
                                             <td>Unlimited</td>
-                                            <td>₱29,999.00</td>
+                                            <td>â‚±29,999.00</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1514,11 +2147,11 @@ $recent_inquiries = $recent_inquiries_stmt->fetchAll();
                     <div>
                         <label>Plan Tier</label>
                         <select class="form-control" name="plan_tier">
-                            <option value="Starter">Starter (₱4,999/mo)</option>
-                            <option value="Growth">Growth (₱9,999/mo)</option>
-                            <option value="Pro">Pro (₱14,999/mo)</option>
-                            <option value="Enterprise">Enterprise (₱22,999/mo)</option>
-                            <option value="Unlimited">Unlimited (₱29,999/mo)</option>
+                            <option value="Starter">Starter (â‚±4,999/mo)</option>
+                            <option value="Growth">Growth (â‚±9,999/mo)</option>
+                            <option value="Pro">Pro (â‚±14,999/mo)</option>
+                            <option value="Enterprise">Enterprise (â‚±22,999/mo)</option>
+                            <option value="Unlimited">Unlimited (â‚±29,999/mo)</option>
                         </select>
                     </div>
                 </div>

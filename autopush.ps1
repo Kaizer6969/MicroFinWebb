@@ -3,6 +3,13 @@ $commitMessagePrefix = "Auto-commit: Workspace changes"
 
 Set-Location -Path $PSScriptRoot
 
+$disableFlag = Join-Path $PSScriptRoot ".autopush.disabled"
+if (Test-Path $disableFlag) {
+    Write-Host "Auto-push is temporarily disabled (.autopush.disabled found)." -ForegroundColor Yellow
+    Write-Host "Remove the flag file to re-enable: $disableFlag" -ForegroundColor Gray
+    exit 0
+}
+
 $currentBranch = (git rev-parse --abbrev-ref HEAD 2>$null).Trim()
 if (-not $currentBranch) {
     Write-Host "Unable to detect current git branch. Exiting." -ForegroundColor Red

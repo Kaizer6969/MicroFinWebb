@@ -625,6 +625,97 @@ document.addEventListener('DOMContentLoaded', () => {
     filterTenantTable();
 
     // ============================================================
+    // TENANT SUBSCRIPTIONS: Search + Plan Change Guardrails
+    // ============================================================
+    const subscriptionSearch = document.getElementById('subscription-search');
+    const subscriptionTable = document.getElementById('tenant-subscriptions-table');
+    const subscriptionForms = document.querySelectorAll('.subscription-change-form');
+    const subscriptionPlanRank = {
+        Starter: 1,
+        Growth: 2,
+        Pro: 3,
+        Enterprise: 4,
+        Unlimited: 5
+    };
+
+    function getSubscriptionPlanRank(plan) {
+        return subscriptionPlanRank[plan] || 0;
+    }
+
+    function filterSubscriptionTable() {
+        if (!subscriptionTable || !subscriptionSearch) return;
+        const searchText = subscriptionSearch.value.toLowerCase().trim();
+        const rows = subscriptionTable.querySelectorAll('tbody tr[data-subscription-row]');
+        rows.forEach((row) => {
+            const rowText = row.textContent.toLowerCase();
+            row.style.display = searchText === '' || rowText.includes(searchText) ? '' : 'none';
+        });
+    }
+
+    if (subscriptionSearch) {
+        subscriptionSearch.addEventListener('input', filterSubscriptionTable);
+    }
+
+    subscriptionForms.forEach((form) => {
+        const planSelect = form.querySelector('.subscription-target-plan');
+        const timingSelect = form.querySelector('.subscription-change-timing');
+        const tenantName = form.dataset.tenantName || 'Tenant';
+        const currentPlan = form.dataset.currentPlan || '';
+
+        if (!planSelect || !timingSelect || !currentPlan) return;
+
+        const immediateOption = timingSelect.querySelector('option[value="immediate"]');
+
+        function applyTimingGuardrails() {
+            const selectedPlan = planSelect.value;
+            const isDowngrade = getSubscriptionPlanRank(selectedPlan) < getSubscriptionPlanRank(currentPlan);
+
+            if (immediateOption) {
+                immediateOption.disabled = isDowngrade;
+            }
+            if (isDowngrade) {
+                timingSelect.value = 'next_cycle';
+                timingSelect.title = 'Downgrades are always scheduled for next billing cycle.';
+            } else {
+                timingSelect.title = '';
+            }
+        }
+
+        planSelect.addEventListener('change', applyTimingGuardrails);
+        applyTimingGuardrails();
+
+        form.addEventListener('submit', (e) => {
+            const selectedPlan = planSelect.value;
+            const selectedTiming = timingSelect.value;
+            const currentRank = getSubscriptionPlanRank(currentPlan);
+            const targetRank = getSubscriptionPlanRank(selectedPlan);
+
+            if (selectedPlan === currentPlan) {
+                e.preventDefault();
+                alert('Selected plan is already active for this tenant.');
+                return;
+            }
+
+            const isUpgrade = targetRank > currentRank;
+            const isDowngrade = targetRank < currentRank;
+
+            let confirmMessage = '';
+            if (isDowngrade) {
+                timingSelect.value = 'next_cycle';
+                confirmMessage = `This will schedule a downgrade for ${tenantName} on the next billing cycle. Reduced limits may restrict staff/client capacity. Continue?`;
+            } else if (isUpgrade && selectedTiming === 'immediate') {
+                confirmMessage = `Apply upgrade immediately for ${tenantName}? This takes effect right away.`;
+            } else {
+                confirmMessage = `Schedule this plan change for ${tenantName} on the next billing cycle?`;
+            }
+
+            if (!window.confirm(confirmMessage)) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // ============================================================
     // REPORTS: Load via AJAX
     // ============================================================
     const btnApplyReportFilter = document.getElementById('btn-apply-report-filter');
