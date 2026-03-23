@@ -68,7 +68,7 @@ function resolve_tenant_billing($pdo) {
                 $this_skip = false;
             }
 
-            // C. Insert Simulated Payment + Invoice
+            // C. Insert Simulated Payment
             if (!$this_skip && $current_mrr > 0) {
                 $ref = 'SUB-' . strtoupper(substr(md5($tenant_id . time() . rand()), 0, 10));
                 
@@ -78,21 +78,6 @@ function resolve_tenant_billing($pdo) {
                 ");
                 $payment_timestamp = $next_billing_date . ' 00:00:00';
                 $ins_pay->execute([$tenant_id, $current_mrr, $payment_timestamp, $ref, $payment_method_desc]);
-
-                // Also record in tenant_billing_invoices for super admin revenue tracking
-                $inv_number = 'INV-' . date('Ymd', strtotime($next_billing_date)) . '-' . strtoupper(substr(uniqid(), -4));
-                $period_start = $next_billing_date;
-                $period_end_dt = new DateTime($next_billing_date);
-                $period_end_dt->modify('+1 month');
-                $period_end_dt->modify('-1 day');
-                $period_end = $period_end_dt->format('Y-m-d');
-
-                $inv_stmt = $pdo->prepare("
-                    INSERT INTO tenant_billing_invoices
-                    (tenant_id, invoice_number, amount, billing_period_start, billing_period_end, due_date, status, paid_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 'Paid', NOW())
-                ");
-                $inv_stmt->execute([$tenant_id, $inv_number, $current_mrr, $period_start, $period_end, $period_start]);
             }
 
             // D. Compute next billing date based on billing_anchor_date preference

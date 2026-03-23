@@ -3615,6 +3615,7 @@ function hexToRgb($hex) {
         list.appendChild(row);
     }
     </script>
+    <script src="admin.js"></script>
 </body>
 
 </html>
