@@ -33,7 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
             item.classList.add('active');
 
             viewSections.forEach(section => section.classList.remove('active'));
-            document.getElementById(targetId).classList.add('active');
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                targetEl.classList.add('active');
+            }
 
             if (targetId === 'settings' && subTabId) {
                 tabBtns.forEach(btn => btn.classList.remove('active'));
@@ -77,7 +80,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('active');
 
             tabContents.forEach(content => content.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
+            const targetTab = document.getElementById(tabId);
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
         });
     });
 
