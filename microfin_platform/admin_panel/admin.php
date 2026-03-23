@@ -3615,7 +3615,7 @@ function hexToRgb($hex) {
         list.appendChild(row);
     }
     </script>
-    <script src="admin.js"></script>
+    <script src="admin.js?v=<?php echo filemtime(__DIR__ . '/admin.js'); ?>"></script>
 </body>
 
 </html>
