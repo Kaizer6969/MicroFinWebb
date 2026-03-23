@@ -61,10 +61,7 @@ $download_url_setting_stmt->execute([$tenant_id]);
 $download_url_setting = $download_url_setting_stmt->fetchColumn();
 $system_download_url = trim((string) ($download_url_setting ?: ''));
 
-$mobile_app_url_stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'mobile_app_web_url' LIMIT 1");
-$mobile_app_url_stmt->execute([$tenant_id]);
-$mobile_app_url_setting = $mobile_app_url_stmt->fetchColumn();
-$system_mobile_app_url = trim((string) ($mobile_app_url_setting ?: ''));
+
 
 $bg_stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'website_hero_background' LIMIT 1");
 $bg_stmt->execute([$tenant_id]);
@@ -85,11 +82,7 @@ $defaults = [
     'website_show_services' => '1',
     'website_show_contact' => '1',
     'website_show_download' => '1',
-    'website_download_title' => 'Download Our App',
-    'website_download_description' => 'Get the app for faster loan tracking and updates.',
-    'website_download_button_text' => 'Download App',
-    'website_download_url' => $system_download_url,
-    'mobile_app_web_url' => $system_mobile_app_url
+    'website_download_url' => $system_download_url
 ];
 
 $form = $defaults;
@@ -111,18 +104,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $show_contact = isset($_POST['website_show_contact']) ? '1' : '0';
     $show_download = isset($_POST['website_show_download']) ? '1' : '0';
 
-    $download_title = trim($_POST['website_download_title'] ?? '');
-    $download_description = trim($_POST['website_download_description'] ?? '');
-    $download_button_text = trim($_POST['website_download_button_text'] ?? '');
     $download_url = $system_download_url;
     if ($download_url !== '' && filter_var($download_url, FILTER_VALIDATE_URL) === false) {
         $download_url = '';
     }
 
-    $mobile_app_web_url = trim($_POST['mobile_app_web_url'] ?? '');
-    if ($mobile_app_web_url !== '' && filter_var($mobile_app_web_url, FILTER_VALIDATE_URL) === false) {
-        $mobile_app_web_url = '';
-    }
 
     $hero_background_path = $system_hero_background;
     if (isset($_FILES['hero_background']) && (int) $_FILES['hero_background']['error'] === UPLOAD_ERR_OK) {
@@ -158,11 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'website_show_services' => $show_services,
         'website_show_contact' => $show_contact,
         'website_show_download' => $show_download,
-        'website_download_title' => $download_title,
-        'website_download_description' => $download_description,
-        'website_download_button_text' => $download_button_text,
-        'website_download_url' => $download_url,
-        'mobile_app_web_url' => $mobile_app_web_url
+        'website_download_url' => $download_url
     ];
 
     if ($hero_title === '') {
@@ -231,12 +213,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'website_show_services' => $show_services,
             'website_show_contact' => $show_contact,
             'website_show_download' => $show_download,
-            'website_download_title' => ($download_title !== '' ? $download_title : 'Download Our App'),
-            'website_download_description' => ($download_description !== '' ? $download_description : 'Get the app for faster loan tracking and updates.'),
-            'website_download_button_text' => ($download_button_text !== '' ? $download_button_text : 'Download App'),
             'website_download_url' => $download_url,
-            'website_hero_background' => $hero_background_path,
-            'mobile_app_web_url' => $mobile_app_web_url
+            'website_hero_background' => $hero_background_path
         ];
 
         $boolean_setting_keys = [
@@ -324,119 +302,6 @@ $e = function ($val) {
         .preview-panel-header p { font-size: 0.8rem; color: #64748b; margin-bottom: 0; }
         .preview-canvas { padding: 14px; background: linear-gradient(180deg, #f1f5f9, #eef2ff); }
         
-        /* ========== TEMPLATE 1: Modern Material ========== */
-        .template-template1 { background: #f8fafc !important; }
-        .template-template1 .preview-frame { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; background: #f8fafc; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); }
-        .template-template1 .preview-header { padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; }
-        .template-template1 .preview-logo { font-size: 0.95rem; font-weight: 800; color: <?php echo $e($accent); ?>; font-family: 'Manrope', sans-serif; letter-spacing: -0.02em; }
-        .template-template1 .preview-nav { display: flex; gap: 20px; }
-        .template-template1 .preview-nav-item { font-size: 0.78rem; color: #64748b; cursor: pointer; transition: 0.2s; padding: 4px 8px; border-radius: 6px; }
-        .template-template1 .preview-nav-item:hover { background: #f1f5f9; color: <?php echo $e($accent); ?>; }
-        .template-template1 .preview-content { padding: 28px 24px; background: #f8fafc; }
-        .template-template1 .preview-hero { display: grid; grid-template-columns: 1fr 120px; gap: 20px; align-items: center; margin-bottom: 28px; }
-        .template-template1 .preview-hero-left { }
-        .template-template1 .preview-hero-subtitle { display: inline-block; font-size: 0.65rem; font-weight: 700; color: <?php echo $e($accent); ?>; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; background: <?php echo $e($accent); ?>15; padding: 4px 10px; border-radius: 99px; }
-        .template-template1 .preview-hero-title { font-size: 1.6rem; font-weight: 800; color: <?php echo $e($accent); ?>; letter-spacing: -0.03em; margin-bottom: 10px; line-height: 1.15; font-family: 'Manrope', sans-serif; }
-        .template-template1 .preview-hero-desc { font-size: 0.82rem; color: #64748b; max-width: 400px; line-height: 1.5; margin-bottom: 16px; }
-        .template-template1 .preview-hero-image { width: 120px; height: 120px; border-radius: 16px; background: linear-gradient(135deg, <?php echo $e($accent); ?>20, <?php echo $e($accent); ?>08); display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
-        .template-template1 .preview-hero-image::after { content: '🏦'; font-size: 2rem; }
-        .template-template1 .preview-stats-card { position: absolute; bottom: -10px; left: -10px; background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); padding: 6px 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        .template-template1 .preview-stats-num { font-size: 0.85rem; font-weight: 800; color: <?php echo $e($accent); ?>; }
-        .template-template1 .preview-stats-label { font-size: 0.55rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-        .template-template1 .preview-cta { display: inline-block; padding: 10px 24px; background: linear-gradient(135deg, <?php echo $e($accent); ?>, <?php echo $e($accent); ?>cc); color: #ffffff; border-radius: 8px; font-size: 0.8rem; font-weight: 700; transition: 0.2s; text-decoration: none; }
-        .template-template1 .preview-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-        .template-template1 .preview-step { padding: 16px 12px; background: #f1f5f9; border-radius: 12px; transition: 0.3s; }
-        .template-template1 .preview-step:nth-child(2) { background: <?php echo $e($accent); ?>; }
-        .template-template1 .preview-step:nth-child(2) .preview-step-num,
-        .template-template1 .preview-step:nth-child(2) h6,
-        .template-template1 .preview-step:nth-child(2) p { color: #ffffff !important; }
-        .template-template1 .preview-step-num { font-size: 1.4rem; font-weight: 800; color: <?php echo $e($accent); ?>15; margin-bottom: 8px; }
-        .template-template1 .preview-step h6 { font-size: 0.78rem; font-weight: 700; color: <?php echo $e($accent); ?>; margin-bottom: 4px; }
-        .template-template1 .preview-step p { font-size: 0.65rem; color: #64748b; line-height: 1.4; }
-        .template-template1 .preview-sections { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-        .template-template1 .preview-section-card { padding: 20px 14px; background: #ffffff; border-radius: 12px; border: 1px solid <?php echo $e($accent); ?>08; transition: 0.3s; }
-        .template-template1 .preview-section-card:hover { box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
-        .template-template1 .preview-section-card h5 { font-size: 0.82rem; font-weight: 700; color: <?php echo $e($accent); ?>; margin-bottom: 8px; }
-        .template-template1 .preview-section-card p { font-size: 0.72rem; color: #64748b; line-height: 1.5; }
-        .template-template1 .preview-footer { padding: 20px 24px; border-top: 1px solid #f1f5f9; background: #ffffff; text-align: center; }
-        .template-template1 .preview-footer-text { font-size: 0.7rem; color: #94a3b8; }
-
-        /* ========== TEMPLATE 2: Editorial ========== */
-        .template-template2 { background: #fafafa !important; }
-        .template-template2 .preview-frame { border: none; border-radius: 0; overflow: hidden; background: #fafafa; }
-        .template-template2 .preview-header { padding: 12px 24px; background: #fafafa; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e5e5; }
-        .template-template2 .preview-logo { font-size: 0.9rem; font-weight: 700; color: <?php echo $e($accent); ?>; font-family: 'Georgia', serif; }
-        .template-template2 .preview-nav { display: flex; gap: 16px; }
-        .template-template2 .preview-nav-item { font-size: 0.72rem; color: #737373; cursor: pointer; transition: 0.2s; }
-        .template-template2 .preview-nav-item:hover { color: <?php echo $e($accent); ?>; }
-        .template-template2 .preview-content { background: #fafafa; padding: 0; }
-        .template-template2 .preview-hero { padding: 32px 24px; border-bottom: 1px solid #e5e5e5; }
-        .template-template2 .preview-hero-subtitle { font-size: 0.65rem; color: #a3a3a3; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 8px; }
-        .template-template2 .preview-hero-title { font-size: 1.8rem; font-weight: 700; color: <?php echo $e($accent); ?>; margin-bottom: 10px; font-family: 'Georgia', serif; line-height: 1.15; letter-spacing: -0.02em; }
-        .template-template2 .preview-hero-desc { font-size: 0.82rem; color: #737373; line-height: 1.6; }
-        .template-template2 .preview-hero-cta { display: inline-flex; align-items: center; gap: 6px; color: <?php echo $e($accent); ?>; font-size: 0.78rem; font-weight: 700; margin-top: 12px; text-decoration: none; }
-        .template-template2 .preview-hero-cta::after { content: '→'; }
-        .template-template2 .preview-narrative-image { width: 100%; height: 120px; background: linear-gradient(180deg, #e5e5e5, #fafafa); position: relative; overflow: hidden; }
-        .template-template2 .preview-narrative-image::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 40%; background: linear-gradient(transparent, #fafafa); }
-        .template-template2 .preview-narrative-badge { position: absolute; bottom: 12px; left: 16px; background: <?php echo $e($accent); ?>; color: #fff; font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 4px 10px; }
-        .template-template2 .preview-cta { display: none; }
-        .template-template2 .preview-sections { display: grid; grid-template-columns: 7fr 5fr; gap: 12px; padding: 20px 24px; }
-        .template-template2 .preview-section-card { background: #ffffff; padding: 18px; border: 1px solid #e5e5e5; transition: 0.2s; }
-        .template-template2 .preview-section-card:hover { border-color: <?php echo $e($accent); ?>30; }
-        .template-template2 .preview-section-card .card-num { font-size: 0.6rem; font-weight: 700; color: #a3a3a3; letter-spacing: 0.1em; margin-bottom: 8px; }
-        .template-template2 .preview-section-card h5 { font-size: 0.85rem; font-weight: 700; color: <?php echo $e($accent); ?>; margin-bottom: 6px; font-family: 'Georgia', serif; }
-        .template-template2 .preview-section-card p { font-size: 0.72rem; color: #737373; line-height: 1.5; }
-        .template-template2 .preview-section-card .explore-link { font-size: 0.68rem; color: <?php echo $e($accent); ?>; font-weight: 700; margin-top: 8px; display: inline-block; }
-        .template-template2 .preview-quote { padding: 24px; background: #f5f5f5; text-align: center; }
-        .template-template2 .preview-quote blockquote { font-size: 1rem; font-family: 'Georgia', serif; font-weight: 700; color: <?php echo $e($accent); ?>; line-height: 1.4; font-style: italic; }
-        .template-template2 .preview-quote cite { font-size: 0.65rem; color: #737373; display: block; margin-top: 8px; font-style: normal; font-weight: 600; }
-        .template-template2 .preview-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 24px; }
-        .template-template2 .preview-stat { border-left: 2px solid <?php echo $e($accent); ?>; padding-left: 12px; }
-        .template-template2 .preview-stat-num { font-size: 1.4rem; font-weight: 700; color: <?php echo $e($accent); ?>; font-family: 'Georgia', serif; }
-        .template-template2 .preview-stat-label { font-size: 0.6rem; color: #737373; text-transform: uppercase; letter-spacing: 0.05em; }
-        .template-template2 .preview-footer { padding: 16px 24px; background: #fafafa; text-align: left; border-top: 1px solid #e5e5e5; }
-        .template-template2 .preview-footer-text { font-size: 0.68rem; color: #a3a3a3; }
-
-        /* ========== TEMPLATE 3: Energetic ========== */
-        .template-template3 { background: #f0fdf4 !important; }
-        .template-template3 .preview-frame { border: none; border-radius: 16px; overflow: hidden; background: linear-gradient(135deg, #f0fdf4 0%, #ecfeff 50%, #f0f9ff 100%); }
-        .template-template3 .preview-header { padding: 14px 24px; background: rgba(255,255,255,0.7); backdrop-filter: blur(10px); display: flex; justify-content: space-between; align-items: center; }
-        .template-template3 .preview-logo { font-size: 0.95rem; font-weight: 800; color: <?php echo $e($accent); ?>; letter-spacing: -0.03em; }
-        .template-template3 .preview-nav { display: flex; gap: 14px; }
-        .template-template3 .preview-nav-item { font-size: 0.72rem; color: #64748b; cursor: pointer; transition: 0.2s; }
-        .template-template3 .preview-nav-item:hover { color: <?php echo $e($accent); ?>; }
-        .template-template3 .preview-cta-btn { padding: 6px 14px; background: <?php echo $e($accent); ?>; color: #fff; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
-        .template-template3 .preview-content { padding: 20px 24px; }
-        .template-template3 .preview-hero { display: grid; grid-template-columns: 1fr 140px; gap: 16px; align-items: center; margin-bottom: 24px; }
-        .template-template3 .preview-hero-left { }
-        .template-template3 .preview-hero-subtitle { display: inline-flex; align-items: center; gap: 4px; font-size: 0.65rem; font-weight: 700; color: <?php echo $e($accent); ?>; background: <?php echo $e($accent); ?>12; padding: 4px 10px; border-radius: 99px; margin-bottom: 10px; }
-        .template-template3 .preview-hero-subtitle::before { content: '🚀'; font-size: 0.7rem; }
-        .template-template3 .preview-hero-title { font-size: 1.5rem; font-weight: 800; color: <?php echo $e($accent); ?>; margin-bottom: 8px; line-height: 1.15; letter-spacing: -0.02em; }
-        .template-template3 .preview-hero-desc { font-size: 0.78rem; color: #64748b; line-height: 1.5; margin-bottom: 14px; }
-        .template-template3 .preview-hero-actions { display: flex; gap: 8px; }
-        .template-template3 .preview-cta { display: inline-block; padding: 10px 20px; background: <?php echo $e($accent); ?>; color: #ffffff; border-radius: 12px; font-size: 0.78rem; font-weight: 700; transition: 0.2s; text-decoration: none; }
-        .template-template3 .preview-cta-secondary { display: inline-block; padding: 10px 20px; color: <?php echo $e($accent); ?>; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
-        .template-template3 .preview-hero-image { width: 140px; height: 110px; border-radius: 20px; background: linear-gradient(135deg, <?php echo $e($accent); ?>15, <?php echo $e($accent); ?>05); display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden; }
-        .template-template3 .preview-hero-image::after { content: '⚡'; font-size: 2.2rem; }
-        .template-template3 .preview-float-card { position: absolute; background: rgba(255,255,255,0.7); backdrop-filter: blur(10px); padding: 5px 8px; border-radius: 8px; font-size: 0.55rem; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
-        .template-template3 .preview-float-card.top-right { top: -6px; right: -6px; color: <?php echo $e($accent); ?>; }
-        .template-template3 .preview-float-card.bottom-left { bottom: -6px; left: -6px; color: <?php echo $e($accent); ?>; }
-        .template-template3 .preview-sections { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
-        .template-template3 .preview-section-card { background: rgba(255,255,255,0.6); backdrop-filter: blur(10px); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 2px 8px rgba(0,0,0,0.03); transition: 0.3s; }
-        .template-template3 .preview-section-card:first-child { grid-column: span 2; }
-        .template-template3 .preview-section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
-        .template-template3 .preview-section-card h5 { font-size: 0.82rem; font-weight: 800; color: <?php echo $e($accent); ?>; margin-bottom: 6px; }
-        .template-template3 .preview-section-card p { font-size: 0.7rem; color: #64748b; line-height: 1.5; }
-        .template-template3 .preview-journey { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
-        .template-template3 .preview-journey-step { background: #f8fafc; padding: 14px 10px; border-radius: 16px; text-align: center; transition: 0.3s; }
-        .template-template3 .preview-journey-step:hover { background: <?php echo $e($accent); ?>; }
-        .template-template3 .preview-journey-step:hover * { color: #fff !important; }
-        .template-template3 .preview-journey-num { font-size: 1.2rem; font-weight: 800; color: <?php echo $e($accent); ?>15; margin-bottom: 4px; }
-        .template-template3 .preview-journey-step h6 { font-size: 0.72rem; font-weight: 700; color: <?php echo $e($accent); ?>; margin-bottom: 2px; }
-        .template-template3 .preview-journey-step p { font-size: 0.6rem; color: #64748b; line-height: 1.3; }
-        .template-template3 .preview-footer { padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; border-radius: 0 0 16px 16px; }
-        .template-template3 .preview-footer-text { font-size: 0.68rem; color: #94a3b8; }
-
         /* ========== Media Queries ========== */
         @media (max-width: 1020px) {
             .setup-layout { grid-template-columns: 1fr; }
@@ -480,24 +345,7 @@ $e = function ($val) {
 
             <div class="setup-layout">
                 <form method="POST" id="websiteSetupForm" enctype="multipart/form-data">
-                    <div class="section">
-                        <h3>Choose Design Template</h3>
-                        <p>Template 1 is currently available. Templates 2 and 3 are under development.</p>
-                        <div class="grid-3">
-                            <label class="template-option">
-                                <input type="radio" name="layout_template" value="template1" checked oninput="updatePreview()"> 
-                                <span>Template 1</span>
-                            </label>
-                            <label class="template-option unavailable" title="Under Development">
-                                <input type="radio" name="layout_template" value="template2" disabled>
-                                <span>Template 2 - Under Development</span>
-                            </label>
-                            <label class="template-option unavailable" title="Under Development">
-                                <input type="radio" name="layout_template" value="template3" disabled>
-                                <span>Template 3 - Under Development</span>
-                            </label>
-                        </div>
-                    </div>
+                    <input type="hidden" name="layout_template" value="template1">
 
                     <div class="section">
                         <h3>Hero Information</h3>
@@ -557,34 +405,6 @@ $e = function ($val) {
                             <label class="check-item"><input type="checkbox" name="website_show_contact" value="1" <?php echo $form['website_show_contact'] === '1' ? 'checked' : ''; ?> oninput="updatePreview()"> Show Contact</label>
                             <label class="check-item"><input type="checkbox" name="website_show_download" value="1" <?php echo $form['website_show_download'] === '1' ? 'checked' : ''; ?> oninput="updatePreview()"> Show Download</label>
                         </div>
-                        <div class="grid-2" style="margin-top: 12px;">
-                            <div class="form-group">
-                                <label>Download Section Title</label>
-                                <input class="form-control" type="text" name="website_download_title" value="<?php echo $e($form['website_download_title']); ?>" oninput="updatePreview()">
-                            </div>
-                            <div class="form-group">
-                                <label>Download Button Text</label>
-                                <input class="form-control" type="text" name="website_download_button_text" value="<?php echo $e($form['website_download_button_text']); ?>" oninput="updatePreview()">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Download Description</label>
-                            <textarea name="website_download_description" oninput="updatePreview()"><?php echo $e($form['website_download_description']); ?></textarea>
-                        </div>
-                        <div class="form-group" style="margin-top:14px;padding-top:14px;border-top:1px dashed #e2e8f0;">
-                            <label style="display:flex;align-items:center;gap:6px;">
-                                <span style="background:#0284c7;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:99px;letter-spacing:.05em;">FLUTTER</span>
-                                Mobile App Web URL
-                            </label>
-                            <input class="form-control" type="url" name="mobile_app_web_url"
-                                value="<?php echo $e($form['mobile_app_web_url'] ?? ''); ?>"
-                                placeholder="e.g. http://localhost:PORT  or  https://app.yourcompany.com">
-                            <p style="margin-top:6px;font-size:0.78rem;color:#64748b;">
-                                Paste your Flutter web app URL here. When visitors click "Download App", the app will open 
-                                <strong>already directed to <em><?php echo $e($tenant_name); ?></em></strong> 
-                                (the URL parameter <code>?tenant=<?php echo $e($_SESSION['tenant_id'] ?? ''); ?></code> is added automatically).
-                            </p>
-                        </div>
                     </div>
 
                     <div class="actions">
@@ -609,10 +429,41 @@ $e = function ($val) {
         var accentColor = '<?php echo $e($accent); ?>';
         var tenantName = '<?php echo $e($tenant_name); ?>';
 
-        var iframeInited = false;
-        function initIframeDoc() {
+        function updatePreview() {
+            var form = document.getElementById('websiteSetupForm');
+            if (!form) return;
+            var templateEl = form.querySelector('input[name="layout_template"]:checked') || form.querySelector('input[name="layout_template"]');
+            var template = templateEl ? templateEl.value : 'template1';
+            var heroTitle = form.querySelector('input[name="hero_title"]')?.value ?? ('Welcome to ' + tenantName);
+            var heroSubtitle = form.querySelector('input[name="hero_subtitle"]')?.value ?? 'Your trusted microfinance partner';
+            var heroDesc = form.querySelector('textarea[name="hero_description"]')?.value ?? '';
+            var aboutBody = form.querySelector('textarea[name="about_body"]')?.value ?? '';
+            var contactPhone = form.querySelector('input[name="contact_phone"]')?.value ?? '';
+            var contactEmail = form.querySelector('input[name="contact_email"]')?.value ?? '';
+            var contactAddr = form.querySelector('textarea[name="contact_address"]')?.value ?? '';
+            var contactHours = form.querySelector('input[name="contact_hours"]')?.value ?? '';
+
+            var showAbout = form.querySelector('input[name="website_show_about"]')?.checked ?? false;
+            var showServices = form.querySelector('input[name="website_show_services"]')?.checked ?? false;
+            var showContact = form.querySelector('input[name="website_show_contact"]')?.checked ?? false;
+            var showDownload = form.querySelector('input[name="website_show_download"]')?.checked ?? false;
+
+            var downloadTitle = 'Download Our App';
+            var downloadDesc = 'Get the app for faster loan tracking and updates.';
+            var downloadBtn = 'Download App';
+
+            var html = '';
+            if (template === 'template1') {
+                html = generateTemplate1(heroTitle, heroSubtitle, heroDesc, aboutBody, contactPhone, contactEmail, contactAddr, contactHours, downloadTitle, downloadDesc, downloadBtn, showAbout, showServices, showContact, showDownload);
+            }
+
             var iframe = document.getElementById('previewContainer');
-            var docHtml = `
+            if (iframe && iframe.contentDocument) {
+                var doc = iframe.contentDocument;
+                
+                if (!doc.getElementById('preview-body-content')) {
+                    doc.open();
+                    doc.write(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -621,14 +472,6 @@ $e = function ($val) {
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Public+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0&display=swap" rel="stylesheet"/>
-<script>
-window.addEventListener('message', function(e) {
-    if (e.data && e.data.html !== undefined) {
-        var el = document.getElementById('preview-body-content');
-        if (el) el.innerHTML = e.data.html;
-    }
-});
-<\/script>
 <style>
     :root {
         --brand: ${accentColor};
@@ -679,51 +522,14 @@ window.addEventListener('message', function(e) {
 <div id="preview-body-content"></div>
 </body>
 </html>
-            `;
-            iframe.onload = function() {
-                if (iframeInited) {
-                    var html = window.lastGeneratedHtml || '';
-                    if (html) iframe.contentWindow.postMessage({ html: html }, '*');
+                    `);
+                    doc.close();
                 }
-            };
-            iframe.srcdoc = docHtml;
-            iframeInited = true;
-        }
 
-        function updatePreview() {
-            if (!iframeInited) initIframeDoc();
-
-            var form = document.getElementById('websiteSetupForm');
-            if (!form) return;
-            var templateEl = form.querySelector('input[name="layout_template"]:checked');
-            var template = templateEl ? templateEl.value : 'template1';
-            var heroTitle = form.querySelector('input[name="hero_title"]').value || 'Welcome to ' + tenantName;
-            var heroSubtitle = form.querySelector('input[name="hero_subtitle"]').value || 'Your trusted microfinance partner';
-            var heroDesc = form.querySelector('textarea[name="hero_description"]').value;
-            var aboutBody = form.querySelector('textarea[name="about_body"]').value;
-            var contactPhone = form.querySelector('input[name="contact_phone"]').value;
-            var contactEmail = form.querySelector('input[name="contact_email"]').value;
-            var contactAddr = form.querySelector('textarea[name="contact_address"]').value;
-            var contactHours = form.querySelector('input[name="contact_hours"]').value;
-
-            var showAbout = form.querySelector('input[name="website_show_about"]').checked;
-            var showServices = form.querySelector('input[name="website_show_services"]').checked;
-            var showContact = form.querySelector('input[name="website_show_contact"]').checked;
-            var showDownload = form.querySelector('input[name="website_show_download"]').checked;
-
-            var downloadTitle = form.querySelector('input[name="website_download_title"]').value || 'Download Our App';
-            var downloadDesc = form.querySelector('textarea[name="website_download_description"]').value || 'Get the app for faster access.';
-            var downloadBtn = form.querySelector('input[name="website_download_button_text"]').value || 'Download App';
-
-            var html = '';
-            if (template === 'template1') {
-                html = generateTemplate1(heroTitle, heroSubtitle, heroDesc, aboutBody, contactPhone, contactEmail, contactAddr, contactHours, downloadTitle, downloadDesc, downloadBtn, showAbout, showServices, showContact, showDownload);
-            }
-
-            window.lastGeneratedHtml = html;
-            var iframe = document.getElementById('previewContainer');
-            if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({ html: html }, '*');
+                var container = doc.getElementById('preview-body-content');
+                if (container) {
+                    container.innerHTML = html;
+                }
             }
         }
 

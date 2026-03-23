@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     if ($is_talk_to_expert && $plan_tier === '') {
-        // Preserve existing tenant insertion constraints without asking for plan in talk-to-expert mode.
+        // Inquiries do not choose a subscription plan — leave plan_tier empty.
         $plan_tier = null;
     }
 
@@ -170,9 +170,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     'Enterprise' => ['clients' => 10000, 'users' => 5000],
                     'Unlimited' => ['clients' => -1, 'users' => -1],
                 ];
-                $mrr = $plan_tier ? ($plan_pricing_map[$plan_tier] ?? 4999.00) : 0.00;
-                $max_c = $plan_tier ? ($plan_limits_map[$plan_tier]['clients'] ?? 1000) : 1000;
-                $max_u = $plan_tier ? ($plan_limits_map[$plan_tier]['users'] ?? 250) : 250;
+                if ($is_talk_to_expert) {
+                    // Inquiries have no subscription — no plan, MRR, or limits
+                    $plan_tier = null;
+                    $mrr = 0;
+                    $max_c = 0;
+                    $max_u = 0;
+                } else {
+                    $mrr = $plan_pricing_map[$plan_tier] ?? 4999.00;
+                    $max_c = $plan_limits_map[$plan_tier]['clients'] ?? 1000;
+                    $max_u = $plan_limits_map[$plan_tier]['users'] ?? 250;
+                }
 
                 try {
                     $pdo->exec("ALTER TABLE tenants ADD COLUMN concern_category VARCHAR(150) NULL AFTER request_type");
@@ -1086,6 +1094,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </div>
                     <?php endif; ?>
 
+                    <div class="form-group" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+                        <label style="display: flex; gap: 10px; cursor: pointer; align-items: flex-start;">
+                            <input type="checkbox" name="agree_terms" required style="margin-top: 4px; accent-color: var(--primary);">
+                            <span style="font-weight: 400; font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;">
+                                By submitting this request, I agree to the
+                                <a href="#" id="open-tos-modal" style="color: #93c5fd; text-decoration: none;">Terms of Service</a>
+                                and <a href="#" id="open-pp-modal" style="color: #93c5fd; text-decoration: none;">Privacy Policy</a>.
+                                I understand that my information will be handled securely and according to these policies.
+                            </span>
+                        </label>
+                    </div>
+
                     <button type="submit" id="btn-final-submit" class="btn btn-primary btn-block" style="opacity: 0.5; pointer-events: none;"><?php echo $is_talk_to_expert ? 'Inquire' : 'Apply Now'; ?></button>
                     <small id="form-block-note" style="display: block; text-align: center; margin-top: 10px; color: #ef4444;">Verify your email to enable submission.</small>
                 </form>
@@ -1093,6 +1113,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </div>
         </div>
     </div>
+
+    <!-- Terms of Service Modal -->
+    <div id="tos-modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; overflow-y:auto; padding:40px 20px;">
+        <div style="background:#0f1b33; border:1px solid rgba(147,197,253,0.25); border-radius:16px; max-width:680px; margin:0 auto; padding:36px; color:#e2e8f0; line-height:1.7;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                <h2 style="margin:0; font-size:1.3rem; color:#f8fbff;">Terms of Service &amp; Refund Policy</h2>
+                <button id="close-tos-modal" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:1.5rem; line-height:1;">&times;</button>
+            </div>
+            <p style="color:#94a3b8; font-size:0.82rem; margin-bottom:20px;">Effective Date: <?php echo date('F d, Y'); ?> &mdash; MicroFin Platform</p>
+
+            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">1. Acceptance of Terms</h3>
+            <p style="font-size:0.88rem;">By submitting an application to use the MicroFin platform, you agree to be bound by these Terms of Service. If you do not agree, do not proceed with your application.</p>
+
+            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">2. Subscription &amp; Payment Rules</h3>
+            <p style="font-size:0.88rem;">Upon approval and completion of your billing setup, the following payment rules apply:</p>
+            <ul style="font-size:0.88rem; padding-left:20px; margin-top:8px;">
+                <li><strong>Prorated Initial Charge:</strong> Your first charge will be a prorated amount calculated from your activation date to your next selected billing date (1st or 15th of the month).</li>
+                <li><strong>Recurring Billing:</strong> After the initial prorated charge, you will be billed the full monthly subscription fee on either the 1st or 15th of each month, depending on your selected billing cycle.</li>
+                <li><strong>Automatic Deduction:</strong> Payments are automatically charged to your registered payment method. It is your responsibility to ensure sufficient funds are available.</li>
+                <li><strong>Late Payment:</strong> Failure to complete payment may result in suspension of your tenant account until the outstanding balance is settled.</li>
+                <li><strong>Plan Changes:</strong> Upgrades take effect immediately with a prorated adjustment. Downgrades take effect on the next billing cycle.</li>
+                <li><strong>Billing Disputes:</strong> Any billing disputes must be raised within 30 days of the charge date by contacting MicroFin support.</li>
+            </ul>
+
+            <h3 style="color:#f87171; font-size:0.95rem; margin:20px 0 8px;">3. No-Refund Policy</h3>
+            <p style="font-size:0.88rem;">All subscription fees paid to MicroFin are <strong>strictly non-refundable</strong>. This includes, but is not limited to:</p>
+            <ul style="font-size:0.88rem; padding-left:20px; margin-top:8px;">
+                <li>Prorated initial charges upon account activation.</li>
+                <li>Monthly recurring subscription fees, regardless of usage during the billing period.</li>
+                <li>Fees charged during any period prior to account suspension or cancellation.</li>
+                <li>Any partial month charges resulting from mid-cycle plan changes.</li>
+            </ul>
+            <p style="font-size:0.88rem; margin-top:8px;">We encourage you to evaluate the platform thoroughly during any trial or demo period before committing to a paid subscription.</p>
+
+            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">4. Account Termination</h3>
+            <p style="font-size:0.88rem;">MicroFin reserves the right to terminate or suspend any account that violates these terms, fails to pay subscription fees, or engages in fraudulent activity. Termination does not entitle the tenant to a refund of any previously paid fees.</p>
+
+            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">5. Data &amp; Privacy</h3>
+            <p style="font-size:0.88rem;">Your data is stored in an isolated tenant environment. MicroFin will not share or sell your data to third parties. Card details are encrypted using AES-256 and CVV is never stored. All transactions are logged for compliance and audit purposes.</p>
+
+            <div style="margin-top:28px; text-align:right;">
+                <button id="close-tos-modal-btn" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6); color:#fff; border:none; border-radius:8px; padding:10px 24px; font-weight:600; cursor:pointer;">I Understand</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const tosBackdrop = document.getElementById('tos-modal-backdrop');
+        const openTos = document.getElementById('open-tos-modal');
+        const closeTos = document.getElementById('close-tos-modal');
+        const closeTosBt = document.getElementById('close-tos-modal-btn');
+        if (openTos) openTos.addEventListener('click', e => { e.preventDefault(); tosBackdrop.style.display = 'block'; document.body.style.overflow='hidden'; });
+        if (closeTos) closeTos.addEventListener('click', () => { tosBackdrop.style.display = 'none'; document.body.style.overflow=''; });
+        if (closeTosBt) closeTosBt.addEventListener('click', () => { tosBackdrop.style.display = 'none'; document.body.style.overflow=''; });
+        if (tosBackdrop) tosBackdrop.addEventListener('click', e => { if (e.target === tosBackdrop) { tosBackdrop.style.display='none'; document.body.style.overflow=''; } });
+    });
+    </script>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {

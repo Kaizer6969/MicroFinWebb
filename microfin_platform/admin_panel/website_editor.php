@@ -72,9 +72,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'website_show_services' => isset($_POST['website_show_services']) ? '1' : '0',
         'website_show_contact' => isset($_POST['website_show_contact']) ? '1' : '0',
         'website_show_download' => isset($_POST['website_show_download']) ? '1' : '0',
-        'website_download_title' => trim($_POST['website_download_title'] ?? 'Download Our App'),
-        'website_download_description' => trim($_POST['website_download_description'] ?? 'Get the app for faster loan tracking and updates.'),
-        'website_download_button_text' => trim($_POST['website_download_button_text'] ?? 'Download App'),
         'website_download_url' => trim($_POST['website_download_url'] ?? '')
     ];
 
@@ -186,13 +183,21 @@ $website_defaults = [
     'website_show_services' => '1',
     'website_show_contact' => '1',
     'website_show_download' => '1',
-    'website_download_title' => 'Download Our App',
-    'website_download_description' => 'Get the app for faster loan tracking and updates.',
-    'website_download_button_text' => 'Download App',
     'website_download_url' => ''
 ];
 $website_config = $website_defaults;
-$settings_stmt = $pdo->prepare("\n    SELECT setting_key, setting_value\n    FROM system_settings\n    WHERE tenant_id = ?\n      AND setting_key IN (\n        'website_show_about',\n        'website_show_services',\n        'website_show_contact',\n        'website_show_download',\n        'website_download_title',\n        'website_download_description',\n        'website_download_button_text',\n        'website_download_url'\n      )\n");
+$settings_stmt = $pdo->prepare("
+    SELECT setting_key, setting_value
+    FROM system_settings
+    WHERE tenant_id = ?
+      AND setting_key IN (
+        'website_show_about',
+        'website_show_services',
+        'website_show_contact',
+        'website_show_download',
+        'website_download_url'
+      )
+");
 $settings_stmt->execute([$tenant_id]);
 foreach ($settings_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     if (array_key_exists($row['setting_key'], $website_config)) {
@@ -549,22 +554,8 @@ $site_url = '../site.php?site=' . urlencode($tenant_slug);
                                 <h3 style="font-size: 1rem; margin-bottom: 8px;">App Download Content</h3>
                                 <p class="card-desc">This section is best for your app install link only.</p>
                                 <div class="form-group">
-                                    <label>Download Section Title</label>
-                                    <input type="text" name="website_download_title" class="form-input" value="<?php echo $e($website_config['website_download_title']); ?>" placeholder="Download Our App">
-                                </div>
-                                <div class="form-group">
-                                    <label>Description</label>
-                                    <textarea name="website_download_description" class="form-textarea" rows="3" placeholder="Tell users why they should install your app."><?php echo $e($website_config['website_download_description']); ?></textarea>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>Button Text</label>
-                                        <input type="text" name="website_download_button_text" class="form-input" value="<?php echo $e($website_config['website_download_button_text']); ?>" placeholder="Download App">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>App Download URL</label>
-                                        <input type="url" name="website_download_url" class="form-input" value="<?php echo $e($website_config['website_download_url']); ?>" placeholder="https://play.google.com/store/apps/details?id=...">
-                                    </div>
+                                    <label>App Download URL</label>
+                                    <input type="url" name="website_download_url" class="form-input" value="<?php echo $e($website_config['website_download_url']); ?>" placeholder="https://play.google.com/store/apps/details?id=...">
                                 </div>
                             </div>
                         </div>
