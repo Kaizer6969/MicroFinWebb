@@ -7,8 +7,8 @@
 --   Example Tenants: Fundline (Marilao), PlaridelMicroFin, Sacred Heart Coop
 -- ============================================================
 -- GUIDE:
---   ✅ EDITED  = Discussed and agreed upon, ready to implement
---   ⚠ CONSIDER    = Needs approval before implementing
+--   ✅ Approved  = Discussed and agreed upon, ready to implement
+--   ⚠ Pending    = Needs approval before implementing
 --   🔒 SECURITY  = Security-related decision
 --   📝 NOTE      = Context or explanation
 -- ============================================================
@@ -29,14 +29,14 @@ USE microfin_db;
 -- ============================================================
 -- PURPOSE: Core multi-tenant registry. Each row = one customer organization.
 --
--- ✅ EDITED: Soft-delete with deleted_at, deleted_by, deletion_reason
--- ✅ EDITED: 30-day auto-purge after soft delete (via PHP cron, not MySQL Event)
--- ✅ EDITED: Track tenant status changes via audit_logs (application-level PHP, not triggers)
--- ✅ EDITED: Branding fields moved to tenant_branding table (TABLE A2)
--- ✅ EDITED: Proof of legitimacy uploads moved to tenant_legitimacy_documents (TABLE A3)
--- ✅ EDITED: setup_token removed — just use slug for tenant access
--- ✅ EDITED: tenant_id is system-generated immutable 10-character alphanumeric identifier (tenant_slug remains editable)
--- ✅ EDITED: Added request_type to separate Tenant Application vs Talk to an Expert flows
+-- ✅ Approved: Soft-delete with deleted_at, deleted_by, deletion_reason
+-- ✅ Approved: 30-day auto-purge after soft delete (via PHP cron, not MySQL Event)
+-- ✅ Approved: Track tenant status changes via audit_logs (application-level PHP, not triggers)
+-- ✅ Approved: Branding fields moved to tenant_branding table (TABLE A2)
+-- ✅ Approved: Proof of legitimacy uploads moved to tenant_legitimacy_documents (TABLE A3)
+-- ✅ Approved: setup_token removed — just use slug for tenant access
+-- ✅ Approved: tenant_id is system-generated immutable 10-character alphanumeric identifier (tenant_slug remains editable)
+-- ✅ Approved: Added request_type to separate Tenant Application vs Talk to an Expert flows
 --
 -- STATUS FLOW:
 --   tenant_application: Pending → Active/Suspended/Rejected
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     assigned_expert_user_id INT NULL
         COMMENT 'Optional owner of talk_to_expert follow-up (maps to users.user_id in app logic)',
 
-    -- ✅ EDITED: Soft delete columns
+    -- ✅ Approved: Soft delete columns
     deleted_at TIMESTAMP NULL COMMENT 'Soft delete timestamp, NULL = active',
     deleted_by INT NULL COMMENT 'User ID who initiated deletion',
     deletion_reason TEXT COMMENT 'Why this tenant was deleted/archived',
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS tenants (
 -- TABLE A2: tenant_branding (Tenant Visual Identity)
 -- ============================================================
 -- PURPOSE: Per-tenant editable design/branding without cluttering tenants table.
--- ✅ EDITED: Separated from tenants table for cleaner architecture.
+-- ✅ Approved: Separated from tenants table for cleaner architecture.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS tenant_branding (
     branding_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -153,9 +153,9 @@ CREATE TABLE IF NOT EXISTS tenant_legitimacy_documents (
 --     • otp_verifications = "what is the current OTP code?" (temporary)
 --     • users.email_verified = "is the email verified?" (permanent flag)
 --
--- ✅ EDITED: Keep this table as-is. No changes needed.
--- ✅ EDITED: Timer lives in DB (expires_at), NOT in .json or browser
--- ✅ EDITED: No attempt_count column needed for now
+-- ✅ Approved: Keep this table as-is. No changes needed.
+-- ✅ Approved: Timer lives in DB (expires_at), NOT in .json or browser
+-- ✅ Approved: No attempt_count column needed for now
 --
 -- 📝 NOTE: otp_code CANNOT be the primary key because:
 --   • Two users can get the same 6-digit code at the same time (collision)
@@ -207,9 +207,9 @@ DELIMITER ;
 -- ============================================================
 -- PURPOSE: Payment methods for tenant subscription charges.
 --
--- ✅ EDITED: Use AES encryption (PHP-side, openssl_encrypt) for full card number
--- ✅ EDITED: Store last_four_digits separately in plain text for display
--- ✅ EDITED: CVC completely removed — NEVER stored
+-- ✅ Approved: Use AES encryption (PHP-side, openssl_encrypt) for full card number
+-- ✅ Approved: Store last_four_digits separately in plain text for display
+-- ✅ Approved: CVC completely removed — NEVER stored
 -- 🔒 SECURITY: Encrypt/decrypt in PHP using openssl_encrypt/openssl_decrypt
 --   Store the encryption key in .env file, NEVER in code or database.
 --
@@ -248,9 +248,9 @@ CREATE TABLE IF NOT EXISTS tenant_billing_payment_methods (
 -- ============================================================
 -- PURPOSE: Monthly subscription invoicing for multi-tenant billing.
 --
--- ⚠ CONSIDER: No retry/payment processing history
--- ⚠ CONSIDER: No dunning management (escalation for unpaid invoices)
--- ⚠ CONSIDER: Add payment_attempts counter, next_retry_date for failed invoices
+-- ⚠ Pending: No retry/payment processing history
+-- ⚠ Pending: No dunning management (escalation for unpaid invoices)
+-- ⚠ Pending: Add payment_attempts counter, next_retry_date for failed invoices
 -- ============================================================
 CREATE TABLE IF NOT EXISTS tenant_billing_invoices (
     invoice_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -285,11 +285,11 @@ CREATE TABLE IF NOT EXISTS tenant_billing_invoices (
 -- ============================================================
 -- PURPOSE: Roles for RBAC — includes tenant roles AND system roles (super_admin).
 --
--- ✅ EDITED: Solid design, no structural changes needed
--- ✅ EDITED: tenant_id NULL for platform-level roles (super_admin)
--- ✅ EDITED: is_system_role prevents deletion of critical default roles
--- ✅ EDITED: UNIQUE(tenant_id, role_name) prevents duplicates per tenant
--- ✅ EDITED: Soft-delete columns (deleted_at, deleted_by, updated_at)
+-- ✅ Approved: Solid design, no structural changes needed
+-- ✅ Approved: tenant_id NULL for platform-level roles (super_admin)
+-- ✅ Approved: is_system_role prevents deletion of critical default roles
+-- ✅ Approved: UNIQUE(tenant_id, role_name) prevents duplicates per tenant
+-- ✅ Approved: Soft-delete columns (deleted_at, deleted_by, updated_at)
 --
 -- 📝 NOTE: MySQL treats NULL specially in UNIQUE indexes.
 --   Two rows with tenant_id=NULL, role_name='super_admin' would BOTH be allowed
@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
     role_description TEXT,
     is_system_role BOOLEAN DEFAULT FALSE COMMENT 'If true, cannot be deleted (e.g. default Admin, super_admin)',
 
-    -- ✅ EDITED: Soft delete
+    -- ✅ Approved: Soft delete
     deleted_at TIMESTAMP NULL,
     deleted_by INT NULL,
 
@@ -339,11 +339,11 @@ INSERT INTO permissions (permission_code, module, description) VALUES
 ('CREATE_CLIENTS', 'Clients', 'Can register new clients'),
 ('VIEW_LOANS', 'Loans', 'Can view loan applications and active loans'),
 ('CREATE_LOANS', 'Loans', 'Can draft new loan applications'),
-('APPROVE_LOANS', 'Loans', 'Can approve or reject CONSIDER loans'),
+('APPROVE_LOANS', 'Loans', 'Can approve or reject Pending loans'),
 ('PROCESS_PAYMENTS', 'Payments', 'Can receive and post loan payments'),
 ('VIEW_REPORTS', 'Reports', 'Can generate and view financial reports'),
-('VIEW_APPLICATIONS', 'Applications', 'Can view CONSIDER loan applications'),
-('MANAGE_APPLICATIONS', 'Applications', 'Can approve, reject, or process CONSIDER loan applications');
+('VIEW_APPLICATIONS', 'Applications', 'Can view Pending loan applications'),
+('MANAGE_APPLICATIONS', 'Applications', 'Can approve, reject, or process Pending loan applications');
 
 
 -- ============================================================
@@ -376,21 +376,21 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 -- PURPOSE: Core authentication table for ALL users.
 --   This table = WHO CAN LOG IN. Profile data lives in employees/clients tables.
 --
--- ✅ EDITED: Keep tenant_id (nullable) — NULL only for Super Admins
--- ✅ EDITED: Add basic profile fields (first_name, last_name, date_of_birth, phone_number)
--- ✅ EDITED: super_admins table REMOVED — merged into users with RBAC
--- ✅ EDITED: 'App User' type REMOVED — no longer needed (tenant-scoped app flow)
--- ✅ EDITED: Email is per-tenant unique (uq_tenant_email) — confirmed correct
+-- ✅ Approved: Keep tenant_id (nullable) — NULL only for Super Admins
+-- ✅ Approved: Add basic profile fields (first_name, last_name, date_of_birth, phone_number)
+-- ✅ Approved: super_admins table REMOVED — merged into users with RBAC
+-- ✅ Approved: 'App User' type REMOVED — no longer needed (tenant-scoped app flow)
+-- ✅ Approved: Email is per-tenant unique (uq_tenant_email) — confirmed correct
 --
--- ⚠ CONSIDER: Remove username column? (Use email as sole login identifier)
+-- ⚠ Pending: Remove username column? (Use email as sole login identifier)
 --   Currently kept for backward compatibility. If you approve removal,
 --   all login logic needs to switch from username to email.
 --
--- ✅ EDITED: Soft-delete (deleted_at TIMESTAMP NULL)
+-- ✅ Approved: Soft-delete (deleted_at TIMESTAMP NULL)
 --
--- ✅ EDITED: Add 2FA fields (2fa_enabled, 2fa_secret) for new device auth
+-- ✅ Approved: Add 2FA fields (2fa_enabled, 2fa_secret) for new device auth
 --
--- ⚠ CONSIDER: Add account_locked_until DATETIME for bruteforce protection?
+-- ⚠ Pending: Add account_locked_until DATETIME for bruteforce protection?
 --   (Right now only failed_login_attempts is tracked, no auto-lock timer)
 --
 -- MENTAL MODEL:
@@ -442,7 +442,7 @@ CREATE TABLE IF NOT EXISTS users (
     force_password_change BOOLEAN DEFAULT FALSE,
     role_id INT NOT NULL,
     user_type ENUM('Employee', 'Client', 'Admin', 'applicant', 'inquirer', 'Super Admin') NOT NULL
-             COMMENT '✅ EDITED: Includes intake/provisioning flow states (applicant/inquirer -> Admin)',
+             COMMENT '✅ Approved: Includes intake/provisioning flow states (applicant/inquirer -> Admin)',
     status ENUM('Active', 'Inactive', 'Suspended', 'Locked') DEFAULT 'Active',
 
     -- Security
@@ -485,9 +485,9 @@ CREATE TABLE IF NOT EXISTS users (
 -- ============================================================
 -- PURPOSE: Session tracking for active user logins (security & audit).
 --
--- ⚠ CONSIDER: Add is_active flag for soft-delete of sessions
--- ⚠ CONSIDER: Add logout_at DATETIME + reason (manual/timeout/admin revoke)
--- ⚠ CONSIDER: Concurrent session limits? (max 3 sessions per user?)
+-- ⚠ Pending: Add is_active flag for soft-delete of sessions
+-- ⚠ Pending: Add logout_at DATETIME + reason (manual/timeout/admin revoke)
+-- ⚠ Pending: Concurrent session limits? (max 3 sessions per user?)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS user_sessions (
     session_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -519,14 +519,14 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 -- ============================================================
 -- PURPOSE: Complete audit trail for compliance & forensics.
 --
--- ✅ EDITED: Use application-level PHP logging (not MySQL triggers)
+-- ✅ Approved: Use application-level PHP logging (not MySQL triggers)
 --   so we can capture WHO performed the action (session user_id).
 --
--- ⚠ CONSIDER: Change ON DELETE SET NULL to ON DELETE RESTRICT?
+-- ⚠ Pending: Change ON DELETE SET NULL to ON DELETE RESTRICT?
 --   Currently if you delete a user, their audit trail loses the user_id.
 --   RESTRICT would prevent deleting users who have audit records.
 --
--- ⚠ CONSIDER: Add old_value TEXT and new_value TEXT columns?
+-- ⚠ Pending: Add old_value TEXT and new_value TEXT columns?
 --   Would allow tracking WHAT changed, not just THAT it changed.
 --
 -- WHAT TO LOG (via PHP after each action):
@@ -572,10 +572,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- PURPOSE: Extended employee profile — linked 1:1 to users table via user_id.
 --   users table = login credentials. This table = work profile (dept, position, HR data).
 --
--- ⚠ CONSIDER: Change ON DELETE CASCADE to ON DELETE RESTRICT on user_id?
+-- ⚠ Pending: Change ON DELETE CASCADE to ON DELETE RESTRICT on user_id?
 --   Currently deleting a user cascades to employee record.
--- ✅ EDITED: Soft-delete (deleted_at)
--- ⚠ CONSIDER: Add employment_end_date for resigned/terminated employees?
+-- ✅ Approved: Soft-delete (deleted_at)
+-- ⚠ Pending: Add employment_end_date for resigned/terminated employees?
 -- ============================================================
 CREATE TABLE IF NOT EXISTS employees (
     employee_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -596,7 +596,7 @@ CREATE TABLE IF NOT EXISTS employees (
     employment_status ENUM('Active', 'On Leave', 'Resigned', 'Terminated') DEFAULT 'Active',
     profile_picture VARCHAR(255),
 
-    -- ✅ EDITED: Soft delete
+    -- ✅ Approved: Soft delete
     deleted_at TIMESTAMP NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -621,18 +621,18 @@ CREATE TABLE IF NOT EXISTS employees (
 -- ============================================================
 -- PURPOSE: Client/borrower profiles with KYC data and credit information.
 --   Linked 1:1 to users table via user_id.
---   A user BECOMES a client when EDITED by a tenant admin.
+--   A user BECOMES a client when Approved by a tenant admin.
 --
--- ✅ EDITED: This table is NOT redundant with users.
+-- ✅ Approved: This table is NOT redundant with users.
 --   users = login/auth identity. clients = KYC, loans, credit, addresses.
 --   Not all users are clients (employees aren't).
 --
--- ⚠ CONSIDER: Normalize addresses into client_addresses table?
+-- ⚠ Pending: Normalize addresses into client_addresses table?
 --   Currently 32 columns for present + permanent address duplication.
--- ⚠ CONSIDER: Extract comaker_* fields into separate comakers table?
+-- ⚠ Pending: Extract comaker_* fields into separate comakers table?
 --   Currently duplicated in both clients AND loan_applications.
--- ✅ EDITED: Soft-delete (deleted_at)
--- ⚠ CONSIDER: Change ON DELETE CASCADE to RESTRICT on user_id?
+-- ✅ Approved: Soft-delete (deleted_at)
+-- ⚠ Pending: Change ON DELETE CASCADE to RESTRICT on user_id?
 -- ============================================================
 CREATE TABLE IF NOT EXISTS clients (
     client_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -678,7 +678,7 @@ CREATE TABLE IF NOT EXISTS clients (
     other_income_source VARCHAR(200),
     other_income_amount DECIMAL(12, 2),
 
-    -- Comaker Info (⚠ CONSIDER: extract to separate comakers table?)
+    -- Comaker Info (⚠ Pending: extract to separate comakers table?)
     comaker_name VARCHAR(150),
     comaker_relationship VARCHAR(50),
     comaker_contact VARCHAR(20),
@@ -697,7 +697,7 @@ CREATE TABLE IF NOT EXISTS clients (
     profile_picture VARCHAR(255),
     registration_date DATE NOT NULL,
     registered_by INT,
-    document_verification_status ENUM('Unverified', 'Verified', 'EDITED', 'Rejected') DEFAULT 'Unverified',
+    document_verification_status ENUM('Unverified', 'Verified', 'Approved', 'Rejected') DEFAULT 'Unverified',
     verification_rejection_reason TEXT,
 
     -- Credit
@@ -706,7 +706,7 @@ CREATE TABLE IF NOT EXISTS clients (
     seen_approval_modal BOOLEAN DEFAULT FALSE,
     credit_limit_tier INT DEFAULT 0,
 
-    -- ✅ EDITED: Soft delete
+    -- ✅ Approved: Soft delete
     deleted_at TIMESTAMP NULL,
 
     -- Timestamps
@@ -838,9 +838,9 @@ CREATE TABLE IF NOT EXISTS loan_products (
 -- TABLE I2: loan_applications (Loan Application Workflow)
 -- ============================================================
 -- PURPOSE: Loan application from submission through approval/rejection.
---   11-step workflow: Draft → Submitted → ... → EDITED/Rejected/Withdrawn
+--   11-step workflow: Draft → Submitted → ... → Approved/Rejected/Withdrawn
 --
--- ⚠ CONSIDER: Comaker data duplicated here AND in clients table — extract to comakers table?
+-- ⚠ Pending: Comaker data duplicated here AND in clients table — extract to comakers table?
 -- ============================================================
 CREATE TABLE IF NOT EXISTS loan_applications (
     application_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -849,7 +849,7 @@ CREATE TABLE IF NOT EXISTS loan_applications (
     tenant_id VARCHAR(50) NOT NULL,
     product_id INT NOT NULL,
     requested_amount DECIMAL(12, 2) NOT NULL,
-    EDITED_amount DECIMAL(12, 2),
+    approved_amount DECIMAL(12, 2),
     loan_term_months INT NOT NULL,
     interest_rate DECIMAL(5, 2) NOT NULL,
     loan_purpose TEXT,
@@ -857,20 +857,20 @@ CREATE TABLE IF NOT EXISTS loan_applications (
     application_status ENUM(
         'Draft', 'Submitted', 'Pending Review', 'Under Review',
         'Document Verification', 'Credit Investigation',
-        'For Approval', 'EDITED', 'Rejected', 'Cancelled', 'Withdrawn'
+        'For Approval', 'Approved', 'Rejected', 'Cancelled', 'Withdrawn'
     ) DEFAULT 'Draft',
     submitted_date DATETIME,
     reviewed_by INT,
     review_date DATETIME,
     review_notes TEXT,
-    EDITED_by INT,
+    approved_by INT,
     approval_date DATETIME,
     approval_notes TEXT,
     rejected_by INT,
     rejection_date DATETIME,
     rejection_reason TEXT,
 
-    -- Comaker (⚠ CONSIDER: extract to separate table?)
+    -- Comaker (⚠ Pending: extract to separate table?)
     has_comaker BOOLEAN DEFAULT FALSE,
     comaker_name VARCHAR(150),
     comaker_relationship VARCHAR(50),
@@ -884,7 +884,7 @@ CREATE TABLE IF NOT EXISTS loan_applications (
     FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id),
     FOREIGN KEY (product_id) REFERENCES loan_products(product_id),
     FOREIGN KEY (reviewed_by) REFERENCES employees(employee_id) ON DELETE SET NULL,
-    FOREIGN KEY (EDITED_by) REFERENCES employees(employee_id) ON DELETE SET NULL,
+    FOREIGN KEY (approved_by) REFERENCES employees(employee_id) ON DELETE SET NULL,
     FOREIGN KEY (rejected_by) REFERENCES employees(employee_id) ON DELETE SET NULL,
     INDEX idx_tenant (tenant_id),
     INDEX idx_status (application_status)
@@ -1165,14 +1165,14 @@ CREATE TABLE IF NOT EXISTS credit_scores (
 -- ============================================================
 -- TABLE L1: notifications (User Notifications/Alerts)
 -- ============================================================
--- PURPOSE: Application notifications (payments due, loan EDITED, etc).
+-- PURPOSE: Application notifications (payments due, loan Approved, etc).
 -- ============================================================
 CREATE TABLE IF NOT EXISTS notifications (
     notification_id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
     tenant_id VARCHAR(50) NOT NULL,
     notification_type ENUM(
-        'Payment Due', 'Payment Received', 'Loan EDITED', 'Loan Rejected',
+        'Payment Due', 'Payment Received', 'Loan Approved', 'Loan Rejected',
         'Document Required', 'Appointment Reminder', 'Message Received',
         'System Alert', 'General'
     ) NOT NULL,
@@ -1318,11 +1318,11 @@ CREATE TABLE IF NOT EXISTS tenant_website_content (
 
 -- ============================================================
 -- ============================================================
---   ITEMS STILL CONSIDER YOUR APPROVAL
+--   ITEMS STILL Pending YOUR APPROVAL
 -- ============================================================
 -- ============================================================
 --
--- These are things we discussed but you haven't explicitly EDITED yet.
+-- These are things we discussed but you haven't explicitly Approved yet.
 -- Reply with which ones you want applied.
 --
 -- ┌────┬──────────────────────────────────────────────────────────────┬──────────┐
@@ -1334,15 +1334,15 @@ CREATE TABLE IF NOT EXISTS tenant_website_content (
 -- │ 2  │ ❌ REJECTED — Per-tenant unique email is correct.            │ users    │
 -- │    │ Tenant-scoped flow: users always have tenant_id at signup.   │          │
 -- ├────┼──────────────────────────────────────────────────────────────┼──────────┤
--- │ 3  │ ✅ EDITED & APPLIED — soft-delete added to users,          │ multiple │
+-- │ 3  │ ✅ Approved & APPLIED — soft-delete added to users,          │ multiple │
 -- │    │ employees, clients, and user_roles.                          │          │
 -- ├────┼──────────────────────────────────────────────────────────────┼──────────┤
 -- │ 4  │ Add old_value/new_value columns to audit_logs?              │ audit    │
 -- ├────┼──────────────────────────────────────────────────────────────┼──────────┤
 -- │ 5  │ Change ON DELETE CASCADE to RESTRICT on audit-critical FKs? │ multiple │
--- │    │ (verified_by, EDITED_by, received_by, etc.)               │          │
+-- │    │ (verified_by, approved_by, received_by, etc.)               │          │
 -- ├────┼──────────────────────────────────────────────────────────────┼──────────┤
--- │ 6  │ ✅ EDITED & APPLIED — soft-delete added to user_roles     │ roles    │
+-- │ 6  │ ✅ Approved & APPLIED — soft-delete added to user_roles     │ roles    │
 -- │    │ (deleted_at, deleted_by, updated_at).                       │          │
 -- ├────┼──────────────────────────────────────────────────────────────┼──────────┤
 -- │ 7  │ Normalize client addresses into client_addresses table?     │ clients  │
@@ -1350,7 +1350,7 @@ CREATE TABLE IF NOT EXISTS tenant_website_content (
 -- │ 8  │ Extract comaker data into separate comakers table?          │ clients  │
 -- │    │ (Currently duplicated in clients AND loan_applications)     │ + loans  │
 -- ├────┼──────────────────────────────────────────────────────────────┼──────────┤
--- │ 9  │ ✅ EDITED & APPLIED — 2FA fields added to users            │ users    │
+-- │ 9  │ ✅ Approved & APPLIED — 2FA fields added to users            │ users    │
 -- │    │ (two_fa_enabled, two_fa_secret, two_fa_recovery_codes).    │          │
 -- ├────┼──────────────────────────────────────────────────────────────┼──────────┤
 -- │ 10 │ Add account_locked_until DATETIME for auto-lock on brute?  │ users    │

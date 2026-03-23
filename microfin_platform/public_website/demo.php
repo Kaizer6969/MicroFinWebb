@@ -85,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $contact_number = trim($_POST['contact_number'] ?? '');
     $company_address = trim($_POST['location'] ?? '');
     $location = $company_address;
+    $concern_category = trim($_POST['concern_category'] ?? '');
     $plan_tier = trim($_POST['plan_tier'] ?? '');
     $company_email = trim($_POST['company_email'] ?? '');
     $demo_schedule_date = trim($_POST['demo_schedule_date'] ?? '');
@@ -116,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     if ($is_talk_to_expert && $plan_tier === '') {
         // Preserve existing tenant insertion constraints without asking for plan in talk-to-expert mode.
-        $plan_tier = 'Starter';
+        $plan_tier = null;
     }
 
     $document_count = 0;
@@ -133,9 +134,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $is_otp_verified = true;
     }
 
-    if ($institution_name === '' || $company_email === '' || (!$is_talk_to_expert && $plan_tier === '')) {
+    if ($institution_name === '' || $company_email === '' || (!$is_talk_to_expert && $plan_tier === '') || ($is_talk_to_expert && $concern_category === '')) {
         $form_error = $is_talk_to_expert
-            ? 'Institution Name and Work Email are required.'
+            ? 'Institution Name, Work Email, and Category of Concern are required.'
             : 'Institution Name, Work Email, and Subscription Plan are required.';
     } elseif (!$is_talk_to_expert && ($document_count < 1 || $document_count > 5)) {
         $form_error = 'Please upload 1 to 5 proof of legitimacy documents.';
@@ -169,9 +170,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     'Enterprise' => ['clients' => 10000, 'users' => 5000],
                     'Unlimited' => ['clients' => -1, 'users' => -1],
                 ];
-                $mrr = $plan_pricing_map[$plan_tier] ?? 4999.00;
-                $max_c = $plan_limits_map[$plan_tier]['clients'] ?? 1000;
-                $max_u = $plan_limits_map[$plan_tier]['users'] ?? 250;
+                $mrr = $plan_tier ? ($plan_pricing_map[$plan_tier] ?? 4999.00) : 0.00;
+                $max_c = $plan_tier ? ($plan_limits_map[$plan_tier]['clients'] ?? 1000) : 1000;
+                $max_u = $plan_tier ? ($plan_limits_map[$plan_tier]['users'] ?? 250) : 250;
+
+                try {
+                    $pdo->exec("ALTER TABLE tenants ADD COLUMN concern_category VARCHAR(150) NULL AFTER request_type");
+                } catch (Throwable $e) {}
 
                 $pdo->beginTransaction();
 
@@ -240,6 +245,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             $company_email, $mrr, $max_c, $max_u, $request_status
                         ]);
                     }
+
+                if ($concern_category !== '') {
+                    try {
+                        $stmtUpdate = $pdo->prepare("UPDATE tenants SET concern_category = ? WHERE tenant_id = ?");
+                        $stmtUpdate->execute([$concern_category, $tenant_id]);
+                    } catch (Throwable $e) {}
+                }
 
                 $admin_role_stmt = $pdo->prepare("INSERT INTO user_roles (tenant_id, role_name, role_description, is_system_role) VALUES (?, 'Admin', 'Default system administrator', TRUE)");
                 $admin_role_stmt->execute([$tenant_id]);
@@ -959,6 +971,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <label>Location</label>
                         <input type="text" class="input-field" name="location" placeholder="e.g. City, Region or Country">
                     </div>
+
+                    <?php if ($is_talk_to_expert): ?>
+                    <div class="form-group">
+                        <label>Category of Concern <span class="text-danger">*</span></label>
+                        <select class="input-field" name="concern_category" required style="appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=%22%237d8ca5%22 height=%2224%22 viewBox=%220 0 24 24%22 width=%2224%22 xmlns=%22http://www.w3.org/2000/svg%22><path d=%22M7 10l5 5 5-5z%22/></svg>'); background-repeat: no-repeat; background-position-x: 98%; background-position-y: center;">
+                            <option value="" disabled selected>Select a category</option>
+                            <option value="General Inquiry">General Inquiry</option>
+                            <option value="Pricing & Billing">Pricing & Billing</option>
+                            <option value="Technical Integration">Technical Integration</option>
+                            <option value="Security & Compliance">Security & Compliance</option>
+                            <option value="Custom Features">Custom Features</option>
+                            <option value="Migration">Migration from existing system</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <?php endif; ?>
 
                     <?php if (!$is_talk_to_expert): ?>
                     <div class="form-group">
