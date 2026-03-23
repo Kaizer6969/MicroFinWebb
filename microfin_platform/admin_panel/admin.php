@@ -22,16 +22,27 @@ $ui_theme = (($_SESSION['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
 $can_manage_billing = false;
 $user_id_check = $_SESSION['user_id'] ?? 0;
 if ($user_id_check > 0) {
-    $fpc_stmt = $pdo->prepare('SELECT force_password_change, ui_theme, can_manage_billing FROM users WHERE user_id = ?');
+    $fpc_stmt = $pdo->prepare('SELECT force_password_change, ui_theme FROM users WHERE user_id = ?');
     $fpc_stmt->execute([$user_id_check]);
     $fpc_row = $fpc_stmt->fetch(PDO::FETCH_ASSOC);
     if ($fpc_row && isset($fpc_row['ui_theme'])) {
         $ui_theme = ($fpc_row['ui_theme'] === 'dark') ? 'dark' : 'light';
         $_SESSION['ui_theme'] = $ui_theme;
     }
-    if ($fpc_row && isset($fpc_row['can_manage_billing'])) {
-        $can_manage_billing = (bool)$fpc_row['can_manage_billing'];
-        $_SESSION['can_manage_billing'] = $can_manage_billing;
+    // Attempt to read can_manage_billing; auto-create column if missing
+    try {
+        $billing_stmt = $pdo->prepare('SELECT can_manage_billing FROM users WHERE user_id = ?');
+        $billing_stmt->execute([$user_id_check]);
+        $billing_row = $billing_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($billing_row && isset($billing_row['can_manage_billing'])) {
+            $can_manage_billing = (bool)$billing_row['can_manage_billing'];
+            $_SESSION['can_manage_billing'] = $can_manage_billing;
+        }
+    } catch (PDOException $e) {
+        // Column doesn't exist yet — create it
+        try {
+            $pdo->exec("ALTER TABLE users ADD COLUMN can_manage_billing TINYINT(1) DEFAULT 0");
+        } catch (PDOException $ignore) {}
     }
     if ($fpc_row && (bool)$fpc_row['force_password_change']) {
         header('Location: ../tenant_login/force_change_password.php');
