@@ -215,10 +215,6 @@ function sa_resolve_app_base_url(): string
     $basePath = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['PHP_SELF'] ?? $defaultScript))), '/\\');
     $explicitBase = trim((string) (getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
 
-    if ($explicitBase !== '') {
-        return sa_normalize_app_base_url($explicitBase);
-    }
-
     if (sa_is_railway_runtime()) {
         $railwayBase = trim((string) (getenv('RAILWAY_STATIC_URL') ?: getenv('RAILWAY_PUBLIC_DOMAIN') ?: ''));
         if ($railwayBase !== '') {
@@ -228,7 +224,11 @@ function sa_resolve_app_base_url(): string
             return sa_normalize_app_base_url($railwayBase);
         }
 
-        return 'https://microfinwebb.up.railway.app/microfin_platform';
+        return 'https://microfinwebb-production.up.railway.app/microfin_platform';
+    }
+
+    if ($explicitBase !== '') {
+        return sa_normalize_app_base_url($explicitBase);
     }
 
     $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));

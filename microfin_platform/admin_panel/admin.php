@@ -136,10 +136,6 @@ function admin_build_tenant_login_url(string $tenantSlug): string
     $safeSlug = urlencode(trim($tenantSlug));
     $explicitBase = trim((string) (getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
 
-    if ($explicitBase !== '') {
-        return admin_normalize_app_base_url($explicitBase) . '/tenant_login/login.php?s=' . $safeSlug;
-    }
-
     if (admin_is_railway_runtime()) {
         $railwayBase = trim((string) (getenv('RAILWAY_STATIC_URL') ?: getenv('RAILWAY_PUBLIC_DOMAIN') ?: ''));
         if ($railwayBase !== '') {
@@ -149,7 +145,11 @@ function admin_build_tenant_login_url(string $tenantSlug): string
             return admin_normalize_app_base_url($railwayBase) . '/tenant_login/login.php?s=' . $safeSlug;
         }
 
-        return 'https://microfinwebb.up.railway.app/microfin_platform/tenant_login/login.php?s=' . $safeSlug;
+        return 'https://microfinwebb-production.up.railway.app/microfin_platform/tenant_login/login.php?s=' . $safeSlug;
+    }
+
+    if ($explicitBase !== '') {
+        return admin_normalize_app_base_url($explicitBase) . '/tenant_login/login.php?s=' . $safeSlug;
     }
 
     $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
