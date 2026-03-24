@@ -1,4 +1,5 @@
 <?php
+// DELETE CANDIDATE: No in-repo references found; appears to be legacy, test, backup, or export-only.
 require_once '../backend/db_connect.php';
 try {
     $tenant_id = uniqid();

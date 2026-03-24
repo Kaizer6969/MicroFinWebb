@@ -39,8 +39,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             
             <div class="nav-links">
                 <a href="#features">Features</a>
-                <a href="#how-it-works">How it Works</a>
                 <a href="#pricing">Pricing</a>
+                <a href="#how-it-works">How it Works</a>
                 <a href="#security">Security</a>
                 <!-- Replaced by Private URL approach -->
                 <a href="demo.php" class="nav-btn-link nav-contact-link">Contact Sales</a>
@@ -57,7 +57,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <header class="hero">
         <div class="container hero-container">
             <div class="hero-content">
-                <div class="badge-pill">🚀 The #1 SaaS for Microfinance</div>
+                <div class="badge-pill">SaaS for Microfinance</div>
                 <h1>Empower your institution with a true cloud core banking system.</h1>
                 <p>MicroFin is a fully isolated, multi-tenant cloud banking platform designed specifically for Microfinance Institutions, SACCOs, and Cooperatives.</p>
                 

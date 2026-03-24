@@ -458,7 +458,7 @@ tbody tr:hover { background: var(--brand-light); }
 [data-theme="dark"] .badge-red    { background: #7f1d1d40; color: #fca5a5; }
 [data-theme="dark"] .badge-amber  { background: #78350f40; color: #fcd34d; }
 [data-theme="dark"] .badge-blue   { background: #1e3a5f40; color: #93c5fd; }
-[data-theme="dark"] .badge-purple { background: #3b0764_40; color: #c4b5fd; }
+[data-theme="dark"] .badge-purple { background: #3b076440; color: #c4b5fd; }
 [data-theme="dark"] .badge-gray   { background: #1e293b;   color: #94a3b8; }
 
 /* ── Buttons ── */

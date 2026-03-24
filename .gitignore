@@ -1,0 +1,14 @@
+# Local automation toggles
+/.autopush.disabled
+
+# Local-only configuration
+/microfin_platform/backend/local_mail_config.php
+
+# Scratch and archived workspaces
+/scratch/
+/archive/
+/microfin_platform/archive/
+
+# OS/editor noise
+Thumbs.db
+.DS_Store

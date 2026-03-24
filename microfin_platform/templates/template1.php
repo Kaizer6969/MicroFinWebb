@@ -1,46 +1,124 @@
 <?php
 /**
  * Template 1 — Bootstrap 5 Premium Modern Design
- * All variables passed from site.php via include scope.
+ * Failsafe version: Gracefully falls back to 'Debug Debug' if SQL/backend variables are missing.
  */
-$headline_font = 'Manrope';
-$body_font = $font_family ?: 'Public Sans';
-$p = $palette;
 
-$hero_badge_text   = $hero_badge_text ?? '';
-$stats_heading     = $stats_heading ?? 'Building Trust Through Numbers';
-$stats_subheading  = $stats_subheading ?? '';
-$stats_image       = $stats_image ?? '';
-$stats             = $stats ?? [];
-$loan_products     = $loan_products ?? [];
-$partners          = $partners ?? [];
-$show_partners     = $show_partners ?? false;
-$show_stats        = $show_stats ?? true;
-$show_loan_calc    = $show_loan_calc ?? true;
-$footer_description = $footer_description ?? '';
-$hero_bg_path      = $hero_bg_path ?? '';
-$show_download_section = $show_download_section ?? false;
-$download_title    = $download_title ?? 'Download Our App';
-$download_description = $download_description ?? 'Track your loans, get updates, and manage your account on the go.';
-$download_button_text = $download_button_text ?? 'Download App';
-$download_url      = $download_url ?? '';
-$mobile_app_web_url = $mobile_app_web_url ?? '';
+// ─── FAILSAFE / DEBUG INITIALIZATION ─────────────────────────────────────────
+// Safely define the HTML escaping closure if it's missing from site.php
+if (!isset($e) || !is_callable($e)) {
+    $e = function($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'); };
+}
+// Safely handle missing color helper functions
+if (!function_exists('hexToRgb')) {
+    function hexToRgb($hex) { return '37, 99, 235'; } // Default blue RGB
+}
+if (!function_exists('adjustColor')) {
+    function adjustColor($hex, $steps) { return $steps < 0 ? '#1d4ed8' : '#eff6ff'; } // Default dark/light
+}
 
-// Build the effective Flutter link: prefer web app URL + tenant slug, else fall back to store URL
-$_flutter_slug       = $slug ?? '';
+// Design variables
+$headline_font = $headline_font ?? 'Manrope';
+$font_family   = $font_family ?? 'Public Sans';
+$body_font     = $font_family;
+$p             = $palette ?? ['primary' => '#2563eb', 'on-primary' => '#ffffff', 'secondary' => '#10b981'];
+
+// General Data
+$tenant_name   = $tenant_name ?? 'Debug Debug Name';
+$meta_desc     = $meta_desc ?? 'Debug Debug Meta Description';
+$logo          = $logo ?? '';
+$site_slug     = $site_slug ?? 'debug-slug';
+$custom_css    = $custom_css ?? '';
+
+// Hero Section
+$hero_badge_text = $hero_badge_text ?? 'Debug Badge';
+$hero_title      = $hero_title ?? 'Debug Debug Hero Title';
+$hero_subtitle   = $hero_subtitle ?? 'Debug debug subtitle text.';
+$hero_desc       = $hero_desc ?? 'Debug debug description text here for the hero section.';
+$hero_cta_url    = $hero_cta_url ?? '#';
+$hero_cta_text   = $hero_cta_text ?? 'Debug CTA';
+$hero_image      = $hero_image ?? '';
+$hero_bg_path    = $hero_bg_path ?? '';
+$total_clients   = $total_clients ?? 999;
+$total_loans     = $total_loans ?? 999;
+
+// Toggles
+$show_services   = $show_services ?? true;
+$show_about      = $show_about ?? true;
+$show_stats      = $show_stats ?? true;
+$show_loan_calc  = $show_loan_calc ?? true;
+$show_contact    = $show_contact ?? true;
+$show_partners   = $show_partners ?? true;
+$show_download_section = $show_download_section ?? true;
+
+// Services Array
+$services_heading = $services_heading ?? 'Debug Services';
+if (empty($services)) {
+    $services = [
+        ['icon' => 'person', 'title' => 'Debug Service 1', 'description' => 'Debug debug debug debug description.'],
+        ['icon' => 'store', 'title' => 'Debug Service 2', 'description' => 'Debug debug debug debug description.'],
+        ['icon' => 'emergency_home', 'title' => 'Debug Service 3', 'description' => 'Debug debug debug debug description.']
+    ];
+}
+
+// About Section
+$about_heading = $about_heading ?? 'Debug About';
+$about_body    = $about_body ?? "Debug debug debug debug.\nDebug debug debug debug.";
+$about_image   = $about_image ?? '';
+
+// Stats Array
+$stats_heading    = $stats_heading ?? 'Debug Stats Heading';
+$stats_subheading = $stats_subheading ?? 'Debug Stats Subheading';
+$stats_image      = $stats_image ?? '';
+if (empty($stats)) {
+    $stats = [
+        ['value' => 'Debug+', 'label' => 'Debug Label 1'],
+        ['value' => 'Debug+', 'label' => 'Debug Label 2'],
+        ['value' => 'Debug+', 'label' => 'Debug Label 3'],
+        ['value' => 'Debug+', 'label' => 'Debug Label 4'],
+    ];
+}
+
+// Partners Array
+if (empty($partners)) {
+    $partners = [];
+}
+
+// Loan Products Array (Calculator)
+if (empty($loan_products)) {
+    $loan_products = [
+        ['product_name' => 'Debug Loan 1', 'product_type' => 'Personal Loan', 'interest_rate' => 2.5, 'interest_type' => 'Flat', 'min_amount' => 1000, 'max_amount' => 50000, 'min_term_months' => 1, 'max_term_months' => 12, 'processing_fee_percentage' => 5],
+        ['product_name' => 'Debug Loan 2', 'product_type' => 'Business Loan', 'interest_rate' => 3.0, 'interest_type' => 'Diminishing', 'min_amount' => 5000, 'max_amount' => 100000, 'min_term_months' => 3, 'max_term_months' => 24, 'processing_fee_percentage' => 3]
+    ];
+}
+
+// Download Section
+$download_title       = $download_title ?? 'Debug Download Title';
+$download_description = $download_description ?? 'Debug download description text here.';
+$download_button_text = $download_button_text ?? 'Debug App';
+$download_url         = $download_url ?? '';
+$mobile_app_web_url   = $mobile_app_web_url ?? '';
+
+// Contact Data
+$contact_address  = $contact_address ?? 'Debug Address Placeholder';
+$contact_phone    = $contact_phone ?? '000-DEBUG-000';
+$contact_email    = $contact_email ?? 'debug@debug.com';
+$contact_hours    = $contact_hours ?? 'Mon-Fri: Debug Hours';
+$footer_description = $footer_description ?? 'Debug debug footer text.';
+
+// App Links Logic
+$_flutter_slug       = $slug ?? 'debug-slug';
 $_has_flutter_web    = ($mobile_app_web_url !== '');
-$_flutter_web_link   = $_has_flutter_web
-    ? rtrim($mobile_app_web_url, '/')
-      . (str_contains($mobile_app_web_url, '?') ? '&' : '?')
-      . 'tenant=' . urlencode($_flutter_slug)
+$_flutter_web_link   = $_has_flutter_web 
+    ? rtrim($mobile_app_web_url, '/') . (str_contains($mobile_app_web_url, '?') ? '&' : '?') . 'tenant=' . urlencode($_flutter_slug) 
     : '';
-// The best link to show on the download button: Flutter web first, then store URL, then empty
 $_download_href      = $_flutter_web_link ?: $download_url;
 
-$primary   = $p['primary'];
-$onPrimary = $p['on-primary'];
-$secondary = $p['secondary'];
+$primary   = $p['primary'] ?? '#2563eb';
+$onPrimary = $p['on-primary'] ?? '#ffffff';
+$secondary = $p['secondary'] ?? '#10b981';
 $primaryRgb = hexToRgb($primary);
+// ─── END FAILSAFE INITIALIZATION ─────────────────────────────────────────────
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -403,18 +481,15 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 </head>
 <body>
 
-<!-- ═══ NAVBAR ════════════════════════════════════════ -->
 <nav class="site-nav sticky-top py-2" id="siteNav">
   <div class="container">
     <div class="d-flex justify-content-between align-items-center" style="height:60px;">
-      <!-- Brand -->
       <a class="d-flex align-items-center gap-2 text-decoration-none" href="#">
         <?php if ($logo): ?>
         <img src="<?php echo $e($logo); ?>" alt="Logo" height="36" class="rounded-2" style="object-fit:cover;">
         <?php endif; ?>
         <span class="fw-800 headline fs-5 text-brand"><?php echo $e($tenant_name); ?></span>
       </a>
-      <!-- Desktop links -->
       <div class="d-none d-lg-flex align-items-center gap-1">
         <?php if ($show_services && !empty($services)): ?>
         <a class="nav-link px-3" href="#services">Services</a>
@@ -435,7 +510,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         <a class="nav-link px-3" href="#download">Download App</a>
         <?php endif; ?>
       </div>
-      <!-- CTA buttons -->
       <div class="d-flex gap-2 align-items-center">
         <a href="tenant_login/login.php?s=<?php echo urlencode($site_slug); ?>&auth=1" class="d-none d-md-inline-flex btn btn-brand-outline rounded-pill px-4 fw-600">Log In</a>
         <?php if ($show_download_section && $_download_href): ?>
@@ -445,7 +519,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         <?php else: ?>
         <a href="<?php echo $e($hero_cta_url); ?>" class="btn btn-brand rounded-pill px-4 fw-700 shadow-sm"><?php echo $e($hero_cta_text); ?></a>
         <?php endif; ?>
-        <!-- Mobile toggler -->
         <button class="btn p-2 d-lg-none border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
           <span class="material-symbols-rounded">menu</span>
         </button>
@@ -454,7 +527,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
   </div>
 </nav>
 
-<!-- Mobile Offcanvas -->
 <div class="offcanvas offcanvas-end" id="mobileMenu">
   <div class="offcanvas-header border-bottom">
     <h5 class="offcanvas-title fw-bold text-brand"><?php echo $e($tenant_name); ?></h5>
@@ -472,7 +544,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 </div>
 
 
-<!-- ═══ HERO ══════════════════════════════════════════ -->
 <section class="hero-wrap" id="home">
   <div class="container position-relative" style="z-index:2;">
     <div class="row align-items-center g-5">
@@ -485,7 +556,7 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         <?php endif; ?>
         <h1 class="hero-title mb-4">
           <?php
-            // Color the first word in brand color
+            // Color the first word in brand color safely
             $parts = explode(' ', $hero_title, 3);
             if (count($parts) >= 2) {
                 echo '<span>' . $e($parts[0]) . '</span> ' . $e(implode(' ', array_slice($parts, 1)));
@@ -516,7 +587,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           </a>
           <?php endif; ?>
         </div>
-        <!-- Trust indicators -->
         <div class="d-flex align-items-center gap-4 mt-5 flex-wrap">
           <div class="d-flex align-items-center gap-2">
             <span class="material-symbols-rounded text-brand">shield</span>
@@ -538,7 +608,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
             <?php if ($hero_image): ?>
             <img src="<?php echo $e($hero_image); ?>" alt="<?php echo $e($tenant_name); ?>">
             <?php else: ?>
-            <!-- Offline-safe branded illustration -->
             <div class="hero-illus">
               <div class="hi-badge">
                 <span class="material-symbols-rounded" style="font-size:.9rem;">verified</span>
@@ -588,20 +657,18 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
             </div>
             <?php endif; ?>
           </div>
-          <!-- Floating badge bottom-left -->
           <div class="hero-float-badge badge-bl">
             <div class="hero-float-icon"><span class="material-symbols-rounded">group</span></div>
             <div>
               <div class="hero-float-label">Happy Members</div>
-              <div class="hero-float-value"><?php echo number_format($total_clients); ?>+ Clients</div>
+              <div class="hero-float-value"><?php echo is_numeric($total_clients) ? number_format($total_clients) : '999'; ?>+ Clients</div>
             </div>
           </div>
-          <!-- Floating badge top-right -->
           <div class="hero-float-badge badge-tr">
             <div class="hero-float-icon"><span class="material-symbols-rounded">payments</span></div>
             <div>
               <div class="hero-float-label">Loans Funded</div>
-              <div class="hero-float-value"><?php echo number_format($total_loans); ?>+ Active</div>
+              <div class="hero-float-value"><?php echo is_numeric($total_loans) ? number_format($total_loans) : '999'; ?>+ Active</div>
             </div>
           </div>
         </div>
@@ -611,7 +678,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 </section>
 
 
-<!-- ═══ PARTNERS STRIP ═════════════════════════════════ -->
 <?php if ($show_partners && !empty($partners)): ?>
 <section class="py-4 bg-white border-top border-bottom">
   <div class="container">
@@ -626,7 +692,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 <?php endif; ?>
 
 
-<!-- ═══ HOW IT WORKS ════════════════════════════════════ -->
 <section class="py-5 my-4" id="how">
   <div class="container py-4">
     <div class="text-center mb-5 fade-up">
@@ -665,7 +730,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 </section>
 
 
-<!-- ═══ SERVICES ════════════════════════════════════════ -->
 <?php if ($show_services && !empty($services)): ?>
 <section id="services" class="py-5 bg-white border-top">
   <div class="container py-4">
@@ -692,7 +756,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 <?php endif; ?>
 
 
-<!-- ═══ TRUST STATS ══════════════════════════════════════ -->
 <?php if ($show_stats && !empty($stats)): ?>
 <section id="numbers" class="py-5">
   <div class="container py-4 fade-up">
@@ -702,16 +765,15 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           <?php if ($stats_image): ?>
           <img src="<?php echo $e($stats_image); ?>" alt="Team" style="width:100%;height:100%;object-fit:cover;min-height:360px;">
           <?php else: ?>
-          <!-- Offline-safe stats visual -->
           <div class="stats-illus">
             <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.6);z-index:1;">Live Performance</div>
             <div class="si-row">
               <div class="si-col">
-                <div class="si-num"><?php echo number_format($total_clients); ?>+</div>
+                <div class="si-num"><?php echo is_numeric($total_clients) ? number_format($total_clients) : '999'; ?>+</div>
                 <div class="si-lbl">Clients</div>
               </div>
               <div class="si-col">
-                <div class="si-num"><?php echo number_format($total_loans); ?>+</div>
+                <div class="si-num"><?php echo is_numeric($total_loans) ? number_format($total_loans) : '999'; ?>+</div>
                 <div class="si-lbl">Loans</div>
               </div>
               <div class="si-col">
@@ -742,8 +804,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           <div class="row g-4">
             <?php foreach (array_slice($stats, 0, 4) as $i => $stat): ?>
             <div class="col-6">
-              <?php if ($i > 0): ?>
-              <?php endif; ?>
               <div class="stat-num headline"><?php echo $e($stat['value'] ?? ''); ?></div>
               <div class="stat-label"><?php echo $e($stat['label'] ?? ''); ?></div>
             </div>
@@ -757,7 +817,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 <?php endif; ?>
 
 
-<!-- ═══ LOAN CALCULATOR ══════════════════════════════════ -->
 <?php if ($show_loan_calc && !empty($loan_products)): ?>
 <section id="calculator" class="py-5 bg-white border-top">
   <div class="container py-4">
@@ -767,7 +826,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
       <p class="text-muted mt-2 mx-auto" style="max-width:500px;">Select a loan product, set your amount and term, and see your estimated monthly payment instantly.</p>
     </div>
     <div class="calc-card mx-auto fade-up" style="max-width:820px;">
-      <!-- Product picker -->
       <div class="mb-4">
         <label class="small fw-700 text-uppercase text-muted d-block mb-3" style="letter-spacing:.08em;">Select Loan Product</label>
         <div class="row g-3" id="lc-product-list">
@@ -789,7 +847,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           <?php endforeach; ?>
         </div>
       </div>
-      <!-- Amount slider -->
       <div class="mb-4 p-4 rounded-4 bg-light">
         <div class="d-flex justify-content-between mb-2">
           <label class="small fw-700 text-uppercase text-muted" style="letter-spacing:.08em;">Loan Amount</label>
@@ -800,7 +857,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           <span id="lc-min-amount">₱0</span><span id="lc-max-amount">₱0</span>
         </div>
       </div>
-      <!-- Term slider -->
       <div class="mb-5 p-4 rounded-4 bg-light">
         <div class="d-flex justify-content-between mb-2">
           <label class="small fw-700 text-uppercase text-muted" style="letter-spacing:.08em;">Loan Term</label>
@@ -811,7 +867,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           <span id="lc-min-term">1 mo</span><span id="lc-max-term">36 mo</span>
         </div>
       </div>
-      <!-- Results -->
       <div class="row g-3 mb-4">
         <div class="col-6 col-md-3"><div class="calc-result-box highlight"><div class="calc-result-label">Monthly</div><div class="calc-result-value" id="lc-monthly">₱0</div></div></div>
         <div class="col-6 col-md-3"><div class="calc-result-box normal"><div class="calc-result-label">Interest</div><div class="calc-result-value accent" id="lc-interest">₱0</div></div></div>
@@ -828,7 +883,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 <?php endif; ?>
 
 
-<!-- ═══ ABOUT SECTION ════════════════════════════════════ -->
 <?php if ($show_about && $about_body): ?>
 <section id="about" class="py-5 border-top">
   <div class="container py-4">
@@ -838,7 +892,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           <?php if ($about_image): ?>
           <img src="<?php echo $e($about_image); ?>" alt="<?php echo $e($tenant_name); ?>">
           <?php else: ?>
-          <!-- Offline-safe about illustration -->
           <div class="about-illus">
             <div class="ai-pill">
               <span class="material-symbols-rounded" style="font-size:1rem;">groups</span>
@@ -848,7 +901,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
               <?php
               $avatar_colors = ['#dc2626','#2563eb','#059669','#d97706','#7c3aed'];
               $avatar_emojis = ['👩🏽','👨🏻','👩🏾','👨🏼','👩🏿'];
-              $count = min(5, max(3, (int)$total_clients / 10));
               for ($ai = 0; $ai < 5; $ai++): ?>
               <div class="ai-avatar" style="background:<?php echo $avatar_colors[$ai]; ?>">
                 <?php echo $avatar_emojis[$ai]; ?>
@@ -856,11 +908,11 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
               <?php endfor; ?>
             </div>
             <div class="ai-stat">
-              <div class="ai-stat-num"><?php echo number_format($total_clients); ?>+</div>
+              <div class="ai-stat-num"><?php echo is_numeric($total_clients) ? number_format($total_clients) : '999'; ?>+</div>
               <div class="ai-stat-lbl">Happy Members Served</div>
             </div>
             <div class="ai-stat">
-              <div class="ai-stat-num"><?php echo number_format($total_loans); ?>+</div>
+              <div class="ai-stat-num"><?php echo is_numeric($total_loans) ? number_format($total_loans) : '999'; ?>+</div>
               <div class="ai-stat-lbl">Loans Funded</div>
             </div>
             <div class="ai-pill">
@@ -878,13 +930,13 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         <div class="row g-4">
           <div class="col-6">
             <div class="about-fact">
-              <div class="fw-800 headline" style="font-size:1.8rem;color:var(--brand);"><?php echo number_format($total_clients); ?>+</div>
+              <div class="fw-800 headline" style="font-size:1.8rem;color:var(--brand);"><?php echo is_numeric($total_clients) ? number_format($total_clients) : '999'; ?>+</div>
               <div class="small text-muted fw-600 text-uppercase" style="letter-spacing:.06em;">Active Members</div>
             </div>
           </div>
           <div class="col-6">
             <div class="about-fact">
-              <div class="fw-800 headline" style="font-size:1.8rem;color:var(--brand);"><?php echo number_format($total_loans); ?>+</div>
+              <div class="fw-800 headline" style="font-size:1.8rem;color:var(--brand);"><?php echo is_numeric($total_loans) ? number_format($total_loans) : '999'; ?>+</div>
               <div class="small text-muted fw-600 text-uppercase" style="letter-spacing:.06em;">Loans Funded</div>
             </div>
           </div>
@@ -896,7 +948,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 <?php endif; ?>
 
 
-<!-- ═══ MOBILE APP DOWNLOAD ══════════════════════════════ -->
 <?php if ($show_download_section): ?>
 <section id="download" class="download-section py-5">
   <div class="container py-5 position-relative" style="z-index:2;">
@@ -909,17 +960,14 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         <p class="text-white mb-5 lh-lg" style="opacity:.7;max-width:500px;font-size:1.1rem;">
           <?php echo $e($download_description ?: 'Track your loans, submit applications, receive notifications, and manage your account — all from your phone.'); ?>
         </p>
-        <!-- Feature pills -->
         <div class="d-flex flex-wrap gap-3 mb-5">
           <span class="app-feature-pill"><span class="material-symbols-rounded" style="font-size:1rem;">notifications</span> Real-time Alerts</span>
           <span class="app-feature-pill"><span class="material-symbols-rounded" style="font-size:1rem;">account_balance_wallet</span> Loan Tracking</span>
           <span class="app-feature-pill"><span class="material-symbols-rounded" style="font-size:1rem;">lock</span> Secure Access</span>
           <span class="app-feature-pill"><span class="material-symbols-rounded" style="font-size:1rem;">speed</span> Fast & Easy</span>
         </div>
-        <!-- Download buttons -->
         <div class="d-flex flex-wrap gap-3">
           <?php if ($_has_flutter_web): ?>
-          <!-- PRIMARY: Open Flutter web app directed at this company -->
           <a href="<?php echo $e($_flutter_web_link); ?>" target="_blank" class="app-store-btn" style="background:rgba(var(--brand-rgb),.18);border-color:rgba(var(--brand-rgb),.4);">
             <span class="material-symbols-rounded store-icon">phone_android</span>
             <div>
@@ -952,7 +1000,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
             </div>
           </a>
           <?php else: ?>
-          <!-- Show coming soon if no URL -->
           <div class="app-store-btn opacity-75">
             <span class="material-symbols-rounded store-icon">android</span>
             <div>
@@ -971,7 +1018,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         </div>
       </div>
       <div class="col-lg-5 text-center d-none d-lg-block">
-        <!-- Visual phone mockup placeholder -->
         <div class="mx-auto position-relative" style="width:240px;">
           <div class="rounded-4 shadow-lg overflow-hidden" style="background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.15);padding:12px;">
             <div class="rounded-3 overflow-hidden" style="background:rgba(255,255,255,.05);aspect-ratio:9/16;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px;">
@@ -991,11 +1037,9 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
 <?php endif; ?>
 
 
-<!-- ═══ FOOTER ════════════════════════════════════════════ -->
 <footer id="contact" class="site-footer py-5">
   <div class="container py-4">
     <div class="row g-5">
-      <!-- Brand column -->
       <div class="col-lg-4">
         <div class="d-flex align-items-center gap-2 mb-4">
           <?php if ($logo): ?>
@@ -1009,7 +1053,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         <p class="footer-link lh-lg" style="font-size:.88rem;">Your trusted microfinance partner — empowering communities through accessible financial services.</p>
         <?php endif; ?>
       </div>
-      <!-- Quick links -->
       <div class="col-6 col-lg-2">
         <h6 class="text-white fw-700 mb-4" style="letter-spacing:.08em;text-transform:uppercase;font-size:.8rem;">Navigate</h6>
         <ul class="list-unstyled d-flex flex-column gap-3 mb-0">
@@ -1020,7 +1063,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
           <?php if ($show_download_section): ?><li><a href="#download" class="footer-link">Get App</a></li><?php endif; ?>
         </ul>
       </div>
-      <!-- Contact -->
       <?php if ($show_contact): ?>
       <div class="col-6 col-lg-3">
         <h6 class="text-white fw-700 mb-4" style="letter-spacing:.08em;text-transform:uppercase;font-size:.8rem;">Contact</h6>
@@ -1052,7 +1094,6 @@ h1,h2,h3,h4,h5,.headline { font-family: '<?php echo $e($headline_font); ?>', san
         </ul>
       </div>
       <?php endif; ?>
-      <!-- App CTA in footer -->
       <?php if ($show_download_section): ?>
       <div class="col-lg-3">
         <h6 class="text-white fw-700 mb-4" style="letter-spacing:.08em;text-transform:uppercase;font-size:.8rem;">Get Our App</h6>
@@ -1097,14 +1138,14 @@ document.querySelectorAll('.fade-up').forEach(function(el) { obs.observe(el); })
 (function() {
     var products = <?php echo json_encode(array_map(function($p) {
         return [
-            'name'       => $p['product_name'],
-            'min'        => (float)$p['min_amount'],
-            'max'        => (float)$p['max_amount'],
-            'rate'       => (float)$p['interest_rate'],
-            'type'       => $p['interest_type'],
-            'minTerm'    => (int)$p['min_term_months'],
-            'maxTerm'    => (int)$p['max_term_months'],
-            'processing' => (float)$p['processing_fee_percentage'],
+            'name'       => $p['product_name'] ?? 'Debug Loan',
+            'min'        => (float)($p['min_amount'] ?? 1000),
+            'max'        => (float)($p['max_amount'] ?? 50000),
+            'rate'       => (float)($p['interest_rate'] ?? 2.5),
+            'type'       => $p['interest_type'] ?? 'Flat',
+            'minTerm'    => (int)($p['min_term_months'] ?? 1),
+            'maxTerm'    => (int)($p['max_term_months'] ?? 12),
+            'processing' => (float)($p['processing_fee_percentage'] ?? 5),
         ];
     }, $loan_products), JSON_UNESCAPED_UNICODE); ?>;
 

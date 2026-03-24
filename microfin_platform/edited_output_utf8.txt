@@ -1,8 +1,0 @@
-clients: `document_verification_status` enum('Unverified','CONSIDER','EDITED','Rejected') DEFAULT 'Unverified',
-loan_applications: `EDITED_amount` decimal(12,2) DEFAULT NULL,
-loan_applications: `application_status` enum('Draft','Submitted','CONSIDER','Under Review','Document Verification','Credit Investigation','For Approval','EDITED','Rejected','Cancelled','Withdrawn') DEFAULT 'Draft',
-loan_applications: `EDITED_by` int(11) DEFAULT NULL,
-loan_applications: KEY `EDITED_by` (`EDITED_by`),
-loan_applications: CONSTRAINT `loan_applications_ibfk_5` FOREIGN KEY (`EDITED_by`) REFERENCES `employees` (`employee_id`) ON DELETE SET NULL,
-notifications: `notification_type` enum('Payment Due','Payment Received','Loan EDITED','Loan Rejected','Document Required','Appointment Reminder','Message Received','System Alert','General') NOT NULL,
-users: `user_type` enum('Employee','Client','Super Admin','App User') NOT NULL COMMENT '✅ EDITED: Added App User for mobile signups',
