@@ -190,45 +190,61 @@ function sa_is_railway_runtime(): bool
     return false;
 }
 
+function sa_normalize_app_base_url(string $baseUrl): string
+{
+    $baseUrl = rtrim(trim($baseUrl), '/');
+    if ($baseUrl === '') {
+        return '';
+    }
+
+    $path = trim((string) (parse_url($baseUrl, PHP_URL_PATH) ?? ''));
+    if ($path === '' || $path === '/') {
+        return $baseUrl . '/microfin_platform';
+    }
+
+    if (!preg_match('~(?:^|/)microfin_platform/?$~i', $path)) {
+        return $baseUrl . '/microfin_platform';
+    }
+
+    return $baseUrl;
+}
+
+function sa_resolve_app_base_url(): string
+{
+    $defaultScript = '/admin-draft-withmobile/admin-draft/microfin_platform/super_admin/super_admin.php';
+    $basePath = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['PHP_SELF'] ?? $defaultScript))), '/\\');
+    $explicitBase = trim((string) (getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
+
+    if ($explicitBase !== '') {
+        return sa_normalize_app_base_url($explicitBase);
+    }
+
+    if (sa_is_railway_runtime()) {
+        $railwayBase = trim((string) (getenv('RAILWAY_STATIC_URL') ?: getenv('RAILWAY_PUBLIC_DOMAIN') ?: ''));
+        if ($railwayBase !== '') {
+            if (!preg_match('~^https?://~i', $railwayBase)) {
+                $railwayBase = 'https://' . $railwayBase;
+            }
+            return sa_normalize_app_base_url($railwayBase);
+        }
+
+        return 'https://microfinwebb.up.railway.app/microfin_platform';
+    }
+
+    $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    return 'http://' . $requestHost . $basePath;
+}
+
 function sa_build_tenant_login_url(string $tenantSlug): string
 {
     $tenantSlug = trim($tenantSlug);
     $safeSlug = urlencode($tenantSlug);
-    $defaultScript = '/admin-draft-withmobile/admin-draft/microfin_platform/super_admin/super_admin.php';
-    $basePath = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['PHP_SELF'] ?? $defaultScript))), '/\\');
-
-    // Optional explicit override, useful if a custom domain is used.
-    $explicitBase = trim((string)(getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
-    // Explicitly check for Railway environment
-    $isRailway = getenv('RAILWAY_ENVIRONMENT') !== false || getenv('RAILWAY_PUBLIC_DOMAIN') !== false || getenv('RAILWAY_STATIC_URL') !== false;
-
-    if ($isRailway) {
-        // EXACT URL FOR RAILWAY PRODUCTION
-        return 'https://microfinwebb-production.up.railway.app/microfin_platform/tenant_login/login.php?s=' . $safeSlug;
-    }
-
-    // Localhost fallback for XAMPP
-    $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    return 'http://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
+    return sa_resolve_app_base_url() . '/tenant_login/login.php?s=' . $safeSlug;
 }
 
 function sa_build_super_admin_login_url(): string
 {
-    $defaultScript = '/admin-draft-withmobile/admin-draft/microfin_platform/super_admin/super_admin.php';
-    $basePath = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['PHP_SELF'] ?? $defaultScript))), '/\\');
-    $explicitBase = trim((string)(getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
-    $isRailway = getenv('RAILWAY_ENVIRONMENT') !== false || getenv('RAILWAY_PUBLIC_DOMAIN') !== false || getenv('RAILWAY_STATIC_URL') !== false;
-
-    if ($explicitBase !== '') {
-        return rtrim($explicitBase, '/') . '/super_admin/login.php';
-    }
-
-    if ($isRailway) {
-        return 'https://microfinwebb-production.up.railway.app/microfin_platform/super_admin/login.php';
-    }
-
-    $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    return 'http://' . $requestHost . $basePath . '/super_admin/login.php';
+    return sa_resolve_app_base_url() . '/super_admin/login.php';
 }
 
 $provision_success = '';

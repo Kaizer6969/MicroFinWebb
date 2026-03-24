@@ -94,6 +94,70 @@ function admin_generate_temporary_password(int $length = 12): string
     return implode('', $passwordChars);
 }
 
+function admin_is_railway_runtime(): bool
+{
+    $keys = [
+        'RAILWAY_ENVIRONMENT',
+        'RAILWAY_PROJECT_ID',
+        'RAILWAY_SERVICE_ID',
+        'RAILWAY_PUBLIC_DOMAIN',
+        'RAILWAY_STATIC_URL',
+    ];
+    foreach ($keys as $key) {
+        $value = getenv($key);
+        if ($value !== false && trim((string) $value) !== '') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function admin_normalize_app_base_url(string $baseUrl): string
+{
+    $baseUrl = rtrim(trim($baseUrl), '/');
+    if ($baseUrl === '') {
+        return '';
+    }
+
+    $path = trim((string) (parse_url($baseUrl, PHP_URL_PATH) ?? ''));
+    if ($path === '' || $path === '/') {
+        return $baseUrl . '/microfin_platform';
+    }
+
+    if (!preg_match('~(?:^|/)microfin_platform/?$~i', $path)) {
+        return $baseUrl . '/microfin_platform';
+    }
+
+    return $baseUrl;
+}
+
+function admin_build_tenant_login_url(string $tenantSlug): string
+{
+    $safeSlug = urlencode(trim($tenantSlug));
+    $explicitBase = trim((string) (getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
+
+    if ($explicitBase !== '') {
+        return admin_normalize_app_base_url($explicitBase) . '/tenant_login/login.php?s=' . $safeSlug;
+    }
+
+    if (admin_is_railway_runtime()) {
+        $railwayBase = trim((string) (getenv('RAILWAY_STATIC_URL') ?: getenv('RAILWAY_PUBLIC_DOMAIN') ?: ''));
+        if ($railwayBase !== '') {
+            if (!preg_match('~^https?://~i', $railwayBase)) {
+                $railwayBase = 'https://' . $railwayBase;
+            }
+            return admin_normalize_app_base_url($railwayBase) . '/tenant_login/login.php?s=' . $safeSlug;
+        }
+
+        return 'https://microfinwebb.up.railway.app/microfin_platform/tenant_login/login.php?s=' . $safeSlug;
+    }
+
+    $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    $defaultScript = '/admin-draft-withmobile/admin-draft/microfin_platform/admin_panel/admin.php';
+    $basePath = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['PHP_SELF'] ?? $defaultScript))), '/\\');
+    return 'http://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
+}
+
 function admin_safe_fetch_value(PDO $pdo, string $sql, array $params = [], $default = 0)
 {
     try {
@@ -150,7 +214,6 @@ if ($user_id_check > 0) {
         }
     }
     $_SESSION['can_manage_billing'] = $can_manage_billing;
-        // Column doesn't exist yet — create it
     if ($fpc_row && (bool)$fpc_row['force_password_change']) {
         header('Location: ../tenant_login/force_change_password.php');
         exit;
@@ -1168,18 +1231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $slug_stmt = $pdo->prepare('SELECT tenant_slug FROM tenants WHERE tenant_id = ?');
             $slug_stmt->execute([$tenant_id]);
             $tenant_slug = $slug_stmt->fetchColumn();
-            // Explicitly check for Railway environment
-            $isRailway = getenv('RAILWAY_ENVIRONMENT') !== false || getenv('RAILWAY_PUBLIC_DOMAIN') !== false || getenv('RAILWAY_STATIC_URL') !== false;
-
-            if ($isRailway) {
-                // EXACT URL FOR RAILWAY PRODUCTION
-                $login_url = "https://microfinwebb-production.up.railway.app/microfin_platform/tenant_login/login.php?s=" . urlencode($tenant_slug);
-            } else {
-                // Localhost fallback for XAMPP
-                $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
-                $base_url = "http://" . $requestHost . dirname(dirname($_SERVER['PHP_SELF']));
-                $login_url = $base_url . "/tenant_login/login.php?s=" . urlencode($tenant_slug);
-            }
+            $login_url = admin_build_tenant_login_url((string)$tenant_slug);
             
             $subject = "Welcome to " . $_SESSION['tenant_name'] . " - Employee Logins";
             $message = "Hello $first_name,\n\n"
