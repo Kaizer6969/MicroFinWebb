@@ -30,9 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auto-navigate to section if hash exists or ?section= or ?tab= param exists
     const urlParams = new URLSearchParams(window.location.search);
-    const targetTab = window.location.hash
+    const rawTargetTab = window.location.hash
         ? window.location.hash.substring(1)
         : (urlParams.get('section') || urlParams.get('tab'));
+    const targetTab = rawTargetTab === 'statements' ? 'receipts' : rawTargetTab;
     if (targetTab) {
         const targetNav = document.querySelector(`.nav-item[data-target="${targetTab}"]`);
         if (targetNav) targetNav.click();
@@ -696,6 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reportDateFromInput = document.getElementById('report-date-from');
     const reportDateToInput = document.getElementById('report-date-to');
     const reportTenantFilter = document.getElementById('report-tenant-filter');
+    const reportPdfButton = document.getElementById('btn-export-report-pdf');
 
     function initializeReportFilters() {
         if (!reportDateFromInput || !reportDateToInput) return;
@@ -712,6 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (reportDateFromInput && reportDateFromInput.value) params.set('date_from', reportDateFromInput.value);
         if (reportDateToInput && reportDateToInput.value) params.set('date_to', reportDateToInput.value);
         if (reportTenantFilter && reportTenantFilter.value) params.set('tenant_id', reportTenantFilter.value);
+        updateReportPdfLink();
 
         fetch('api_dashboard_stats.php?' + params.toString())
             .then(r => r.json())
@@ -722,12 +725,36 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
+    function updateReportPdfLink(filters = null) {
+        if (!reportPdfButton) return;
+
+        const params = new URLSearchParams();
+        const fromValue = filters && filters.date_from ? filters.date_from : (reportDateFromInput ? reportDateFromInput.value : '');
+        const toValue = filters && filters.date_to ? filters.date_to : (reportDateToInput ? reportDateToInput.value : '');
+        const tenantValue = filters && typeof filters.tenant_id !== 'undefined'
+            ? filters.tenant_id
+            : (reportTenantFilter ? reportTenantFilter.value : '');
+
+        if (fromValue) params.set('date_from', fromValue);
+        if (toValue) params.set('date_to', toValue);
+        if (tenantValue) params.set('tenant_id', tenantValue);
+
+        reportPdfButton.href = 'report_pdf.php' + (params.toString() ? `?${params.toString()}` : '');
+    }
+
     if (btnApplyReportFilter) {
         btnApplyReportFilter.addEventListener('click', loadReports);
     }
 
+    [reportDateFromInput, reportDateToInput, reportTenantFilter].forEach((input) => {
+        if (input) {
+            input.addEventListener('change', () => updateReportPdfLink());
+        }
+    });
+
     if (document.getElementById('reports')) {
         initializeReportFilters();
+        updateReportPdfLink();
         loadReports();
     }
 
@@ -740,20 +767,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         setEl('report-stat-total-tenants', String(summary.total_tenants ?? 0));
-        setEl('report-stat-active-tenants', String(summary.active_tenants ?? 0));
-        setEl('report-stat-active-super-admins', String(summary.active_super_admin_accounts ?? 0));
-        setEl('report-stat-pending-applications', String(summary.pending_applications ?? 0));
-        setEl('report-stat-open-inquiries', String(summary.open_inquiries ?? 0));
         setEl('report-stat-current-mrr', formatCurrency(summary.current_mrr ?? 0));
         setEl('report-stat-range-revenue', formatCurrency(summary.range_revenue ?? 0));
         setEl('report-stat-range-transactions', String(summary.range_transactions ?? 0));
+        updateReportPdfLink(filters);
 
-        const filterSummary = document.getElementById('report-filter-summary');
-        if (filterSummary) {
-            const fromText = filters.date_from ? formatDate(filters.date_from) : (reportDateFromInput && reportDateFromInput.value ? formatDate(reportDateFromInput.value) : 'the selected start date');
-            const toText = filters.date_to ? formatDate(filters.date_to) : (reportDateToInput && reportDateToInput.value ? formatDate(reportDateToInput.value) : 'the selected end date');
-            const tenantText = filters.tenant_name ? ` for ${filters.tenant_name}` : '';
-            filterSummary.textContent = `Showing current platform summary plus filtered activity from ${fromText} to ${toText}${tenantText}.`;
+        const analyticsSummary = document.getElementById('report-analytics-summary');
+        if (analyticsSummary) {
+            analyticsSummary.textContent = data.analytics_summary || 'Derived analytics from the current report scope will appear here.';
         }
 
         // Tenant Activity
@@ -995,7 +1016,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     // SETTINGS: Sub-tab navigation
     // ============================================================
-    const settingsTabs = document.querySelectorAll('.settings-tab');
+    const settingsTabs = document.querySelectorAll('[data-settings-target]');
     const settingsPanels = document.querySelectorAll('.settings-panel');
 
     settingsTabs.forEach(tab => {
@@ -1215,68 +1236,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 'api_backup.php?action=create&tenant_id=' + encodeURIComponent(tid),
                 'Exporting data for ' + tenantName + '...'
             );
-        });
-    }
-
-    // Import SQL form
-    const importForm = document.getElementById('backup-import-form');
-    if (importForm) {
-        importForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const fileInput = document.getElementById('backup-import-file');
-            const resultDiv = document.getElementById('backup-import-result');
-            const btn = document.getElementById('btn-backup-import');
-            if (!fileInput || !fileInput.files[0]) return;
-
-            const origText = btn.innerHTML;
-            btn.innerHTML = '<span class="material-symbols-rounded" style="animation:spin 1s linear infinite;">sync</span> Importing...';
-            btn.disabled = true;
-            if (resultDiv) { resultDiv.style.display = 'none'; }
-
-            const formData = new FormData();
-            formData.append('sql_file', fileInput.files[0]);
-
-            try {
-                const res = await fetch('api_backup.php?action=import', { method: 'POST', body: formData });
-                const data = await res.json();
-
-                if (resultDiv) {
-                    resultDiv.style.display = 'block';
-                    let html = '';
-                    if (data.success || (res.ok && !data.error)) {
-                        resultDiv.style.background = 'rgba(16,185,129,0.08)';
-                        resultDiv.style.border = '1px solid rgba(16,185,129,0.2)';
-                        html += '<div style="display:flex;align-items:center;gap:8px;"><span class="material-symbols-rounded" style="color:#10b981;">check_circle</span><span>' + esc(data.message || 'Import complete.') + '</span></div>';
-                    } else {
-                        resultDiv.style.background = 'rgba(239,68,68,0.08)';
-                        resultDiv.style.border = '1px solid rgba(239,68,68,0.2)';
-                        html += '<div style="display:flex;align-items:center;gap:8px;"><span class="material-symbols-rounded" style="color:#ef4444;">error</span><span>' + esc(data.error || data.message || 'Import failed.') + '</span></div>';
-                    }
-                    // Show schema mismatch warnings
-                    if (data.details && data.details.mismatches && data.details.mismatches.length > 0) {
-                        html += '<div style="margin-top:10px; padding:10px 12px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:6px;">';
-                        html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="material-symbols-rounded" style="color:#f59e0b;font-size:18px;">warning</span><strong style="font-size:.875rem;">Schema Mismatches Detected (' + data.details.mismatches.length + ')</strong></div>';
-                        html += '<ul style="margin:0;padding-left:18px;font-size:.825rem;line-height:1.7;">';
-                        data.details.mismatches.forEach(m => { html += '<li>' + esc(m) + '</li>'; });
-                        html += '</ul></div>';
-                    }
-                    resultDiv.innerHTML = html;
-                }
-
-                loadBackupInfo();
-                loadBackupHistory();
-            } catch (err) {
-                if (resultDiv) {
-                    resultDiv.style.display = 'block';
-                    resultDiv.style.background = 'rgba(239,68,68,0.08)';
-                    resultDiv.style.border = '1px solid rgba(239,68,68,0.2)';
-                    resultDiv.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><span class="material-symbols-rounded" style="color:#ef4444;">error</span><span>Network error: ' + esc(err.message) + '</span></div>';
-                }
-            } finally {
-                btn.innerHTML = origText;
-                btn.disabled = false;
-                fileInput.value = '';
-            }
         });
     }
 

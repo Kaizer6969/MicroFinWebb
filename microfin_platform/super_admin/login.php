@@ -2,7 +2,10 @@
 session_start();
 
 if (isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
-    header('Location: super_admin.php');
+    $destination = !empty($_SESSION['super_admin_force_password_change'])
+        ? 'force_change_password.php'
+        : 'super_admin.php';
+    header('Location: ' . $destination);
     exit;
 }
 
@@ -17,8 +20,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($email === '' || $password === '') {
         $error_msg = 'Email and password are required.';
     } else {
-        // UPDATED QUERY: Point to 'users' table and check for 'Super Admin' user_type
-        $stmt = $pdo->prepare("SELECT user_id AS super_admin_id, username, password_hash, ui_theme FROM users WHERE email = ? AND user_type = 'Super Admin'");
+        $stmt = $pdo->prepare("
+            SELECT user_id AS super_admin_id,
+                   username,
+                   password_hash,
+                   ui_theme,
+                   force_password_change
+            FROM users
+            WHERE email = ?
+              AND user_type = 'Super Admin'
+              AND status = 'Active'
+              AND deleted_at IS NULL
+            LIMIT 1
+        ");
         $stmt->execute([$email]);
         $admin = $stmt->fetch();
 
@@ -27,8 +41,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['super_admin_id'] = (int) $admin['super_admin_id'];
             $_SESSION['super_admin_username'] = $admin['username'];
             $_SESSION['ui_theme'] = (($admin['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
+            $_SESSION['super_admin_force_password_change'] = (bool) ($admin['force_password_change'] ?? false);
 
-            header('Location: super_admin.php');
+            $destination = !empty($_SESSION['super_admin_force_password_change'])
+                ? 'force_change_password.php'
+                : 'super_admin.php';
+            header('Location: ' . $destination);
             exit;
         }
 

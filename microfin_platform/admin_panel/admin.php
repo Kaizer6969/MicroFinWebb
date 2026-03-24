@@ -7,43 +7,150 @@ if (!isset($_SESSION['user_logged_in']) || $_SESSION['user_logged_in'] !== true 
 }
 
 require_once '../backend/db_connect.php';
+require_once '../backend/billing_access.php';
 require_once '../backend/lazy_billing_resolver.php';
 
 // Resolve any pending tenant subscriptions automagically!
 resolve_tenant_billing($pdo);
 
+function admin_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+    $safe_table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    $safe_column = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$safe_table}` LIKE '{$safe_column}'");
+    $stmt->execute();
+    $cache[$key] = (bool)$stmt->fetch();
+    return $cache[$key];
+}
+
+function admin_get_system_setting(PDO $pdo, string $tenantId, string $settingKey, string $default = ''): string
+{
+    $stmt = $pdo->prepare('SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = ? LIMIT 1');
+    $stmt->execute([$tenantId, $settingKey]);
+    $value = $stmt->fetchColumn();
+    return $value !== false ? trim((string)$value) : $default;
+}
+
+function admin_get_next_billing_date(PDO $pdo, string $tenantId, bool $tenantsHasNextBillingDate): string
+{
+    if ($tenantsHasNextBillingDate) {
+        try {
+            $stmt = $pdo->prepare('SELECT next_billing_date FROM tenants WHERE tenant_id = ? LIMIT 1');
+            $stmt->execute([$tenantId]);
+            $value = trim((string)$stmt->fetchColumn());
+            if ($value !== '') {
+                return $value;
+            }
+        } catch (Throwable $ignore) {}
+    }
+
+    return admin_get_system_setting($pdo, $tenantId, 'next_billing_date', '');
+}
+
+function admin_role_supports_billing_toggle(PDO $pdo, string $tenantId, int $roleId): bool
+{
+    if ($roleId <= 0 || $tenantId === '') {
+        return false;
+    }
+
+    $stmt = $pdo->prepare('SELECT role_name FROM user_roles WHERE tenant_id = ? AND role_id = ? LIMIT 1');
+    $stmt->execute([$tenantId, $roleId]);
+    $roleName = trim((string)$stmt->fetchColumn());
+
+    return strcasecmp($roleName, 'Admin') === 0;
+}
+
+function admin_generate_temporary_password(int $length = 12): string
+{
+    $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    $lower = 'abcdefghijkmnopqrstuvwxyz';
+    $digits = '23456789';
+    $symbols = '!@#$%^&*';
+    $all = $upper . $lower . $digits . $symbols;
+
+    $passwordChars = [
+        $upper[random_int(0, strlen($upper) - 1)],
+        $lower[random_int(0, strlen($lower) - 1)],
+        $digits[random_int(0, strlen($digits) - 1)],
+        $symbols[random_int(0, strlen($symbols) - 1)],
+    ];
+
+    while (count($passwordChars) < $length) {
+        $passwordChars[] = $all[random_int(0, strlen($all) - 1)];
+    }
+
+    for ($i = count($passwordChars) - 1; $i > 0; $i--) {
+        $swapIndex = random_int(0, $i);
+        $temp = $passwordChars[$i];
+        $passwordChars[$i] = $passwordChars[$swapIndex];
+        $passwordChars[$swapIndex] = $temp;
+    }
+
+    return implode('', $passwordChars);
+}
+
+function admin_safe_fetch_value(PDO $pdo, string $sql, array $params = [], $default = 0)
+{
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $value = $stmt->fetchColumn();
+        return $value !== false ? $value : $default;
+    } catch (Throwable $ignore) {
+        return $default;
+    }
+}
+
+function admin_safe_fetch_row(PDO $pdo, string $sql, array $params = [], array $default = []): array
+{
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return is_array($row) ? $row : $default;
+    } catch (Throwable $ignore) {
+        return $default;
+    }
+}
+
 $tenant_id = $_SESSION['tenant_id'];
 $tenant_name = $_SESSION['tenant_name'] ?? 'Company Admin';
 $role_name = $_SESSION['role_name'] ?? ($_SESSION['role'] ?? 'User');
-$is_admin_account = strcasecmp($role_name, 'Admin') === 0;
 $ui_theme = (($_SESSION['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
+$tenants_has_next_billing_date = admin_column_exists($pdo, 'tenants', 'next_billing_date');
+$tenants_has_cancel_at_period_end = admin_column_exists($pdo, 'tenants', 'cancel_at_period_end');
+$tenants_has_scheduled_plan_tier = admin_column_exists($pdo, 'tenants', 'scheduled_plan_tier');
+$tenants_has_scheduled_plan_effective_date = admin_column_exists($pdo, 'tenants', 'scheduled_plan_effective_date');
+$users_has_can_manage_billing = admin_column_exists($pdo, 'users', 'can_manage_billing');
 
 // Check if user still needs to change their password (e.g. closed browser during force change)
 $can_manage_billing = false;
 $user_id_check = $_SESSION['user_id'] ?? 0;
 if ($user_id_check > 0) {
-    $fpc_stmt = $pdo->prepare('SELECT force_password_change, ui_theme FROM users WHERE user_id = ?');
+    $fpc_stmt = $pdo->prepare('SELECT force_password_change, ui_theme, role_id FROM users WHERE user_id = ?');
     $fpc_stmt->execute([$user_id_check]);
     $fpc_row = $fpc_stmt->fetch(PDO::FETCH_ASSOC);
     if ($fpc_row && isset($fpc_row['ui_theme'])) {
         $ui_theme = ($fpc_row['ui_theme'] === 'dark') ? 'dark' : 'light';
         $_SESSION['ui_theme'] = $ui_theme;
     }
-    // Attempt to read can_manage_billing; auto-create column if missing
-    try {
-        $billing_stmt = $pdo->prepare('SELECT can_manage_billing FROM users WHERE user_id = ?');
-        $billing_stmt->execute([$user_id_check]);
-        $billing_row = $billing_stmt->fetch(PDO::FETCH_ASSOC);
-        if ($billing_row && isset($billing_row['can_manage_billing'])) {
-            $can_manage_billing = (bool)$billing_row['can_manage_billing'];
-            $_SESSION['can_manage_billing'] = $can_manage_billing;
+    $roleId = (int)($fpc_row['role_id'] ?? 0);
+    if (admin_role_supports_billing_toggle($pdo, (string)$tenant_id, $roleId)) {
+        if ($users_has_can_manage_billing) {
+            $billing_stmt = $pdo->prepare('SELECT can_manage_billing FROM users WHERE user_id = ? LIMIT 1');
+            $billing_stmt->execute([$user_id_check]);
+            $can_manage_billing = (bool)$billing_stmt->fetchColumn();
+        } else {
+            $can_manage_billing = mf_user_can_manage_billing($pdo, (string)$tenant_id, $user_id_check);
         }
-    } catch (PDOException $e) {
-        // Column doesn't exist yet — create it
-        try {
-            $pdo->exec("ALTER TABLE users ADD COLUMN can_manage_billing TINYINT(1) DEFAULT 0");
-        } catch (PDOException $ignore) {}
     }
+    $_SESSION['can_manage_billing'] = $can_manage_billing;
+        // Column doesn't exist yet — create it
     if ($fpc_row && (bool)$fpc_row['force_password_change']) {
         header('Location: ../tenant_login/force_change_password.php');
         exit;
@@ -195,10 +302,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         
         if (array_key_exists($new_plan, $valid_plans)) {
             $change_timing = $_POST['change_timing'] ?? 'next_cycle';
-            
-            $info_stmt = $pdo->prepare('SELECT plan_tier, billing_cycle, next_billing_date FROM tenants WHERE tenant_id = ?');
+
+            $info_stmt = $pdo->prepare('SELECT plan_tier FROM tenants WHERE tenant_id = ?');
             $info_stmt->execute([$tenant_id]);
-            $tenant_info = $info_stmt->fetch(PDO::FETCH_ASSOC);
+            $tenant_info = $info_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $tenant_info['next_billing_date'] = admin_get_next_billing_date($pdo, (string)$tenant_id, $tenants_has_next_billing_date);
             
             $plan_prices = [
                 'Starter' => 4999,
@@ -212,8 +320,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             if ($change_timing === 'immediate') {
                 $max_clients = (int)$valid_plans[$new_plan]['max_clients'];
                 $max_users = (int)$valid_plans[$new_plan]['max_users'];
-                
-                $upd = $pdo->prepare("UPDATE tenants SET plan_tier = ?, mrr = ?, max_clients = ?, max_users = ?, scheduled_plan_tier = NULL, scheduled_plan_effective_date = NULL WHERE tenant_id = ?");
+
+                $update_parts = ['plan_tier = ?', 'mrr = ?', 'max_clients = ?', 'max_users = ?'];
+                if ($tenants_has_scheduled_plan_tier) {
+                    $update_parts[] = 'scheduled_plan_tier = NULL';
+                }
+                if ($tenants_has_scheduled_plan_effective_date) {
+                    $update_parts[] = 'scheduled_plan_effective_date = NULL';
+                }
+
+                $upd = $pdo->prepare('UPDATE tenants SET ' . implode(', ', $update_parts) . ' WHERE tenant_id = ?');
                 $upd->execute([$new_plan, $mrr, $max_clients, $max_users, $tenant_id]);
                 
                 $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_UPDATE', ?, ?)");
@@ -225,14 +341,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
                 if (empty($next) || $next < date('Y-m-d')) {
                     $next = date('Y-m-d', strtotime('+30 days'));
                 }
-                
-                $upd = $pdo->prepare("UPDATE tenants SET scheduled_plan_tier = ?, scheduled_plan_effective_date = ? WHERE tenant_id = ?");
-                $upd->execute([$new_plan, $next, $tenant_id]);
-                
-                $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_SCHEDULED', ?, ?)");
-                $log_stmt->execute([$tenant_id, $_SESSION['user_id'], "Subscription plan scheduled to $new_plan on $next", $_SERVER['REMOTE_ADDR'] ?? '']);
-                
-                $_SESSION['admin_flash'] = "Subscription plan update to $new_plan is scheduled for your next billing cycle ($next).";
+
+                if ($tenants_has_scheduled_plan_tier && $tenants_has_scheduled_plan_effective_date) {
+                    $upd = $pdo->prepare("UPDATE tenants SET scheduled_plan_tier = ?, scheduled_plan_effective_date = ? WHERE tenant_id = ?");
+                    $upd->execute([$new_plan, $next, $tenant_id]);
+
+                    $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_SCHEDULED', ?, ?)");
+                    $log_stmt->execute([$tenant_id, $_SESSION['user_id'], "Subscription plan scheduled to $new_plan on $next", $_SERVER['REMOTE_ADDR'] ?? '']);
+
+                    $_SESSION['admin_flash'] = "Subscription plan update to $new_plan is scheduled for your next billing cycle ($next).";
+                } else {
+                    $max_clients = (int)$valid_plans[$new_plan]['max_clients'];
+                    $max_users = (int)$valid_plans[$new_plan]['max_users'];
+                    $upd = $pdo->prepare("UPDATE tenants SET plan_tier = ?, mrr = ?, max_clients = ?, max_users = ? WHERE tenant_id = ?");
+                    $upd->execute([$new_plan, $mrr, $max_clients, $max_users, $tenant_id]);
+
+                    $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'SUBSCRIPTION_UPDATE', ?, ?)");
+                    $log_stmt->execute([$tenant_id, $_SESSION['user_id'], "Subscription plan updated instantly to $new_plan because scheduled plan columns are unavailable", $_SERVER['REMOTE_ADDR'] ?? '']);
+
+                    $_SESSION['admin_flash'] = "Scheduled plan changes are unavailable on this installation, so $new_plan was applied immediately.";
+                }
             }
         } else {
             $_SESSION['admin_flash'] = "Invalid plan selected.";
@@ -371,6 +499,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cancel_subscription') {
     if (!$can_manage_billing) {
         $_SESSION['admin_flash'] = 'You do not have permission to cancel the subscription.';
+        header('Location: admin.php?tab=billing');
+        exit;
+    }
+
+    if (!$tenants_has_cancel_at_period_end) {
+        $_SESSION['admin_flash'] = 'Subscription cancellation scheduling is not available on this installation yet.';
         header('Location: admin.php?tab=billing');
         exit;
     }
@@ -912,11 +1046,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 throw new Exception('That email is already in use by another account.');
             }
 
+            $billing_access_enabled = admin_role_supports_billing_toggle($pdo, (string)$tenant_id, $role_id)
+                && isset($_POST['can_manage_billing'])
+                && $_POST['can_manage_billing'] === '1';
+
             $pdo->beginTransaction();
-            $pdo->prepare('UPDATE users SET email = ?, role_id = ?, status = ? WHERE user_id = ? AND tenant_id = ? AND user_type = \'Employee\'')
-                ->execute([$email, $role_id, $status, $target_user_id, $tenant_id]);
+            if ($users_has_can_manage_billing) {
+                $pdo->prepare('UPDATE users SET email = ?, role_id = ?, status = ?, can_manage_billing = ? WHERE user_id = ? AND tenant_id = ? AND user_type = \'Employee\'')
+                    ->execute([$email, $role_id, $status, $billing_access_enabled ? 1 : 0, $target_user_id, $tenant_id]);
+            } else {
+                $pdo->prepare('UPDATE users SET email = ?, role_id = ?, status = ? WHERE user_id = ? AND tenant_id = ? AND user_type = \'Employee\'')
+                    ->execute([$email, $role_id, $status, $target_user_id, $tenant_id]);
+            }
             $pdo->prepare('UPDATE employees SET first_name = ?, last_name = ? WHERE user_id = ? AND tenant_id = ?')
                 ->execute([$first_name, $last_name, $target_user_id, $tenant_id]);
+            if (!$users_has_can_manage_billing) {
+                mf_set_user_billing_access($pdo, (string)$tenant_id, $target_user_id, $billing_access_enabled);
+            }
             
             $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'STAFF_UPDATED', 'user', ?, ?)")->execute([$_SESSION['user_id'] ?? null, "Staff account updated for $first_name $last_name", $tenant_id]);
             
@@ -934,11 +1080,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $status = 'Active'; // Automatically active
             $create_as_admin = isset($_POST['create_as_admin']) && $_POST['create_as_admin'] === '1';
 
-            if ($create_as_admin) {
-                $can_manage_billing_input = isset($_POST['can_manage_billing']) && $_POST['can_manage_billing'] === '1' ? 1 : 0;
-            } else {
-                $can_manage_billing_input = 0;
-            }
+            $can_manage_billing_input = false;
 
             if ($create_as_admin) {
                 $admin_role_stmt = $pdo->prepare("SELECT role_id FROM user_roles WHERE tenant_id = ? AND role_name = 'Admin' LIMIT 1");
@@ -958,6 +1100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new Exception('Invalid email address.');
             }
+
+            $can_manage_billing_input = admin_role_supports_billing_toggle($pdo, (string)$tenant_id, $role_id)
+                && isset($_POST['can_manage_billing'])
+                && $_POST['can_manage_billing'] === '1';
 
             // Enforce max_users limit for Staff Accounts
             $plan_stmt = $pdo->prepare('SELECT max_users FROM tenants WHERE tenant_id = ? LIMIT 1');
@@ -995,17 +1141,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
 
             // Generate a secure random temporary password
-            $temp_password = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'), 0, 10);
+            $temp_password = admin_generate_temporary_password(12);
             $password_hash = password_hash($temp_password, PASSWORD_DEFAULT);
 
             $pdo->beginTransaction();
 
-            $user_stmt = $pdo->prepare('INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, can_manage_billing) VALUES (?, ?, ?, ?, TRUE, ?, \'Employee\', ?, ?)');
-            $user_stmt->execute([$tenant_id, $username, $email, $password_hash, $role_id, $status, $can_manage_billing_input]);
+            if ($users_has_can_manage_billing) {
+                $user_stmt = $pdo->prepare('INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, can_manage_billing) VALUES (?, ?, ?, ?, TRUE, ?, \'Employee\', ?, ?)');
+                $user_stmt->execute([$tenant_id, $username, $email, $password_hash, $role_id, $status, $can_manage_billing_input ? 1 : 0]);
+            } else {
+                $user_stmt = $pdo->prepare('INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status) VALUES (?, ?, ?, ?, TRUE, ?, \'Employee\', ?)');
+                $user_stmt->execute([$tenant_id, $username, $email, $password_hash, $role_id, $status]);
+            }
             $new_user_id = $pdo->lastInsertId();
 
             $emp_stmt = $pdo->prepare('INSERT INTO employees (user_id, tenant_id, first_name, last_name, department, hire_date) VALUES (?, ?, ?, ?, \'Admin\', CURDATE())');
             $emp_stmt->execute([$new_user_id, $tenant_id, $first_name, $last_name]);
+            if (!$users_has_can_manage_billing) {
+                mf_set_user_billing_access($pdo, (string)$tenant_id, $new_user_id, $can_manage_billing_input);
+            }
 
             $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'STAFF_ADDED', 'user', ?, ?)")->execute([$_SESSION['user_id'] ?? null, "New staff account created for $first_name $last_name", $tenant_id]);
 
@@ -1095,25 +1249,100 @@ $dashboard_alerts_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_
 $dashboard_alerts_stmt->execute([$tenant_id]);
 $dashboard_system_alerts = (int)$dashboard_alerts_stmt->fetchColumn();
 
+$dashboard_active_clients = (int)admin_safe_fetch_value(
+    $pdo,
+    "SELECT COUNT(*) FROM clients WHERE tenant_id = ? AND client_status = 'Active' AND deleted_at IS NULL",
+    [$tenant_id],
+    0
+);
+$dashboard_pending_applications = (int)admin_safe_fetch_value(
+    $pdo,
+    "SELECT COUNT(*) FROM loan_applications WHERE tenant_id = ? AND application_status NOT IN ('Approved','Rejected','Cancelled','Withdrawn')",
+    [$tenant_id],
+    0
+);
+$dashboard_active_loans = (int)admin_safe_fetch_value(
+    $pdo,
+    "SELECT COUNT(*) FROM loans WHERE tenant_id = ? AND loan_status IN ('Active', 'Overdue')",
+    [$tenant_id],
+    0
+);
+$dashboard_overdue_loans = (int)admin_safe_fetch_value(
+    $pdo,
+    "SELECT COUNT(*) FROM loans WHERE tenant_id = ? AND loan_status = 'Overdue'",
+    [$tenant_id],
+    0
+);
+$dashboard_total_portfolio = (float)admin_safe_fetch_value(
+    $pdo,
+    "SELECT COALESCE(SUM(remaining_balance), 0) FROM loans WHERE tenant_id = ? AND loan_status IN ('Active', 'Overdue')",
+    [$tenant_id],
+    0
+);
+$dashboard_todays_collections = (float)admin_safe_fetch_value(
+    $pdo,
+    "SELECT COALESCE(SUM(payment_amount), 0) FROM payments WHERE tenant_id = ? AND DATE(payment_date) = CURDATE() AND payment_status != 'Cancelled'",
+    [$tenant_id],
+    0
+);
+$dashboard_plan_snapshot = admin_safe_fetch_row(
+    $pdo,
+    "SELECT plan_tier, max_clients, max_users, mrr FROM tenants WHERE tenant_id = ? LIMIT 1",
+    [$tenant_id],
+    ['plan_tier' => 'Starter', 'max_clients' => 0, 'max_users' => 0, 'mrr' => 0]
+);
+$dashboard_plan_name = trim((string)($dashboard_plan_snapshot['plan_tier'] ?? 'Starter'));
+$dashboard_plan_price = (float)($dashboard_plan_snapshot['mrr'] ?? 0);
+$dashboard_client_limit = (int)($dashboard_plan_snapshot['max_clients'] ?? 0);
+$dashboard_staff_limit = (int)($dashboard_plan_snapshot['max_users'] ?? 0);
+$dashboard_client_utilization = $dashboard_client_limit > 0 ? min(100, (int)round(($dashboard_active_clients / $dashboard_client_limit) * 100)) : 0;
+$dashboard_staff_utilization = $dashboard_staff_limit > 0 ? min(100, (int)round(($dashboard_active_staff / $dashboard_staff_limit) * 100)) : 0;
+$dashboard_utilization_peak = max($dashboard_client_utilization, $dashboard_staff_utilization);
+$dashboard_health_tone = 'stable';
+$dashboard_health_title = 'Operations look healthy';
+$dashboard_health_detail = 'Your workspace is within normal operating ranges today.';
+if ($dashboard_overdue_loans > 0 || $dashboard_utilization_peak >= 90 || $dashboard_system_alerts > 0) {
+    $dashboard_health_tone = 'warning';
+    $dashboard_health_title = 'Needs attention';
+    $dashboard_health_detail = 'A few areas need review so daily operations stay on track.';
+}
+if ($dashboard_overdue_loans >= 10 || $dashboard_utilization_peak >= 100 || $dashboard_system_alerts >= 5) {
+    $dashboard_health_tone = 'critical';
+    $dashboard_health_title = 'Immediate action recommended';
+    $dashboard_health_detail = 'Critical alerts, high utilization, or overdue accounts are stacking up.';
+}
+
 // Pre-fetch Data for UI Rendering
 // ==========================================
 // 1. Fetch Roles
 $roles_stmt = $pdo->prepare('SELECT * FROM user_roles WHERE tenant_id = ? ORDER BY is_system_role DESC, created_at ASC');
 $roles_stmt->execute([$tenant_id]);
 $roles = $roles_stmt->fetchAll(PDO::FETCH_ASSOC);
+$staff_assignable_roles = array_values(array_filter($roles, function ($role) {
+    return strcasecmp((string)($role['role_name'] ?? ''), 'Admin') !== 0;
+}));
+$role_management_roles = $staff_assignable_roles;
 
-$active_role_id = isset($_GET['role_id']) ? (int)$_GET['role_id'] : ($roles[0]['role_id'] ?? null);
+$active_role_id = isset($_GET['role_id']) ? (int)$_GET['role_id'] : ($role_management_roles[0]['role_id'] ?? null);
 $active_role = null;
-foreach ($roles as $r) {
+foreach ($role_management_roles as $r) {
     if ($r['role_id'] == $active_role_id) {
         $active_role = $r;
         break;
     }
 }
+if ($active_role === null && !empty($role_management_roles)) {
+    $active_role = $role_management_roles[0];
+    $active_role_id = (int)$active_role['role_id'];
+}
 
 // 1.5 Fetch Staff/Employees
+$staff_select_fields = 'u.user_id, u.role_id, u.email, u.status, e.first_name, e.last_name, r.role_name';
+if ($users_has_can_manage_billing) {
+    $staff_select_fields .= ', u.can_manage_billing';
+}
 $staff_stmt = $pdo->prepare('
-    SELECT u.user_id, u.role_id, u.email, u.status, e.first_name, e.last_name, r.role_name 
+    SELECT ' . $staff_select_fields . '
     FROM users u 
     JOIN employees e ON u.user_id = e.user_id 
     JOIN user_roles r ON u.role_id = r.role_id 
@@ -1122,6 +1351,17 @@ $staff_stmt = $pdo->prepare('
 ');
 $staff_stmt->execute([$tenant_id, 'Employee']);
 $staff_list = $staff_stmt->fetchAll(PDO::FETCH_ASSOC);
+if ($users_has_can_manage_billing) {
+    foreach ($staff_list as &$staff_row) {
+        $staff_row['can_manage_billing'] = !empty($staff_row['can_manage_billing']);
+    }
+} else {
+    $staff_billing_access_map = mf_get_billing_access_map($pdo, (string)$tenant_id, array_column($staff_list, 'user_id'));
+    foreach ($staff_list as &$staff_row) {
+        $staff_row['can_manage_billing'] = !empty($staff_billing_access_map[(int)$staff_row['user_id']]);
+    }
+}
+unset($staff_row);
 
 // 2. Fetch Global Permissions
 try {
@@ -1454,12 +1694,16 @@ function hexToRgb($hex) {
             if (isset($_GET['tab'])) {
                 if (in_array($_GET['tab'], ['staff-list', 'roles-list'])) {
                     $active_view = 'staff';
+                } elseif ($_GET['tab'] === 'features') {
+                    $active_view = 'features';
                 } elseif ($_GET['tab'] === 'billing') {
                     $active_view = 'billing';
                 } elseif ($_GET['tab'] === 'statements') {
                     $active_view = 'statements';
                 } elseif ($_GET['tab'] === 'website') {
                     $active_view = 'website';
+                } elseif ($_GET['tab'] === 'settings') {
+                    $active_view = 'settings';
                 } elseif ($_GET['tab'] === 'personal') {
                     $active_view = 'personal';
                 } elseif ($_GET['tab'] === 'loan_products') {
@@ -1467,6 +1711,9 @@ function hexToRgb($hex) {
                 } elseif ($_GET['tab'] === 'credit_settings') {
                     $active_view = 'credit_settings';
                 }
+            }
+            if (!$can_manage_billing && in_array((string)($_GET['tab'] ?? ''), ['billing', 'statements'], true)) {
+                $active_view = 'dashboard';
             }
             $page_titles = [
                 'dashboard' => 'Dashboard',
@@ -1476,7 +1723,7 @@ function hexToRgb($hex) {
                 'personal' => 'Personal Settings',
                 'features' => 'Feature Toggles',
                 'billing' => 'Billing & Subscription',
-                'statements' => 'Statements',
+                'statements' => 'Receipts',
                 'loan_products' => 'Loan Products Settings',
                 'credit_settings' => 'Credit Assessment Settings'
             ];
@@ -1484,54 +1731,54 @@ function hexToRgb($hex) {
             ?>
             <nav class="sidebar-nav">
                 <span class="sidebar-section-title">Overview</span>
-                <a href="#dashboard" class="nav-item <?php echo $active_view === 'dashboard' ? 'active' : ''; ?>" data-target="dashboard" data-title="Dashboard">
+                <a href="admin.php" class="nav-item <?php echo $active_view === 'dashboard' ? 'active' : ''; ?>" data-target="dashboard" data-title="Dashboard">
                     <span class="material-symbols-rounded">dashboard</span>
                     <span>Dashboard</span>
                 </a>
 
                 <span class="sidebar-section-title">User Management</span>
-                <a href="#staff" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff" data-title="Staff Accounts">
+                <a href="admin.php?tab=staff-list" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff" data-title="Staff Accounts">
                     <span class="material-symbols-rounded">groups</span>
                     <span>Staff Accounts</span>
                 </a>
 
                 <span class="sidebar-section-title">Platform Settings</span>
-                <a href="#loan_products" class="nav-item <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>" data-target="loan_products" data-title="Loan Products">
+                <a href="admin.php?tab=loan_products" class="nav-item <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>" data-target="loan_products" data-title="Loan Products">
                     <span class="material-symbols-rounded">payments</span>
                     <span>Loan Products</span>
                 </a>
-                <a href="#credit_settings" class="nav-item <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Assessment">
+                <a href="admin.php?tab=credit_settings" class="nav-item <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Assessment">
                     <span class="material-symbols-rounded">speed</span>
                     <span>Credit Assessment</span>
                 </a>
-                <a href="#website" class="nav-item <?php echo $active_view === 'website' ? 'active' : ''; ?>" data-target="website" data-title="Website Editor">
+                <a href="admin.php?tab=website" class="nav-item <?php echo $active_view === 'website' ? 'active' : ''; ?>" data-target="website" data-title="Website Editor">
                     <span class="material-symbols-rounded">language</span>
                     <span>Website</span>
                 </a>
-                <a href="#features" class="nav-item <?php echo $active_view === 'features' ? 'active' : ''; ?>" data-target="features" data-title="Feature Toggles">
+                <a href="admin.php?tab=features" class="nav-item <?php echo $active_view === 'features' ? 'active' : ''; ?>" data-target="features" data-title="Feature Toggles">
                     <span class="material-symbols-rounded">toggle_on</span>
                     <span>Feature Toggles</span>
                 </a>
 
                 <?php if ($can_manage_billing): ?>
                 <span class="sidebar-section-title">Billing & Subscription</span>
-                <a href="#billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
+                <a href="admin.php?tab=billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
                     <span class="material-symbols-rounded">receipt_long</span>
                     <span>Plan & Billing</span>
                 </a>
-                <a href="#statements" class="nav-item <?php echo $active_view === 'statements' ? 'active' : ''; ?>" data-target="statements" data-title="Statements">
+                <a href="admin.php?tab=statements" class="nav-item <?php echo $active_view === 'statements' ? 'active' : ''; ?>" data-target="statements" data-title="Receipts">
                     <span class="material-symbols-rounded">account_balance_wallet</span>
-                    <span>Statements</span>
+                    <span>Receipts</span>
                 </a>
                 <?php endif; ?>
 
 
                 <span class="sidebar-section-title">Account</span>
-                <a href="#settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Settings">
+                <a href="admin.php?tab=settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Settings">
                     <span class="material-symbols-rounded">settings</span>
                     <span>General Settings</span>
                 </a>
-                <a href="#settings" class="nav-item <?php echo $active_view === 'personal' ? 'active' : ''; ?>" data-target="settings" data-subtab="personal-profile" data-title="Personal Settings">
+                <a href="admin.php?tab=personal" class="nav-item <?php echo $active_view === 'personal' ? 'active' : ''; ?>" data-target="settings" data-subtab="personal-profile" data-title="Personal Settings">
                     <span class="material-symbols-rounded">person</span>
                     <span>Personal Profile</span>
                 </a>
@@ -1556,7 +1803,7 @@ function hexToRgb($hex) {
                     <button id="theme-toggle" class="icon-btn" title="Toggle Light/Dark Mode">
                         <span class="material-symbols-rounded"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
                     </button>
-                    <div class="admin-profile" style="cursor:pointer;" onclick="document.querySelector('[data-subtab=\'personal-profile\']').click();" title="Manage Profile">
+                    <div class="admin-profile" style="cursor:pointer;" onclick="window.location.href='admin.php?tab=personal';" title="Manage Profile">
                         <img src="https://ui-avatars.com/api/?name=Super+Admin&background=random" alt="Admin Avatar"
                             class="avatar">
                         <div class="admin-info">
@@ -1578,40 +1825,190 @@ function hexToRgb($hex) {
 
                 <!-- Dashboard View -->
                 <section id="dashboard" class="view-section <?php echo $active_view === 'dashboard' ? 'active' : ''; ?>">
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon"
-                                style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color);">
-                                <span class="material-symbols-rounded">book</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Total Clients</p>
-                                <h3><?php echo number_format($dashboard_total_clients); ?></h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1); color: #22c55e;">
-                                <span class="material-symbols-rounded">group</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Active Staff</p>
-                                <h3><?php echo number_format($dashboard_active_staff); ?></h3>
+                    <div class="dashboard-hero dashboard-hero-<?php echo htmlspecialchars($dashboard_health_tone); ?>">
+                        <div class="dashboard-hero-copy">
+                            <span class="dashboard-eyebrow">Workspace Overview</span>
+                            <h2><?php echo htmlspecialchars($settings['company_name']); ?> at a glance</h2>
+                            <p>Track daily operations, borrower activity, staff capacity, and collection momentum from one place.</p>
+                            <div class="dashboard-pill-row">
+                                <span class="dashboard-pill">Plan: <?php echo htmlspecialchars($dashboard_plan_name); ?></span>
+                                <span class="dashboard-pill">MRR: &#8369;<?php echo number_format($dashboard_plan_price, 2); ?></span>
+                                <span class="dashboard-pill">Active Clients: <?php echo number_format($dashboard_active_clients); ?></span>
+                                <span class="dashboard-pill">Alerts: <?php echo number_format($dashboard_system_alerts + $dashboard_overdue_loans); ?></span>
                             </div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
-                                <span class="material-symbols-rounded">warning</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>System Alerts</p>
-                                <h3><?php echo number_format($dashboard_system_alerts); ?></h3>
+                        <div class="dashboard-hero-status">
+                            <span class="dashboard-health-label"><?php echo htmlspecialchars($dashboard_health_title); ?></span>
+                            <p><?php echo htmlspecialchars($dashboard_health_detail); ?></p>
+                            <div class="dashboard-health-meta">
+                                <span><strong><?php echo number_format($dashboard_pending_applications); ?></strong> pending applications</span>
+                                <span><strong><?php echo number_format($dashboard_overdue_loans); ?></strong> overdue loans</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="dashboard-widgets">
-                        <div class="widget">
-                            <h3>Recent Staff Activity</h3>
+                    <div class="stats-grid dashboard-stats-grid">
+                        <div class="stat-card stat-card-compact">
+                            <div class="stat-icon" style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color);">
+                                <span class="material-symbols-rounded">groups</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Active Clients</p>
+                                <h3><?php echo number_format($dashboard_active_clients); ?></h3>
+                                <small><?php echo number_format($dashboard_total_clients); ?> total records</small>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-card-compact">
+                            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.12); color: #2563eb;">
+                                <span class="material-symbols-rounded">assignment</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Pending Applications</p>
+                                <h3><?php echo number_format($dashboard_pending_applications); ?></h3>
+                                <small>Awaiting review or decision</small>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-card-compact">
+                            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.12); color: #d97706;">
+                                <span class="material-symbols-rounded">payments</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Today's Collections</p>
+                                <h3>&#8369;<?php echo number_format($dashboard_todays_collections, 2); ?></h3>
+                                <small>Posted collections today</small>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-card-compact">
+                            <div class="stat-icon" style="background: rgba(139, 92, 246, 0.12); color: #7c3aed;">
+                                <span class="material-symbols-rounded">badge</span>
+                            </div>
+                            <div class="stat-details">
+                                <p>Active Staff</p>
+                                <h3><?php echo number_format($dashboard_active_staff); ?></h3>
+                                <small><?php echo $dashboard_staff_limit > 0 ? number_format($dashboard_staff_utilization) . '% of plan capacity' : 'No staff cap'; ?></small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-panel-grid">
+                        <div class="card dashboard-panel">
+                            <div class="card-header-flex">
+                                <div>
+                                    <h3>Capacity Snapshot</h3>
+                                    <p class="text-muted">See how close your workspace is to plan limits and operating thresholds.</p>
+                                </div>
+                                <span class="badge <?php echo $dashboard_utilization_peak >= 90 ? 'badge-yellow' : 'badge-green'; ?>">
+                                    <?php echo $dashboard_utilization_peak >= 90 ? 'Near Limit' : 'Healthy'; ?>
+                                </span>
+                            </div>
+                            <div class="dashboard-capacity-list">
+                                <div class="dashboard-capacity-item">
+                                    <div class="dashboard-capacity-head">
+                                        <span>Client Capacity</span>
+                                        <strong><?php echo number_format($dashboard_active_clients); ?> / <?php echo $dashboard_client_limit > 0 ? number_format($dashboard_client_limit) : 'Unlimited'; ?></strong>
+                                    </div>
+                                    <div class="dashboard-progress-track">
+                                        <div class="dashboard-progress-fill" style="width: <?php echo $dashboard_client_limit > 0 ? $dashboard_client_utilization : 8; ?>%;"></div>
+                                    </div>
+                                </div>
+                                <div class="dashboard-capacity-item">
+                                    <div class="dashboard-capacity-head">
+                                        <span>Staff Capacity</span>
+                                        <strong><?php echo number_format($dashboard_active_staff); ?> / <?php echo $dashboard_staff_limit > 0 ? number_format($dashboard_staff_limit) : 'Unlimited'; ?></strong>
+                                    </div>
+                                    <div class="dashboard-progress-track">
+                                        <div class="dashboard-progress-fill dashboard-progress-fill-green" style="width: <?php echo $dashboard_staff_limit > 0 ? $dashboard_staff_utilization : 8; ?>%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="dashboard-meta-grid">
+                                <div class="dashboard-meta-card">
+                                    <span class="dashboard-meta-label">Loan Portfolio</span>
+                                    <strong><?php echo number_format($dashboard_active_loans); ?> active loans</strong>
+                                    <small>&#8369;<?php echo number_format($dashboard_total_portfolio, 2); ?> remaining balance</small>
+                                </div>
+                                <div class="dashboard-meta-card">
+                                    <span class="dashboard-meta-label">Risk Watch</span>
+                                    <strong><?php echo number_format($dashboard_overdue_loans); ?> overdue loans</strong>
+                                    <small><?php echo number_format($dashboard_system_alerts); ?> user account alerts</small>
+                                </div>
+                                <div class="dashboard-meta-card">
+                                    <span class="dashboard-meta-label">Workspace Plan</span>
+                                    <strong><?php echo htmlspecialchars($dashboard_plan_name); ?></strong>
+                                    <small>&#8369;<?php echo number_format($dashboard_plan_price, 2); ?> monthly recurring value</small>
+                                </div>
+                                <div class="dashboard-meta-card">
+                                    <span class="dashboard-meta-label">Support Email</span>
+                                    <strong><?php echo htmlspecialchars(($settings['support_email'] ?? '') !== '' ? $settings['support_email'] : 'Not configured'); ?></strong>
+                                    <small><?php echo htmlspecialchars(($settings['support_phone'] ?? '') !== '' ? $settings['support_phone'] : 'No support phone set'); ?></small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card dashboard-panel">
+                            <div class="card-header-flex">
+                                <div>
+                                    <h3>Quick Actions</h3>
+                                    <p class="text-muted">Jump straight into the settings and admin tasks that matter most.</p>
+                                </div>
+                            </div>
+                            <div class="dashboard-action-grid">
+                                <a href="admin.php?tab=staff-list" class="dashboard-action-card">
+                                    <span class="material-symbols-rounded">manage_accounts</span>
+                                    <div>
+                                        <strong>Manage Staff</strong>
+                                        <small>Create accounts and update roles.</small>
+                                    </div>
+                                </a>
+                                <a href="admin.php?tab=loan_products" class="dashboard-action-card">
+                                    <span class="material-symbols-rounded">payments</span>
+                                    <div>
+                                        <strong>Loan Products</strong>
+                                        <small>Adjust lending options and charges.</small>
+                                    </div>
+                                </a>
+                                <a href="admin.php?tab=credit_settings" class="dashboard-action-card">
+                                    <span class="material-symbols-rounded">speed</span>
+                                    <div>
+                                        <strong>Credit Settings</strong>
+                                        <small>Refine approval thresholds and weights.</small>
+                                    </div>
+                                </a>
+                                <a href="admin.php?tab=website" class="dashboard-action-card">
+                                    <span class="material-symbols-rounded">language</span>
+                                    <div>
+                                        <strong>Website Editor</strong>
+                                        <small>Update your tenant-facing website.</small>
+                                    </div>
+                                </a>
+                                <?php if ($can_manage_billing): ?>
+                                <a href="admin.php?tab=billing" class="dashboard-action-card">
+                                    <span class="material-symbols-rounded">receipt_long</span>
+                                    <div>
+                                        <strong>Plan & Billing</strong>
+                                        <small>Review plan usage and payment details.</small>
+                                    </div>
+                                </a>
+                                <?php endif; ?>
+                                <a href="admin.php?tab=settings" class="dashboard-action-card">
+                                    <span class="material-symbols-rounded">settings</span>
+                                    <div>
+                                        <strong>General Settings</strong>
+                                        <small>Keep company info and branding current.</small>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-panel-grid dashboard-panel-grid-secondary">
+                        <div class="card dashboard-panel">
+                            <div class="card-header-flex">
+                                <div>
+                                    <h3>Recent Staff Activity</h3>
+                                    <p class="text-muted">Latest account access and staff-management changes.</p>
+                                </div>
+                            </div>
                             <ul class="activity-list">
                                 <?php if (empty($staff_audit_logs)): ?>
                                 <li>
@@ -1635,45 +2032,52 @@ function hexToRgb($hex) {
                                 <?php endif; ?>
                             </ul>
                         </div>
-                    </div>
-                    
-                    <div class="card" style="margin-top: 24px;">
-                        <div class="card-header-flex mb-4">
-                            <h3>Complete Audit Logs</h3>
-                            <div class="search-box">
-                                <span class="material-symbols-rounded">search</span>
-                                <input type="text" placeholder="Search logs...">
+
+                        <div class="card dashboard-panel">
+                            <div class="card-header-flex">
+                                <div>
+                                    <h3>Recent Audit Trail</h3>
+                                    <p class="text-muted">A compact view of the latest tracked system actions.</p>
+                                </div>
                             </div>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="admin-table log-table">
-                                <thead>
-                                    <tr>
-                                        <th>Timestamp</th>
-                                        <th>Username</th>
-                                        <th>Action</th>
-                                        <th>Details</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (empty($all_audit_logs)): ?>
-                                    <tr>
-                                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                                            No audit logs recorded yet.
-                                        </td>
-                                    </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($all_audit_logs as $log): ?>
+                            <div class="table-responsive">
+                                <table class="admin-table dashboard-log-table">
+                                    <thead>
                                         <tr>
-                                            <td><?php echo date('M j, Y, g:i a', strtotime($log['created_at'])); ?></td>
-                                            <td><?php echo htmlspecialchars($log['actor_name'] ?? 'System'); ?></td>
-                                            <td><span class="status-badge status-active"><?php echo htmlspecialchars($log['action_type']); ?></span></td>
-                                            <td><?php echo htmlspecialchars($log['description']); ?></td>
+                                            <th>Timestamp</th>
+                                            <th>Actor</th>
+                                            <th>Action</th>
+                                            <th>Details</th>
                                         </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (empty($all_audit_logs)): ?>
+                                        <tr>
+                                            <td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                                No audit logs recorded yet.
+                                            </td>
+                                        </tr>
+                                        <?php else: ?>
+                                            <?php foreach (array_slice($all_audit_logs, 0, 12) as $log): ?>
+                                            <?php
+                                                $logBadgeClass = 'badge-blue';
+                                                if (stripos((string)$log['action_type'], 'DELETE') !== false || stripos((string)$log['action_type'], 'SUSPEND') !== false || stripos((string)$log['action_type'], 'CANCEL') !== false) {
+                                                    $logBadgeClass = 'badge-red';
+                                                } elseif (stripos((string)$log['action_type'], 'LOGIN') !== false || stripos((string)$log['action_type'], 'ADDED') !== false || stripos((string)$log['action_type'], 'UPDATED') !== false) {
+                                                    $logBadgeClass = 'badge-green';
+                                                }
+                                            ?>
+                                            <tr>
+                                                <td><?php echo date('M j, Y, g:i a', strtotime($log['created_at'])); ?></td>
+                                                <td><?php echo htmlspecialchars($log['actor_name'] ?? 'System'); ?></td>
+                                                <td><span class="badge <?php echo $logBadgeClass; ?>"><?php echo htmlspecialchars($log['action_type']); ?></span></td>
+                                                <td><?php echo htmlspecialchars($log['description']); ?></td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -1681,8 +2085,8 @@ function hexToRgb($hex) {
                 <!-- General Settings View -->
                 <section id="settings" class="view-section <?php echo in_array($active_view, ['settings', 'personal'], true) ? 'active' : ''; ?>">
                     <div class="tabs">
-                        <button class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'personal') ? 'active' : ''; ?>" data-tab="company-profile">Company Profile</button>
-                        <button class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'personal') ? 'active' : ''; ?>" data-tab="personal-profile">Personal Profile</button>
+                        <a href="admin.php?tab=settings" class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'personal') ? 'active' : ''; ?>" data-tab="company-profile">Company Profile</a>
+                        <a href="admin.php?tab=personal" class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'personal') ? 'active' : ''; ?>" data-tab="personal-profile">Personal Profile</a>
                     </div>
 
                     <div id="company-profile" class="tab-content <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'personal') ? 'active' : ''; ?>">
@@ -1901,6 +2305,7 @@ function hexToRgb($hex) {
                     </div>
                 </section>
 
+                <?php if ($can_manage_billing): ?>
                 <!-- Billing & Subscription View -->
                 <section id="billing" class="view-section <?php echo $active_view === 'billing' ? 'active' : ''; ?>">
                     <div class="header-desc" style="margin-bottom: 24px;">
@@ -1909,20 +2314,32 @@ function hexToRgb($hex) {
                     </div>
 
                     <div class="tabs" style="margin-bottom: 24px;">
-                        <button class="tab-btn <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>" data-tab="billing-overview">Overview</button>
-                        <button class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'payment') ? 'active' : ''; ?>" data-tab="billing-payment">Payment Info</button>
-                        <button class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'history') ? 'active' : ''; ?>" data-tab="billing-history">Payment History</button>
+                        <a href="admin.php?tab=billing" class="tab-btn <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>" data-tab="billing-overview">Overview</a>
+                        <a href="admin.php?tab=billing&amp;sub=payment" class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'payment') ? 'active' : ''; ?>" data-tab="billing-payment">Payment Info</a>
+                        <a href="admin.php?tab=billing&amp;sub=history" class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'history') ? 'active' : ''; ?>" data-tab="billing-history">Payment History</a>
                     </div>
 
                     <!-- 1. Overview Tab -->
                     <div id="billing-overview" class="tab-content <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>">
                             <?php
-                                $plan_stmt = $pdo->prepare('SELECT plan_tier, max_clients, max_users, cancel_at_period_end, next_billing_date FROM tenants WHERE tenant_id = ?');
+                                $plan_fields = ['plan_tier', 'max_clients', 'max_users'];
+                                if ($tenants_has_cancel_at_period_end) {
+                                    $plan_fields[] = 'cancel_at_period_end';
+                                }
+                                if ($tenants_has_next_billing_date) {
+                                    $plan_fields[] = 'next_billing_date';
+                                }
+
+                                $plan_stmt = $pdo->prepare('SELECT ' . implode(', ', $plan_fields) . ' FROM tenants WHERE tenant_id = ?');
                                 $plan_stmt->execute([$tenant_id]);
-                                $tenant_plan = $plan_stmt->fetch(PDO::FETCH_ASSOC) ?: ['plan_tier' => 'Starter', 'max_clients' => 1000, 'max_users' => 250, 'cancel_at_period_end' => 0, 'next_billing_date' => date('Y-m-d', strtotime('+30 days'))];
-                                
-                                $cancel_at_period_end = (bool)$tenant_plan['cancel_at_period_end'];
-                                $next_billing_date_formatted = $tenant_plan['next_billing_date'] ? date('M j, Y', strtotime($tenant_plan['next_billing_date'])) : 'N/A';
+                                $tenant_plan = $plan_stmt->fetch(PDO::FETCH_ASSOC) ?: ['plan_tier' => 'Starter', 'max_clients' => 1000, 'max_users' => 250];
+
+                                $cancel_at_period_end = (bool)($tenant_plan['cancel_at_period_end'] ?? 0);
+                                $next_billing_date_value = trim((string)($tenant_plan['next_billing_date'] ?? ''));
+                                if ($next_billing_date_value === '') {
+                                    $next_billing_date_value = admin_get_next_billing_date($pdo, (string)$tenant_id, $tenants_has_next_billing_date);
+                                }
+                                $next_billing_date_formatted = $next_billing_date_value !== '' ? date('M j, Y', strtotime($next_billing_date_value)) : 'N/A';
                                 
                                 $current_plan = $tenant_plan['plan_tier'];
                                 $plan_aliases = ['Professional' => 'Pro', 'Elite' => 'Enterprise'];
@@ -2045,7 +2462,7 @@ function hexToRgb($hex) {
                                                 });
                                             </script>
                                         </div>
-                                        <?php if (!$cancel_at_period_end): ?>
+                                        <?php if ($tenants_has_cancel_at_period_end && !$cancel_at_period_end): ?>
                                         <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
                                             <form method="POST" action="admin.php" data-confirm-title="Cancel Subscription" data-confirm-message="Are you sure you want to cancel your subscription? You will still retain access to the system until your next billing due date, after which your account will be suspended." data-confirm-button="Yes, Cancel Subscription">
                                                 <input type="hidden" name="action" value="cancel_subscription">
@@ -2055,7 +2472,6 @@ function hexToRgb($hex) {
                                             </form>
                                         </div>
                                         <?php endif; ?>
-                                    </div>
                                     </div>
                                     <?php endif; ?>
                                 </div>
@@ -2272,7 +2688,7 @@ function hexToRgb($hex) {
                     </div>
                 </section>
 
-                <!-- Statements View -->
+                <!-- Receipts View -->
                 <section id="statements" class="view-section <?php echo $active_view === 'statements' ? 'active' : ''; ?>">
                     <div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
                         <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
@@ -2280,15 +2696,15 @@ function hexToRgb($hex) {
                                 <div style="background: rgba(34, 197, 94, 0.1); color: #22c55e; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
                                     <span class="material-symbols-rounded" style="font-size: 20px;">account_balance_wallet</span>
                                 </div>
-                                <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;">Statement of Transactions</h3>
+                                <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;">Receipt Records</h3>
                             </div>
-                            <p class="text-muted" style="margin: 0; font-size: 0.95rem;">Review all processed billing transactions and automatic payments for your subscription.</p>
+                            <p class="text-muted" style="margin: 0; font-size: 0.95rem;">Review all processed billing transactions and automatic payments for your subscription receipts.</p>
                         </div>
                         <div class="table-responsive">
                             <table class="admin-table">
                                 <thead>
                                     <tr>
-                                        <th>Reference ID</th>
+                                            <th>Receipt ID</th>
                                         <th>Date</th>
                                         <th>Amount</th>
                                         <th>Payment Source</th>
@@ -2305,7 +2721,7 @@ function hexToRgb($hex) {
                                     <tr>
                                         <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
                                             <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">receipt_long</span>
-                                            No transactions have been recorded yet.
+                                            No receipts have been recorded yet.
                                         </td>
                                     </tr>
                                     <?php else: ?>
@@ -2326,12 +2742,13 @@ function hexToRgb($hex) {
                         </div>
                     </div>
                 </section>
+                <?php endif; ?>
 
                 <!-- Staff & Roles View -->
                 <section id="staff" class="view-section <?php echo $active_view === 'staff' ? 'active' : ''; ?>">
                     <div class="tabs">
-                        <button class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'roles-list') ? 'active' : ''; ?>" data-tab="staff-list">Staff Accounts</button>
-                        <button class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'roles-list') ? 'active' : ''; ?>" data-tab="roles-list">Roles & Permissions</button>
+                        <a href="admin.php?tab=staff-list" class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'roles-list') ? 'active' : ''; ?>" data-tab="staff-list">Staff Accounts</a>
+                        <a href="admin.php?tab=roles-list" class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'roles-list') ? 'active' : ''; ?>" data-tab="roles-list">Roles & Permissions</a>
                     </div>
 
                     <div id="staff-list" class="tab-content <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'roles-list') ? 'active' : ''; ?>">
@@ -2349,17 +2766,21 @@ function hexToRgb($hex) {
                                 <script>
                                     function openAddStaffModal() {
                                         var m = document.getElementById('add-staff-modal');
+                                        var sel = m.querySelector('select[name="role_id"]');
                                         var flag = document.getElementById('create-as-admin-flag');
                                         var title = document.getElementById('add-staff-modal-title');
                                         var submit = document.getElementById('add-staff-submit-btn');
                                         var roleGroup = document.getElementById('role-group');
                                         var billingToggle = document.getElementById('billing-toggle-group');
+                                        var billingCheckbox = document.getElementById('create-can-manage-billing');
 
                                         if (flag) flag.value = '0';
                                         if (title) title.textContent = 'Add Staff Member';
                                         if (submit) submit.textContent = 'Add Staff';
+                                        if (sel) sel.required = true;
                                         if (roleGroup) roleGroup.style.display = 'block';
                                         if (billingToggle) billingToggle.style.display = 'none';
+                                        if (billingCheckbox) billingCheckbox.checked = false;
 
                                         m.style.display = 'flex';
                                     }
@@ -2371,18 +2792,15 @@ function hexToRgb($hex) {
                                         var submit = document.getElementById('add-staff-submit-btn');
                                         var roleGroup = document.getElementById('role-group');
                                         var billingToggle = document.getElementById('billing-toggle-group');
-
-                                        if (sel) {
-                                            for(var i=0; i<sel.options.length; i++) {
-                                                if(sel.options[i].text === 'Admin') sel.selectedIndex = i;
-                                            }
-                                        }
+                                        var billingCheckbox = document.getElementById('create-can-manage-billing');
 
                                         if (flag) flag.value = '1';
                                         if (title) title.textContent = 'Create Admin Account';
                                         if (submit) submit.textContent = 'Create Admin';
+                                        if (sel) sel.required = false;
                                         if (roleGroup) roleGroup.style.display = 'none';
                                         if (billingToggle) billingToggle.style.display = 'flex';
+                                        if (billingCheckbox) billingCheckbox.checked = true;
 
                                         m.style.display = 'flex';
                                     }
@@ -2439,6 +2857,7 @@ function hexToRgb($hex) {
                                                                  data-last-name="<?php echo htmlspecialchars($staff['last_name']); ?>"
                                                                  data-email="<?php echo htmlspecialchars($staff['email']); ?>"
                                                                  data-role-id="<?php echo htmlspecialchars($staff['role_id']); ?>"
+                                                                 data-can-manage-billing="<?php echo !empty($staff['can_manage_billing']) ? '1' : '0'; ?>"
                                                                  data-status="<?php echo htmlspecialchars($staff['status']); ?>">
                                                                  <span class="material-symbols-rounded" style="font-size:18px;">edit</span>
                                                              </button>
@@ -2502,10 +2921,10 @@ function hexToRgb($hex) {
                                     </script>
                                 </div>
                                 <div class="role-list-container">
-                                    <?php if (empty($roles)): ?>
+                                    <?php if (empty($role_management_roles)): ?>
                                         <div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.9rem;">No roles found.</div>
                                     <?php else: ?>
-                                        <?php foreach ($roles as $role): ?>
+                                        <?php foreach ($role_management_roles as $role): ?>
                                             <a href="#" 
                                                data-role-id="<?php echo $role['role_id']; ?>"
                                                class="role-list-item <?php echo ($active_role_id == $role['role_id']) ? 'active' : ''; ?>" 
@@ -2524,13 +2943,13 @@ function hexToRgb($hex) {
 
                             <!-- Right Content: Permissions -->
                             <div class="roles-content card">
-                                <?php if (empty($roles)): ?>
+                                <?php if (empty($role_management_roles)): ?>
                                     <div id="empty-permissions-state" style="text-align: center; padding: 3rem 1rem;">
                                         <span class="material-symbols-rounded" style="font-size: 48px; color: var(--border-color); margin-bottom: 1rem;">tune</span>
                                         <p style="color: var(--text-muted);">Select a role from the sidebar to view and edit its permissions.</p>
                                     </div>
                                 <?php else: ?>
-                                    <?php foreach ($roles as $role_panel): 
+                                    <?php foreach ($role_management_roles as $role_panel): 
                                         $is_active_panel = ($role_panel['role_id'] == $active_role_id);
                                         $is_admin_role = ((int)$role_panel['is_system_role'] && $role_panel['role_name'] === 'Admin');
                                         $panel_active_codes = $active_codes_by_role[$role_panel['role_id']] ?? [];
@@ -3220,7 +3639,7 @@ function hexToRgb($hex) {
                         <label>Role <span style="color:var(--danger-color);">*</span></label>
                         <select name="role_id" class="form-control" required>
                             <option value="">Select a role...</option>
-                            <?php foreach ($roles as $r): ?>
+                            <?php foreach ($staff_assignable_roles as $r): ?>
                                 <option value="<?php echo $r['role_id']; ?>"><?php echo htmlspecialchars($r['role_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -3232,7 +3651,7 @@ function hexToRgb($hex) {
                             <span style="font-size: 0.8rem; color: var(--text-muted);">Allow this admin to change subscription and edit payment methods.</span>
                         </div>
                         <label class="switch" style="transform: scale(0.9);">
-                            <input type="checkbox" name="can_manage_billing" value="1" checked>
+                            <input type="checkbox" id="create-can-manage-billing" name="can_manage_billing" value="1" checked>
                             <span class="slider round"></span>
                         </label>
                     </div>
@@ -3341,6 +3760,16 @@ function hexToRgb($hex) {
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <div class="form-group" id="edit-billing-toggle-group" style="display: none; align-items: center; justify-content: space-between; padding: 12px; background: rgba(var(--primary-rgb), 0.05); border-radius: 8px; border: 1px solid rgba(var(--primary-rgb), 0.1);">
+                        <div>
+                            <span style="display: block; font-weight: 500; font-size: 0.95rem;">Manage Plan & Billing</span>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Allow this admin to change subscription and edit payment methods.</span>
+                        </div>
+                        <label class="switch" style="transform: scale(0.9);">
+                            <input type="checkbox" id="edit-can-manage-billing" name="can_manage_billing" value="1">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
                     <div class="form-group">
                         <label>Status</label>
                         <select name="status" id="edit-staff-status" class="form-control">
@@ -3401,7 +3830,6 @@ function hexToRgb($hex) {
         </div>
     </div>
 
-    <script src="admin.js?v=<?php echo time(); ?>"></script>
     <script>
         (function() {
             var planSelect = document.getElementById('new-plan-select');
@@ -3474,6 +3902,24 @@ function hexToRgb($hex) {
             });
         })();
 
+        function syncEditBillingToggle() {
+            var roleSelect = document.getElementById('edit-staff-role-id');
+            var billingToggleGroup = document.getElementById('edit-billing-toggle-group');
+            var billingCheckbox = document.getElementById('edit-can-manage-billing');
+            if (!roleSelect || !billingToggleGroup || !billingCheckbox) {
+                return;
+            }
+
+            var selectedOption = roleSelect.options[roleSelect.selectedIndex];
+            var selectedRoleName = selectedOption ? String(selectedOption.text || '').trim() : '';
+            var isAdminRole = selectedRoleName === 'Admin';
+
+            billingToggleGroup.style.display = isAdminRole ? 'flex' : 'none';
+            if (!isAdminRole) {
+                billingCheckbox.checked = false;
+            }
+        }
+
         // Wire up Edit Staff buttons
         document.querySelectorAll('.btn-edit-staff').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -3482,6 +3928,7 @@ function hexToRgb($hex) {
                 document.getElementById('edit-staff-last-name').value  = this.dataset.lastName;
                 document.getElementById('edit-staff-email').value      = this.dataset.email;
                 document.getElementById('edit-staff-status').value     = this.dataset.status;
+                document.getElementById('edit-can-manage-billing').checked = this.dataset.canManageBilling === '1';
 
                 var roleSelect = document.getElementById('edit-staff-role-id');
                 for (var i = 0; i < roleSelect.options.length; i++) {
@@ -3490,9 +3937,15 @@ function hexToRgb($hex) {
                         break;
                     }
                 }
+                syncEditBillingToggle();
                 document.getElementById('edit-staff-modal').style.display = 'flex';
             });
         });
+
+        var editStaffRoleSelect = document.getElementById('edit-staff-role-id');
+        if (editStaffRoleSelect) {
+            editStaffRoleSelect.addEventListener('change', syncEditBillingToggle);
+        }
 
         function closeEditPaymentMethodModal() {
             var modal = document.getElementById('edit-payment-method-modal');

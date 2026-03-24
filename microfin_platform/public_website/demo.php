@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../backend/db_connect.php';
+require_once '../backend/billing_access.php';
 require_once '../backend/tenant_identity.php';
 
 $form_success = false;
@@ -91,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $demo_schedule_date = trim($_POST['demo_schedule_date'] ?? '');
     $demo_schedule_date = $demo_schedule_date === '' ? date('Y-m-d H:i:s') : $demo_schedule_date;
     $uploaded_files = [];
+    
     // Primary upload flow: fixed slots legitimacy_document_1..5
     for ($slot = 1; $slot <= 5; $slot++) {
         $field = 'legitimacy_document_' . $slot;
@@ -170,9 +172,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     'Enterprise' => ['clients' => 10000, 'users' => 5000],
                     'Unlimited' => ['clients' => -1, 'users' => -1],
                 ];
+                
                 if ($is_talk_to_expert) {
-                    // Inquiries have no subscription — no plan, MRR, or limits
-                    $plan_tier = null;
                     $mrr = 0;
                     $max_c = 0;
                     $max_u = 0;
@@ -192,67 +193,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $request_status = 'Pending';
                 $has_request_type = demo_column_exists($pdo, 'tenants', 'request_type');
                 $has_company_address = demo_column_exists($pdo, 'tenants', 'company_address');
+                $has_demo_schedule_date = demo_column_exists($pdo, 'tenants', 'demo_schedule_date');
 
-                    $has_demo_schedule_date = demo_column_exists($pdo, 'tenants', 'demo_schedule_date');
-                    if ($has_demo_schedule_date && $has_request_type && $has_company_address) {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO tenants (
-                                tenant_id, tenant_name, company_address, plan_tier,
-                                demo_schedule_date, request_type, mrr,
-                                max_clients, max_users, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([
-                            $tenant_id, $institution_name, $company_address, $plan_tier,
-                            $demo_schedule_date, $request_type, $mrr, $max_c, $max_u, $request_status
-                        ]);
-                    } elseif ($has_demo_schedule_date && $has_company_address) {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO tenants (
-                                tenant_id, tenant_name, company_address, plan_tier,
-                                demo_schedule_date, mrr, max_clients, max_users, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([
-                            $tenant_id, $institution_name, $company_address, $plan_tier,
-                            $demo_schedule_date, $mrr, $max_c, $max_u, $request_status
-                        ]);
-                    } elseif ($has_request_type && $has_company_address) {
-                        $stmt = $pdo->prepare(" 
-                            INSERT INTO tenants (
-                                tenant_id, tenant_name, company_address, plan_tier,
-                                request_type, mrr, max_clients, max_users, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([
-                            $tenant_id, $institution_name, $company_address, $plan_tier,
-                            $request_type, $mrr, $max_c, $max_u, $request_status
-                        ]);
-                    } elseif ($has_company_address) {
-                        $stmt = $pdo->prepare(" 
-                            INSERT INTO tenants (
-                                tenant_id, tenant_name, company_address, plan_tier,
-                                mrr, max_clients, max_users, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([
-                            $tenant_id, $institution_name, $company_address, $plan_tier,
-                            $mrr, $max_c, $max_u, $request_status
-                        ]);
-                    } else {
-                        $stmt = $pdo->prepare(" 
-                            INSERT INTO tenants (
-                                tenant_id, tenant_name, first_name, last_name,
-                                mi, suffix, branch_name, plan_tier,
-                                email, mrr, max_clients, max_users, status
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([
-                            $tenant_id, $institution_name, null, null,
-                            null, null, $location, $plan_tier,
-                            $company_email, $mrr, $max_c, $max_u, $request_status
-                        ]);
-                    }
+                if ($has_demo_schedule_date && $has_request_type && $has_company_address) {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO tenants (
+                            tenant_id, tenant_name, company_address, plan_tier,
+                            demo_schedule_date, request_type, mrr,
+                            max_clients, max_users, status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt->execute([
+                        $tenant_id, $institution_name, $company_address, $plan_tier,
+                        $demo_schedule_date, $request_type, $mrr, $max_c, $max_u, $request_status
+                    ]);
+                } elseif ($has_demo_schedule_date && $has_company_address) {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO tenants (
+                            tenant_id, tenant_name, company_address, plan_tier,
+                            demo_schedule_date, mrr, max_clients, max_users, status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt->execute([
+                        $tenant_id, $institution_name, $company_address, $plan_tier,
+                        $demo_schedule_date, $mrr, $max_c, $max_u, $request_status
+                    ]);
+                } elseif ($has_request_type && $has_company_address) {
+                    $stmt = $pdo->prepare(" 
+                        INSERT INTO tenants (
+                            tenant_id, tenant_name, company_address, plan_tier,
+                            request_type, mrr, max_clients, max_users, status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt->execute([
+                        $tenant_id, $institution_name, $company_address, $plan_tier,
+                        $request_type, $mrr, $max_c, $max_u, $request_status
+                    ]);
+                } elseif ($has_company_address) {
+                    $stmt = $pdo->prepare(" 
+                        INSERT INTO tenants (
+                            tenant_id, tenant_name, company_address, plan_tier,
+                            mrr, max_clients, max_users, status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt->execute([
+                        $tenant_id, $institution_name, $company_address, $plan_tier,
+                        $mrr, $max_c, $max_u, $request_status
+                    ]);
+                } else {
+                    $stmt = $pdo->prepare(" 
+                        INSERT INTO tenants (
+                            tenant_id, tenant_name, first_name, last_name,
+                            mi, suffix, branch_name, plan_tier,
+                            email, mrr, max_clients, max_users, status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmt->execute([
+                        $tenant_id, $institution_name, null, null,
+                        null, null, $location, $plan_tier,
+                        $company_email, $mrr, $max_c, $max_u, $request_status
+                    ]);
+                }
 
                 if ($concern_category !== '') {
                     try {
@@ -281,8 +282,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $temp_password = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'), 0, 12);
                 $password_hash = password_hash($temp_password, PASSWORD_DEFAULT);
                 $user_type = $is_talk_to_expert ? 'inquirer' : 'applicant';
+                $users_has_billing_column = demo_column_exists($pdo, 'users', 'can_manage_billing');
 
-                $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', ?, ?, ?, ?)");
+                if ($users_has_billing_column) {
+                    $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, can_manage_billing, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', 1, ?, ?, ?, ?)");
+                } else {
+                    $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', ?, ?, ?, ?)");
+                }
                 $user_insert_stmt->execute([
                     $tenant_id,
                     $username,
@@ -296,6 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $contact_mi !== '' ? $contact_mi : null,
                     $contact_suffix !== '' ? $contact_suffix : null,
                 ]);
+                mf_set_user_billing_access($pdo, (string)$tenant_id, (int)$pdo->lastInsertId(), true);
 
                 $upload_dir = __DIR__ . '/../uploads/business_permits/';
                 if (!is_dir($upload_dir) && !mkdir($upload_dir, 0777, true)) {
@@ -376,24 +383,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         :root {
             --base-dark: #0B0F1A;
-            --surface-dark: #121826;
-            --surface-light: #1A2235;
-            --surface-soft: #0f1b33;
+            --surface-light: #f8fafc;
             --primary: #3B82F6;
             --primary-light: #93c5fd;
             --accent: #8B5CF6;
             --accent-hover: #7C3AED;
-            --primary-glow: rgba(59, 130, 246, 0.15);
-            --text-dark: #F8FAFC;
-            --text-gray: #94A3B8;
+            --primary-glow: rgba(59, 130, 246, 0.2);
+            --text-dark: #0f172a;
+            --text-gray: #475569;
             --text-light: #64748B;
-            --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
+            --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.08);
         }
 
+        /* Updated Body for Light Theme */
         body {
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
-            background: var(--base-dark);
+            background: #f1f5f9;
             padding: 86px 20px 40px;
             color: var(--text-dark);
             position: relative;
@@ -403,13 +409,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             content: '';
             position: fixed;
             inset: 0;
-            background: radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.2) 0%, transparent 46%),
-                        radial-gradient(circle at 86% 6%, rgba(139, 92, 246, 0.14) 0%, transparent 42%),
-                        radial-gradient(circle at 70% 88%, rgba(59, 130, 246, 0.1) 0%, transparent 45%);
+            background: radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.08) 0%, transparent 46%),
+                        radial-gradient(circle at 86% 6%, rgba(139, 92, 246, 0.06) 0%, transparent 42%),
+                        radial-gradient(circle at 70% 88%, rgba(59, 130, 246, 0.04) 0%, transparent 45%);
             pointer-events: none;
             z-index: 0;
         }
 
+        /* Updated Back Button */
         .back-btn {
             position: fixed;
             top: 22px;
@@ -417,34 +424,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            color: #dbeafe;
+            color: var(--text-dark);
             text-decoration: none;
             font-size: 0.88rem;
             font-weight: 600;
             padding: 9px 16px;
             border-radius: 999px;
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(147, 197, 253, 0.4);
+            background: #ffffff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
             transition: all 0.25s ease;
             z-index: 20;
         }
 
         .back-btn:hover {
-            color: #ffffff;
-            background: rgba(30, 64, 175, 0.25);
+            color: var(--primary);
+            background: #f8fafc;
             transform: translateX(-2px);
-            border-color: rgba(147, 197, 253, 0.75);
+            border-color: #cbd5e1;
         }
 
-        .back-btn .material-symbols-rounded {
-            font-size: 18px;
-            transition: transform 0.2s;
-        }
-
-        .back-btn:hover .material-symbols-rounded {
-            transform: translateX(-2px);
-        }
+        .back-btn .material-symbols-rounded { font-size: 18px; transition: transform 0.2s; }
+        .back-btn:hover .material-symbols-rounded { transform: translateX(-2px); }
 
         .demo-wrapper {
             position: relative;
@@ -467,430 +468,178 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Kept Left Side Dark for Premium Contrast */
         .demo-intro {
-            background: linear-gradient(170deg, rgba(15, 26, 46, 0.95) 0%, rgba(13, 20, 35, 0.95) 100%);
-            border: 1px solid rgba(147, 197, 253, 0.22);
+            background: linear-gradient(170deg, #0B0F1A 0%, #121826 100%);
+            border: 1px solid rgba(147, 197, 253, 0.15);
             border-radius: 18px;
-            padding: 30px 24px;
+            padding: 40px 32px;
             box-shadow: var(--shadow-lg);
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
 
-        .page-brand {
-            text-align: left;
-            margin-bottom: 6px;
-        }
-
+        .page-brand { text-align: left; margin-bottom: 6px; }
         .page-brand .logo {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--primary-light);
-            margin-bottom: 8px;
+            display: inline-flex; align-items: center; gap: 8px;
+            color: #60A5FA; margin-bottom: 8px;
         }
-
-        .page-brand .logo-text {
-            font-size: 1.2rem;
-            font-weight: 800;
-            letter-spacing: -0.4px;
-        }
-
-        .page-brand p {
-            color: var(--text-gray);
-            font-size: 0.9rem;
-        }
+        .page-brand .logo-text { font-size: 1.2rem; font-weight: 800; letter-spacing: -0.4px; color: white;}
+        .page-brand p { color: #94A3B8; font-size: 0.9rem; }
 
         .intro-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            width: fit-content;
-            border-radius: 999px;
-            border: 1px solid rgba(147, 197, 253, 0.45);
-            background: rgba(30, 64, 175, 0.16);
-            color: #bfdbfe;
-            font-size: 0.75rem;
-            font-weight: 700;
-            letter-spacing: 0.4px;
-            text-transform: uppercase;
-            padding: 7px 10px;
+            display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+            border-radius: 999px; border: 1px solid rgba(147, 197, 253, 0.3);
+            background: rgba(30, 64, 175, 0.2); color: #bfdbfe;
+            font-size: 0.75rem; font-weight: 700; letter-spacing: 0.4px;
+            text-transform: uppercase; padding: 7px 10px;
         }
 
-        .intro-title {
-            font-size: 1.95rem;
-            line-height: 1.1;
-            letter-spacing: -0.6px;
-            font-weight: 800;
-            color: #f8fbff;
-        }
+        .intro-title { font-size: 1.95rem; line-height: 1.1; letter-spacing: -0.6px; font-weight: 800; color: #f8fbff; }
+        .intro-sub { font-size: 0.95rem; color: #cbd5e1; line-height: 1.6; }
 
-        .intro-sub {
-            font-size: 0.95rem;
-            color: #cbd5e1;
-            line-height: 1.6;
-        }
-
-        .intro-list {
-            list-style: none;
-            display: grid;
-            gap: 10px;
-        }
-
+        .intro-list { list-style: none; display: grid; gap: 12px; }
         .intro-list li {
-            display: grid;
-            grid-template-columns: 22px 1fr;
-            gap: 8px;
-            align-items: start;
-            color: #dbeafe;
-            font-size: 0.88rem;
-            line-height: 1.45;
+            display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start;
+            color: #e2e8f0; font-size: 0.9rem; line-height: 1.45;
         }
-
-        .intro-list .material-symbols-rounded {
-            color: #34d399;
-            font-size: 18px;
-            margin-top: 1px;
-        }
+        .intro-list .material-symbols-rounded { color: #34d399; font-size: 20px; margin-top: 1px; }
 
         .intro-note {
-            margin-top: auto;
-            font-size: 0.82rem;
-            color: #93c5fd;
-            border-top: 1px solid rgba(147, 197, 253, 0.28);
-            padding-top: 14px;
+            margin-top: auto; font-size: 0.82rem; color: #93c5fd;
+            border-top: 1px solid rgba(147, 197, 253, 0.2); padding-top: 14px;
         }
 
+        /* Updated Form Card to Crisp Light Theme */
         .demo-card {
-            background: rgba(17, 24, 39, 0.92);
-            border: 1px solid rgba(255, 255, 255, 0.11);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             border-radius: 18px;
-            padding: 34px;
+            padding: 40px;
             box-shadow: var(--shadow-lg);
-            backdrop-filter: blur(10px);
         }
 
-        .demo-card h2 {
-            font-size: 1.55rem;
-            font-weight: 700;
-            color: #f8fbff;
-            margin-bottom: 4px;
-            letter-spacing: -0.4px;
-        }
+        .demo-card h2 { font-size: 1.55rem; font-weight: 800; color: var(--text-dark); margin-bottom: 4px; letter-spacing: -0.4px; }
+        .demo-card .subtitle { color: var(--text-gray); font-size: 0.95rem; margin-bottom: 24px; }
 
-        .demo-card .subtitle {
-            color: #cbd5e1;
-            font-size: 0.92rem;
-            margin-bottom: 24px;
-        }
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 8px; color: #334155; }
 
-        .form-group { margin-bottom: 16px; }
-
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            font-size: 0.84rem;
-            margin-bottom: 8px;
-            color: #cbd5e1;
-        }
-
-        .form-row {
-            display: flex;
-            gap: 12px;
-        }
-
+        .form-row { display: flex; gap: 12px; }
         .form-row .form-group { flex: 1; }
 
+        /* Updated Inputs */
         .input-field {
             width: 100%;
-            padding: 12px 13px;
-            border: 1px solid rgba(148, 163, 184, 0.28);
+            padding: 12px 14px;
+            border: 1px solid #cbd5e1;
             border-radius: 10px;
-            background: rgba(8, 12, 22, 0.9);
-            color: #f8fafc;
-            font-size: 0.93rem;
+            background: #f8fafc;
+            color: var(--text-dark);
+            font-size: 0.95rem;
             transition: all 0.2s;
         }
-
-        .input-field::placeholder {
-            color: #7d8ca5;
-        }
-
+        .input-field::placeholder { color: #94a3b8; }
         .input-field:focus {
-            outline: none;
-            border-color: rgba(147, 197, 253, 0.9);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+            outline: none; background: #ffffff;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
 
-        .text-danger { color: #fb7185; }
+        .text-danger { color: #ef4444; }
 
-        .plan-helper {
-            font-size: 0.8rem;
-            color: #a5b4cc;
-            margin-top: -2px;
-            margin-bottom: 10px;
-        }
+        .plan-helper { font-size: 0.8rem; color: var(--text-gray); margin-top: -2px; margin-bottom: 12px; }
 
-        .plan-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
-            align-items: stretch;
-        }
+        .plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+        .plan-option { position: relative; display: block; cursor: pointer; }
+        .plan-option input { position: absolute; opacity: 0; pointer-events: none; }
 
-        .plan-option {
-            position: relative;
-            display: block;
-            cursor: pointer;
-        }
-
-        .plan-option input {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
-        }
-
+        /* Updated Plan Cards */
         .plan-card-content {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            width: 100%;
-            height: 100%;
-            border: 1px solid rgba(148, 163, 184, 0.26);
-            background: linear-gradient(170deg, rgba(12, 19, 35, 0.95) 0%, rgba(10, 15, 27, 0.95) 100%);
-            border-radius: 12px;
-            padding: 12px 36px 12px 12px;
-            min-height: 122px;
-            transition: all 0.2s ease;
+            display: flex; flex-direction: column; gap: 5px; width: 100%; height: 100%;
+            border: 1px solid #e2e8f0; background: #ffffff; border-radius: 12px;
+            padding: 16px 36px 16px 16px; min-height: 122px; transition: all 0.2s ease;
             position: relative;
         }
-
         .plan-card-content::after {
-            content: '';
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 16px;
-            height: 16px;
-            border-radius: 999px;
-            border: 1px solid rgba(148, 163, 184, 0.65);
-            background: transparent;
-            transition: all 0.2s ease;
+            content: ''; position: absolute; top: 12px; right: 12px; width: 16px; height: 16px;
+            border-radius: 999px; border: 1px solid #cbd5e1; background: #f8fafc; transition: all 0.2s ease;
         }
 
         .plan-option:hover .plan-card-content {
-            border-color: rgba(96, 165, 250, 0.65);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(2, 6, 23, 0.35);
+            border-color: #93c5fd; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.05);
         }
 
-        .plan-option input:focus + .plan-card-content {
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-        }
-
+        .plan-option input:focus + .plan-card-content { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
         .plan-option input:checked + .plan-card-content {
-            border-color: rgba(139, 92, 246, 0.9);
-            background: linear-gradient(175deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.95) 100%);
-            box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.55), 0 8px 20px rgba(29, 78, 216, 0.18);
+            border-color: var(--accent); background: #faf5ff;
+            box-shadow: 0 0 0 1px var(--accent), 0 8px 20px rgba(139, 92, 246, 0.15);
         }
-
         .plan-option input:checked + .plan-card-content::after {
-            background: var(--accent);
-            border-color: var(--accent);
-            box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.92);
+            background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 3px #ffffff;
         }
 
-        .plan-name {
-            display: block;
-            font-weight: 700;
-            color: #f8fbff;
-            font-size: 0.95rem;
-            letter-spacing: -0.2px;
-        }
-
-        .plan-meta {
-            display: block;
-            max-width: 100%;
-            margin-top: auto;
-        }
-
-        .plan-capacity {
-            display: block;
-            font-size: 0.78rem;
-            color: #b8c3d8;
-            line-height: 1.34;
-        }
-
+        .plan-name { display: block; font-weight: 700; color: var(--text-dark); font-size: 1rem; letter-spacing: -0.2px; }
+        .plan-meta { display: block; max-width: 100%; margin-top: auto; }
+        .plan-capacity { display: block; font-size: 0.8rem; color: var(--text-gray); line-height: 1.34; }
+        
         .plan-price {
-            display: block;
-            margin-top: 6px;
-            font-size: 0.78rem;
-            font-weight: 700;
-            color: #bfdbfe;
-            background: rgba(59, 130, 246, 0.16);
-            border: 1px solid rgba(96, 165, 250, 0.35);
-            border-radius: 999px;
-            width: fit-content;
-            padding: 3px 8px;
+            display: block; margin-top: 8px; font-size: 0.8rem; font-weight: 700; color: #1d4ed8;
+            background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 999px;
+            width: fit-content; padding: 4px 10px;
         }
 
-        .email-row {
-            display: flex;
-            gap: 10px;
-        }
+        .email-row { display: flex; gap: 10px; }
 
+        /* Updated OTP Container */
         .otp-group {
-            display: none;
-            background: rgba(8, 12, 22, 0.76);
-            padding: 14px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.11);
-            margin-bottom: 16px;
+            display: none; background: #f8fafc; padding: 16px; border-radius: 12px;
+            border: 1px solid #e2e8f0; margin-bottom: 20px;
         }
-
-        .otp-row {
-            display: flex;
-            gap: 10px;
-        }
+        .otp-row { display: flex; gap: 10px; }
 
         .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 11px 20px;
-            border-radius: 10px;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            cursor: pointer;
-            border: none;
-            font-family: inherit;
-            font-size: 0.94rem;
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 12px 20px; border-radius: 10px; font-weight: 600; text-decoration: none;
+            transition: all 0.2s ease; cursor: pointer; border: none; font-family: inherit; font-size: 0.95rem;
         }
-
         .btn-primary {
             background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-            color: #ffffff;
-            box-shadow: 0 0 16px var(--primary-glow);
+            color: #ffffff; box-shadow: 0 4px 12px var(--primary-glow);
         }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3); }
+        
+        /* Updated Outline Button */
+        .btn-outline { background: #ffffff; border: 1px solid #cbd5e1; color: var(--text-dark); }
+        .btn-outline:hover { background: #f1f5f9; border-color: #94a3b8; }
 
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.32);
-        }
+        .btn-block { width: 100%; padding: 14px; font-size: 1rem; }
 
-        .btn-outline {
-            background: transparent;
-            border: 1px solid rgba(148, 163, 184, 0.45);
-            color: #e2e8f0;
-        }
-
-        .btn-outline:hover {
-            background: rgba(37, 99, 235, 0.16);
-            border-color: rgba(96, 165, 250, 0.75);
-        }
-
-        .btn-block {
-            width: 100%;
-            padding: 13px;
-            font-size: 1rem;
-        }
-
-        .success-view {
-            text-align: center;
-            padding: 28px 4px;
-        }
-
-        .success-view .material-symbols-rounded {
-            font-size: 56px;
-            color: #10b981;
-            margin-bottom: 14px;
-        }
-
-        .success-view h3 {
-            font-size: 1.36rem;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: #f8fbff;
-        }
-
-        .success-view p {
-            color: #cbd5e1;
-            font-size: 0.95rem;
-            margin-bottom: 24px;
-        }
-
-        .success-view .btn {
-            margin-top: 8px;
-        }
+        .success-view { text-align: center; padding: 28px 4px; }
+        .success-view .material-symbols-rounded { font-size: 64px; color: #10b981; margin-bottom: 16px; }
+        .success-view h3 { font-size: 1.5rem; font-weight: 800; margin-bottom: 8px; color: var(--text-dark); }
+        .success-view p { color: var(--text-gray); font-size: 1rem; margin-bottom: 28px; }
 
         .alert-error {
-            background: #fee2e2;
-            color: #b91c1c;
-            padding: 10px 14px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            font-size: 0.9rem;
-            font-weight: 600;
+            background: #fef2f2; color: #b91c1c; padding: 12px 16px; border-radius: 10px;
+            border: 1px solid #fecaca; margin-bottom: 20px; font-size: 0.9rem; font-weight: 600;
         }
 
-        @media (max-width: 980px) {
-            .demo-layout {
-                grid-template-columns: 1fr;
-            }
-
-            .demo-intro {
-                padding: 24px 20px;
-            }
-        }
-
+        @media (max-width: 980px) { .demo-layout { grid-template-columns: 1fr; } .demo-intro { padding: 24px 20px; } }
         @media (max-width: 760px) {
-            body {
-                padding: 78px 14px 24px;
-            }
-
-            .demo-card {
-                padding: 24px 16px;
-            }
-
-            .form-row {
-                flex-direction: column;
-                gap: 0;
-            }
-
-            .plan-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .email-row {
-                flex-direction: column;
-            }
-
-            .otp-row {
-                flex-direction: column;
-            }
-
-            .back-btn {
-                top: 12px;
-                left: 12px;
-                padding: 8px 13px;
-                font-size: 0.82rem;
-            }
+            body { padding: 78px 14px 24px; }
+            .demo-card { padding: 24px 20px; }
+            .form-row, .email-row, .otp-row { flex-direction: column; gap: 12px;}
+            .plan-grid { grid-template-columns: 1fr; }
+            .back-btn { top: 12px; left: 12px; padding: 8px 13px; font-size: 0.82rem; }
         }
-
-        @media (max-width: 1024px) {
-            .plan-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
+        @media (max-width: 1024px) { .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <!-- Back Button -->
     <a href="index.php" class="back-btn" id="back-btn">
         <span class="material-symbols-rounded">arrow_back</span>
         Back to Home
@@ -983,7 +732,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <?php if ($is_talk_to_expert): ?>
                     <div class="form-group">
                         <label>Category of Concern <span class="text-danger">*</span></label>
-                        <select class="input-field" name="concern_category" required style="appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=%22%237d8ca5%22 height=%2224%22 viewBox=%220 0 24 24%22 width=%2224%22 xmlns=%22http://www.w3.org/2000/svg%22><path d=%22M7 10l5 5 5-5z%22/></svg>'); background-repeat: no-repeat; background-position-x: 98%; background-position-y: center;">
+                        <select class="input-field" name="concern_category" required style="appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=%22%23475569%22 height=%2224%22 viewBox=%220 0 24 24%22 width=%2224%22 xmlns=%22http://www.w3.org/2000/svg%22><path d=%22M7 10l5 5 5-5z%22/></svg>'); background-repeat: no-repeat; background-position-x: 98%; background-position-y: center;">
                             <option value="" disabled selected>Select a category</option>
                             <option value="General Inquiry">General Inquiry</option>
                             <option value="Pricing & Billing">Pricing & Billing</option>
@@ -1065,13 +814,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <input type="email" class="input-field" name="company_email" id="work_email" placeholder="ceo@institution.com" required>
                             <button type="button" id="btn-send-otp" class="btn btn-outline" style="padding: 0 15px; white-space: nowrap;">Send OTP</button>
                         </div>
-                        <small id="email-help-text" style="color: #94a3b8; font-size: 0.8rem; margin-top: 4px; display:block;">Requires verification before submission.</small>
+                        <small id="email-help-text" style="color: #64748b; font-size: 0.8rem; margin-top: 6px; display:block;">Requires verification before submission.</small>
                     </div>
 
-                    <!-- OTP Input Group -->
                     <div class="otp-group" id="otp-group">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <label style="font-weight:500; font-size:0.85rem; color:var(--text-gray); margin:0;">Enter 6-Digit OTP <span class="text-danger">*</span></label>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label style="font-weight:600; font-size:0.85rem; color:#334155; margin:0;">Enter 6-Digit OTP <span class="text-danger">*</span></label>
                             <span id="otp-countdown" style="font-size: 0.8rem; font-weight: 600; color: #b45309;"></span>
                         </div>
                         <div class="otp-row">
@@ -1085,50 +833,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <?php if (!$is_talk_to_expert): ?>
                     <div class="form-group">
                         <label>Proof of Legitimacy Documents <span class="text-danger">*</span></label>
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_1" id="legitimacy_document_1" data-slot="1" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px;" required>
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_2" id="legitimacy_document_2" data-slot="2" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_3" id="legitimacy_document_3" data-slot="3" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_4" id="legitimacy_document_4" data-slot="4" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_5" id="legitimacy_document_5" data-slot="5" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; margin-top: 8px; display: none;">
-                        <small style="color: #94a3b8; font-size: 0.8rem; margin-top: 4px; display:block;">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_1" id="legitimacy_document_1" data-slot="1" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff;" required>
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_2" id="legitimacy_document_2" data-slot="2" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_3" id="legitimacy_document_3" data-slot="3" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_4" id="legitimacy_document_4" data-slot="4" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
+                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_5" id="legitimacy_document_5" data-slot="5" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
+                        <small style="color: #64748b; font-size: 0.8rem; margin-top: 6px; display:block;">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
                     </div>
                     <?php endif; ?>
 
-                    <div class="form-group" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+                    <div class="form-group" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
                         <label style="display: flex; gap: 10px; cursor: pointer; align-items: flex-start;">
                             <input type="checkbox" name="agree_terms" required style="margin-top: 4px; accent-color: var(--primary);">
-                            <span style="font-weight: 400; font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;">
+                            <span style="font-weight: 400; font-size: 0.85rem; color: #475569; line-height: 1.5;">
                                 By submitting this request, I agree to the
-                                <a href="#" id="open-tos-modal" style="color: #93c5fd; text-decoration: none;">Terms of Service</a>
-                                and <a href="#" id="open-pp-modal" style="color: #93c5fd; text-decoration: none;">Privacy Policy</a>.
+                                <a href="#" id="open-tos-modal" style="color: #3b82f6; text-decoration: underline;">Terms of Service</a>
+                                and <a href="#" id="open-pp-modal" style="color: #3b82f6; text-decoration: underline;">Privacy Policy</a>.
                                 I understand that my information will be handled securely and according to these policies.
                             </span>
                         </label>
                     </div>
 
-                    <button type="submit" id="btn-final-submit" class="btn btn-primary btn-block" style="opacity: 0.5; pointer-events: none;"><?php echo $is_talk_to_expert ? 'Inquire' : 'Apply Now'; ?></button>
-                    <small id="form-block-note" style="display: block; text-align: center; margin-top: 10px; color: #ef4444;">Verify your email to enable submission.</small>
+                    <button type="submit" id="btn-final-submit" class="btn btn-primary btn-block" style="opacity: 0.5; pointer-events: none; margin-top: 24px;"><?php echo $is_talk_to_expert ? 'Inquire' : 'Apply Now'; ?></button>
+                    <small id="form-block-note" style="display: block; text-align: center; margin-top: 12px; color: #ef4444; font-weight: 500;">Verify your email to enable submission.</small>
                 </form>
             <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <!-- Terms of Service Modal -->
-    <div id="tos-modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; overflow-y:auto; padding:40px 20px;">
-        <div style="background:#0f1b33; border:1px solid rgba(147,197,253,0.25); border-radius:16px; max-width:680px; margin:0 auto; padding:36px; color:#e2e8f0; line-height:1.7;">
+    <div id="tos-modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index:9999; overflow-y:auto; padding:40px 20px;">
+        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:18px; max-width:680px; margin:0 auto; padding:40px; color:#334155; line-height:1.7; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-                <h2 style="margin:0; font-size:1.3rem; color:#f8fbff;">Terms of Service &amp; Refund Policy</h2>
-                <button id="close-tos-modal" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:1.5rem; line-height:1;">&times;</button>
+                <h2 style="margin:0; font-size:1.4rem; color:#0f172a; font-weight: 800;">Terms of Service &amp; Refund Policy</h2>
+                <button id="close-tos-modal" style="background:none; border:none; color:#64748b; cursor:pointer; font-size:1.8rem; line-height:1; transition: color 0.2s;">&times;</button>
             </div>
-            <p style="color:#94a3b8; font-size:0.82rem; margin-bottom:20px;">Effective Date: <?php echo date('F d, Y'); ?> &mdash; MicroFin Platform</p>
+            <p style="color:#64748b; font-size:0.85rem; margin-bottom:24px;">Effective Date: <?php echo date('F d, Y'); ?> &mdash; MicroFin Platform</p>
 
-            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">1. Acceptance of Terms</h3>
-            <p style="font-size:0.88rem;">By submitting an application to use the MicroFin platform, you agree to be bound by these Terms of Service. If you do not agree, do not proceed with your application.</p>
+            <h3 style="color:#0f172a; font-size:1rem; margin:20px 0 8px;">1. Acceptance of Terms</h3>
+            <p style="font-size:0.9rem;">By submitting an application to use the MicroFin platform, you agree to be bound by these Terms of Service. If you do not agree, do not proceed with your application.</p>
 
-            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">2. Subscription &amp; Payment Rules</h3>
-            <p style="font-size:0.88rem;">Upon approval and completion of your billing setup, the following payment rules apply:</p>
-            <ul style="font-size:0.88rem; padding-left:20px; margin-top:8px;">
+            <h3 style="color:#0f172a; font-size:1rem; margin:24px 0 8px;">2. Subscription &amp; Payment Rules</h3>
+            <p style="font-size:0.9rem;">Upon approval and completion of your billing setup, the following payment rules apply:</p>
+            <ul style="font-size:0.9rem; padding-left:20px; margin-top:8px;">
                 <li><strong>Prorated Initial Charge:</strong> Your first charge will be a prorated amount calculated from your activation date to your next selected billing date (1st or 15th of the month).</li>
                 <li><strong>Recurring Billing:</strong> After the initial prorated charge, you will be billed the full monthly subscription fee on either the 1st or 15th of each month, depending on your selected billing cycle.</li>
                 <li><strong>Automatic Deduction:</strong> Payments are automatically charged to your registered payment method. It is your responsibility to ensure sufficient funds are available.</li>
@@ -1137,24 +884,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <li><strong>Billing Disputes:</strong> Any billing disputes must be raised within 30 days of the charge date by contacting MicroFin support.</li>
             </ul>
 
-            <h3 style="color:#f87171; font-size:0.95rem; margin:20px 0 8px;">3. No-Refund Policy</h3>
-            <p style="font-size:0.88rem;">All subscription fees paid to MicroFin are <strong>strictly non-refundable</strong>. This includes, but is not limited to:</p>
-            <ul style="font-size:0.88rem; padding-left:20px; margin-top:8px;">
+            <h3 style="color:#b91c1c; font-size:1rem; margin:24px 0 8px;">3. No-Refund Policy</h3>
+            <p style="font-size:0.9rem;">All subscription fees paid to MicroFin are <strong>strictly non-refundable</strong>. This includes, but is not limited to:</p>
+            <ul style="font-size:0.9rem; padding-left:20px; margin-top:8px;">
                 <li>Prorated initial charges upon account activation.</li>
                 <li>Monthly recurring subscription fees, regardless of usage during the billing period.</li>
                 <li>Fees charged during any period prior to account suspension or cancellation.</li>
                 <li>Any partial month charges resulting from mid-cycle plan changes.</li>
             </ul>
-            <p style="font-size:0.88rem; margin-top:8px;">We encourage you to evaluate the platform thoroughly during any trial or demo period before committing to a paid subscription.</p>
+            <p style="font-size:0.9rem; margin-top:8px;">We encourage you to evaluate the platform thoroughly during any trial or demo period before committing to a paid subscription.</p>
 
-            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">4. Account Termination</h3>
-            <p style="font-size:0.88rem;">MicroFin reserves the right to terminate or suspend any account that violates these terms, fails to pay subscription fees, or engages in fraudulent activity. Termination does not entitle the tenant to a refund of any previously paid fees.</p>
+            <h3 style="color:#0f172a; font-size:1rem; margin:24px 0 8px;">4. Account Termination</h3>
+            <p style="font-size:0.9rem;">MicroFin reserves the right to terminate or suspend any account that violates these terms, fails to pay subscription fees, or engages in fraudulent activity. Termination does not entitle the tenant to a refund of any previously paid fees.</p>
 
-            <h3 style="color:#93c5fd; font-size:0.95rem; margin:20px 0 8px;">5. Data &amp; Privacy</h3>
-            <p style="font-size:0.88rem;">Your data is stored in an isolated tenant environment. MicroFin will not share or sell your data to third parties. Card details are encrypted using AES-256 and CVV is never stored. All transactions are logged for compliance and audit purposes.</p>
+            <h3 style="color:#0f172a; font-size:1rem; margin:24px 0 8px;">5. Data &amp; Privacy</h3>
+            <p style="font-size:0.9rem;">Your data is stored in an isolated tenant environment. MicroFin will not share or sell your data to third parties. Card details are encrypted using AES-256 and CVV is never stored. All transactions are logged for compliance and audit purposes.</p>
 
-            <div style="margin-top:28px; text-align:right;">
-                <button id="close-tos-modal-btn" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6); color:#fff; border:none; border-radius:8px; padding:10px 24px; font-weight:600; cursor:pointer;">I Understand</button>
+            <div style="margin-top:32px; text-align:right; border-top: 1px solid #e2e8f0; padding-top: 24px;">
+                <button id="close-tos-modal-btn" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6); color:#fff; border:none; border-radius:8px; padding:12px 28px; font-weight:600; cursor:pointer; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);">I Understand</button>
             </div>
         </div>
     </div>
@@ -1254,31 +1001,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             otpExpiryInterval = setInterval(updateExpiry, 1000);
         }
 
-        // Cooldown timer for failed OTP attempts
-        let cooldownInterval = null;
-        function startCooldown(seconds) {
-            btnSendOtp.disabled = true;
-            let remaining = seconds;
-            const updateTimer = () => {
-                const mins = Math.floor(remaining / 60);
-                const secs = remaining % 60;
-                btnSendOtp.innerHTML = `Retry in ${mins}:${secs.toString().padStart(2, '0')}`;
-                if (remaining <= 0) {
-                    clearInterval(cooldownInterval);
-                    cooldownInterval = null;
-                    btnSendOtp.disabled = false;
-                    btnSendOtp.innerHTML = 'Send OTP';
-                    if (emailHelpText) {
-                        emailHelpText.style.color = '#94a3b8';
-                        emailHelpText.innerText = 'Requires verification before submission.';
-                    }
-                }
-                remaining--;
-            };
-            updateTimer();
-            cooldownInterval = setInterval(updateTimer, 1000);
-        }
-
         // Send OTP
         if (btnSendOtp) {
             btnSendOtp.addEventListener('click', () => {
@@ -1315,7 +1037,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         btnSendOtp.innerHTML = 'OTP Sent';
                         btnSendOtp.classList.remove('btn-outline');
                         btnSendOtp.style.backgroundColor = '#10b981';
-                        btnSendOtp.style.color = 'var(--text-dark)';
+                        btnSendOtp.style.color = 'white';
                         btnSendOtp.style.borderColor = '#10b981';
                         otpMsg.style.color = '#10b981';
 

@@ -2,6 +2,7 @@
 session_start();
 
 require_once '../backend/db_connect.php';
+require_once '../backend/billing_access.php';
 require_once '../backend/lazy_billing_resolver.php';
 
 // Resolve any pending tenant subscriptions automagically!
@@ -9,6 +10,11 @@ resolve_tenant_billing($pdo);
 
 if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_in'] !== true) {
     header('Location: login.php');
+    exit;
+}
+
+if (!empty($_SESSION['super_admin_force_password_change'])) {
+    header('Location: force_change_password.php');
     exit;
 }
 
@@ -90,6 +96,82 @@ function sa_compute_next_billing_date(string $billingCycle, ?string $baseDate = 
     return $base->format('Y-m-d');
 }
 
+function sa_ensure_platform_role(PDO $pdo, string $roleName, string $roleDescription): int
+{
+    $activeRoleStmt = $pdo->prepare("
+        SELECT role_id
+        FROM user_roles
+        WHERE tenant_id IS NULL
+          AND role_name = ?
+          AND deleted_at IS NULL
+        ORDER BY role_id ASC
+        LIMIT 1
+    ");
+    $activeRoleStmt->execute([$roleName]);
+    $activeRoleId = (int) $activeRoleStmt->fetchColumn();
+    if ($activeRoleId > 0) {
+        return $activeRoleId;
+    }
+
+    $anyRoleStmt = $pdo->prepare("
+        SELECT role_id
+        FROM user_roles
+        WHERE tenant_id IS NULL
+          AND role_name = ?
+        ORDER BY role_id ASC
+        LIMIT 1
+    ");
+    $anyRoleStmt->execute([$roleName]);
+    $existingRoleId = (int) $anyRoleStmt->fetchColumn();
+    if ($existingRoleId > 0) {
+        $restoreRoleStmt = $pdo->prepare("
+            UPDATE user_roles
+            SET role_description = ?,
+                is_system_role = TRUE,
+                deleted_at = NULL,
+                deleted_by = NULL
+            WHERE role_id = ?
+        ");
+        $restoreRoleStmt->execute([$roleDescription, $existingRoleId]);
+        return $existingRoleId;
+    }
+
+    $insertRoleStmt = $pdo->prepare("
+        INSERT INTO user_roles (tenant_id, role_name, role_description, is_system_role)
+        VALUES (NULL, ?, ?, TRUE)
+    ");
+    $insertRoleStmt->execute([$roleName, $roleDescription]);
+    return (int) $pdo->lastInsertId();
+}
+
+function sa_generate_temporary_password(int $length = 12): string
+{
+    $length = max(8, $length);
+    $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    $lower = 'abcdefghijkmnopqrstuvwxyz';
+    $digits = '23456789';
+    $symbols = '!@#$%^&*_-+=?';
+    $all = $upper . $lower . $digits . $symbols;
+
+    $passwordChars = [
+        $upper[random_int(0, strlen($upper) - 1)],
+        $lower[random_int(0, strlen($lower) - 1)],
+        $digits[random_int(0, strlen($digits) - 1)],
+        $symbols[random_int(0, strlen($symbols) - 1)],
+    ];
+
+    while (count($passwordChars) < $length) {
+        $passwordChars[] = $all[random_int(0, strlen($all) - 1)];
+    }
+
+    for ($i = count($passwordChars) - 1; $i > 0; $i--) {
+        $swapIndex = random_int(0, $i);
+        [$passwordChars[$i], $passwordChars[$swapIndex]] = [$passwordChars[$swapIndex], $passwordChars[$i]];
+    }
+
+    return implode('', $passwordChars);
+}
+
 function sa_is_railway_runtime(): bool
 {
     $keys = [
@@ -128,6 +210,25 @@ function sa_build_tenant_login_url(string $tenantSlug): string
     // Localhost fallback for XAMPP
     $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
     return 'http://' . $requestHost . $basePath . '/tenant_login/login.php?s=' . $safeSlug;
+}
+
+function sa_build_super_admin_login_url(): string
+{
+    $defaultScript = '/admin-draft-withmobile/admin-draft/microfin_platform/super_admin/super_admin.php';
+    $basePath = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['PHP_SELF'] ?? $defaultScript))), '/\\');
+    $explicitBase = trim((string)(getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
+    $isRailway = getenv('RAILWAY_ENVIRONMENT') !== false || getenv('RAILWAY_PUBLIC_DOMAIN') !== false || getenv('RAILWAY_STATIC_URL') !== false;
+
+    if ($explicitBase !== '') {
+        return rtrim($explicitBase, '/') . '/super_admin/login.php';
+    }
+
+    if ($isRailway) {
+        return 'https://microfinwebb-production.up.railway.app/microfin_platform/super_admin/login.php';
+    }
+
+    $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    return 'http://' . $requestHost . $basePath . '/super_admin/login.php';
 }
 
 $provision_success = '';
@@ -347,7 +448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $new_role_id = (int)$pdo->lastInsertId();
             }
 
-            $temp_password = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'), 0, 10);
+            $temp_password = sa_generate_temporary_password(12);
             $password_hash = password_hash($temp_password, PASSWORD_DEFAULT);
 
             $admin_username = $base_admin_username;
@@ -365,9 +466,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existing_admin_user_stmt = $pdo->prepare("SELECT user_id FROM users WHERE tenant_id = ? AND email = ? LIMIT 1");
             $existing_admin_user_stmt->execute([$tenant_id, $admin_email]);
             $existing_admin_user_id = (int)$existing_admin_user_stmt->fetchColumn();
+            $users_has_billing_column = sa_column_exists($pdo, 'users', 'can_manage_billing');
 
             if ($existing_admin_user_id > 0) {
-                $user_update = $pdo->prepare("UPDATE users SET username = ?, password_hash = ?, force_password_change = TRUE, role_id = ?, user_type = 'Admin', status = 'Active', first_name = ?, last_name = ?, middle_name = ?, suffix = ?, deleted_at = NULL WHERE user_id = ?");
+                if ($users_has_billing_column) {
+                    $user_update = $pdo->prepare("UPDATE users SET username = ?, password_hash = ?, force_password_change = TRUE, role_id = ?, user_type = 'Admin', status = 'Active', can_manage_billing = 1, first_name = ?, last_name = ?, middle_name = ?, suffix = ?, deleted_at = NULL WHERE user_id = ?");
+                } else {
+                    $user_update = $pdo->prepare("UPDATE users SET username = ?, password_hash = ?, force_password_change = TRUE, role_id = ?, user_type = 'Admin', status = 'Active', first_name = ?, last_name = ?, middle_name = ?, suffix = ?, deleted_at = NULL WHERE user_id = ?");
+                }
                 $user_update->execute([
                     $admin_username,
                     $password_hash,
@@ -378,9 +484,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $suffix !== '' ? $suffix : null,
                     $existing_admin_user_id
                 ]);
+                mf_set_user_billing_access($pdo, (string)$tenant_id, $existing_admin_user_id, true);
             } else {
-                $user_insert = $pdo->prepare("INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, TRUE, ?, 'Admin', 'Active', ?, ?, ?, ?)");
+                if ($users_has_billing_column) {
+                    $user_insert = $pdo->prepare("INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, can_manage_billing, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, TRUE, ?, 'Admin', 'Active', 1, ?, ?, ?, ?)");
+                } else {
+                    $user_insert = $pdo->prepare("INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, TRUE, ?, 'Admin', 'Active', ?, ?, ?, ?)");
+                }
                 $user_insert->execute([$tenant_id, $admin_username, $admin_email, $password_hash, $new_role_id, $first_name !== '' ? $first_name : null, $last_name !== '' ? $last_name : null, $mi !== '' ? $mi : null, $suffix !== '' ? $suffix : null]);
+                mf_set_user_billing_access($pdo, (string)$tenant_id, (int)$pdo->lastInsertId(), true);
             }
 
             $admin_name = (string)($_SESSION['super_admin_username'] ?? 'super_admin');
@@ -731,24 +843,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'create_super_admin') {
         $sa_username = trim($_POST['sa_username'] ?? '');
         $sa_email = trim($_POST['sa_email'] ?? '');
-        $sa_password = $_POST['sa_password'] ?? '';
 
-        if ($sa_username === '' || $sa_email === '' || $sa_password === '') {
-            $_SESSION['sa_error'] = 'All fields are required to create a super admin.';
+        if ($sa_username === '' || $sa_email === '') {
+            $_SESSION['sa_error'] = 'Username and email are required to create a super admin.';
+        } elseif (!filter_var($sa_email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['sa_error'] = 'Please provide a valid email address.';
         } else {
-            $check = $pdo->prepare("SELECT user_id FROM users WHERE (email = ? OR username = ?) AND deleted_at IS NULL");
-            $check->execute([$sa_email, $sa_username]);
-            if ($check->fetch()) {
-                $_SESSION['sa_error'] = 'Email or Username already exists.';
-            } else {
-                $hash = password_hash($sa_password, PASSWORD_DEFAULT);
-                $insert = $pdo->prepare("INSERT INTO users (tenant_id, username, email, password_hash, user_type, status, role_id) VALUES (NULL, ?, ?, ?, 'Super Admin', 'Active', NULL)");
-                $insert->execute([$sa_username, $sa_email, $hash]);
+            try {
+                $superAdminRoleId = sa_ensure_platform_role($pdo, 'Super Admin', 'Master Platform Administrator');
 
-                $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description) VALUES (?, 'SUPER_ADMIN_CREATED', 'user', ?)");
-                $log->execute([$_SESSION['super_admin_id'], "Created new super admin account: {$sa_username}"]);
+                $check = $pdo->prepare("
+                    SELECT user_id
+                    FROM users
+                    WHERE tenant_id IS NULL
+                      AND deleted_at IS NULL
+                      AND (email = ? OR username = ?)
+                    LIMIT 1
+                ");
+                $check->execute([$sa_email, $sa_username]);
 
-                $_SESSION['sa_flash'] = 'Super admin account created successfully.';
+                if ($check->fetchColumn()) {
+                    $_SESSION['sa_error'] = 'Email or username already exists for a platform admin.';
+                } else {
+                    $temporaryPassword = sa_generate_temporary_password();
+                    $hash = password_hash($temporaryPassword, PASSWORD_DEFAULT);
+                    $loginUrl = sa_build_super_admin_login_url();
+                    $message = "
+                    <html>
+                    <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+                       <h2>Your MicroFin Super Admin Account Is Ready</h2>
+                       <p>A platform administrator account has been created for you.</p>
+                       <p><strong>Login URL:</strong> <a href='{$loginUrl}'>{$loginUrl}</a></p>
+                       <p><strong>Use this email to sign in:</strong> {$sa_email}</p>
+                       <p><strong>Temporary Password:</strong> <code style='background:#f4f4f5; padding:4px 8px; border-radius:4px; font-size:16px;'>{$temporaryPassword}</code></p>
+                       <p>Please keep this password secure. It was generated automatically by the system.</p>
+                    </body>
+                    </html>
+                    ";
+
+                    $pdo->beginTransaction();
+                    try {
+                        $insert = $pdo->prepare("
+                            INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status)
+                            VALUES (NULL, ?, ?, ?, TRUE, ?, 'Super Admin', 'Active')
+                        ");
+                        $insert->execute([$sa_username, $sa_email, $hash, $superAdminRoleId]);
+
+                        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description) VALUES (?, 'SUPER_ADMIN_CREATED', 'user', ?)");
+                        $log->execute([$_SESSION['super_admin_id'], "Created new super admin account: {$sa_username}"]);
+
+                        $result_msg = mf_send_brevo_email($sa_email, 'MicroFin - Super Admin Access', $message);
+                        if ($result_msg !== 'Email sent successfully.') {
+                            throw new RuntimeException('Credential email could not be delivered.');
+                        }
+
+                        $pdo->commit();
+                        $_SESSION['sa_flash'] = "Super admin account created successfully. Credentials were sent to {$sa_email}.";
+                    } catch (Throwable $transactionError) {
+                        if ($pdo->inTransaction()) {
+                            $pdo->rollBack();
+                        }
+                        throw $transactionError;
+                    }
+                }
+            } catch (Throwable $e) {
+                $_SESSION['sa_error'] = 'Failed to create super admin account: ' . $e->getMessage();
             }
         }
         header('Location: super_admin.php?section=settings');
@@ -994,9 +1153,9 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                     <span class="material-symbols-rounded">credit_card</span>
                     <span>Tenant Subscriptions</span>
                 </a>
-                <a href="#statements" class="nav-item" data-target="statements">
+                <a href="#receipts" class="nav-item" data-target="receipts">
                     <span class="material-symbols-rounded">account_balance_wallet</span>
-                    <span>Statements</span>
+                    <span>Receipts</span>
                 </a>
 
                 <div class="nav-section-label">System</div>
@@ -1942,80 +2101,60 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                 </button>
                             </div>
                         </div>
-                        <p id="report-filter-summary" class="text-muted" style="margin-top: 12px;">Loading consolidated report summary...</p>
                     </div>
 
-                    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 24px;">
-                        <div class="stat-card">
-                            <div class="stat-icon bg-blue">
-                                <span class="material-symbols-rounded">domain</span>
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex mb-4">
+                            <div>
+                                <h3 style="margin-bottom: 8px;">Report Analytics</h3>
+                                <p id="report-analytics-summary" class="text-muted" style="margin: 0;">Building analytics snapshot...</p>
                             </div>
-                            <div class="stat-details">
-                                <p>Total Tenants</p>
-                                <h3 id="report-stat-total-tenants">--</h3>
-                            </div>
+                            <a
+                                href="report_pdf.php"
+                                id="btn-export-report-pdf"
+                                target="_blank"
+                                rel="noopener"
+                                class="btn btn-outline"
+                            >
+                                <span class="material-symbols-rounded">download</span> Export PDF
+                            </a>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-green">
-                                <span class="material-symbols-rounded">verified</span>
+                        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 20px;">
+                            <div class="stat-card" style="margin-bottom: 0;">
+                                <div class="stat-icon bg-blue">
+                                    <span class="material-symbols-rounded">domain</span>
+                                </div>
+                                <div class="stat-details">
+                                    <p>Total Tenants</p>
+                                    <h3 id="report-stat-total-tenants">--</h3>
+                                </div>
                             </div>
-                            <div class="stat-details">
-                                <p>Active Tenants</p>
-                                <h3 id="report-stat-active-tenants">--</h3>
+                            <div class="stat-card" style="margin-bottom: 0;">
+                                <div class="stat-icon bg-purple">
+                                    <span class="material-symbols-rounded">payments</span>
+                                </div>
+                                <div class="stat-details">
+                                    <p>Current MRR</p>
+                                    <h3 id="report-stat-current-mrr">--</h3>
+                                </div>
                             </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-purple">
-                                <span class="material-symbols-rounded">admin_panel_settings</span>
+                            <div class="stat-card" style="margin-bottom: 0;">
+                                <div class="stat-icon bg-green">
+                                    <span class="material-symbols-rounded">account_balance_wallet</span>
+                                </div>
+                                <div class="stat-details">
+                                    <p>Revenue in Range</p>
+                                    <h3 id="report-stat-range-revenue">--</h3>
+                                </div>
                             </div>
-                            <div class="stat-details">
-                                <p>Active Super Admins</p>
-                                <h3 id="report-stat-active-super-admins">--</h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-amber">
-                                <span class="material-symbols-rounded">pending_actions</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Pending Applications</p>
-                                <h3 id="report-stat-pending-applications">--</h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-red">
-                                <span class="material-symbols-rounded">support_agent</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Open Inquiries</p>
-                                <h3 id="report-stat-open-inquiries">--</h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-purple">
-                                <span class="material-symbols-rounded">payments</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Current MRR</p>
-                                <h3 id="report-stat-current-mrr">--</h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-green">
-                                <span class="material-symbols-rounded">account_balance_wallet</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Revenue in Range</p>
-                                <h3 id="report-stat-range-revenue">--</h3>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon bg-blue">
-                                <span class="material-symbols-rounded">receipt_long</span>
-                            </div>
-                            <div class="stat-details">
-                                <p>Transactions in Range</p>
-                                <h3 id="report-stat-range-transactions">--</h3>
+                            <div class="stat-card" style="margin-bottom: 0;">
+                                <div class="stat-icon bg-blue">
+                                    <span class="material-symbols-rounded">receipt_long</span>
+                                </div>
+                                <div class="stat-details">
+                                    <p>Transactions in Range</p>
+                                    <h3 id="report-stat-range-transactions">--</h3>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2023,11 +2162,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                     <div class="dashboard-grid-2">
                         <div class="card">
                             <h3>Tenant Activity</h3>
-                            <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 12px 0;">
-                                <span class="badge badge-green">Active</span>
-                                <span class="badge badge-amber">Pending Application</span>
-                                <span class="badge badge-red">Inactive</span>
-                            </div>
                             <div class="table-responsive">
                                 <table class="admin-table" id="report-tenant-activity">
                                     <thead>
@@ -2048,11 +2182,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
 
                         <div class="card">
                             <h3>Inquiry Activity</h3>
-                            <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 12px 0;">
-                                <span class="badge badge-amber">Open</span>
-                                <span class="badge badge-green">Closed</span>
-                                <span class="badge badge-red">Inactive</span>
-                            </div>
                             <div class="table-responsive">
                                 <table class="admin-table" id="report-inquiry-activity">
                                     <thead>
@@ -2268,27 +2397,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                     </div>
                     <div class="card" style="margin-bottom:24px;">
                         <div class="card-header-flex mb-4">
-                            <div><h3>Import SQL</h3></div>
-                        </div>
-                        <div style="display:flex; gap:10px; align-items:flex-start; padding:12px 14px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; margin-bottom:16px;">
-                            <span class="material-symbols-rounded" style="color:#f59e0b; font-size:20px; margin-top:1px;">warning</span>
-                            <p class="text-muted" style="margin:0; font-size:.875rem; line-height:1.55;">
-                                Upload a <code>.sql</code> backup file to import. Duplicate rows are automatically skipped. Schema mismatches (tables not in the current database) will be flagged before import completes.
-                            </p>
-                        </div>
-                        <form id="backup-import-form" enctype="multipart/form-data" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
-                            <div class="form-group" style="margin:0; flex:1; min-width:250px;">
-                                <label style="font-size:.8rem;">Select SQL File</label>
-                                <input type="file" class="form-control" id="backup-import-file" accept=".sql" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary" id="btn-backup-import">
-                                <span class="material-symbols-rounded">upload_file</span> Import
-                            </button>
-                        </form>
-                        <div id="backup-import-result" style="display:none; margin-top:16px; padding:12px 16px; border-radius:8px;"></div>
-                    </div>
-                    <div class="card" style="margin-bottom:24px;">
-                        <div class="card-header-flex mb-4">
                             <div><h3>Backup History</h3><p class="text-muted">Recent backup operations and their status.</p></div>
                         </div>
                         <div class="table-responsive">
@@ -2333,12 +2441,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <!-- SECTION 7: SETTINGS -->
                 <!-- ============================================================ -->
                 <section id="settings" class="view-section">
-                    <!-- Settings sub-tabs -->
-                    <div class="settings-tabs">
-                        <button class="settings-tab active" data-settings-target="settings-limits">Tenant Limits</button>
-                        <button class="settings-tab" data-settings-target="settings-accounts">Super Admin Accounts</button>
-                    </div>
-
+                    <?php if (false): ?>
                     <!-- Sub-section: Tenant Limits -->
                     <div id="settings-limits" class="settings-panel active">
                         <div class="card">
@@ -2396,9 +2499,10 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             </div>
                         </div>
                     </div>
+                    <?php endif; ?>
 
                     <!-- Sub-section: Super Admin Accounts -->
-                    <div id="settings-accounts" class="settings-panel">
+                    <div id="settings-accounts" class="settings-panel active">
                         <div class="card">
                             <div class="card-header-flex mb-4">
                                 <div>
@@ -2455,14 +2559,14 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 </section>
 
                 <!-- ============================================================ -->
-                <!-- SECTION: STATEMENTS GLOBAL LEDGER -->
+                <!-- SECTION: RECEIPTS GLOBAL LEDGER -->
                 <!-- ============================================================ -->
-                <section id="statements" class="view-section">
+                <section id="receipts" class="view-section">
                     <div class="card">
                         <div class="card-header-flex mb-4">
                             <div>
-                                <h3>Statement of Transactions</h3>
-                                <p class="text-muted">Global ledger of all tenant subscription billing transactions.</p>
+                                <h3>Receipt Ledger</h3>
+                                <p class="text-muted">Platform receipt ledger for all tenant subscription billing transactions.</p>
                             </div>
                             <?php
                             $stmt_filter_period = trim((string) ($_GET['statement_period'] ?? 'monthly'));
@@ -2508,9 +2612,9 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             ];
                             ?>
                             <form method="GET" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
-                                <input type="hidden" name="section" value="statements">
+                                <input type="hidden" name="section" value="receipts">
                                 <div class="form-group" style="margin:0; min-width:160px;">
-                                    <label style="font-size:.8rem;">Statement Type</label>
+                                    <label style="font-size:.8rem;">Receipt Type</label>
                                     <select name="statement_period" class="form-control">
                                         <option value="monthly" <?php echo $stmt_filter_period === 'monthly' ? 'selected' : ''; ?>>Monthly</option>
                                         <option value="yearly" <?php echo $stmt_filter_period === 'yearly' ? 'selected' : ''; ?>>Yearly</option>
@@ -2573,7 +2677,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                         ?>
                         <div style="display:flex; gap:24px; margin-bottom:16px; padding:12px 16px; background:rgba(2,132,199,0.06); border-radius:8px;">
                             <div><span class="text-muted" style="font-size:.82rem;">Revenue for <?php echo htmlspecialchars($stmt_period_label, ENT_QUOTES, 'UTF-8'); ?></span><br><strong style="font-size:1.1rem;">&#8369;<?php echo number_format($stmt_month_total, 2); ?></strong></div>
-                            <div><span class="text-muted" style="font-size:.82rem;">Tenant Statements</span><br><strong style="font-size:1.1rem;"><?php echo $total_tenant_statements; ?></strong></div>
+                            <div><span class="text-muted" style="font-size:.82rem;">Tenant Receipts</span><br><strong style="font-size:1.1rem;"><?php echo $total_tenant_statements; ?></strong></div>
                         </div>
                         <div class="table-responsive">
                             <table class="admin-table">
@@ -2581,7 +2685,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                     <tr>
                                         <th>Tenant</th>
                                         <th>Plan</th>
-                                        <th>Statement Period</th>
+                                        <th>Receipt Period</th>
                                         <th>Invoices</th>
                                         <th>Total Amount</th>
                                         <th>Status</th>
@@ -2593,7 +2697,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                     <tr>
                                         <td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">
                                             <span class="material-symbols-rounded" style="font-size:40px; display:block; margin-bottom:0.5rem;">receipt_long</span>
-                                            No tenant statements available for <?php echo htmlspecialchars($stmt_period_label, ENT_QUOTES, 'UTF-8'); ?>.
+                                            No tenant receipts available for <?php echo htmlspecialchars($stmt_period_label, ENT_QUOTES, 'UTF-8'); ?>.
                                         </td>
                                     </tr>
                                     <?php else: ?>
@@ -2617,7 +2721,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <td style="font-weight:500;"><?php echo $pay['invoice_count']; ?></td>
                                             <td style="font-weight:600;">&#8369;<?php echo number_format((float)$pay['total_amount'], 2); ?></td>
                                             <td><span class="badge <?php echo $badge_class; ?>"><?php echo $disp_status; ?></span></td>
-                                            <td><a href="<?php echo htmlspecialchars($statement_pdf_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener" class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;">View PDF</a></td>
+                                            <td><a href="<?php echo htmlspecialchars($statement_pdf_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener" class="btn btn-outline" style="padding:4px 8px; font-size:0.75rem;">View Receipt PDF</a></td>
                                         </tr>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
@@ -2648,11 +2752,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <div class="form-group">
                     <label>Email Address</label>
                     <input type="email" class="form-control" name="sa_email" placeholder="superadmin@microfin.com" required>
-                </div>
-                <div class="form-group">
-                    <label>Temporary Password</label>
-                    <input type="password" class="form-control" name="sa_password" required>
-                    <small class="text-muted">Please provide this password to the new admin securely.</small>
                 </div>
                 <div class="modal-footer" style="margin-top:24px;">
                     <button type="button" class="btn btn-outline" id="cancel-sa-modal">Cancel</button>

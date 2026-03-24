@@ -7,7 +7,14 @@ if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_
     exit;
 }
 
+if (!empty($_SESSION['super_admin_force_password_change'])) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Password change required']);
+    exit;
+}
+
 require_once '../backend/db_connect.php';
+require_once __DIR__ . '/report_data.php';
 
 header('Content-Type: application/json');
 
@@ -145,197 +152,8 @@ try {
         // REPORTS: Privacy-safe tenant activity summary
         // ============================================================
         case 'reports':
-            $date_from = $_GET['date_from'] ?? date('Y-01-01');
-            $date_to = $_GET['date_to'] ?? date('Y-m-d', strtotime('+1 day'));
-            $tenant_id = trim((string) ($_GET['tenant_id'] ?? ''));
-            $data = [];
-
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date_from)) {
-                $date_from = date('Y-01-01');
-            }
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date_to)) {
-                $date_to = date('Y-m-d', strtotime('+1 day'));
-            }
-            if ($date_from > $date_to) {
-                $tmp = $date_from;
-                $date_from = $date_to;
-                $date_to = $tmp;
-            }
-
-            $selected_tenant_name = '';
-            if ($tenant_id !== '') {
-                $tenant_lookup_stmt = $pdo->prepare('SELECT tenant_name FROM tenants WHERE tenant_id = ? LIMIT 1');
-                $tenant_lookup_stmt->execute([$tenant_id]);
-                $selected_tenant_name = (string) ($tenant_lookup_stmt->fetchColumn() ?: '');
-            }
-
-            $data['filters'] = [
-                'date_from' => $date_from,
-                'date_to' => $date_to,
-                'tenant_id' => $tenant_id,
-                'tenant_name' => $selected_tenant_name,
-            ];
-
-            $summary_sql = "
-                SELECT
-                    SUM(CASE WHEN (t.request_type = 'tenant_application' OR t.request_type IS NULL) THEN 1 ELSE 0 END) AS total_tenants,
-                    SUM(CASE WHEN (t.request_type = 'tenant_application' OR t.request_type IS NULL) AND t.status = 'Active' THEN 1 ELSE 0 END) AS active_tenants,
-                    SUM(CASE WHEN (t.request_type = 'tenant_application' OR t.request_type IS NULL) AND t.status IN ('Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'New', 'In Contact') THEN 1 ELSE 0 END) AS pending_applications,
-                    SUM(CASE WHEN t.request_type = 'talk_to_expert' AND t.status IN ('Pending', 'Contacted', 'New', 'In Contact') THEN 1 ELSE 0 END) AS open_inquiries,
-                    COALESCE(SUM(CASE WHEN (t.request_type = 'tenant_application' OR t.request_type IS NULL) AND t.status = 'Active' THEN t.mrr ELSE 0 END), 0) AS current_mrr
-                FROM tenants t
-                WHERE t.deleted_at IS NULL
-            ";
-            $summary_params = [];
-            if ($tenant_id !== '') {
-                $summary_sql .= " AND t.tenant_id = ?";
-                $summary_params[] = $tenant_id;
-            }
-            $summary_stmt = $pdo->prepare($summary_sql);
-            $summary_stmt->execute($summary_params);
-            $summary_row = $summary_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-
-            $sa_stmt = $pdo->query("SELECT COUNT(*) AS cnt FROM users WHERE user_type = 'Super Admin' AND status = 'Active' AND deleted_at IS NULL");
-            $active_super_admin_accounts = (int) ($sa_stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0);
-
-            $range_revenue_sql = "
-                SELECT COALESCE(SUM(amount), 0) AS total_revenue, COUNT(*) AS total_transactions
-                FROM tenant_billing_invoices
-                WHERE status = 'Paid'
-                  AND DATE(created_at) BETWEEN ? AND ?
-            ";
-            $range_revenue_params = [$date_from, $date_to];
-            if ($tenant_id !== '') {
-                $range_revenue_sql .= " AND tenant_id = ?";
-                $range_revenue_params[] = $tenant_id;
-            }
-            $range_revenue_stmt = $pdo->prepare($range_revenue_sql);
-            $range_revenue_stmt->execute($range_revenue_params);
-            $range_revenue_row = $range_revenue_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-
-            $data['summary'] = [
-                'total_tenants' => (int) ($summary_row['total_tenants'] ?? 0),
-                'active_tenants' => (int) ($summary_row['active_tenants'] ?? 0),
-                'active_super_admin_accounts' => $active_super_admin_accounts,
-                'pending_applications' => (int) ($summary_row['pending_applications'] ?? 0),
-                'open_inquiries' => (int) ($summary_row['open_inquiries'] ?? 0),
-                'current_mrr' => (float) ($summary_row['current_mrr'] ?? 0),
-                'range_revenue' => (float) ($range_revenue_row['total_revenue'] ?? 0),
-                'range_transactions' => (int) ($range_revenue_row['total_transactions'] ?? 0),
-            ];
-
-            $tenant_activity_sql = "
-                SELECT t.tenant_id, t.tenant_name, t.status, t.plan_tier, t.created_at,
-                    CASE
-                        WHEN t.status = 'Active' THEN 'Active'
-                        WHEN t.status IN ('Draft', 'CONSIDER', 'Pending', 'Contacted', 'Accepted', 'New', 'In Contact') THEN 'Pending Application'
-                        ELSE 'Inactive'
-                    END AS status_legend
-                FROM tenants t
-                WHERE t.deleted_at IS NULL
-                  AND (t.request_type = 'tenant_application' OR t.request_type IS NULL)
-                  AND DATE(t.created_at) BETWEEN ? AND ?
-            ";
-            $tenant_activity_params = [$date_from, $date_to];
-            if ($tenant_id !== '') {
-                $tenant_activity_sql .= " AND t.tenant_id = ?";
-                $tenant_activity_params[] = $tenant_id;
-            }
-            $tenant_activity_sql .= " ORDER BY t.created_at DESC";
-            $stmt = $pdo->prepare($tenant_activity_sql);
-            $stmt->execute($tenant_activity_params);
-            $data['tenant_activity'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $inquiry_sql = "
-                SELECT t.tenant_id, t.tenant_name, t.status, t.created_at,
-                    CASE
-                        WHEN t.status IN ('Pending', 'Contacted', 'New', 'In Contact') THEN 'Open'
-                        WHEN t.status IN ('Closed', 'Resolved') THEN 'Closed'
-                        ELSE 'Inactive'
-                    END AS inquiry_stage
-                FROM tenants t
-                WHERE t.deleted_at IS NULL
-                  AND t.request_type = 'talk_to_expert'
-                  AND DATE(t.created_at) BETWEEN ? AND ?
-            ";
-            $inquiry_params = [$date_from, $date_to];
-            if ($tenant_id !== '') {
-                $inquiry_sql .= " AND t.tenant_id = ?";
-                $inquiry_params[] = $tenant_id;
-            }
-            $inquiry_sql .= " ORDER BY t.created_at DESC";
-            $stmt = $pdo->prepare($inquiry_sql);
-            $stmt->execute($inquiry_params);
-            $data['inquiry_activity'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $plan_summary_sql = "
-                SELECT
-                    t.plan_tier,
-                    COUNT(*) AS total_tenants,
-                    SUM(CASE WHEN t.status = 'Active' THEN 1 ELSE 0 END) AS active_tenants,
-                    COALESCE(SUM(CASE WHEN t.status = 'Active' THEN t.mrr ELSE 0 END), 0) AS total_mrr,
-                    COALESCE(SUM(COALESCE(u_stats.total_users, 0)), 0) AS total_users
-                FROM tenants t
-                LEFT JOIN (
-                    SELECT tenant_id, COUNT(*) AS total_users
-                    FROM users
-                    WHERE tenant_id IS NOT NULL AND deleted_at IS NULL
-                    GROUP BY tenant_id
-                ) u_stats ON u_stats.tenant_id = t.tenant_id
-                WHERE t.deleted_at IS NULL
-                  AND (t.request_type = 'tenant_application' OR t.request_type IS NULL)
-            ";
-            $plan_summary_params = [];
-            if ($tenant_id !== '') {
-                $plan_summary_sql .= " AND t.tenant_id = ?";
-                $plan_summary_params[] = $tenant_id;
-            }
-            $plan_summary_sql .= "
-                GROUP BY t.plan_tier
-                ORDER BY active_tenants DESC, total_tenants DESC, t.plan_tier ASC
-            ";
-            $stmt = $pdo->prepare($plan_summary_sql);
-            $stmt->execute($plan_summary_params);
-            $data['plan_summary'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $billing_summary_sql = "
-                SELECT
-                    t.tenant_id,
-                    t.tenant_name,
-                    t.plan_tier,
-                    COALESCE(SUM(p.amount), 0) AS total_revenue,
-                    COUNT(p.invoice_id) AS transaction_count,
-                    MAX(p.created_at) AS latest_payment
-                FROM tenants t
-                LEFT JOIN tenant_billing_invoices p
-                  ON p.tenant_id = t.tenant_id
-                 AND p.status = 'Paid'
-                 AND DATE(p.created_at) BETWEEN ? AND ?
-                WHERE t.deleted_at IS NULL
-                  AND (t.request_type = 'tenant_application' OR t.request_type IS NULL)
-            ";
-            $billing_summary_params = [$date_from, $date_to];
-            if ($tenant_id !== '') {
-                $billing_summary_sql .= " AND t.tenant_id = ?";
-                $billing_summary_params[] = $tenant_id;
-            }
-            $billing_summary_sql .= "
-                GROUP BY t.tenant_id, t.tenant_name, t.plan_tier
-            ";
-            if ($tenant_id === '') {
-                $billing_summary_sql .= "
-                HAVING transaction_count > 0 OR total_revenue > 0
-                ";
-            }
-            $billing_summary_sql .= "
-                ORDER BY total_revenue DESC, transaction_count DESC, t.tenant_name ASC
-                LIMIT 10
-            ";
-            $stmt = $pdo->prepare($billing_summary_sql);
-            $stmt->execute($billing_summary_params);
-            $data['billing_summary'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            echo json_encode($data);
+            $filters = mf_sa_report_normalize_filters($_GET);
+            echo json_encode(mf_sa_report_fetch_data($pdo, $filters));
             break;
 
         // ============================================================

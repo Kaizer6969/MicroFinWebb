@@ -444,6 +444,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_type ENUM('Employee', 'Client', 'Admin', 'applicant', 'inquirer', 'Super Admin') NOT NULL
              COMMENT '✅ Approved: Includes intake/provisioning flow states (applicant/inquirer -> Admin)',
     status ENUM('Active', 'Inactive', 'Suspended', 'Locked') DEFAULT 'Active',
+    can_manage_billing TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Per-user billing access toggle for tenant admins',
 
     -- Security
     verification_token VARCHAR(255),

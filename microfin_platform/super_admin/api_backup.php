@@ -17,6 +17,12 @@ if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_
     exit;
 }
 
+if (!empty($_SESSION['super_admin_force_password_change'])) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Password change required']);
+    exit;
+}
+
 require_once '../backend/db_connect.php';
 
 $action = $_GET['action'] ?? '';

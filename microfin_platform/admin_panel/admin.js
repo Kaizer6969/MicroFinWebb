@@ -17,73 +17,175 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleEmails = document.getElementById('toggle-email_notifications');
     const toggleWebsite = document.getElementById('toggle-public_website_enabled');
 
-    const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
-    const viewSections = document.querySelectorAll('.view-section');
+    const navItems = Array.from(document.querySelectorAll('.sidebar-nav .nav-item[data-target]'));
+    const viewSections = Array.from(document.querySelectorAll('.view-section'));
     const pageTitle = document.getElementById('page-title');
+    const tabBtns = Array.from(document.querySelectorAll('.tab-btn'));
+    const tabContents = Array.from(document.querySelectorAll('.tab-content'));
+
+    const sectionDefaults = {
+        staff: 'staff-list',
+        billing: 'billing-overview',
+        settings: 'company-profile',
+    };
+
+    const sectionRouteMap = {
+        dashboard: { sectionId: 'dashboard' },
+        staff: { sectionId: 'staff', subTabId: 'staff-list' },
+        'staff-list': { sectionId: 'staff', subTabId: 'staff-list' },
+        'roles-list': { sectionId: 'staff', subTabId: 'roles-list' },
+        loan_products: { sectionId: 'loan_products' },
+        credit_settings: { sectionId: 'credit_settings' },
+        website: { sectionId: 'website' },
+        features: { sectionId: 'features' },
+        billing: { sectionId: 'billing', subTabId: 'billing-overview' },
+        statements: { sectionId: 'statements' },
+        settings: { sectionId: 'settings', subTabId: 'company-profile' },
+        personal: { sectionId: 'settings', subTabId: 'personal-profile' },
+    };
+
+    const billingSubtabMap = {
+        payment: 'billing-payment',
+        history: 'billing-history',
+    };
+
+    function setPageTitleFromNav(item, fallbackTargetId) {
+        if (!pageTitle) return;
+
+        if (item) {
+            const navTitle = item.getAttribute('data-title');
+            const label = item.querySelector('span:nth-child(2)');
+            pageTitle.textContent = navTitle || (label ? label.textContent : pageTitle.textContent);
+            return;
+        }
+
+        const fallbackNav = document.querySelector(`.sidebar-nav .nav-item[data-target="${fallbackTargetId}"]`);
+        if (fallbackNav) {
+            const navTitle = fallbackNav.getAttribute('data-title');
+            const label = fallbackNav.querySelector('span:nth-child(2)');
+            pageTitle.textContent = navTitle || (label ? label.textContent : pageTitle.textContent);
+        }
+    }
+
+    function activateTabInSection(sectionEl, tabId) {
+        if (!sectionEl || !tabId) {
+            return;
+        }
+
+        const scopedTabButtons = Array.from(sectionEl.querySelectorAll('.tab-btn'));
+        const scopedTabContents = Array.from(sectionEl.querySelectorAll('.tab-content'));
+        if (scopedTabButtons.length === 0 || scopedTabContents.length === 0) {
+            return;
+        }
+
+        scopedTabButtons.forEach((btn) => {
+            btn.classList.toggle('active', btn.getAttribute('data-tab') === tabId);
+        });
+
+        scopedTabContents.forEach((content) => {
+            content.classList.toggle('active', content.id === tabId);
+        });
+    }
+
+    function findPreferredNavItem(targetId, subTabId = '') {
+        if (subTabId !== '') {
+            const exactNav = document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"][data-subtab="${subTabId}"]`);
+            if (exactNav) {
+                return exactNav;
+            }
+        }
+
+        return document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"]:not([data-subtab])`)
+            || document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"]`);
+    }
+
+    function activateSection(targetId, options = {}) {
+        if (!targetId) {
+            return;
+        }
+
+        const targetEl = document.getElementById(targetId);
+        if (!targetEl) {
+            return;
+        }
+
+        const requestedSubTabId = options.subTabId || '';
+        const effectiveSubTabId = requestedSubTabId || sectionDefaults[targetId] || '';
+        const navItem = options.navItem || findPreferredNavItem(targetId, requestedSubTabId);
+
+        navItems.forEach((nav) => nav.classList.toggle('active', nav === navItem));
+        viewSections.forEach((section) => section.classList.toggle('active', section.id === targetId));
+
+        if (effectiveSubTabId !== '') {
+            activateTabInSection(targetEl, effectiveSubTabId);
+        }
+
+        setPageTitleFromNav(navItem, targetId);
+
+        if (window.location.hash.substring(1) !== targetId) {
+            history.replaceState(null, null, `#${targetId}`);
+        }
+    }
 
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             const targetId = item.getAttribute('data-target');
             if(!targetId) return;
             const subTabId = item.getAttribute('data-subtab');
-            const navTitle = item.getAttribute('data-title');
+            const href = item.getAttribute('href') || '';
+
+            if (href !== '' && !href.startsWith('#')) {
+                return;
+            }
             
             e.preventDefault();
-            navItems.forEach(nav => nav.classList.remove('active'));
-            item.classList.add('active');
-
-            viewSections.forEach(section => section.classList.remove('active'));
-            const targetEl = document.getElementById(targetId);
-            if (targetEl) {
-                targetEl.classList.add('active');
-            }
-
-            if (targetId === 'settings' && subTabId) {
-                tabBtns.forEach(btn => btn.classList.remove('active'));
-                tabContents.forEach(content => content.classList.remove('active'));
-
-                const targetTabButton = document.querySelector(`.tab-btn[data-tab="${subTabId}"]`);
-                if (targetTabButton) {
-                    targetTabButton.classList.add('active');
-                }
-
-                const targetTabContent = document.getElementById(subTabId);
-                if (targetTabContent) {
-                    targetTabContent.classList.add('active');
-                }
-            }
-
-            if (pageTitle) {
-                pageTitle.textContent = navTitle || item.querySelector('span:nth-child(2)').textContent;
-            }
-
-            // Update URL hash without causing a page jump
-            history.replaceState(null, null, `#${targetId}`);
+            activateSection(targetId, { navItem: item, subTabId: subTabId || '' });
         });
     });
 
-    // Auto-navigate if hash exists or ?section= param exists
+    // Auto-navigate if hash or query params target a specific section/sub-tab
     const urlParams = new URLSearchParams(window.location.search);
-    const targetTab = window.location.hash ? window.location.hash.substring(1) : (urlParams.get('section') || urlParams.get('tab'));       
-    if (targetTab) {
-        const targetNav = document.querySelector(`.nav-item[data-target="${targetTab}"]`);
-        if (targetNav) targetNav.click();
+    const hashTarget = window.location.hash ? window.location.hash.substring(1) : '';
+    const sectionParam = urlParams.get('section') || '';
+    const tabParam = urlParams.get('tab') || '';
+    const subParam = urlParams.get('sub') || '';
+
+    let initialRoute = null;
+    if (hashTarget && document.getElementById(hashTarget)) {
+        initialRoute = {
+            sectionId: hashTarget,
+            subTabId: hashTarget === 'billing' && billingSubtabMap[subParam] ? billingSubtabMap[subParam] : '',
+        };
+    } else if (sectionParam && document.getElementById(sectionParam)) {
+        initialRoute = {
+            sectionId: sectionParam,
+            subTabId: sectionParam === 'billing' && billingSubtabMap[subParam] ? billingSubtabMap[subParam] : '',
+        };
+    } else if (tabParam && sectionRouteMap[tabParam]) {
+        initialRoute = {
+            sectionId: sectionRouteMap[tabParam].sectionId,
+            subTabId: tabParam === 'billing' && billingSubtabMap[subParam]
+                ? billingSubtabMap[subParam]
+                : (sectionRouteMap[tabParam].subTabId || ''),
+        };
+    } else if (subParam && billingSubtabMap[subParam]) {
+        initialRoute = { sectionId: 'billing', subTabId: billingSubtabMap[subParam] };
     }
 
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    const tabContents = document.querySelectorAll('.tab-content');
+    if (initialRoute && initialRoute.sectionId) {
+        activateSection(initialRoute.sectionId, { subTabId: initialRoute.subTabId || '' });
+    }
 
     tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tabId = btn.getAttribute('data-tab');
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            tabContents.forEach(content => content.classList.remove('active'));
-            const targetTab = document.getElementById(tabId);
-            if (targetTab) {
-                targetTab.classList.add('active');
+        btn.addEventListener('click', (event) => {
+            const href = btn.getAttribute('href') || '';
+            if (href !== '' && !href.startsWith('#')) {
+                return;
             }
+            event.preventDefault();
+            const tabId = btn.getAttribute('data-tab');
+            const sectionEl = btn.closest('.view-section');
+            activateTabInSection(sectionEl, tabId);
         });
     });
 

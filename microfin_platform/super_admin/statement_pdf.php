@@ -8,6 +8,13 @@ if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_
     exit;
 }
 
+if (!empty($_SESSION['super_admin_force_password_change'])) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'Password change required';
+    exit;
+}
+
 require_once __DIR__ . '/../backend/db_connect.php';
 
 function mf_statement_pdf_abort($statusCode, $message)
@@ -331,20 +338,20 @@ foreach ($invoices as $invoice) {
     $totalAmount += (float) ($invoice['amount'] ?? 0);
 }
 
-$statementHeading = ucfirst($filters['period']) . ' Statement - ' . $filters['period_label'];
+$statementHeading = ucfirst($filters['period']) . ' Receipt - ' . $filters['period_label'];
 $generatedAtLabel = mf_statement_pdf_safe_date(date('Y-m-d H:i:s'), 'M j, Y g:i A');
 $statusSummary = mf_statement_pdf_status_summary($invoices);
 
 $pdf = new MF_SimplePdf();
 $page = $pdf->addPage();
 
-$pdf->text($page, 40, 804, 'MicroFin Statement of Transactions', 18, 'F2');
-$pdf->text($page, 40, 786, 'System-generated billing statement', 10, 'F1');
+$pdf->text($page, 40, 804, 'MicroFin Billing Receipt', 18, 'F2');
+$pdf->text($page, 40, 786, 'System-generated tenant billing receipt', 10, 'F1');
 $pdf->line($page, 40, 778, 555, 778, 0.8);
 
 $pdf->text($page, 40, 754, 'Tenant:', 10, 'F2');
 $pdf->text($page, 95, 754, mf_statement_pdf_clean_text($tenant['tenant_name'] ?? $tenantId), 10, 'F1');
-$pdf->text($page, 320, 754, 'Statement:', 10, 'F2');
+$pdf->text($page, 320, 754, 'Receipt:', 10, 'F2');
 $pdf->text($page, 392, 754, $statementHeading, 10, 'F1');
 
 $pdf->text($page, 40, 736, 'Tenant ID:', 10, 'F2');
@@ -389,7 +396,7 @@ if (empty($invoices)) {
     foreach ($invoices as $invoice) {
         if ($y < 70) {
             $page = $pdf->addPage();
-            $pdf->text($page, 40, 804, 'Statement of Transactions (continued)', 15, 'F2');
+            $pdf->text($page, 40, 804, 'Billing Receipt (continued)', 15, 'F2');
             $pdf->text($page, 40, 786, mf_statement_pdf_clean_text($tenant['tenant_name'] ?? $tenantId) . ' - ' . $statementHeading, 10, 'F1');
             $pdf->line($page, 40, 778, 555, 778, 0.8);
             $y = 752;
@@ -411,6 +418,6 @@ if (empty($invoices)) {
 $safePeriodToken = $filters['period'] === 'yearly'
     ? (string) $filters['year']
     : sprintf('%04d-%02d', $filters['year'], $filters['month_number']);
-$fileName = 'statement-' . preg_replace('/[^A-Za-z0-9_-]/', '-', $tenantId) . '-' . $safePeriodToken . '.pdf';
+$fileName = 'receipt-' . preg_replace('/[^A-Za-z0-9_-]/', '-', $tenantId) . '-' . $safePeriodToken . '.pdf';
 
 $pdf->outputInline($fileName);
