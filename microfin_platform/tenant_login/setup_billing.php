@@ -83,6 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($billing_cycle_preference, ['1', '15'], true)) {
             $billing_cycle_preference = '1';
         }
+
+        // billing_cycle DB column is ENUM('Monthly','Quarterly','Yearly').
+        // Both day-of-month options ('1' and '15') are Monthly cycles.
+        // The actual billing day is encoded via next_billing_date.
+        $billing_cycle_enum = 'Monthly';
         
         $today_ts = time();
         $current_day = (int) date('j', $today_ts);
@@ -114,7 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $pdo->prepare('UPDATE tenants SET billing_cycle = ?, next_billing_date = ?, setup_current_step = 6, setup_completed = TRUE WHERE tenant_id = ? AND setup_current_step = 5')->execute([$billing_cycle_preference, $next_billing, $tenant_id]);
+        $upd = $pdo->prepare('UPDATE tenants SET billing_cycle = ?, next_billing_date = ?, setup_current_step = 6, setup_completed = TRUE WHERE tenant_id = ? AND setup_current_step = 5');
+        $upd->execute([$billing_cycle_enum, $next_billing, $tenant_id]);
 
         $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'BILLING_SETUP', 'tenant', 'Payment method added during onboarding', ?)");
         $log->execute([$user_id, $tenant_id]);
