@@ -4,17 +4,25 @@
 
 $charset = 'utf8mb4';
 
-// Local fallback DB configuration.
-$host = 'localhost';
-$port = 3306;
-$db = 'microfin_db';
+// ---------------------------------------------------------------
+// Primary (hosted) DB defaults — Railway production credentials.
+// These are used when environment variables are not available.
+// ---------------------------------------------------------------
+$host = 'centerbeam.proxy.rlwy.net';
+$port = 52624;
+$db   = 'railway';
 $user = 'root';
-$pass = '1234';
-$localHost = $host;
-$localPort = $port;
-$localDb = $db;
-$localUser = $user;
-$localPass = $pass;
+$pass = 'zVULvPIbSyHVavTRnPFAkMWGVmvRwInd';
+
+// ---------------------------------------------------------------
+// Local localhost fallback — only used when the primary/hosted
+// connection above fails (e.g. developing offline).
+// ---------------------------------------------------------------
+$localHost = 'localhost';
+$localPort = 3306;
+$localDb   = 'microfin_db';
+$localUser = 'root';
+$localPass = '';
 
 function mf_env_first(array $keys)
 {
@@ -49,7 +57,7 @@ function mf_local_config_value(string $key, string $default = ''): string
     return $default;
 }
 
-// Hosted override via URL-style DB variables.
+// Override defaults with env-var URL (Railway DATABASE_URL, etc.).
 $databaseUrl = mf_env_first(['DATABASE_URL', 'MYSQL_URL', 'MYSQL_PUBLIC_URL', 'MYSQL_PRIVATE_URL']);
 if ($databaseUrl !== null) {
     $parts = parse_url($databaseUrl);
@@ -72,12 +80,28 @@ if ($databaseUrl !== null) {
     }
 }
 
-// Railway plugin-style discrete variables.
-$host = mf_env_first(['MYSQLHOST', 'DB_HOST']) ?: $host;
-$port = (int)(mf_env_first(['MYSQLPORT', 'DB_PORT']) ?: $port);
-$db = mf_env_first(['MYSQLDATABASE', 'DB_NAME']) ?: $db;
-$user = mf_env_first(['MYSQLUSER', 'DB_USER']) ?: $user;
-$pass = mf_env_first(['MYSQLPASSWORD', 'DB_PASSWORD']) ?: $pass;
+// Override further with Railway plugin-style discrete variables
+// (these win over DATABASE_URL when explicitly set).
+$envHost = mf_env_first(['MYSQLHOST', 'DB_HOST']);
+if ($envHost !== null) {
+    $host = $envHost;
+}
+$envPort = mf_env_first(['MYSQLPORT', 'DB_PORT']);
+if ($envPort !== null) {
+    $port = (int)$envPort;
+}
+$envDb = mf_env_first(['MYSQLDATABASE', 'DB_NAME']);
+if ($envDb !== null) {
+    $db = $envDb;
+}
+$envUser = mf_env_first(['MYSQLUSER', 'DB_USER']);
+if ($envUser !== null) {
+    $user = $envUser;
+}
+$envPass = mf_env_first(['MYSQLPASSWORD', 'DB_PASSWORD']);
+if ($envPass !== null) {
+    $pass = $envPass;
+}
 
 $resolvedBrevoApiKey = mf_env_first(['BREVO_API_KEY']) ?? mf_local_config_value('BREVO_API_KEY', '');
 $resolvedBrevoSenderEmail = mf_env_first(['BREVO_SENDER_EMAIL']) ?? mf_local_config_value('BREVO_SENDER_EMAIL', 'microfin.statements@gmail.com');
