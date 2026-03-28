@@ -11,663 +11,904 @@ require_once '../backend/db_connect.php';
 $tenant_id   = $_SESSION['tenant_id'];
 $tenant_name = $_SESSION['tenant_name'] ?? 'Company Admin';
 $tenant_slug = $_SESSION['tenant_slug'] ?? '';
-$ui_theme = (($_SESSION['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
-
-function hexToRgb($hex) {
-    $hex = str_replace('#', '', $hex);
-    if (strlen($hex) == 3) {
-        $r = hexdec(substr($hex,0,1).substr($hex,0,1));
-        $g = hexdec(substr($hex,1,1).substr($hex,1,1));
-        $b = hexdec(substr($hex,2,1).substr($hex,2,1));
-    } else {
-        $r = hexdec(substr($hex,0,2));
-        $g = hexdec(substr($hex,2,2));
-        $b = hexdec(substr($hex,4,2));
-    }
-    return "$r, $g, $b";
-}
 
 // ==========================================
-// POST Handler — Save Website Content (PRG)
+// AJAX POST Handler — Save Website Content
 // ==========================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_website_content') {
-    $layout = 'template1'; // Template 2/3 are temporarily unavailable.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
 
-    $hero_title       = trim($_POST['hero_title'] ?? '');
-    $hero_subtitle    = trim($_POST['hero_subtitle'] ?? '');
-    $hero_description = trim($_POST['hero_description'] ?? '');
-    $hero_cta_text    = trim($_POST['hero_cta_text'] ?? 'Learn More');
-    $hero_cta_url     = trim($_POST['hero_cta_url'] ?? '#about');
-    $hero_image_path  = trim($_POST['hero_image_path'] ?? '');
+    try {
+        $jsonRaw = $_POST['json_data'] ?? '{}';
+        $payload = json_decode($jsonRaw, true);
+        if (!is_array($payload)) $payload = [];
 
-    $about_heading    = trim($_POST['about_heading'] ?? 'About Us');
-    $about_body       = trim($_POST['about_body'] ?? '');
-    $about_image_path = trim($_POST['about_image_path'] ?? '');
+        // Extract branding fields (saved to tenant_branding)
+        $primary_color = $payload['primary_color'] ?? '#2563eb';
+        $border_color  = $payload['border_color'] ?? '#e2e8f0';
 
-    $services_heading = trim($_POST['services_heading'] ?? 'Our Services');
-    $svc_titles = $_POST['service_title'] ?? [];
-    $svc_descs  = $_POST['service_description'] ?? [];
-    $svc_icons  = $_POST['service_icon'] ?? [];
-    $services = [];
-    for ($i = 0; $i < count($svc_titles); $i++) {
-        if (trim($svc_titles[$i]) !== '') {
-            $services[] = [
-                'title'       => trim($svc_titles[$i]),
-                'description' => trim($svc_descs[$i] ?? ''),
-                'icon'        => trim($svc_icons[$i] ?? 'star')
-            ];
+        // Update tenant_branding
+        $brandUpsert = $pdo->prepare('
+            INSERT INTO tenant_branding (tenant_id, theme_primary_color, theme_border_color)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                theme_primary_color = VALUES(theme_primary_color),
+                theme_border_color = VALUES(theme_border_color),
+                updated_at = CURRENT_TIMESTAMP
+        ');
+        $brandUpsert->execute([$tenant_id, $primary_color, $border_color]);
+
+        // Handle logo upload
+        if (!empty($_FILES['logo_file']) && $_FILES['logo_file']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = '../uploads/logos/';
+            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+            $ext = pathinfo($_FILES['logo_file']['name'], PATHINFO_EXTENSION);
+            $filename = 'logo_' . $tenant_id . '_' . time() . '.' . $ext;
+            $targetPath = $uploadDir . $filename;
+            if (move_uploaded_file($_FILES['logo_file']['tmp_name'], $targetPath)) {
+                $logoRelPath = 'uploads/logos/' . $filename;
+                $pdo->prepare('UPDATE tenant_branding SET logo_path = ? WHERE tenant_id = ?')
+                    ->execute([$logoRelPath, $tenant_id]);
+                $payload['logo_url'] = $logoRelPath;
+            }
         }
+
+        // Handle hero image upload
+        if (!empty($_FILES['hero_image_file']) && $_FILES['hero_image_file']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = '../uploads/hero/';
+            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+            $ext = pathinfo($_FILES['hero_image_file']['name'], PATHINFO_EXTENSION);
+            $filename = 'hero_' . $tenant_id . '_' . time() . '.' . $ext;
+            $targetPath = $uploadDir . $filename;
+            if (move_uploaded_file($_FILES['hero_image_file']['tmp_name'], $targetPath)) {
+                $payload['hero_image'] = 'uploads/hero/' . $filename;
+            }
+        } elseif (!empty($_POST['hero_preset_path'])) {
+            $payload['hero_image'] = $_POST['hero_preset_path'];
+        }
+
+        // Extract template selection (saved to layout_template column)
+        $selectedTemplate = $payload['selected_template'] ?? 'template1.php';
+        // Remove branding/template fields from the JSON payload (they live in their own columns)
+        unset($payload['selected_template'], $payload['primary_color'], $payload['border_color']);
+
+        // Save everything to tenant_website_content
+        $websiteUpsert = $pdo->prepare('
+            INSERT INTO tenant_website_content (tenant_id, layout_template, website_data)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                layout_template = VALUES(layout_template),
+                website_data = VALUES(website_data),
+                updated_at = CURRENT_TIMESTAMP
+        ');
+        $websiteUpsert->execute([
+            $tenant_id, 
+            $selectedTemplate, 
+            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        ]);
+
+        // Auto-enable the public website toggle
+        $pdo->prepare('INSERT INTO tenant_feature_toggles (tenant_id, toggle_key, is_enabled) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE is_enabled = 1')
+            ->execute([$tenant_id, 'public_website_enabled']);
+
+        echo json_encode(['status' => 'success']);
+    } catch (Exception $ex) {
+        echo json_encode(['status' => 'error', 'message' => $ex->getMessage()]);
     }
-    $services_json = json_encode($services, JSON_UNESCAPED_UNICODE);
-
-    $contact_address  = trim($_POST['contact_address'] ?? '');
-    $contact_phone    = trim($_POST['contact_phone'] ?? '');
-    $contact_email    = trim($_POST['contact_email'] ?? '');
-    $contact_hours    = trim($_POST['contact_hours'] ?? '');
-    $custom_css       = trim($_POST['custom_css'] ?? '');
-    $meta_description = trim($_POST['meta_description'] ?? '');
-
-    $website_config = [
-        'website_show_about' => isset($_POST['website_show_about']) ? '1' : '0',
-        'website_show_services' => isset($_POST['website_show_services']) ? '1' : '0',
-        'website_show_contact' => isset($_POST['website_show_contact']) ? '1' : '0',
-        'website_show_download' => isset($_POST['website_show_download']) ? '1' : '0',
-        'website_download_url' => trim($_POST['website_download_url'] ?? '')
-    ];
-
-    $upsert = $pdo->prepare('
-        INSERT INTO tenant_website_content
-            (tenant_id, layout_template, hero_title, hero_subtitle, hero_description,
-             hero_cta_text, hero_cta_url, hero_image_path,
-             about_heading, about_body, about_image_path,
-             services_heading, services_json,
-             contact_address, contact_phone, contact_email, contact_hours,
-             custom_css, meta_description)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            layout_template = VALUES(layout_template),
-            hero_title = VALUES(hero_title), hero_subtitle = VALUES(hero_subtitle),
-            hero_description = VALUES(hero_description),
-            hero_cta_text = VALUES(hero_cta_text), hero_cta_url = VALUES(hero_cta_url),
-            hero_image_path = VALUES(hero_image_path),
-            about_heading = VALUES(about_heading), about_body = VALUES(about_body),
-            about_image_path = VALUES(about_image_path),
-            services_heading = VALUES(services_heading), services_json = VALUES(services_json),
-            contact_address = VALUES(contact_address), contact_phone = VALUES(contact_phone),
-            contact_email = VALUES(contact_email), contact_hours = VALUES(contact_hours),
-            custom_css = VALUES(custom_css), meta_description = VALUES(meta_description)
-    ');
-    $upsert->execute([
-        $tenant_id, $layout, $hero_title, $hero_subtitle, $hero_description,
-        $hero_cta_text, $hero_cta_url, $hero_image_path,
-        $about_heading, $about_body, $about_image_path,
-        $services_heading, $services_json,
-        $contact_address, $contact_phone, $contact_email, $contact_hours,
-        $custom_css, $meta_description
-    ]);
-
-    $boolean_setting_keys = [
-        'website_show_about',
-        'website_show_services',
-        'website_show_contact',
-        'website_show_download'
-    ];
-    $setting_upsert = $pdo->prepare('
-        INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type)
-        VALUES (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            setting_value = VALUES(setting_value),
-            setting_category = VALUES(setting_category),
-            data_type = VALUES(data_type),
-            updated_at = CURRENT_TIMESTAMP
-    ');
-    foreach ($website_config as $key => $value) {
-        $data_type = in_array($key, $boolean_setting_keys, true) ? 'Boolean' : 'String';
-        $setting_upsert->execute([$tenant_id, $key, $value, 'Website', $data_type]);
-    }
-
-    // Auto-enable the public website toggle
-    $pdo->prepare('INSERT INTO tenant_feature_toggles (tenant_id, toggle_key, is_enabled) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE is_enabled = 1')
-        ->execute([$tenant_id, 'public_website_enabled']);
-
-    $_SESSION['editor_flash'] = 'Website saved and published successfully!';
-    header('Location: website_editor.php');
     exit;
 }
 
 // ==========================================
-// Load existing data
+// Load existing data for the editor
 // ==========================================
-$flash_msg = '';
-if (isset($_SESSION['editor_flash'])) {
-    $flash_msg = $_SESSION['editor_flash'];
-    unset($_SESSION['editor_flash']);
+$pageData = [];
+$branding = [];
+
+// Fetch Branding
+$stmtBrand = $pdo->prepare("SELECT * FROM tenant_branding WHERE tenant_id = ?");
+$stmtBrand->execute([$tenant_id]);
+$branding = $stmtBrand->fetch(PDO::FETCH_ASSOC) ?: [];
+
+// Fetch Website Content
+$stmtWeb = $pdo->prepare("SELECT layout_template, website_data FROM tenant_website_content WHERE tenant_id = ?");
+$stmtWeb->execute([$tenant_id]);
+$website = $stmtWeb->fetch(PDO::FETCH_ASSOC);
+
+// Decode the JSON bucket
+if ($website && !empty($website['website_data'])) {
+    $pageData = json_decode($website['website_data'], true);
+    if (!is_array($pageData)) $pageData = [];
 }
 
-// Branding for sidebar theming
-$brand_stmt = $pdo->prepare('SELECT t.tenant_name, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, b.logo_path FROM tenants t LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id WHERE t.tenant_id = ?');
-$brand_stmt->execute([$tenant_id]);
-$brand = $brand_stmt->fetch(PDO::FETCH_ASSOC);
-$primary_color = ($brand && $brand['theme_primary_color']) ? $brand['theme_primary_color'] : '#4f46e5';
-$sidebar_color = ($brand && $brand['theme_secondary_color']) ? $brand['theme_secondary_color'] : '#0f172a';
-$text_main     = ($brand && $brand['theme_text_main']) ? $brand['theme_text_main'] : '#0f172a';
-$text_muted    = ($brand && $brand['theme_text_muted']) ? $brand['theme_text_muted'] : '#64748b';
-$bg_body       = ($brand && $brand['theme_bg_body']) ? $brand['theme_bg_body'] : '#f8fafc';
-$bg_card       = ($brand && $brand['theme_bg_card']) ? $brand['theme_bg_card'] : '#ffffff';
-$font_family   = ($brand && $brand['font_family']) ? $brand['font_family'] : 'Inter';
-$logo_path     = ($brand && $brand['logo_path']) ? $brand['logo_path'] : '';
-$company_name  = ($brand && $brand['tenant_name']) ? $brand['tenant_name'] : $tenant_name;
-
-// Website content
-$ws_stmt = $pdo->prepare('SELECT * FROM tenant_website_content WHERE tenant_id = ?');
-$ws_stmt->execute([$tenant_id]);
-$ws = $ws_stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$ws) {
-    $ws = [
-        'layout_template' => 'template1',
-        'hero_title' => '', 'hero_subtitle' => '', 'hero_description' => '',
-        'hero_cta_text' => 'Learn More', 'hero_cta_url' => '#about', 'hero_image_path' => '',
-        'about_heading' => 'About Us', 'about_body' => '', 'about_image_path' => '',
-        'services_heading' => 'Our Services', 'services_json' => '[]',
-        'contact_address' => '', 'contact_phone' => '', 'contact_email' => '', 'contact_hours' => '',
-        'custom_css' => '', 'meta_description' => ''
-    ];
-}
-if (($ws['layout_template'] ?? '') !== 'template1') {
-    $ws['layout_template'] = 'template1';
-}
-
-$website_defaults = [
-    'website_show_about' => '1',
-    'website_show_services' => '1',
-    'website_show_contact' => '1',
-    'website_show_download' => '1',
-    'website_download_url' => ''
-];
-$website_config = $website_defaults;
-$settings_stmt = $pdo->prepare("
-    SELECT setting_key, setting_value
-    FROM system_settings
-    WHERE tenant_id = ?
-      AND setting_key IN (
-        'website_show_about',
-        'website_show_services',
-        'website_show_contact',
-        'website_show_download',
-        'website_download_url'
-      )
-");
-$settings_stmt->execute([$tenant_id]);
-foreach ($settings_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    if (array_key_exists($row['setting_key'], $website_config)) {
-        $website_config[$row['setting_key']] = (string) ($row['setting_value'] ?? '');
+// ==========================================
+// DYNAMIC TEMPLATE SCANNER
+// ==========================================
+$templates_dir = '../templates/';
+$available_templates = [];
+if (is_dir($templates_dir)) {
+    foreach (scandir($templates_dir) as $file) {
+        if (pathinfo($file, PATHINFO_EXTENSION) === 'php') {
+            $available_templates[] = $file;
+        }
     }
 }
+if (empty($available_templates)) $available_templates[] = 'template1.php';
 
-$services = json_decode($ws['services_json'] ?? '[]', true) ?: [];
+// Preview template from URL or from DB
+$selected_template = $_GET['tpl'] ?? $website['layout_template'] ?? $available_templates[0];
+if (!in_array($selected_template, $available_templates)) $selected_template = $available_templates[0];
 
-$e = function($v) { return htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8'); };
+// ==========================================
+// MANIFEST READER (Schema-Driven UI)
+// ==========================================
+$template_name_only = str_replace('.php', '', $selected_template);
+$manifest_path = $templates_dir . $template_name_only . '.json';
+$template_rules = [];
+
+if (file_exists($manifest_path)) {
+    $template_rules = json_decode(file_get_contents($manifest_path), true);
+}
+
+// ==========================================
+// PRESET TEMPLATE IMAGES
+// ==========================================
+$preset_dir = '../uploads/hero/presets/';
+$preset_images = [];
+if (is_dir($preset_dir)) {
+    foreach (scandir($preset_dir) as $file) {
+        if (in_array(strtolower(pathinfo($file, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp'])) {
+            $preset_images[] = $preset_dir . $file;
+        }
+    }
+}
+if (empty($preset_images)) {
+    $preset_images = [
+        'https://images.unsplash.com/photo-1556740714-a8395b3bf30f?auto=format&fit=crop&w=600&h=800&q=80',
+        'https://images.unsplash.com/photo-1556742044-3c52d6e88c62?auto=format&fit=crop&w=600&h=800&q=80',
+        'https://images.unsplash.com/photo-1595841696677-6489ff3f8cd1?auto=format&fit=crop&w=600&h=800&q=80'
+    ];
+}
+
+// ==========================================
+// GLOBAL TOKENS
+// ==========================================
+$logo          = $branding['logo_path'] ?? '';
+$primary       = $branding['theme_primary_color'] ?? '#2563eb';
+$border_color  = $branding['theme_border_color'] ?? '#e2e8f0';
+$border_radius = $pageData['border_radius'] ?? '16';
+$shadow        = $pageData['shadow_intensity'] ?? '0.1';
+
+// Typography & Buttons
+$text_heading_color = $pageData['text_heading_color'] ?? '#0f172a';
+$text_body_color    = $pageData['text_body_color'] ?? '#64748b';
+$btn_bg_color       = $pageData['btn_bg_color'] ?? $primary;
+$btn_text_color     = $pageData['btn_text_color'] ?? '#ffffff';
+
+// Content Strings
+$company_name     = $pageData['company_name'] ?? $tenant_name;
+$short_name       = $pageData['short_name'] ?? '';
+$display_name     = $short_name ? $short_name : $company_name;
+
+$hero_title       = $pageData['hero_title'] ?? 'Empowering Your Financial Future';
+$hero_subtitle    = $pageData['hero_subtitle'] ?? 'Get flexible loans with fast approval and transparent terms.';
+$hero_badge_text  = $pageData['hero_badge_text'] ?? 'Verified Partner';
+
+$about_body       = $pageData['about_body'] ?? 'We believe in empowering our community through accessible financial tools.';
+$download_description = $pageData['download_description'] ?? 'Track your loans, submit applications, receive notifications...';
+
+$contact_address = $pageData['contact_address'] ?? '123 Finance Ave, Business District';
+$contact_phone   = $pageData['contact_phone'] ?? '0900-123-4567';
+$contact_email   = $pageData['contact_email'] ?? 'hello@microfin.os';
+$contact_hours   = $pageData['contact_hours'] ?? 'Mon-Fri: 8AM - 5PM';
+$footer_desc     = $pageData['footer_desc'] ?? 'Your trusted microfinance partner.';
+
+// Hero Image
+$hero_image       = $pageData['hero_image'] ?? '';
+$default_hero_img = $preset_images[0] ?? '';
+$display_image    = $hero_image ? $hero_image : $default_hero_img;
+
+// Arrays
+$services = $pageData['services'] ?? [['icon' => 'person', 'title' => 'Personal Loan', 'description' => 'Fast approval for your personal needs.']];
+if (!is_array($services)) $services = [];
+
+$stats = $pageData['stats'] ?? [['value' => '1.5k+', 'label' => 'Active Members']];
+if (!is_array($stats)) $stats = [];
+
+$loan_products = $pageData['loan_products'] ?? [['product_name' => 'Demo Personal Loan', 'interest_rate' => 2.5]];
+if (!is_array($loan_products)) $loan_products = [];
+
+// Section toggles
+$show_services  = isset($pageData['show_services']) ? filter_var($pageData['show_services'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_stats     = isset($pageData['show_stats']) ? filter_var($pageData['show_stats'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_loan_calc = isset($pageData['show_calculator']) ? filter_var($pageData['show_calculator'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_about     = isset($pageData['show_about']) ? filter_var($pageData['show_about'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_download  = isset($pageData['show_download']) ? filter_var($pageData['show_download'], FILTER_VALIDATE_BOOLEAN) : true;
+
+// Helpers
+$sec_styles = $pageData['section_styles'] ?? [];
+function getBgStyle($secId, $styles, $defaultBg)
+{
+    $style = $styles[$secId] ?? null;
+    if (!$style) return "background: $defaultBg;";
+    $isGrad = filter_var($style['gradient'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $c1 = $style['bg'] ?? $defaultBg;
+    if ($isGrad) {
+        $c2 = $style['grad_color2'] ?? '#e2e8f0';
+        $dir = $style['grad_dir'] ?? '135deg';
+        if ($dir === 'circle') return "background: radial-gradient(circle, $c1 0%, $c2 100%);";
+        return "background: linear-gradient($dir, $c1 0%, $c2 100%);";
+    }
+    return "background: $c1;";
+}
+$e = function ($str) {
+    return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
+};
+
 $site_url = '../site.php?site=' . urlencode($tenant_slug);
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?php echo htmlspecialchars($ui_theme, ENT_QUOTES, 'UTF-8'); ?>">
+<html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Website Editor — <?php echo $e($company_name); ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=<?php echo urlencode($font_family); ?>:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-    <link rel="stylesheet" href="admin.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Public+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0&display=swap" rel="stylesheet" />
     <style>
-        :root {
-            --primary-color: <?php echo $e($primary_color); ?>;
-            --primary-rgb: <?php echo hexToRgb($primary_color); ?>;
-            --sidebar-bg: <?php echo $e($sidebar_color); ?>;
-            --sidebar-color-dark: <?php echo $e($sidebar_color); ?>;
-            --text-main: <?php echo $e($text_main); ?>;
-            --text-muted: <?php echo $e($text_muted); ?>;
-            --bg-body: <?php echo $e($bg_body); ?>;
-            --bg-card: <?php echo $e($bg_card); ?>;
-            --font-family: '<?php echo $e($font_family); ?>', sans-serif;
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            background: #f1f5f9;
+            font-family: 'Public Sans', sans-serif;
+            overflow: hidden;
         }
-        <?php if ($logo_path): ?>
-        .logo-circle { background-image: url('<?php echo $e($logo_path); ?>'); background-size: cover; background-position: center; }
-        .logo-circle .material-symbols-rounded { display: none; }
-        <?php endif; ?>
 
-        /* Template Picker */
-        .template-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px; }
-        .template-option { cursor: pointer; }
-        .template-option input[type="radio"] { display: none; }
-        .template-card { border: 2px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 20px; text-align: center; transition: all 0.2s; }
-        .template-option input:checked + .template-card { border-color: var(--primary-color); background: rgba(var(--primary-rgb), 0.04); box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15); }
-        .template-card:hover { border-color: var(--primary-color); }
-        .template-option.is-disabled { cursor: not-allowed; }
-        .template-option.is-disabled .template-card { opacity: 0.55; border-style: dashed; }
-        .template-option.is-disabled .template-card:hover { border-color: var(--border-color, #e2e8f0); }
-        .template-coming-soon { width: 100%; height: 100%; border: 1px dashed var(--border-color, #cbd5e1); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; color: var(--text-muted, #64748b); background: rgba(148, 163, 184, 0.08); }
-        .template-card h4 { margin: 12px 0 4px; font-size: 0.95rem; font-weight: 600; }
-        .template-card p { font-size: 0.8rem; color: var(--text-muted, #64748b); }
-        .template-thumb { width: 100%; height: 140px; border-radius: 8px; background: var(--bg-secondary, #f1f5f9); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .template-thumb svg { width: 90%; height: 90%; }
-
-        /* Content Tabs */
-        .editor-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border-color, #e2e8f0); margin-bottom: 24px; }
-        .editor-tab { padding: 10px 20px; border: none; background: none; cursor: pointer; font-size: 0.85rem; font-weight: 500; color: var(--text-muted, #64748b); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; font-family: inherit; }
-        .editor-tab:hover { color: var(--text-primary, #0f172a); }
-        .editor-tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); font-weight: 600; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        /* Form */
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; font-size: 0.85rem; font-weight: 500; margin-bottom: 6px; }
-        .form-group .hint { font-size: 0.75rem; color: var(--text-muted, #64748b); margin-top: 4px; }
-        .form-group .hint a { color: var(--primary-color); }
-        .form-group .hint code { background: var(--bg-secondary, #f1f5f9); padding: 1px 5px; border-radius: 3px; font-size: 0.8rem; }
-        .form-input, .form-textarea { width: 100%; padding: 10px 14px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; font-size: 0.9rem; font-family: var(--font-family); background: var(--bg-primary, #fff); color: var(--text-primary, #0f172a); transition: border-color 0.15s; }
-        .form-input:focus, .form-textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1); }
-        .form-textarea { resize: vertical; min-height: 100px; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-        /* Service Rows */
-        .service-row { display: grid; grid-template-columns: 1fr 2fr 120px 40px; gap: 10px; align-items: start; margin-bottom: 12px; padding: 14px; border-radius: 8px; background: var(--bg-secondary, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); }
-        .service-row .form-input, .service-row .form-textarea { font-size: 0.85rem; }
-        .service-row .form-textarea { min-height: 60px; }
-        .btn-remove { width: 36px; height: 36px; border: none; background: none; cursor: pointer; color: #ef4444; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
-        .btn-remove:hover { background: #fee2e2; }
-
-        /* Cards */
-        .editor-card { background: var(--bg-primary, #fff); border-radius: 12px; padding: 28px; border: 1px solid var(--border-color, #e2e8f0); margin-bottom: 20px; }
-        .editor-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 4px; }
-        .editor-card .card-desc { font-size: 0.85rem; color: var(--text-muted, #64748b); margin-bottom: 24px; }
-
-        /* Save Bar */
-        .save-bar { position: sticky; bottom: 0; z-index: 10; background: var(--bg-primary, #fff); border-top: 1px solid var(--border-color, #e2e8f0); padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
-        .save-bar .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; text-decoration: none; }
-        .save-bar .btn-primary { background: var(--primary-color); color: #fff; }
-        .save-bar .btn-primary:hover { opacity: 0.9; }
-        .save-bar .btn-outline { background: transparent; border: 1px solid var(--border-color, #e2e8f0); color: var(--text-primary, #0f172a); }
-        .save-bar .btn-outline:hover { background: var(--bg-secondary, #f8fafc); }
-
-        .btn-add { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px dashed var(--border-color, #cbd5e1); border-radius: 8px; background: none; cursor: pointer; font-size: 0.85rem; font-weight: 500; color: var(--primary-color); font-family: inherit; margin-top: 8px; }
-        .btn-add:hover { background: rgba(var(--primary-rgb), 0.04); border-color: var(--primary-color); }
-
-        /* Flash */
-        .flash-msg { margin: 0 0 20px; padding: 12px 16px; border-radius: 8px; background: #dcfce7; color: #166534; font-weight: 500; font-size: 0.9rem; }
-
-        /* Section Nav */
-        .section-nav { display: flex; flex-direction: column; gap: 2px; }
-        .section-nav .nav-link { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; color: rgba(255,255,255,0.6); text-decoration: none; cursor: pointer; transition: all 0.15s; }
-        .section-nav .nav-link:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
-        .section-nav .nav-link.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 600; }
-        .section-nav .nav-link .material-symbols-rounded { font-size: 20px; }
-        .editor-section { display: none; }
-        .editor-section.active { display: block; }
-
-        .preview-frame { width: 100%; height: 650px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; background: #fff; }
-
-        @media (max-width: 768px) {
-            .template-picker { grid-template-columns: 1fr; }
-            .form-row { grid-template-columns: 1fr; }
-            .service-row { grid-template-columns: 1fr; }
+        .editor-sidebar {
+            width: 320px;
+            height: 100vh;
+            background: #fff;
+            border-right: 1px solid #e2e8f0;
+            padding: 24px;
+            flex-shrink: 0;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 2px 0 15px rgba(0, 0, 0, 0.03);
         }
+
+        .editor-canvas {
+            flex-grow: 1;
+            height: 100vh;
+            overflow-y: auto;
+            position: relative;
+            background: #fff;
+        }
+
+        [contenteditable="true"] {
+            outline: none;
+            transition: all 0.2s;
+            border: 2px dashed transparent;
+            border-radius: 4px;
+            padding: 2px 4px;
+            margin: -2px -4px;
+            cursor: text;
+        }
+
+        [contenteditable="true"]:hover {
+            border-color: #94a3b8;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        [contenteditable="true"]:focus {
+            border-style: solid;
+            border-color: var(--brand, #2563eb);
+            background: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            color: #000 !important;
+        }
+
+        .editable-icon-wrap {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .editable-icon-wrap:hover {
+            outline: 2px dashed var(--brand, #2563eb);
+            outline-offset: 4px;
+            background: #fff !important;
+        }
+
+        .icon-option {
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--brand, #2563eb);
+        }
+
+        .icon-option:hover {
+            background: rgba(37, 99, 235, 0.15);
+            transform: scale(1.1);
+        }
+
+        .editable-section {
+            position: relative;
+            transition: outline 0.2s;
+        }
+
+        .editable-section:hover {
+            outline: 3px solid rgba(37, 99, 235, 0.5);
+            outline-offset: -3px;
+        }
+
+        #sectionToolbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 99px;
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+        }
+
+        .toolbar-divider {
+            width: 1px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #64748b;
+            text-decoration: none;
+            margin-bottom: 16px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+        .back-link:hover { background: #f1f5f9; color: #0f172a; }
     </style>
 </head>
+
 <body>
-    <div class="app-container">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-circle"><span class="material-symbols-rounded">diamond</span></div>
-                <h2 class="company-name-display"><?php echo $e($company_name); ?></h2>
+    <div class="editor-sidebar">
+        <a href="admin.php" class="back-link">
+            <span class="material-symbols-rounded" style="font-size:18px;">arrow_back</span> Back to Admin
+        </a>
+
+        <h5 class="fw-bold mb-4 headline" style="color: #0f172a;">Site Settings</h5>
+
+        <div class="small fw-bold text-muted mb-2">DESIGN TEMPLATE</div>
+        <div class="mb-4">
+            <select id="inp_template" class="form-select form-select-sm fw-bold border-primary text-primary shadow-sm" style="cursor: pointer;">
+                <?php foreach ($available_templates as $tpl): ?>
+                    <option value="<?php echo $tpl; ?>" <?php echo $selected_template === $tpl ? 'selected' : ''; ?>>
+                        <?php echo ucwords(str_replace(['.php', '-', '_'], ['', ' ', ' '], $tpl)); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <div class="small fw-bold text-muted mb-2">COMPANY & BRANDING</div>
+        <div class="mb-4 p-3 rounded" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+            <label class="form-label small fw-bold">Company Name</label>
+            <input type="text" id="inp_company_name" class="form-control form-control-sm mb-2" value="<?php echo $e($company_name); ?>">
+
+            <label class="form-label small fw-bold mt-1">Brand Acronym <span class="text-muted fw-normal">(Optional)</span></label>
+            <input type="text" id="inp_short_name" class="form-control form-control-sm mb-1" placeholder="e.g. BDO" value="<?php echo $e($short_name); ?>">
+
+            <label class="form-label small fw-bold border-top pt-3 w-100">Brand Logo</label>
+            <input type="file" id="inp_logo" class="form-control form-control-sm mb-2" accept="image/png, image/jpeg, image/svg+xml">
+            <button id="btn_match_color" class="btn btn-sm btn-outline-primary w-100 fw-bold d-none mb-3">✨ Match Color to Logo</button>
+
+            <label class="form-label small fw-bold mt-2">Primary Color</label>
+            <input type="color" id="inp_color" class="form-control form-control-color w-100" value="<?php echo $primary; ?>">
+        </div>
+        
+        <div class="small fw-bold text-muted mb-2 mt-4">TYPOGRAPHY & BUTTONS</div>
+        <div class="mb-4 p-3 rounded" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <label class="form-label small fw-bold mb-0">Heading Text</label>
+                <input type="color" id="inp_text_heading" class="form-control form-control-color p-0 border-0" style="width:30px;height:30px;" value="<?php echo $text_heading_color; ?>">
             </div>
-
-            <nav class="sidebar-nav">
-                <a href="admin.php" class="nav-item">
-                    <span class="material-symbols-rounded">arrow_back</span>
-                    <span>Back to Admin</span>
-                </a>
-            </nav>
-
-            <div style="padding: 0 8px; margin-top: 16px;">
-                <div class="section-nav" id="editor-nav">
-                    <a class="nav-link active" data-section="section-template">
-                        <span class="material-symbols-rounded">view_quilt</span> Layout Template
-                    </a>
-                    <a class="nav-link" data-section="section-content">
-                        <span class="material-symbols-rounded">edit_note</span> Edit Content
-                    </a>
-                    <a class="nav-link" data-section="section-preview">
-                        <span class="material-symbols-rounded">visibility</span> Preview
-                    </a>
-                </div>
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <label class="form-label small fw-bold mb-0">Body Text</label>
+                <input type="color" id="inp_text_body" class="form-control form-control-color p-0 border-0" style="width:30px;height:30px;" value="<?php echo $text_body_color; ?>">
             </div>
-
-            <div style="margin-top: auto; padding: 16px 12px;">
-                <a href="<?php echo $e($site_url); ?>" target="_blank" style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: rgba(255,255,255,0.6); text-decoration: none; padding: 10px 14px; border-radius: 8px; background: rgba(255,255,255,0.08);">
-                    <span class="material-symbols-rounded" style="font-size: 18px;">open_in_new</span>
-                    View Live Site
-                </a>
+            
+            <div class="border-top pt-3 mb-2 d-flex align-items-center justify-content-between">
+                <label class="form-label small fw-bold mb-0">Button Color</label>
+                <input type="color" id="inp_btn_bg" class="form-control form-control-color p-0 border-0" style="width:30px;height:30px;" value="<?php echo $btn_bg_color; ?>">
             </div>
-        </aside>
-
-        <main class="main-content">
-            <header class="top-header">
-                <h1 id="page-title">Website Editor</h1>
-            </header>
-
-            <div class="views-container" style="padding: 24px 32px;">
-                <?php if ($flash_msg): ?>
-                <div class="flash-msg"><?php echo $e($flash_msg); ?></div>
-                <?php endif; ?>
-
-                <form method="POST" id="editor-form">
-                    <input type="hidden" name="action" value="save_website_content">
-
-                    <!-- SECTION: Layout Template -->
-                    <div class="editor-section active" id="section-template">
-                        <div class="editor-card">
-                            <h3>Choose a Layout</h3>
-                            <p class="card-desc">Select the visual structure for your public website. Each template arranges the same content differently.</p>
-                            <div class="template-picker">
-                                <label class="template-option">
-                                    <input type="radio" name="layout_template" value="template1" checked>
-                                    <div class="template-card">
-                                        <div class="template-thumb">
-                                            <svg viewBox="0 0 200 150" fill="none"><rect width="200" height="150" rx="4" fill="#f1f5f9"/><rect x="10" y="8" width="180" height="55" rx="4" fill="rgba(79,70,229,0.15)"/><rect x="20" y="22" width="80" height="6" rx="2" fill="rgba(79,70,229,0.4)"/><rect x="20" y="32" width="60" height="4" rx="2" fill="rgba(79,70,229,0.2)"/><rect x="10" y="72" width="85" height="4" rx="2" fill="#cbd5e1"/><rect x="10" y="80" width="85" height="3" rx="1" fill="#e2e8f0"/><rect x="105" y="68" width="85" height="28" rx="4" fill="#e2e8f0"/><rect x="10" y="105" width="56" height="36" rx="4" fill="rgba(79,70,229,0.08)"/><rect x="72" y="105" width="56" height="36" rx="4" fill="rgba(79,70,229,0.08)"/><rect x="134" y="105" width="56" height="36" rx="4" fill="rgba(79,70,229,0.08)"/></svg>
-                                        </div>
-                                        <h4>Template 1</h4>
-                                        <p>Card-based hero with stats overlay. Bold & impactful.</p>
-                                    </div>
-                                </label>
-                                <label class="template-option is-disabled" title="Under Development">
-                                    <input type="radio" name="layout_template" value="template2" disabled>
-                                    <div class="template-card">
-                                        <div class="template-thumb">
-                                            <div class="template-coming-soon">Not Available Yet</div>
-                                        </div>
-                                        <h4>Template 2</h4>
-                                        <p>Under Development</p>
-                                    </div>
-                                </label>
-                                <label class="template-option is-disabled" title="Under Development">
-                                    <input type="radio" name="layout_template" value="template3" disabled>
-                                    <div class="template-card">
-                                        <div class="template-thumb">
-                                            <div class="template-coming-soon">Not Available Yet</div>
-                                        </div>
-                                        <h4>Template 3</h4>
-                                        <p>Under Development</p>
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SECTION: Edit Content -->
-                    <div class="editor-section" id="section-content">
-                        <div class="editor-tabs">
-                            <button type="button" class="editor-tab active" data-tab="tab-hero">Hero</button>
-                            <button type="button" class="editor-tab" data-tab="tab-about">About Us</button>
-                            <button type="button" class="editor-tab" data-tab="tab-services">Services</button>
-                            <button type="button" class="editor-tab" data-tab="tab-contact">Contact</button>
-                            <button type="button" class="editor-tab" data-tab="tab-visibility">Visibility & Download</button>
-                            <button type="button" class="editor-tab" data-tab="tab-advanced">Advanced</button>
-                        </div>
-
-                        <!-- Hero Tab -->
-                        <div class="tab-content active" id="tab-hero">
-                            <div class="editor-card">
-                                <h3>Hero / Banner Section</h3>
-                                <p class="card-desc">The first thing visitors see. Make it count.</p>
-                                <div class="form-group">
-                                    <label>Title</label>
-                                    <input type="text" name="hero_title" class="form-input" value="<?php echo $e($ws['hero_title']); ?>" placeholder="Welcome to Our Institution">
-                                </div>
-                                <div class="form-group">
-                                    <label>Subtitle</label>
-                                    <input type="text" name="hero_subtitle" class="form-input" value="<?php echo $e($ws['hero_subtitle']); ?>" placeholder="Your Trusted Microfinance Partner">
-                                </div>
-                                <div class="form-group">
-                                    <label>Description</label>
-                                    <textarea name="hero_description" class="form-textarea" rows="3" placeholder="A brief description of your organization..."><?php echo $e($ws['hero_description']); ?></textarea>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>CTA Button Text</label>
-                                        <input type="text" name="hero_cta_text" class="form-input" value="<?php echo $e($ws['hero_cta_text']); ?>" placeholder="Learn More">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>CTA Button Link</label>
-                                        <input type="text" name="hero_cta_url" class="form-input" value="<?php echo $e($ws['hero_cta_url']); ?>" placeholder="#about">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label>Hero Background Image URL</label>
-                                    <input type="text" name="hero_image_path" class="form-input" value="<?php echo $e($ws['hero_image_path']); ?>" placeholder="https://images.unsplash.com/...">
-                                    <p class="hint">Paste an external image URL. For best results use a wide landscape image (1920x1080 or similar).</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- About Tab -->
-                        <div class="tab-content" id="tab-about">
-                            <div class="editor-card">
-                                <h3>About Us Section</h3>
-                                <p class="card-desc">Tell visitors about your organization, mission, and history.</p>
-                                <div class="form-group">
-                                    <label>Section Heading</label>
-                                    <input type="text" name="about_heading" class="form-input" value="<?php echo $e($ws['about_heading']); ?>" placeholder="About Us">
-                                </div>
-                                <div class="form-group">
-                                    <label>Body Text</label>
-                                    <textarea name="about_body" class="form-textarea" rows="6" placeholder="Tell your story..."><?php echo $e($ws['about_body']); ?></textarea>
-                                    <p class="hint">Line breaks will be preserved on the live site.</p>
-                                </div>
-                                <div class="form-group">
-                                    <label>Image URL (optional)</label>
-                                    <input type="text" name="about_image_path" class="form-input" value="<?php echo $e($ws['about_image_path']); ?>" placeholder="https://...">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Services Tab -->
-                        <div class="tab-content" id="tab-services">
-                            <div class="editor-card">
-                                <h3>Services / Products</h3>
-                                <p class="card-desc">List the financial services your institution offers.</p>
-                                <div class="form-group">
-                                    <label>Section Heading</label>
-                                    <input type="text" name="services_heading" class="form-input" value="<?php echo $e($ws['services_heading']); ?>" placeholder="Our Services">
-                                </div>
-                                <div id="services-list">
-                                    <?php if (empty($services)): ?>
-                                    <p style="color: var(--text-muted, #64748b); font-size: 0.85rem; padding: 12px 0;">No services added yet. Click below to add one.</p>
-                                    <?php endif; ?>
-                                    <?php foreach ($services as $svc): ?>
-                                    <div class="service-row">
-                                        <input type="text" name="service_title[]" class="form-input" value="<?php echo $e($svc['title']); ?>" placeholder="Service name">
-                                        <textarea name="service_description[]" class="form-textarea" rows="2" placeholder="Brief description"><?php echo $e($svc['description']); ?></textarea>
-                                        <input type="text" name="service_icon[]" class="form-input" value="<?php echo $e($svc['icon']); ?>" placeholder="Icon name">
-                                        <button type="button" class="btn-remove" onclick="this.closest('.service-row').remove()" title="Remove">
-                                            <span class="material-symbols-rounded">close</span>
-                                        </button>
-                                    </div>
-                                    <?php endforeach; ?>
-                                </div>
-                                <button type="button" class="btn-add" onclick="addServiceRow()">
-                                    <span class="material-symbols-rounded">add</span> Add Service
-                                </button>
-                                <p class="hint" style="margin-top: 12px;">Icon names use <a href="https://fonts.google.com/icons?icon.set=Material+Symbols" target="_blank">Material Symbols</a> (e.g. <code>payments</code>, <code>savings</code>, <code>account_balance</code>, <code>credit_card</code>, <code>handshake</code>)</p>
-                            </div>
-                        </div>
-
-                        <!-- Contact Tab -->
-                        <div class="tab-content" id="tab-contact">
-                            <div class="editor-card">
-                                <h3>Contact Information & Footer</h3>
-                                <p class="card-desc">Displayed in the footer of your public website.</p>
-                                <div class="form-group">
-                                    <label>Company Address</label>
-                                    <textarea name="contact_address" class="form-textarea" rows="2" placeholder="123 Main St, City, Province"><?php echo $e($ws['contact_address']); ?></textarea>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>Phone Number</label>
-                                        <input type="text" name="contact_phone" class="form-input" value="<?php echo $e($ws['contact_phone']); ?>" placeholder="+63 912 345 6789">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Email Address</label>
-                                        <input type="email" name="contact_email" class="form-input" value="<?php echo $e($ws['contact_email']); ?>" placeholder="info@company.com">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label>Office Hours</label>
-                                    <input type="text" name="contact_hours" class="form-input" value="<?php echo $e($ws['contact_hours']); ?>" placeholder="Mon-Fri 8:00 AM - 5:00 PM">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Visibility & Download Tab -->
-                        <div class="tab-content" id="tab-visibility">
-                            <div class="editor-card">
-                                <h3>Section Visibility</h3>
-                                <p class="card-desc">Choose which sections are shown on your public website.</p>
-                                <div class="form-group">
-                                    <label><input type="checkbox" name="website_show_about" value="1" <?php echo $website_config['website_show_about'] === '1' ? 'checked' : ''; ?>> Show About Section</label>
-                                </div>
-                                <div class="form-group">
-                                    <label><input type="checkbox" name="website_show_services" value="1" <?php echo $website_config['website_show_services'] === '1' ? 'checked' : ''; ?>> Show Services Section</label>
-                                </div>
-                                <div class="form-group">
-                                    <label><input type="checkbox" name="website_show_contact" value="1" <?php echo $website_config['website_show_contact'] === '1' ? 'checked' : ''; ?>> Show Contact Details</label>
-                                </div>
-                                <div class="form-group">
-                                    <label><input type="checkbox" name="website_show_download" value="1" <?php echo $website_config['website_show_download'] === '1' ? 'checked' : ''; ?>> Show App Download Section</label>
-                                </div>
-
-                                <hr style="border: 0; border-top: 1px solid var(--border-color, #e2e8f0); margin: 20px 0;">
-
-                                <h3 style="font-size: 1rem; margin-bottom: 8px;">App Download Content</h3>
-                                <p class="card-desc">This section is best for your app install link only.</p>
-                                <div class="form-group">
-                                    <label>App Download URL</label>
-                                    <input type="url" name="website_download_url" class="form-input" value="<?php echo $e($website_config['website_download_url']); ?>" placeholder="https://play.google.com/store/apps/details?id=...">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Advanced Tab -->
-                        <div class="tab-content" id="tab-advanced">
-                            <div class="editor-card">
-                                <h3>Advanced Settings</h3>
-                                <p class="card-desc">Optional customizations for your website.</p>
-                                <div class="form-group">
-                                    <label>SEO Meta Description</label>
-                                    <input type="text" name="meta_description" class="form-input" value="<?php echo $e($ws['meta_description']); ?>" placeholder="A brief description for search engines..." maxlength="255">
-                                    <p class="hint">Shown in search engine results. Max 255 characters.</p>
-                                </div>
-                                <div class="form-group">
-                                    <label>Custom CSS</label>
-                                    <textarea name="custom_css" class="form-textarea" rows="8" placeholder="/* Add custom CSS overrides here */" style="font-family: monospace; font-size: 0.85rem;"><?php echo $e($ws['custom_css']); ?></textarea>
-                                    <p class="hint">Advanced: add CSS rules to override template styles. Use with caution.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SECTION: Preview -->
-                    <div class="editor-section" id="section-preview">
-                        <div class="editor-card">
-                            <h3>Live Preview</h3>
-                            <p class="card-desc">This shows your currently published website. Save changes first to see updates here.</p>
-                            <div style="margin: 16px 0; display: flex; gap: 8px;">
-                                <button type="button" class="btn-add" onclick="document.getElementById('preview-iframe').src = document.getElementById('preview-iframe').src">
-                                    <span class="material-symbols-rounded">refresh</span> Refresh Preview
-                                </button>
-                                <a href="<?php echo $e($site_url); ?>" target="_blank" class="btn-add" style="text-decoration: none;">
-                                    <span class="material-symbols-rounded">open_in_new</span> Open in New Tab
-                                </a>
-                            </div>
-                            <iframe id="preview-iframe" src="<?php echo $e($site_url); ?>" class="preview-frame"></iframe>
-                        </div>
-                    </div>
-
-                    <!-- Save Bar -->
-                    <div class="save-bar">
-                        <a href="admin.php" style="font-size: 0.85rem; color: var(--text-muted, #64748b); text-decoration: none; display: flex; align-items: center; gap: 6px;">
-                            <span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span> Back to Admin Panel
-                        </a>
-                        <div style="display: flex; gap: 10px;">
-                            <a href="<?php echo $e($site_url); ?>" target="_blank" class="btn btn-outline">
-                                <span class="material-symbols-rounded" style="font-size: 18px;">visibility</span> Preview
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                <span class="material-symbols-rounded" style="font-size: 18px;">save</span> Save & Publish
-                            </button>
-                        </div>
-                    </div>
-                </form>
+            <div class="d-flex align-items-center justify-content-between">
+                <label class="form-label small fw-bold mb-0">Button Text</label>
+                <input type="color" id="inp_btn_text" class="form-control form-control-color p-0 border-0" style="width:30px;height:30px;" value="<?php echo $btn_text_color; ?>">
             </div>
-        </main>
+        </div>
+
+        <div class="small fw-bold text-muted mb-2">STRUCTURE</div>
+        <div class="mb-3">
+            <label class="form-label small fw-bold">Border Color</label>
+            <input type="color" id="inp_border" class="form-control form-control-color w-100" value="<?php echo $border_color; ?>">
+        </div>
+        <div class="mb-3">
+            <label class="form-label small fw-bold">Rounded Corners</label>
+            <input type="range" id="inp_radius" class="form-range" min="0" max="40" value="<?php echo $border_radius; ?>">
+        </div>
+        <div class="mb-4">
+            <label class="form-label small fw-bold">Box Shadow</label>
+            <input type="range" id="inp_shadow" class="form-range" min="0" max="0.3" step="0.05" value="<?php echo $shadow; ?>">
+        </div>
+
+        <div class="small fw-bold text-muted mb-2">SECTIONS</div>
+
+        <?php
+        $sidebar_sections = $template_rules['sections'] ?? [];
+        foreach ($sidebar_sections as $sec):
+            $toggle_key = 'show_' . $sec['id'];
+            $target_id  = $sec['target'];
+            $is_checked = isset($pageData[$toggle_key]) ? filter_var($pageData[$toggle_key], FILTER_VALIDATE_BOOLEAN) : $sec['default_state'];
+        ?>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input toggle-section dynamic-toggle"
+                    type="checkbox"
+                    id="toggle_<?php echo $sec['id']; ?>"
+                    data-key="<?php echo $toggle_key; ?>"
+                    data-target="<?php echo $target_id; ?>"
+                    <?php echo $is_checked ? 'checked' : ''; ?>>
+                <label class="form-check-label small"><?php echo $sec['label']; ?></label>
+            </div>
+        <?php endforeach; ?>
+
+        <div class="d-flex gap-2 mt-3">
+            <button id="saveBtn" class="btn btn-primary flex-grow-1 fw-bold py-2 shadow">Save & Publish</button>
+            <a href="<?php echo $e($site_url); ?>" target="_blank" class="btn btn-outline-secondary py-2" title="Preview Live Site">
+                <span class="material-symbols-rounded" style="font-size:18px;">open_in_new</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="editor-canvas" id="canvasArea">
+        <img id="hiddenLogo" style="display:none;" <?php if ($logo) echo 'src="' . $e($logo) . '"'; ?>>
+        <canvas id="colorCanvas" style="display:none;"></canvas>
+        <?php
+        $full_template_path = '../templates/' . $selected_template;
+        if (file_exists($full_template_path)) {
+            include $full_template_path;
+        } else {
+            echo "<div class='p-5 text-center'><h3>Template Not Found</h3><p>Path: $full_template_path</p></div>";
+        }
+        ?>
+    </div>
+
+    <div id="imagePickerOverlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:10050; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+        <div class="bg-white p-4 rounded-4 shadow-lg" style="width: 550px; max-width: 90vw;">
+            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                <h6 class="fw-bold mb-0 text-dark">Choose Hero Image</h6>
+                <button type="button" class="btn-close" id="closeImagePicker"></button>
+            </div>
+            <div class="mb-4">
+                <label for="inp_hero_upload" class="btn btn-primary w-100 fw-bold text-center" style="cursor:pointer; display:block;">
+                    Upload Custom Photo
+                </label>
+                <input type="file" id="inp_hero_upload" class="d-none" accept="image/png, image/jpeg, image/webp">
+            </div>
+            <div class="d-flex flex-wrap gap-2" style="max-height: 300px; overflow-y:auto;">
+                <?php foreach ($preset_images as $img): ?>
+                    <div class="preset-img-option" style="width: 110px; height: 110px; cursor: pointer; border-radius: 8px; overflow: hidden; border: 2px solid transparent;">
+                        <img src="<?php echo $img; ?>" style="width:100%; height:100%; object-fit:cover;" data-src="<?php echo $img; ?>">
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+
+    <div id="iconPickerOverlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:10050; align-items:center; justify-content:center;">
+        <div class="bg-white p-4 rounded-4 shadow-lg" style="width: 420px; max-width: 90vw;">
+            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                <h6 class="fw-bold mb-0 text-dark">Choose an Icon</h6>
+                <button type="button" class="btn-close" id="closeIconPicker"></button>
+            </div>
+            <div class="d-flex flex-wrap gap-2 justify-content-center" id="iconGrid" style="max-height: 350px; overflow-y:auto; padding: 10px;"></div>
+        </div>
+    </div>
+
+    <div id="sectionToolbar">
+        <div class="d-flex align-items-center gap-2">
+            <span class="small fw-bold">Color 1:</span>
+            <input type="color" id="secBgColor" class="form-control form-control-color p-0" style="width: 30px; height: 30px; border:none; cursor:pointer;">
+        </div>
+        <div class="form-check form-switch mb-0 ms-2">
+            <input class="form-check-input" type="checkbox" id="secGradientToggle">
+            <label class="form-check-label small fw-bold">Gradient</label>
+        </div>
+        <div id="gradControls" class="d-none align-items-center gap-3 ms-2 border-start border-secondary ps-3">
+            <div class="d-flex align-items-center gap-2">
+                <span class="small fw-bold">Color 2:</span>
+                <input type="color" id="secBgColor2" class="form-control form-control-color p-0" style="width: 30px; height: 30px; border:none; cursor:pointer;" value="#e2e8f0">
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="small fw-bold">Direction:</span>
+                <select id="secGradDir" class="form-select form-select-sm" style="width: 140px; cursor:pointer;">
+                    <option value="135deg">↘ Bottom Right</option>
+                    <option value="to right">➡ Right</option>
+                    <option value="to bottom">⬇ Bottom</option>
+                    <option value="45deg">↗ Top Right</option>
+                    <option value="circle">⚪ Radial (Circle)</option>
+                </select>
+            </div>
+        </div>
+        <div class="toolbar-divider mx-2"></div>
+        <button id="closeSecToolbar" class="btn btn-link text-white p-0 text-decoration-none d-flex align-items-center" title="Close">
+            <span class="material-symbols-rounded">close</span>
+        </button>
     </div>
 
     <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // Section navigation (sidebar)
-        const navLinks = document.querySelectorAll('#editor-nav .nav-link');
-        const sections = document.querySelectorAll('.editor-section');
-        navLinks.forEach(link => {
-            link.addEventListener('click', () => {
-                const target = link.dataset.section;
-                navLinks.forEach(l => l.classList.remove('active'));
-                link.classList.add('active');
-                sections.forEach(s => s.classList.remove('active'));
-                const el = document.getElementById(target);
-                if (el) el.classList.add('active');
-                document.getElementById('page-title').textContent = link.textContent.trim();
-            });
+        const root = document.documentElement;
+        let activeSection = null;
+        let sectionStyles = <?php echo json_encode($sec_styles); ?>;
+
+        document.getElementById('inp_color').addEventListener('input', (e) => root.style.setProperty('--brand', e.target.value));
+        document.getElementById('inp_border').addEventListener('input', (e) => root.style.setProperty('--border-clr', e.target.value));
+        document.getElementById('inp_radius').addEventListener('input', (e) => root.style.setProperty('--radius', e.target.value + 'px'));
+        document.getElementById('inp_shadow').addEventListener('input', (e) => root.style.setProperty('--shadow', `0 8px 24px rgba(0,0,0,${e.target.value})`));
+
+        // Typography & Button Live Preview
+        document.getElementById('inp_text_heading').addEventListener('input', (e) => root.style.setProperty('--text-heading', e.target.value));
+        document.getElementById('inp_text_body').addEventListener('input', (e) => root.style.setProperty('--text-body', e.target.value));
+        document.getElementById('inp_btn_bg').addEventListener('input', (e) => root.style.setProperty('--btn-bg', e.target.value));
+        document.getElementById('inp_btn_text').addEventListener('input', (e) => root.style.setProperty('--btn-text', e.target.value));
+
+        document.getElementById('inp_company_name').addEventListener('input', function() {
+            document.querySelectorAll('.display-company-name').forEach(el => el.innerText = this.value);
+            if (!document.getElementById('inp_short_name').value.trim()) {
+                document.querySelectorAll('.display-short-name').forEach(el => el.innerText = this.value);
+            }
         });
 
-        // Content tabs
-        const tabs = document.querySelectorAll('.editor-tab');
-        const tabContents = document.querySelectorAll('.tab-content');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                tabContents.forEach(tc => tc.classList.remove('active'));
-                const target = document.getElementById(tab.dataset.tab);
-                if (target) target.classList.add('active');
-            });
+        document.getElementById('inp_short_name').addEventListener('input', function() {
+            const val = this.value.trim() || document.getElementById('inp_company_name').value;
+            document.querySelectorAll('.display-short-name').forEach(el => el.innerText = val);
         });
 
-        // Auto-dismiss flash
-        const flash = document.querySelector('.flash-msg');
-        if (flash) {
-            setTimeout(() => { flash.style.opacity = '0'; flash.style.transition = 'opacity 0.3s'; setTimeout(() => flash.remove(), 300); }, 4000);
+        const inpLogo = document.getElementById('inp_logo');
+        const previewLogo = document.getElementById('preview_logo');
+        const hiddenLogo = document.getElementById('hiddenLogo');
+        const btnMatch = document.getElementById('btn_match_color');
+        let uploadedLogoFile = null;
+
+        inpLogo.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                uploadedLogoFile = this.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    if (previewLogo) {
+                        previewLogo.src = e.target.result;
+                        previewLogo.style.display = 'block';
+                    }
+                    hiddenLogo.src = e.target.result;
+                    btnMatch.classList.remove('d-none');
+                    saveToServer();
+                }
+                reader.readAsDataURL(uploadedLogoFile);
+            }
+        });
+
+        // Dominant color extraction
+        function getDominantLogoColor() {
+            if (!hiddenLogo.src || (hiddenLogo.src.includes(window.location.host) === false && !hiddenLogo.src.startsWith('data:'))) return null;
+            try {
+                const cvs = document.getElementById('colorCanvas');
+                const ctx = cvs.getContext('2d', { willReadFrequently: true });
+                cvs.width = hiddenLogo.width || 100;
+                cvs.height = hiddenLogo.height || 100;
+                ctx.drawImage(hiddenLogo, 0, 0, cvs.width, cvs.height);
+                const data = ctx.getImageData(0, 0, cvs.width, cvs.height).data;
+                let r = 0, g = 0, b = 0, count = 0;
+                for (let i = 0; i < data.length; i += 16) {
+                    if (data[i + 3] > 0) { r += data[i]; g += data[i + 1]; b += data[i + 2]; count++; }
+                }
+                if (count > 0) {
+                    return "#" + ((1 << 24) + (Math.floor(r / count) << 16) + (Math.floor(g / count) << 8) + Math.floor(b / count)).toString(16).slice(1);
+                }
+            } catch (e) { console.warn("Could not extract color.", e); }
+            return null;
         }
-    });
 
-    function addServiceRow() {
-        const list = document.getElementById('services-list');
-        const emptyMsg = list.querySelector('p');
-        if (emptyMsg) emptyMsg.remove();
-        const row = document.createElement('div');
-        row.className = 'service-row';
-        row.innerHTML = `
-            <input type="text" name="service_title[]" class="form-input" placeholder="Service name">
-            <textarea name="service_description[]" class="form-textarea" rows="2" placeholder="Brief description"></textarea>
-            <input type="text" name="service_icon[]" class="form-input" placeholder="star" value="star">
-            <button type="button" class="btn-remove" onclick="this.closest('.service-row').remove()" title="Remove">
-                <span class="material-symbols-rounded">close</span>
-            </button>
-        `;
-        list.appendChild(row);
-    }
+        btnMatch.addEventListener('click', function() {
+            const hex = getDominantLogoColor();
+            if (hex) {
+                document.getElementById('inp_color').value = hex;
+                root.style.setProperty('--brand', hex);
+                this.innerText = "Matched! ✅";
+                setTimeout(() => this.innerText = "✨ Match Color to Logo", 2000);
+                saveToServer();
+            }
+        });
+
+        // Icon picker
+        const iconList = [
+            'star', 'home', 'payments', 'account_balance_wallet', 'store', 'rocket', 'verified',
+            'shield', 'speed', 'support_agent', 'trending_up', 'group', 'emergency_home',
+            'credit_card', 'savings', 'monetization_on', 'real_estate_agent', 'handshake',
+            'health_and_safety', 'school', 'agriculture', 'spa', 'bolt', 'lightbulb'
+        ];
+
+        const iconGrid = document.getElementById('iconGrid');
+        const iconPickerOverlay = document.getElementById('iconPickerOverlay');
+        let currentIconTarget = null;
+
+        iconList.forEach(icon => {
+            const el = document.createElement('div');
+            el.className = 'icon-option';
+            el.innerHTML = `<span class="material-symbols-rounded fs-2">${icon}</span>`;
+            el.onclick = () => {
+                if (currentIconTarget) { currentIconTarget.innerText = icon; saveToServer(); }
+                iconPickerOverlay.style.display = 'none';
+            };
+            iconGrid.appendChild(el);
+        });
+
+        document.getElementById('canvasArea').addEventListener('click', function(e) {
+            const iconWrap = e.target.closest('.editable-icon-wrap');
+            if (iconWrap) {
+                currentIconTarget = iconWrap.querySelector('.service-icon-text');
+                iconPickerOverlay.style.display = 'flex';
+            }
+        });
+        document.getElementById('closeIconPicker').addEventListener('click', () => { iconPickerOverlay.style.display = 'none'; });
+
+        // Hero Image Picker
+        const imagePickerOverlay = document.getElementById('imagePickerOverlay');
+        const closeImagePicker = document.getElementById('closeImagePicker');
+        const inpHeroUpload = document.getElementById('inp_hero_upload');
+        let uploadedHeroFile = null;
+        let selectedPresetHero = "";
+
+        document.getElementById('canvasArea').addEventListener('click', function(e) {
+            if (e.target && e.target.id === 'btn_open_hero_picker') { imagePickerOverlay.style.display = 'flex'; }
+        });
+        closeImagePicker.addEventListener('click', () => imagePickerOverlay.style.display = 'none');
+
+        window.addEventListener('load', () => {
+            const previewHero = document.getElementById('preview_hero');
+            const heroContainer = document.getElementById('hero_img_container');
+            if (previewHero && previewHero.getAttribute('src') && previewHero.getAttribute('src') !== '') {
+                const tempImg = new Image();
+                tempImg.onload = function() { heroContainer.style.aspectRatio = this.width + " / " + this.height; };
+                tempImg.src = previewHero.getAttribute('src');
+            }
+        });
+
+        document.querySelectorAll('.preset-img-option img').forEach(img => {
+            img.addEventListener('click', function() {
+                const src = this.getAttribute('data-src');
+                const previewHero = document.getElementById('preview_hero');
+                const heroContainer = document.getElementById('hero_img_container');
+                if (previewHero) previewHero.src = src;
+                selectedPresetHero = src; uploadedHeroFile = null; inpHeroUpload.value = '';
+                const tempImg = new Image();
+                tempImg.onload = function() { if (heroContainer) heroContainer.style.aspectRatio = this.width + " / " + this.height; };
+                tempImg.src = src;
+                imagePickerOverlay.style.display = 'none';
+                saveToServer();
+            });
+        });
+
+        inpHeroUpload.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                uploadedHeroFile = this.files[0]; selectedPresetHero = "";
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewHero = document.getElementById('preview_hero');
+                    const heroContainer = document.getElementById('hero_img_container');
+                    if (previewHero) previewHero.src = e.target.result;
+                    const tempImg = new Image();
+                    tempImg.onload = function() { if (heroContainer) heroContainer.style.aspectRatio = this.width + " / " + this.height; };
+                    tempImg.src = e.target.result;
+                }
+                reader.readAsDataURL(uploadedHeroFile);
+                imagePickerOverlay.style.display = 'none';
+                saveToServer();
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.target.isContentEditable && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+        });
+
+        // Service card blueprint
+        let serviceCardBlueprint = '';
+        window.addEventListener('load', () => {
+            const firstCard = document.querySelector('.service-col');
+            if (firstCard) {
+                const clone = firstCard.cloneNode(true);
+                const title = clone.querySelector('.service-title'); if (title) title.innerText = 'New Service';
+                const desc = clone.querySelector('.service-desc'); if (desc) desc.innerText = 'Describe your new service here.';
+                const icon = clone.querySelector('.service-icon-text'); if (icon) icon.innerText = 'star';
+                serviceCardBlueprint = clone.outerHTML;
+            }
+        });
+
+        window.addServiceCard = function() {
+            if (!serviceCardBlueprint) { console.error("No blueprint."); return; }
+            const addCol = document.getElementById('add_service_col');
+            if (addCol) addCol.insertAdjacentHTML('beforebegin', serviceCardBlueprint);
+        };
+
+        document.getElementById('canvasArea').addEventListener('click', function(e) {
+            if (e.target.classList.contains('delete-card')) { e.target.closest('.service-col').remove(); saveToServer(); }
+        });
+
+        // Section toolbar
+        const secToolbar = document.getElementById('sectionToolbar');
+        const secBgColor = document.getElementById('secBgColor');
+        const secGradToggle = document.getElementById('secGradientToggle');
+        const gradControls = document.getElementById('gradControls');
+        const secBgColor2 = document.getElementById('secBgColor2');
+        const secGradDir = document.getElementById('secGradDir');
+
+        document.getElementById('canvasArea').addEventListener('click', function(e) {
+            const sec = e.target.closest('.editable-section');
+            if (!sec || e.target.isContentEditable || e.target.closest('button') || e.target.closest('input') || e.target.closest('.editable-icon-wrap')) return;
+            activeSection = sec;
+            secToolbar.style.display = 'flex';
+            const secId = sec.id;
+            if (!sectionStyles[secId]) sectionStyles[secId] = { bg: '#ffffff', gradient: false, grad_color2: '#e2e8f0', grad_dir: '135deg' };
+            secBgColor.value = sectionStyles[secId].bg || '#ffffff';
+            secGradToggle.checked = sectionStyles[secId].gradient || false;
+            secBgColor2.value = sectionStyles[secId].grad_color2 || '#e2e8f0';
+            secGradDir.value = sectionStyles[secId].grad_dir || '135deg';
+            if (secGradToggle.checked) { gradControls.classList.remove('d-none'); gradControls.classList.add('d-flex'); }
+            else { gradControls.classList.add('d-none'); gradControls.classList.remove('d-flex'); }
+        });
+
+        function updateSectionBackground() {
+            if (!activeSection) return;
+            const secId = activeSection.id;
+            const c1 = secBgColor.value; const isGrad = secGradToggle.checked; const c2 = secBgColor2.value; const dir = secGradDir.value;
+            sectionStyles[secId] = { bg: c1, gradient: isGrad, grad_color2: c2, grad_dir: dir };
+            if (isGrad) {
+                if (dir === 'circle') activeSection.style.background = `radial-gradient(circle, ${c1} 0%, ${c2} 100%)`;
+                else activeSection.style.background = `linear-gradient(${dir}, ${c1} 0%, ${c2} 100%)`;
+            } else { activeSection.style.background = c1; }
+        }
+
+        secBgColor.addEventListener('input', updateSectionBackground);
+        secBgColor2.addEventListener('input', updateSectionBackground);
+        secGradDir.addEventListener('change', updateSectionBackground);
+        secGradToggle.addEventListener('change', (e) => {
+            if (e.target.checked) { gradControls.classList.remove('d-none'); gradControls.classList.add('d-flex'); }
+            else { gradControls.classList.add('d-none'); gradControls.classList.remove('d-flex'); }
+            updateSectionBackground();
+        });
+        document.getElementById('closeSecToolbar').addEventListener('click', () => { secToolbar.style.display = 'none'; activeSection = null; });
+
+        // Section toggles
+        document.querySelector('.editor-sidebar').addEventListener('change', function(e) {
+            if (e.target && e.target.classList.contains('toggle-section')) {
+                const targetId = e.target.getAttribute('data-target');
+                const targetEl = document.getElementById(targetId);
+                if (targetEl) targetEl.style.display = e.target.checked ? 'block' : 'none';
+                saveToServer();
+            }
+        });
+
+        // ─── SAVE TO SERVER LOGIC ───
+        function saveToServer() {
+            const btn = document.getElementById('saveBtn');
+            if (btn.disabled) return;
+            btn.innerText = 'Publishing...';
+            btn.disabled = true;
+
+            const formData = new FormData();
+            if (uploadedLogoFile) formData.append('logo_file', uploadedLogoFile);
+            if (uploadedHeroFile) formData.append('hero_image_file', uploadedHeroFile);
+            if (selectedPresetHero !== "") formData.append('hero_preset_path', selectedPresetHero);
+
+            // Collect services
+            const currentServices = [];
+            document.querySelectorAll('.service-col').forEach(col => {
+                currentServices.push({
+                    icon: col.querySelector('.service-icon-text') ? col.querySelector('.service-icon-text').innerText.trim() : 'star',
+                    title: col.querySelector('.service-title') ? col.querySelector('.service-title').innerText.trim() : '',
+                    description: col.querySelector('.service-desc') ? col.querySelector('.service-desc').innerText.trim() : ''
+                });
+            });
+
+            // Dynamically catch all toggles
+            const dynamicToggles = {};
+            document.querySelectorAll('.dynamic-toggle').forEach(toggle => {
+                const key = toggle.getAttribute('data-key');
+                dynamicToggles[key] = toggle.checked;
+            });
+
+            // Build payload
+            const jsonPayload = {
+                selected_template: document.getElementById('inp_template').value,
+                company_name: document.getElementById('inp_company_name').value.trim(),
+                short_name: document.getElementById('inp_short_name').value.trim(),
+
+                primary_color: document.getElementById('inp_color').value,
+
+                text_heading_color: document.getElementById('inp_text_heading').value,
+                text_body_color: document.getElementById('inp_text_body').value,
+                btn_bg_color: document.getElementById('inp_btn_bg').value,
+                btn_text_color: document.getElementById('inp_btn_text').value,
+
+                border_color: document.getElementById('inp_border').value,
+                border_radius: document.getElementById('inp_radius').value,
+                shadow_intensity: document.getElementById('inp_shadow').value,
+
+                ...dynamicToggles,
+                section_styles: sectionStyles,
+                services: currentServices
+            };
+
+            // Grab all editable text
+            document.querySelectorAll('[data-edit]').forEach(el => {
+                jsonPayload[el.getAttribute('data-edit')] = el.innerText.trim();
+            });
+
+            formData.append('json_data', JSON.stringify(jsonPayload));
+
+            fetch('website_editor.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        btn.innerText = 'Published! ✅';
+                        setTimeout(() => { btn.innerText = 'Save & Publish'; btn.disabled = false; }, 2000);
+                    } else {
+                        console.error("Save Error:", data.message);
+                        btn.innerText = 'Error Saving';
+                        setTimeout(() => { btn.innerText = 'Save & Publish'; btn.disabled = false; }, 3000);
+                    }
+                }).catch(err => {
+                    console.error(err);
+                    btn.innerText = 'Error Saving';
+                    btn.disabled = false;
+                });
+        }
+
+        document.getElementById('saveBtn').addEventListener('click', saveToServer);
+
+        // Template preview
+        document.getElementById('inp_template').addEventListener('change', function() {
+            const btn = document.getElementById('saveBtn');
+            btn.innerText = 'Loading Preview...'; btn.disabled = true;
+            const url = new URL(window.location.href);
+            url.searchParams.set('tpl', this.value);
+            window.location.href = url.toString();
+        });
+
+        // Auto-save on contenteditable blur
+        document.getElementById('canvasArea').addEventListener('focusout', function(e) {
+            if (e.target && e.target.getAttribute('contenteditable') === 'true') {
+                saveToServer();
+            }
+        });
     </script>
 </body>
+
 </html>

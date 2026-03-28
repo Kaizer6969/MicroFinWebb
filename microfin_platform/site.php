@@ -1,5 +1,5 @@
 <?php
-// site.php â€” Tenant Public Website
+// site.php — Tenant Public Website
 // URL: site.php?site=tenant-slug
 // No authentication required.
 
@@ -14,52 +14,18 @@ if ($slug === '') {
     $error_page = true;
     $error_msg = 'No website specified.';
 } else {
-    // Backward-compatible select: older DBs may not yet have new website columns.
-    $website_columns = [];
-    try {
-        $cols_stmt = $pdo->query('SHOW COLUMNS FROM tenant_website_content');
-        foreach ($cols_stmt->fetchAll(PDO::FETCH_ASSOC) as $col) {
-            $website_columns[$col['Field']] = true;
-        }
-    } catch (PDOException $ex) {
-        $website_columns = [];
-    }
-
-    $optional_columns = [
-        'stats_json' => "'[]'",
-        'stats_heading' => "''",
-        'stats_subheading' => "''",
-        'stats_image_path' => "''",
-        'hero_badge_text' => "''",
-        'footer_description' => "''",
-    ];
-
-    $optional_select_parts = [];
-    foreach ($optional_columns as $column_name => $fallback_sql) {
-        if (isset($website_columns[$column_name])) {
-            $optional_select_parts[] = "w.$column_name";
-        } else {
-            $optional_select_parts[] = "$fallback_sql AS $column_name";
-        }
-    }
-
-    $stmt = $pdo->prepare(
-        "SELECT
+    $stmt = $pdo->prepare("
+        SELECT
             t.tenant_id, t.tenant_name, t.tenant_slug, t.status,
             b.logo_path, b.font_family, b.theme_primary_color, b.theme_secondary_color,
             b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card,
-            w.layout_template, w.hero_title, w.hero_subtitle, w.hero_description,
-            w.hero_cta_text, w.hero_cta_url, w.hero_image_path,
-            w.about_heading, w.about_body, w.about_image_path,
-            w.services_heading, w.services_json,
-            " . implode(",\n            ", $optional_select_parts) . ",
-            w.contact_address, w.contact_phone, w.contact_email, w.contact_hours,
-            w.custom_css, w.meta_description
+            b.theme_border_color,
+            w.layout_template, w.website_data
         FROM tenants t
         LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id
         LEFT JOIN tenant_website_content w ON t.tenant_id = w.tenant_id
-        WHERE t.tenant_slug = ?"
-    );
+        WHERE t.tenant_slug = ?
+    ");
     $stmt->execute([$slug]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -83,34 +49,6 @@ if ($slug === '') {
             $error_msg = 'This organization has not set up their website yet.';
         }
     }
-}
-
-function hexToRgb($hex) {
-    $hex = str_replace('#', '', $hex);
-    if (strlen($hex) == 3) {
-        $r = hexdec(substr($hex,0,1).substr($hex,0,1));
-        $g = hexdec(substr($hex,1,1).substr($hex,1,1));
-        $b = hexdec(substr($hex,2,1).substr($hex,2,1));
-    } else {
-        $r = hexdec(substr($hex,0,2));
-        $g = hexdec(substr($hex,2,2));
-        $b = hexdec(substr($hex,4,2));
-    }
-    return "$r, $g, $b";
-}
-
-function settingAsBool($value, $default = true) {
-    if ($value === null) {
-        return $default;
-    }
-    $normalized = strtolower(trim((string)$value));
-    if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
-        return true;
-    }
-    if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
-        return false;
-    }
-    return $default;
 }
 
 // --- Error Page ---
@@ -148,149 +86,103 @@ if ($error_page) {
     exit;
 }
 
-// --- Prepare Data ---
+// ==========================================
+// DECODE WEBSITE DATA
+// ==========================================
+$pageData = [];
+if (!empty($data['website_data'])) {
+    $pageData = json_decode($data['website_data'], true);
+    if (!is_array($pageData)) $pageData = [];
+}
+
 $e = function($val) { return htmlspecialchars($val ?? '', ENT_QUOTES, 'UTF-8'); };
 
-$tenant_name = $data['tenant_name'];
-$layout = $data['layout_template'];
-$logo = $data['logo_path'] ?? '';
-$site_slug = $slug; // Alias used by all templates for login link hrefs
+// Template selection
+$selected_template = $data['layout_template'] ?? 'template1.php';
+// Normalize old-style names (template1 → template1.php)
+if (strpos($selected_template, '.php') === false) $selected_template .= '.php';
+$templates_dir = __DIR__ . '/templates/';
+$template_path = $templates_dir . basename($selected_template);
+if (!file_exists($template_path)) $template_path = $templates_dir . 'template1.php';
 
-$primary   = $data['theme_primary_color'] ?: '#dc2626';
-$secondary = $data['theme_secondary_color'] ?: '#991b1b';
-$text_main = $data['theme_text_main'] ?: '#0f172a';
-$text_muted = $data['theme_text_muted'] ?: '#64748b';
-$bg_body   = $data['theme_bg_body'] ?: '#f8fafc';
-$bg_card   = $data['theme_bg_card'] ?: '#ffffff';
-$font_family = $data['font_family'] ?: 'Inter';
+// ==========================================
+// GLOBAL TOKENS (Prioritize JSON over DB)
+// ==========================================
+$logo          = $data['logo_path'] ?? '';
+$primary       = $data['theme_primary_color'] ?: '#2563eb';
+$border_color  = $data['theme_border_color'] ?? '#e2e8f0';
+$border_radius = $pageData['border_radius'] ?? '16';
+$shadow        = $pageData['shadow_intensity'] ?? '0.1';
 
-$hero_title = $data['hero_title'] ?: 'Welcome';
-$hero_subtitle = $data['hero_subtitle'] ?: '';
-$hero_desc = $data['hero_description'] ?: '';
-$hero_cta_text = $data['hero_cta_text'] ?: 'Learn More';
-$hero_cta_url = $data['hero_cta_url'] ?: '#about';
-$hero_image = $data['hero_image_path'] ?: '';
+// Typography & Buttons
+$text_heading_color = $pageData['text_heading_color'] ?? '#0f172a';
+$text_body_color    = $pageData['text_body_color'] ?? '#64748b';
+$btn_bg_color       = $pageData['btn_bg_color'] ?? $primary;
+$btn_text_color     = $pageData['btn_text_color'] ?? '#ffffff';
 
-$about_heading = $data['about_heading'] ?: 'About Us';
-$about_body = $data['about_body'] ?: '';
-$about_image = $data['about_image_path'] ?: '';
+// Content Strings
+$tenant_name      = $data['tenant_name'] ?? 'MicroFin OS';
+$company_name     = $pageData['company_name'] ?? $tenant_name;
+$short_name       = $pageData['short_name'] ?? '';
+$display_name     = $short_name ? $short_name : $company_name;
+$site_slug        = $slug;
 
-$services_heading = $data['services_heading'] ?: 'Our Services';
-$services = json_decode($data['services_json'] ?? '[]', true) ?: [];
+$hero_title       = $pageData['hero_title'] ?? 'Empowering Your Financial Future';
+$hero_subtitle    = $pageData['hero_subtitle'] ?? 'Get flexible loans with fast approval and transparent terms.';
+$hero_badge_text  = $pageData['hero_badge_text'] ?? 'Verified Partner';
+$hero_image       = $pageData['hero_image'] ?? '';
+$display_image    = $hero_image ?: '';
 
-$contact_address = $data['contact_address'] ?: '';
-$contact_phone = $data['contact_phone'] ?: '';
-$contact_email = $data['contact_email'] ?: '';
-$contact_hours = $data['contact_hours'] ?: '';
-$custom_css = $data['custom_css'] ?? '';
-$meta_desc = $data['meta_description'] ?? '';
+$about_body       = $pageData['about_body'] ?? 'We believe in empowering our community through accessible financial tools.';
+$download_description = $pageData['download_description'] ?? 'Track your loans, submit applications, receive notifications — all from your phone.';
+$footer_desc      = $pageData['footer_desc'] ?? 'Your trusted microfinance partner.';
 
-$hero_badge_text = $data['hero_badge_text'] ?? '';
-$footer_description = $data['footer_description'] ?? '';
-$stats_heading = $data['stats_heading'] ?? '';
-$stats_subheading = $data['stats_subheading'] ?? '';
-$stats_image = $data['stats_image_path'] ?? '';
-$stats = json_decode($data['stats_json'] ?? '[]', true) ?: [];
+$contact_address = $pageData['contact_address'] ?? '';
+$contact_phone   = $pageData['contact_phone'] ?? '';
+$contact_email   = $pageData['contact_email'] ?? '';
+$contact_hours   = $pageData['contact_hours'] ?? '';
 
-$website_settings = [
-    'website_show_about' => '1',
-    'website_show_services' => '1',
-    'website_show_contact' => '1',
-    'website_show_download' => '1',
-    'website_download_title' => 'Download Our App',
-    'website_download_description' => 'Get the app for faster loan tracking and updates.',
-    'website_download_button_text' => 'Download App',
-    'website_download_url' => '',
-    'website_hero_background' => '',
-    'website_show_stats' => '1',
-    'website_stats_auto' => '1',
-    'website_show_loan_calc' => '1',
-    'website_show_partners' => '0',
-    'website_partners_json' => '[]',
-    'mobile_app_web_url' => ''
+// Arrays
+$services = $pageData['services'] ?? [
+    ['icon' => 'person', 'title' => 'Personal Loan', 'description' => 'Fast approval for your personal needs.'],
+    ['icon' => 'store', 'title' => 'Business Capital', 'description' => 'Grow your business with flexible terms.']
 ];
-$settings_stmt = $pdo->prepare("
-    SELECT setting_key, setting_value
-    FROM system_settings
-    WHERE tenant_id = ?
-      AND setting_key IN (
-        'website_show_about',
-        'website_show_services',
-        'website_show_contact',
-        'website_show_download',
-        'website_download_title',
-        'website_download_description',
-        'website_download_button_text',
-        'website_download_url',
-        'website_hero_background',
-        'website_show_stats',
-        'website_stats_auto',
-        'website_show_loan_calc',
-        'website_show_partners',
-        'website_partners_json',
-        'mobile_app_web_url'
-      )
-");
-$settings_stmt->execute([$data['tenant_id']]);
-foreach ($settings_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    if (array_key_exists($row['setting_key'], $website_settings)) {
-        $website_settings[$row['setting_key']] = (string)($row['setting_value'] ?? '');
+if (!is_array($services)) $services = [];
+
+$stats = $pageData['stats'] ?? [
+    ['value' => '1.5k+', 'label' => 'Active Members'],
+    ['value' => '3.2k+', 'label' => 'Loans Funded'],
+    ['value' => '98%', 'label' => 'Satisfaction'],
+    ['value' => '24h', 'label' => 'Fast Release']
+];
+if (!is_array($stats)) $stats = [];
+
+// Section Toggles
+$show_services  = isset($pageData['show_services']) ? filter_var($pageData['show_services'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_stats     = isset($pageData['show_stats']) ? filter_var($pageData['show_stats'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_loan_calc = isset($pageData['show_calculator']) ? filter_var($pageData['show_calculator'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_about     = isset($pageData['show_about']) ? filter_var($pageData['show_about'], FILTER_VALIDATE_BOOLEAN) : true;
+$show_download  = isset($pageData['show_download']) ? filter_var($pageData['show_download'], FILTER_VALIDATE_BOOLEAN) : true;
+
+// Background Style Helper
+$sec_styles = $pageData['section_styles'] ?? [];
+if (!function_exists('getBgStyle')) {
+    function getBgStyle($secId, $styles, $defaultBg) {
+        $style = $styles[$secId] ?? null;
+        if (!$style) return "background: $defaultBg;";
+        $isGrad = filter_var($style['gradient'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $c1 = $style['bg'] ?? $defaultBg;
+        if ($isGrad) {
+            $c2 = $style['grad_color2'] ?? '#e2e8f0';
+            $dir = $style['grad_dir'] ?? '135deg';
+            if ($dir === 'circle') return "background: radial-gradient(circle, $c1 0%, $c2 100%);";
+            return "background: linear-gradient($dir, $c1 0%, $c2 100%);";
+        }
+        return "background: $c1;";
     }
 }
 
-$show_about = settingAsBool($website_settings['website_show_about'], true);
-$show_services = settingAsBool($website_settings['website_show_services'], true);
-$show_contact = settingAsBool($website_settings['website_show_contact'], true);
-$show_download = settingAsBool($website_settings['website_show_download'], true);
-$show_stats = settingAsBool($website_settings['website_show_stats'], true);
-$stats_auto = settingAsBool($website_settings['website_stats_auto'], true);
-$show_loan_calc = settingAsBool($website_settings['website_show_loan_calc'], true);
-$show_partners = settingAsBool($website_settings['website_show_partners'], false);
-$partners = json_decode($website_settings['website_partners_json'] ?? '[]', true) ?: [];
-
-$download_title = trim($website_settings['website_download_title']);
-$download_description = trim($website_settings['website_download_description']);
-$download_button_text = trim($website_settings['website_download_button_text']);
-$download_url = trim($website_settings['website_download_url']);
-$hero_bg_path = trim($website_settings['website_hero_background']);
-
-// Flutter Web App URL — e.g. http://localhost:PORT or https://app.microfin.com
-// The tenant slug is automatically appended as ?tenant={slug} by the template.
-$mobile_app_web_url = trim($website_settings['mobile_app_web_url']);
-
-// Fetch tenant stats for display
-$stats_stmt = $pdo->prepare("SELECT COUNT(*) as total_clients FROM clients WHERE tenant_id = ? AND client_status = 'Active'");
-$stats_stmt->execute([$data['tenant_id']]);
-$total_clients = (int)$stats_stmt->fetchColumn();
-
-$stats_loans_stmt = $pdo->prepare("SELECT COUNT(*) as total_loans FROM loans WHERE tenant_id = ? AND loan_status = 'Active'");
-$stats_loans_stmt->execute([$data['tenant_id']]);
-$total_loans = (int)$stats_loans_stmt->fetchColumn();
-
-if ($stats_auto) {
-    $active_staff_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE tenant_id = ? AND user_type = 'Employee' AND status = 'Active'");
-    $active_staff_stmt->execute([$data['tenant_id']]);
-    $total_staff = (int)$active_staff_stmt->fetchColumn();
-
-    $stats = [
-        ['value' => number_format($total_clients) . '+', 'label' => 'Active Clients'],
-        ['value' => number_format($total_loans) . '+', 'label' => 'Active Loans'],
-        ['value' => number_format($total_staff) . '+', 'label' => 'Active Staff'],
-        ['value' => date('Y'), 'label' => 'Serving Since']
-    ];
-
-    if (trim((string)$stats_heading) === '') {
-        $stats_heading = 'Building Trust Through Numbers';
-    }
-    if (trim((string)$stats_subheading) === '') {
-        $stats_subheading = 'Updated automatically from your live platform activity';
-    }
-}
-
-// Show the download section whenever the toggle is enabled (shows "coming soon" if no URL)
-$show_download_section = $show_download;
-
-// Fetch active loan products for loan calculator
+// Fetch active loan products from DB for calculator
 $loan_products = [];
 try {
     $lp_stmt = $pdo->prepare('SELECT product_name, product_type, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage FROM loan_products WHERE tenant_id = ? AND is_active = 1 ORDER BY product_name');
@@ -299,100 +191,175 @@ try {
 } catch (PDOException $ex) {
     $loan_products = [];
 }
-
-if ($download_title === '') {
-    $download_title = 'Download Our App';
-}
-if ($download_button_text === '') {
-    $download_button_text = 'Download App';
+if (empty($loan_products)) {
+    $loan_products = [['product_name' => 'Demo Personal Loan', 'product_type' => 'Personal Loan', 'interest_rate' => 2.5, 'interest_type' => 'Flat', 'min_amount' => 1000, 'max_amount' => 50000, 'min_term_months' => 1, 'max_term_months' => 12, 'processing_fee_percentage' => 5]];
 }
 
-// --- Color Palette Generator ---
-function adjustColor($hex, $percent) {
-    $hex = ltrim($hex, '#');
-    if (strlen($hex) === 3) {
-        $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
-    }
-    $r = hexdec(substr($hex, 0, 2));
-    $g = hexdec(substr($hex, 2, 2));
-    $b = hexdec(substr($hex, 4, 2));
-    if ($percent > 0) {
-        $r = round($r + (255 - $r) * $percent / 100);
-        $g = round($g + (255 - $g) * $percent / 100);
-        $b = round($b + (255 - $b) * $percent / 100);
-    } else {
-        $factor = (100 + $percent) / 100;
-        $r = round($r * $factor);
-        $g = round($g * $factor);
-        $b = round($b * $factor);
-    }
-    return sprintf('#%02x%02x%02x', max(0, min(255, $r)), max(0, min(255, $g)), max(0, min(255, $b)));
+// Misc variables expected by templates
+$meta_desc = '';
+$custom_css = '';
+$headline_font = 'Manrope';
+$body_font = 'Public Sans';
+$onPrimary = '#ffffff';
+$secondary = $data['theme_secondary_color'] ?: '#10b981';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title><?php echo $e($company_name); ?> — Official Website</title>
+<?php if ($meta_desc): ?><meta name="description" content="<?php echo $e($meta_desc); ?>"><?php endif; ?>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=<?php echo urlencode($headline_font); ?>:wght@400;600;700;800&family=<?php echo urlencode($body_font); ?>:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0&display=swap" rel="stylesheet"/>
+
+<style>
+/* ─── LIVE SITE OVERRIDES ─── */
+body { font-family: '<?php echo $e($body_font); ?>', sans-serif; background: #f8fafc; color: #1e293b; }
+
+/* 1. Animations */
+.fade-up { opacity: 0; transform: translateY(30px); transition: opacity .6s ease, transform .6s ease; }
+.fade-up.visible { opacity: 1; transform: translateY(0); }
+
+/* 2. Hide Builder Tools from Public Visitors! */
+.delete-card, 
+#add_service_col, 
+#btn_open_hero_picker, 
+.editable-section:hover::after {
+    display: none !important;
 }
+.editable-icon-wrap { cursor: default !important; pointer-events: none; }
+.editable-section:hover { outline: none !important; }
+.custom-card { transition: transform .3s; }
+.custom-card:hover { transform: translateY(-4px); border-color: var(--brand); }
+<?php if ($custom_css) echo "\n" . $custom_css . "\n"; ?>
+</style>
 
-function generatePalette($primary, $secondary, $text_main, $text_muted, $bg_body, $bg_card) {
-    return [
-        'primary'                       => $primary,
-        'primary-container'             => adjustColor($primary, -25),
-        'on-primary'                    => '#ffffff',
-        'on-primary-container'          => adjustColor($primary, 60),
-        'on-primary-fixed'              => adjustColor($primary, -50),
-        'on-primary-fixed-variant'      => adjustColor($primary, -40),
-        'primary-fixed'                 => adjustColor($primary, 75),
-        'primary-fixed-dim'             => adjustColor($primary, 55),
+</head>
+<body>
 
-        'secondary'                     => $secondary,
-        'secondary-container'           => adjustColor($secondary, 70),
-        'on-secondary'                  => '#ffffff',
-        'on-secondary-container'        => adjustColor($secondary, -30),
-        'secondary-fixed'               => adjustColor($secondary, 70),
-        'secondary-fixed-dim'           => adjustColor($secondary, 50),
-        'on-secondary-fixed'            => adjustColor($secondary, -50),
-        'on-secondary-fixed-variant'    => adjustColor($secondary, -30),
-
-        'tertiary'                      => adjustColor($secondary, -20),
-        'tertiary-container'            => adjustColor($secondary, 60),
-        'on-tertiary'                   => '#ffffff',
-        'on-tertiary-container'         => adjustColor($secondary, -40),
-        'tertiary-fixed'                => adjustColor($secondary, 65),
-        'tertiary-fixed-dim'            => adjustColor($secondary, 45),
-
-        'background'                    => $bg_body,
-        'on-background'                 => $text_main,
-        'surface'                       => $bg_body,
-        'surface-bright'                => $bg_body,
-        'surface-dim'                   => adjustColor($bg_body, -15),
-        'surface-tint'                  => $primary,
-        'surface-container-lowest'      => $bg_card,
-        'surface-container-low'         => adjustColor($bg_body, -3),
-        'surface-container'             => adjustColor($bg_body, -6),
-        'surface-container-high'        => adjustColor($bg_body, -10),
-        'surface-container-highest'     => adjustColor($bg_body, -15),
-        'surface-variant'               => adjustColor($bg_body, -12),
-        'on-surface'                    => $text_main,
-        'on-surface-variant'            => $text_muted,
-
-        'outline'                       => adjustColor($text_muted, 25),
-        'outline-variant'               => adjustColor($text_muted, 55),
-
-        'inverse-surface'               => adjustColor($text_main, -10),
-        'inverse-on-surface'            => adjustColor($bg_body, 10),
-        'inverse-primary'               => adjustColor($primary, 55),
-
-        'error'                         => '#ba1a1a',
-        'on-error'                      => '#ffffff',
-        'error-container'               => '#ffdad6',
-        'on-error-container'            => '#410002',
-    ];
+<?php
+// Load the template, strip contenteditable attributes for public view
+if (file_exists($template_path)) {
+    ob_start();
+    include $template_path;
+    $raw_html = ob_get_clean();
+    $clean_html = preg_replace('/contenteditable="(true|false)"/i', '', $raw_html);
+    echo $clean_html;
+} else {
+    echo "<div class='container py-5 text-center mt-5'><h1>Template Missing</h1><p>Please log into the Website Editor and publish a design.</p></div>";
 }
+?>
 
-$palette = generatePalette($primary, $secondary, $text_main, $text_muted, $bg_body, $bg_card);
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-// --- Include Selected Template ---
-$template_map = [
-    'template1' => __DIR__ . '/templates/template1.php',
-    'template2' => __DIR__ . '/templates/template2.php',
-    'template3' => __DIR__ . '/templates/template3.php',
-];
+<script>
+// Navbar shadow on scroll
+window.addEventListener('scroll', function() {
+  var nav = document.querySelector('.site-nav');
+  if (nav) nav.classList.toggle('scrolled', window.scrollY > 20);
+});
 
-$template_file = $template_map[$layout] ?? $template_map['template1'];
-include $template_file;
+// Scroll fade-in
+document.querySelectorAll('section > .container').forEach(el => el.classList.add('fade-up'));
+var obs = new IntersectionObserver(function(entries) {
+  entries.forEach(function(e) { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); }});
+}, { threshold: 0.12 });
+document.querySelectorAll('.fade-up').forEach(function(el) { obs.observe(el); });
+
+<?php if ($show_loan_calc && !empty($loan_products)): ?>
+// Calculator Logic
+(function() {
+  var products = <?php echo json_encode(array_map(function($p) {
+      return [
+          'name'       => $p['product_name'] ?? 'Loan',
+          'min'        => (float)($p['min_amount'] ?? 1000),
+          'max'        => (float)($p['max_amount'] ?? 50000),
+          'rate'       => (float)($p['interest_rate'] ?? 2.5),
+          'type'       => $p['interest_type'] ?? 'Flat',
+          'minTerm'    => (int)($p['min_term_months'] ?? 1),
+          'maxTerm'    => (int)($p['max_term_months'] ?? 12),
+          'processing' => (float)($p['processing_fee_percentage'] ?? 5),
+      ];
+  }, $loan_products), JSON_UNESCAPED_UNICODE); ?>;
+
+  var amtSlider = document.getElementById('lc-amount-slider');
+  var trmSlider = document.getElementById('lc-term-slider');
+  var btns      = document.querySelectorAll('.lc-product-btn');
+  var selected  = 0;
+  
+  if(!amtSlider || !trmSlider) return;
+
+  var php       = new Intl.NumberFormat('en-PH', {minimumFractionDigits:0, maximumFractionDigits:0});
+  var fmt       = function(n){ return '₱' + php.format(Math.round(n)); };
+
+  function step(min, max){
+      var r = max - min;
+      return r <= 20000 ? 50 : r <= 100000 ? 100 : r <= 500000 ? 500 : 1000;
+  }
+
+  function selectProduct(idx) {
+      selected = idx;
+      var p = products[idx];
+      btns.forEach(function(b, i){ 
+          if(i === idx) { b.classList.add('border-primary', 'bg-light'); b.classList.remove('bg-white'); }
+          else { b.classList.remove('border-primary', 'bg-light'); b.classList.add('bg-white'); }
+      });
+      amtSlider.min  = p.min; amtSlider.max  = p.max; amtSlider.step = step(p.min, p.max);
+      amtSlider.value = Math.round(((p.min + p.max) / 2) / step(p.min, p.max)) * step(p.min, p.max);
+      trmSlider.min  = p.minTerm; trmSlider.max = p.maxTerm;
+      trmSlider.value = Math.round((p.minTerm + p.maxTerm) / 2);
+      
+      var elMinAmt = document.getElementById('lc-min-amount');
+      var elMaxAmt = document.getElementById('lc-max-amount');
+      var elMinTrm = document.getElementById('lc-min-term');
+      var elMaxTrm = document.getElementById('lc-max-term');
+      
+      if(elMinAmt) elMinAmt.textContent = fmt(p.min);
+      if(elMaxAmt) elMaxAmt.textContent = fmt(p.max);
+      if(elMinTrm) elMinTrm.textContent = p.minTerm + ' mo';
+      if(elMaxTrm) elMaxTrm.textContent = p.maxTerm + ' mo';
+      calc();
+  }
+
+  function calc() {
+      var p = products[selected];
+      var amt  = parseFloat(amtSlider.value);
+      var term = parseInt(trmSlider.value, 10);
+      var rate = p.rate / 100;
+      
+      var amtDisp = document.getElementById('lc-amount-display');
+      var trmDisp = document.getElementById('lc-term-display');
+      if(amtDisp) amtDisp.textContent = fmt(amt);
+      if(trmDisp) trmDisp.textContent = term + ' mo';
+      
+      var monthly = 0, interest = 0, total = 0;
+      if (p.type === 'Flat' || p.type === 'Fixed') {
+          interest = amt * rate * term; total = amt + interest; monthly = total / term;
+      } else if (p.type === 'Diminishing') {
+          monthly  = rate > 0 ? amt * (rate * Math.pow(1+rate,term)) / (Math.pow(1+rate,term)-1) : amt/term;
+          total    = monthly * term; interest = total - amt;
+      }
+      var fee = amt * (p.processing / 100);
+      
+      var elMo = document.getElementById('lc-monthly');
+      var elInt = document.getElementById('lc-interest');
+      var elFee = document.getElementById('lc-fee');
+      var elTot = document.getElementById('lc-total');
+      
+      if(elMo) elMo.textContent  = fmt(monthly);
+      if(elInt) elInt.textContent = fmt(interest);
+      if(elFee) elFee.textContent      = fmt(fee);
+      if(elTot) elTot.textContent    = fmt(total);
+  }
+
+  btns.forEach(function(b, i){ b.addEventListener('click', function(){ selectProduct(i); }); });
+  amtSlider.addEventListener('input', calc);
+  trmSlider.addEventListener('input', calc);
+  if (products.length > 0) selectProduct(0);
+})();
+<?php endif; ?>
+</script>
+</body>
+</html>

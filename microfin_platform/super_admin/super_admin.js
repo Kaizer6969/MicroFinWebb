@@ -147,32 +147,78 @@ document.addEventListener('DOMContentLoaded', () => {
     // Create SA Modal
     const btnCreateSA = document.getElementById('btn-create-super-admin');
     const saModalBackdrop = document.getElementById('modal-sa-backdrop');
-    if (btnCreateSA && saModalBackdrop) {
-        btnCreateSA.addEventListener('click', () => saModalBackdrop.classList.add('show'));
-    }
+    const saModalForm = saModalBackdrop ? saModalBackdrop.querySelector('form') : null;
     const btnCloseSAModal = document.getElementById('close-sa-modal');
     const btnCancelSAModal = document.getElementById('cancel-sa-modal');
-    
-    if (btnCloseSAModal) btnCloseSAModal.addEventListener('click', () => {
-        if (saModalBackdrop) {
-            saModalBackdrop.classList.remove('show');
-            saModalBackdrop.querySelector('form').reset();
+    const saProfileModeToggle = document.getElementById('sa-profile-mode');
+    const saProfileModeSides = saModalForm ? Array.from(saModalForm.querySelectorAll('.profile-mode-side')) : [];
+    const saProfileModeTitle = document.getElementById('sa-profile-mode-title');
+    const saProfileModeDescription = document.getElementById('sa-profile-mode-description');
+    const saFillNowFields = document.getElementById('sa-fill-now-fields');
+    const saFillNowRequiredFields = saModalForm ? Array.from(saModalForm.querySelectorAll('[data-fill-now-required="true"]')) : [];
+
+    function syncSuperAdminProfileMode() {
+        const selectedMode = saProfileModeToggle && saProfileModeToggle.checked ? 'fill_now' : 'onboarding';
+
+        if (saFillNowFields) {
+            saFillNowFields.classList.toggle('is-hidden', selectedMode !== 'fill_now');
         }
-    });
-    if (btnCancelSAModal) btnCancelSAModal.addEventListener('click', () => {
-        if (saModalBackdrop) {
-            saModalBackdrop.classList.remove('show');
-            saModalBackdrop.querySelector('form').reset();
+
+        saProfileModeSides.forEach((side) => {
+            side.classList.toggle('active', side.dataset.mode === selectedMode);
+        });
+
+        if (saProfileModeTitle) {
+            saProfileModeTitle.textContent = selectedMode === 'fill_now'
+                ? 'Fill It Now'
+                : 'Complete During Onboarding';
         }
-    });
+
+        if (saProfileModeDescription) {
+            saProfileModeDescription.textContent = selectedMode === 'fill_now'
+                ? 'You capture the profile details now, then the admin only resets the temporary password.'
+                : 'Only the login account is created now. The admin finishes their profile after first login.';
+        }
+
+        saFillNowRequiredFields.forEach((field) => {
+            field.required = selectedMode === 'fill_now';
+        });
+    }
+
+    function closeSuperAdminModal() {
+        if (!saModalBackdrop) {
+            return;
+        }
+
+        saModalBackdrop.classList.remove('show');
+        if (saModalForm) {
+            saModalForm.reset();
+            syncSuperAdminProfileMode();
+        }
+    }
+
+    if (btnCreateSA && saModalBackdrop) {
+        btnCreateSA.addEventListener('click', () => {
+            if (saModalForm) {
+                saModalForm.reset();
+            }
+            syncSuperAdminProfileMode();
+            saModalBackdrop.classList.add('show');
+        });
+    }
+    if (btnCloseSAModal) btnCloseSAModal.addEventListener('click', closeSuperAdminModal);
+    if (btnCancelSAModal) btnCancelSAModal.addEventListener('click', closeSuperAdminModal);
     if (saModalBackdrop) {
         saModalBackdrop.addEventListener('click', (e) => {
             if (e.target === saModalBackdrop) {
-                saModalBackdrop.classList.remove('show');
-                saModalBackdrop.querySelector('form').reset();
+                closeSuperAdminModal();
             }
         });
     }
+    if (saProfileModeToggle) {
+        saProfileModeToggle.addEventListener('change', syncSuperAdminProfileMode);
+    }
+    syncSuperAdminProfileMode();
 
     // Audit Details Modal
     const auditModalBackdrop = document.getElementById('modal-audit-backdrop');

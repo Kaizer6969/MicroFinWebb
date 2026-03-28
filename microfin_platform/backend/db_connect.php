@@ -10,7 +10,7 @@ $charset = 'utf8mb4';
 // ---------------------------------------------------------------
 $host = 'centerbeam.proxy.rlwy.net';
 $port = 52624;
-$db   = 'railway';
+$db = 'railway';
 $user = 'root';
 $pass = 'zVULvPIbSyHVavTRnPFAkMWGVmvRwInd';
 
@@ -20,9 +20,9 @@ $pass = 'zVULvPIbSyHVavTRnPFAkMWGVmvRwInd';
 // ---------------------------------------------------------------
 $localHost = 'localhost';
 $localPort = 3306;
-$localDb   = 'microfin_db';
+$localDb = 'microfin_db';
 $localUser = 'root';
-$localPass = '';
+$localPass = '1234';
 
 function mf_env_first(array $keys)
 {
@@ -34,6 +34,16 @@ function mf_env_first(array $keys)
     }
 
     return null;
+}
+
+function mf_db_target_signature(array $target): string
+{
+    return implode('|', [
+        (string)($target['host'] ?? ''),
+        (string)($target['port'] ?? ''),
+        (string)($target['db'] ?? ''),
+        (string)($target['user'] ?? ''),
+    ]);
 }
 
 $mf_local_mail_config = [];
@@ -177,9 +187,6 @@ function mf_send_brevo_email($toEmail, $subject, $htmlContent)
     return 'API Error: HTTP ' . $httpCode . ' - ' . (is_string($result) ? $result : '');
 }
 
-// Data Source Name
-$dsn = "mysql:host=$host;port=$port;dbname=$db;charset=$charset";
-
 // PDO Options
 $options = [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -189,31 +196,82 @@ $options = [
 ];
 
 try {
-    try {
-        $pdo = new PDO($dsn, $user, $pass, $options);
-    }
-    catch (\Throwable $primaryDbError) {
-        $isAlreadyUsingLocalFallback = ($host === $localHost && (int)$port === (int)$localPort && $db === $localDb && $user === $localUser);
-        if ($isAlreadyUsingLocalFallback) {
-            throw $primaryDbError;
+    // Prefer localhost first, then fail over to the hosted Railway config.
+    $connectionTargets = [];
+    $seenConnectionTargets = [];
+
+    foreach ([
+        [
+            'label' => 'localhost',
+            'host' => $localHost,
+            'port' => $localPort,
+            'db' => $localDb,
+            'user' => $localUser,
+            'pass' => $localPass,
+        ],
+        [
+            'label' => 'Railway',
+            'host' => $host,
+            'port' => $port,
+            'db' => $db,
+            'user' => $user,
+            'pass' => $pass,
+        ],
+    ] as $candidateTarget) {
+        $signature = mf_db_target_signature($candidateTarget);
+        if (isset($seenConnectionTargets[$signature])) {
+            continue;
         }
 
-        $fallbackDsn = "mysql:host=$localHost;port=$localPort;dbname=$localDb;charset=$charset";
+        $seenConnectionTargets[$signature] = true;
+        $connectionTargets[] = $candidateTarget;
+    }
+
+    $connectionErrors = [];
+    foreach ($connectionTargets as $index => $target) {
+        $targetDsn = sprintf(
+            'mysql:host=%s;port=%d;dbname=%s;charset=%s',
+            $target['host'],
+            (int)$target['port'],
+            $target['db'],
+            $charset
+        );
+
         try {
-            $pdo = new PDO($fallbackDsn, $localUser, $localPass, $options);
-            $host = $localHost;
-            $port = $localPort;
-            $db = $localDb;
-            $user = $localUser;
-            $pass = $localPass;
-            error_log('Primary DB connection failed; switched to localhost fallback. Error: ' . $primaryDbError->getMessage());
-        }
-        catch (\Throwable $fallbackDbError) {
-            throw new RuntimeException(
-                'Primary DB connection failed: ' . $primaryDbError->getMessage() .
-                ' | Local fallback failed: ' . $fallbackDbError->getMessage()
+            $pdo = new PDO($targetDsn, $target['user'], $target['pass'], $options);
+            $host = $target['host'];
+            $port = (int)$target['port'];
+            $db = $target['db'];
+            $user = $target['user'];
+            $pass = $target['pass'];
+
+            if ($index > 0) {
+                $previousTarget = $connectionTargets[$index - 1]['label'];
+                $previousError = $connectionErrors[$previousTarget] ?? 'Unknown connection error.';
+                error_log(
+                    sprintf(
+                        '%s DB connection failed; switched to %s fallback. Error: %s',
+                        $previousTarget,
+                        $target['label'],
+                        $previousError
+                    )
                 );
+            }
+
+            break;
         }
+        catch (\Throwable $connectionError) {
+            $connectionErrors[$target['label']] = $connectionError->getMessage();
+        }
+    }
+
+    if (!isset($pdo)) {
+        $errorParts = [];
+        foreach ($connectionErrors as $targetLabel => $message) {
+            $errorParts[] = $targetLabel . ' failed: ' . $message;
+        }
+
+        throw new RuntimeException(implode(' | ', $errorParts));
     }
 
     // Schema guard for newer website customization flows.
@@ -229,6 +287,8 @@ try {
             "ALTER TABLE tenant_website_content ADD COLUMN stats_subheading VARCHAR(255) NULL AFTER stats_heading",
             "ALTER TABLE tenant_website_content ADD COLUMN stats_image_path VARCHAR(500) NULL AFTER stats_subheading",
             "ALTER TABLE tenant_website_content ADD COLUMN footer_description TEXT NULL AFTER contact_hours",
+            // JSON bucket for all page content (builder migration)
+            "ALTER TABLE tenant_website_content ADD COLUMN website_data JSON NULL COMMENT 'Stores hero, about, services, toggles, section_styles, and arrays' AFTER layout_template",
         ];
         foreach ($websiteContentColumnMigrations as $migrationSql) {
             try {
@@ -243,10 +303,9 @@ try {
         error_log('Schema guard warning (tenant_website_content): ' . $migrationError->getMessage());
     }
 
-    // Migrate layout_template ENUM from old names to template1/2/3
+    // Migrate layout_template to flexible VARCHAR from old ENUM
     try {
-        $pdo->exec("ALTER TABLE tenant_website_content MODIFY COLUMN layout_template ENUM('template1', 'template2', 'template3') DEFAULT 'template1'");
-        $pdo->exec("UPDATE tenant_website_content SET layout_template = 'template1' WHERE layout_template NOT IN ('template1','template2','template3') OR layout_template IS NULL");
+        $pdo->exec("ALTER TABLE tenant_website_content MODIFY COLUMN layout_template VARCHAR(50) DEFAULT 'template1.php'");
     }
     catch (\PDOException $e) {
     // Already migrated or table does not exist yet.

@@ -15,6 +15,13 @@ if (!empty($_SESSION['super_admin_force_password_change'])) {
     exit;
 }
 
+if (!empty($_SESSION['super_admin_onboarding_required'])) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'Profile onboarding required';
+    exit;
+}
+
 require_once __DIR__ . '/../backend/db_connect.php';
 
 function mf_statement_pdf_abort($statusCode, $message)

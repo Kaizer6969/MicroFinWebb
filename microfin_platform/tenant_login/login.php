@@ -108,7 +108,8 @@ if (!$tenant) {
 } else {
     // Canonicalize the URL to ?s=<tenant_slug> so subsequent form posts are stable.
     if (!isset($_GET['impersonate']) && strcasecmp($site_slug, (string)$tenant['tenant_slug']) !== 0) {
-        header('Location: login.php?s=' . urlencode((string)$tenant['tenant_slug']));
+        $auth_param = isset($_GET['auth']) ? '&auth=1' : '';
+        header('Location: login.php?s=' . urlencode((string)$tenant['tenant_slug']) . $auth_param);
         exit;
     }
 

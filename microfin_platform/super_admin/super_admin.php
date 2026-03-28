@@ -4,6 +4,7 @@ session_start();
 require_once '../backend/db_connect.php';
 require_once '../backend/billing_access.php';
 require_once '../backend/lazy_billing_resolver.php';
+require_once __DIR__ . '/super_admin_auth.php';
 
 // Resolve any pending tenant subscriptions automagically!
 resolve_tenant_billing($pdo);
@@ -13,23 +14,27 @@ if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_
     exit;
 }
 
+require_once '../backend/tenant_identity.php';
+
+$superAdminState = sa_load_super_admin_state($pdo, (int)($_SESSION['super_admin_id'] ?? 0));
+if (!$superAdminState) {
+    session_unset();
+    session_destroy();
+    header('Location: login.php');
+    exit;
+}
+
+sa_sync_super_admin_session_from_state($superAdminState);
+$ui_theme = sa_super_admin_theme($superAdminState);
+
 if (!empty($_SESSION['super_admin_force_password_change'])) {
     header('Location: force_change_password.php');
     exit;
 }
 
-require_once '../backend/db_connect.php';
-require_once '../backend/tenant_identity.php';
-
-$ui_theme = (($_SESSION['ui_theme'] ?? 'dark') === 'dark') ? 'dark' : 'light';
-if (!empty($_SESSION['super_admin_id'])) {
-    $theme_stmt = $pdo->prepare('SELECT ui_theme FROM users WHERE user_id = ? LIMIT 1');
-    $theme_stmt->execute([(int)$_SESSION['super_admin_id']]);
-    $theme_row = $theme_stmt->fetch(PDO::FETCH_ASSOC);
-    if ($theme_row && isset($theme_row['ui_theme'])) {
-        $ui_theme = ($theme_row['ui_theme'] === 'dark') ? 'dark' : 'light';
-        $_SESSION['ui_theme'] = $ui_theme;
-    }
+if (!empty($_SESSION['super_admin_onboarding_required'])) {
+    header('Location: onboarding_profile.php');
+    exit;
 }
 
 function sa_column_exists(PDO $pdo, $table, $column)
@@ -857,14 +862,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: super_admin.php?section=tenants');
         exit;
     } elseif ($action === 'create_super_admin') {
-        $sa_username = trim($_POST['sa_username'] ?? '');
-        $sa_email = trim($_POST['sa_email'] ?? '');
+        $profileMode = trim((string)($_POST['profile_mode'] ?? 'onboarding'));
+        if (!in_array($profileMode, ['onboarding', 'fill_now'], true)) {
+            $profileMode = 'onboarding';
+        }
 
-        if ($sa_username === '' || $sa_email === '') {
-            $_SESSION['sa_error'] = 'Username and email are required to create a super admin.';
-        } elseif (!filter_var($sa_email, FILTER_VALIDATE_EMAIL)) {
+        $saUsernameInput = trim((string)($_POST['sa_username'] ?? ''));
+        $saEmail = trim((string)($_POST['sa_email'] ?? ''));
+        $saFirstName = trim((string)($_POST['sa_first_name'] ?? ''));
+        $saLastName = trim((string)($_POST['sa_last_name'] ?? ''));
+        $saMiddleName = trim((string)($_POST['sa_middle_name'] ?? ''));
+        $saSuffix = trim((string)($_POST['sa_suffix'] ?? ''));
+        $saPhoneNumber = trim((string)($_POST['sa_phone_number'] ?? ''));
+        $saDateOfBirth = trim((string)($_POST['sa_date_of_birth'] ?? ''));
+        $saUsername = $saUsernameInput === '' ? '' : sa_sanitize_platform_username($saUsernameInput);
+
+        $dateOfBirthIsValid = false;
+        if ($saDateOfBirth !== '') {
+            $parsedDob = DateTime::createFromFormat('Y-m-d', $saDateOfBirth);
+            $dateOfBirthIsValid = $parsedDob instanceof DateTime && $parsedDob->format('Y-m-d') === $saDateOfBirth;
+        }
+
+        if ($saEmail === '') {
+            $_SESSION['sa_error'] = 'Email is required to create a super admin.';
+        } elseif ($saUsernameInput !== '' && $saUsername === '') {
+            $_SESSION['sa_error'] = 'Username can only contain letters, numbers, dots, underscores, or hyphens.';
+        } elseif (!filter_var($saEmail, FILTER_VALIDATE_EMAIL)) {
             $_SESSION['sa_error'] = 'Please provide a valid email address.';
+        } elseif ($profileMode === 'fill_now' && ($saFirstName === '' || $saLastName === '' || $saPhoneNumber === '' || $saDateOfBirth === '')) {
+            $_SESSION['sa_error'] = 'First name, last name, phone number, and date of birth are required when filling the profile now.';
+        } elseif ($profileMode === 'fill_now' && !$dateOfBirthIsValid) {
+            $_SESSION['sa_error'] = 'Please provide a valid date of birth.';
         } else {
+            $resolvedUsername = $saUsername !== ''
+                ? $saUsername
+                : sa_generate_unique_platform_username($pdo, '', $saEmail, $saFirstName, $saLastName);
+
+            $profileModeLabel = $profileMode === 'fill_now' ? 'Profile was filled during account creation.' : 'Profile will be completed during onboarding.';
             try {
                 $superAdminRoleId = sa_ensure_platform_role($pdo, 'Super Admin', 'Master Platform Administrator');
 
@@ -876,7 +910,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       AND (email = ? OR username = ?)
                     LIMIT 1
                 ");
-                $check->execute([$sa_email, $sa_username]);
+                $check->execute([$saEmail, $resolvedUsername]);
 
                 if ($check->fetchColumn()) {
                     $_SESSION['sa_error'] = 'Email or username already exists for a platform admin.';
@@ -890,9 +924,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        <h2>Your MicroFin Super Admin Account Is Ready</h2>
                        <p>A platform administrator account has been created for you.</p>
                        <p><strong>Login URL:</strong> <a href='{$loginUrl}'>{$loginUrl}</a></p>
-                       <p><strong>Use this email to sign in:</strong> {$sa_email}</p>
+                       <p><strong>Use this email to sign in:</strong> {$saEmail}</p>
                        <p><strong>Temporary Password:</strong> <code style='background:#f4f4f5; padding:4px 8px; border-radius:4px; font-size:16px;'>{$temporaryPassword}</code></p>
                        <p>Please keep this password secure. It was generated automatically by the system.</p>
+                       <p><strong>Next step:</strong> You will reset this temporary password on first login.</p>
+                       <p><strong>Profile setup:</strong> {$profileModeLabel}</p>
                     </body>
                     </html>
                     ";
@@ -900,21 +936,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->beginTransaction();
                     try {
                         $insert = $pdo->prepare("
-                            INSERT INTO users (tenant_id, username, email, password_hash, force_password_change, role_id, user_type, status)
-                            VALUES (NULL, ?, ?, ?, TRUE, ?, 'Super Admin', 'Active')
+                            INSERT INTO users (
+                                tenant_id,
+                                username,
+                                email,
+                                phone_number,
+                                password_hash,
+                                force_password_change,
+                                role_id,
+                                user_type,
+                                status,
+                                first_name,
+                                last_name,
+                                middle_name,
+                                suffix,
+                                date_of_birth
+                            )
+                            VALUES (NULL, ?, ?, ?, ?, TRUE, ?, 'Super Admin', 'Inactive', ?, ?, ?, ?, ?)
                         ");
-                        $insert->execute([$sa_username, $sa_email, $hash, $superAdminRoleId]);
+                        $insert->execute([
+                            $resolvedUsername,
+                            $saEmail,
+                            $saPhoneNumber !== '' ? $saPhoneNumber : null,
+                            $hash,
+                            $superAdminRoleId,
+                            $saFirstName !== '' ? $saFirstName : null,
+                            $saLastName !== '' ? $saLastName : null,
+                            $saMiddleName !== '' ? $saMiddleName : null,
+                            $saSuffix !== '' ? $saSuffix : null,
+                            $saDateOfBirth !== '' ? $saDateOfBirth : null,
+                        ]);
 
                         $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description) VALUES (?, 'SUPER_ADMIN_CREATED', 'user', ?)");
-                        $log->execute([$_SESSION['super_admin_id'], "Created new super admin account: {$sa_username}"]);
+                        $log->execute([$_SESSION['super_admin_id'], "Created new super admin account: {$resolvedUsername}. {$profileModeLabel}"]);
 
-                        $result_msg = mf_send_brevo_email($sa_email, 'MicroFin - Super Admin Access', $message);
+                        $result_msg = mf_send_brevo_email($saEmail, 'MicroFin - Super Admin Access', $message);
                         if ($result_msg !== 'Email sent successfully.') {
                             throw new RuntimeException('Credential email could not be delivered.');
                         }
 
                         $pdo->commit();
-                        $_SESSION['sa_flash'] = "Super admin account created successfully. Credentials were sent to {$sa_email}.";
+                        $_SESSION['sa_flash'] = "Super admin account created successfully. Credentials were sent to {$saEmail}. {$profileModeLabel}";
                     } catch (Throwable $transactionError) {
                         if ($pdo->inTransaction()) {
                             $pdo->rollBack();
@@ -1034,7 +1096,7 @@ $action_types = $action_types_stmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Settings: Registered admin accounts
 $super_admins_stmt = $pdo->query("
-    SELECT user_id, username, email, first_name, last_name, created_at, last_login
+    SELECT user_id, username, email, status, first_name, last_name, created_at, last_login
     FROM users WHERE user_type = 'Super Admin' AND deleted_at IS NULL
     ORDER BY created_at DESC
 ");
@@ -2536,6 +2598,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <th>ID</th>
                                             <th>Username</th>
                                             <th>Email Address</th>
+                                            <th>Status</th>
                                             <th>Last Login</th>
                                             <th>Registration Date</th>
                                         </tr>
@@ -2543,7 +2606,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                     <tbody>
                                         <?php if (count($super_admins_list) === 0): ?>
                                         <tr>
-                                            <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                                            <td colspan="6" style="text-align: center; padding: 3rem; color: var(--text-muted);">
                                                 No system accounts found.
                                             </td>
                                         </tr>
@@ -2561,6 +2624,13 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             </td>
                                             <td>
                                                 <a href="mailto:<?php echo htmlspecialchars($admin['email']); ?>"><?php echo htmlspecialchars($admin['email']); ?></a>
+                                            </td>
+                                            <td>
+                                                <?php
+                                                $account_status = (string)($admin['status'] ?? 'Inactive');
+                                                $account_status_badge = $account_status === 'Active' ? 'badge-green' : 'badge-amber';
+                                                ?>
+                                                <span class="badge <?php echo $account_status_badge; ?>"><?php echo htmlspecialchars($account_status); ?></span>
                                             </td>
                                             <td><?php echo $admin['last_login'] ? date('M d, Y H:i', strtotime($admin['last_login'])) : 'Never'; ?></td>
                                             <td><?php echo date('M d, Y', strtotime($admin['created_at'])); ?></td>
@@ -2762,12 +2832,60 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
             <form class="modal-body" method="POST" action="">
                 <input type="hidden" name="action" value="create_super_admin">
                 <div class="form-group">
-                    <label>Username</label>
-                    <input type="text" class="form-control" name="sa_username" placeholder="e.g. jdelacruz" required>
+                    <label>Profile Setup</label>
+                    <div class="profile-mode-toggle" id="sa-profile-mode-toggle">
+                        <span class="profile-mode-side active" data-mode="onboarding">During Onboarding</span>
+                        <label class="switch profile-mode-switch" aria-label="Toggle profile setup mode">
+                            <input type="checkbox" id="sa-profile-mode" name="profile_mode" value="fill_now">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="profile-mode-side" data-mode="fill_now">Fill It Now</span>
+                    </div>
+                    <div class="profile-mode-summary">
+                        <strong id="sa-profile-mode-title">Complete During Onboarding</strong>
+                        <span id="sa-profile-mode-description">Only the login account is created now. The admin finishes their profile after first login.</span>
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label>Email Address</label>
+                    <label>Username</label>
+                    <input type="text" class="form-control" name="sa_username" placeholder="Optional">
+                    <small class="form-hint">Optional. Defaults to the admin’s first name (e.g., Maria Clara Santos → Maria).</small>
+                </div>
+                <div class="form-group">
+                    <label>Email Address<span class="required-mark">*</span></label>
                     <input type="email" class="form-control" name="sa_email" placeholder="superadmin@microfin.com" required>
+                </div>
+                <div id="sa-fill-now-fields" class="is-hidden">
+                    <div class="row-2-equal">
+                        <div class="form-group">
+                            <label>First Name<span class="required-mark">*</span></label>
+                            <input type="text" class="form-control" name="sa_first_name" data-fill-now-required="true">
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name<span class="required-mark">*</span></label>
+                            <input type="text" class="form-control" name="sa_last_name" data-fill-now-required="true">
+                        </div>
+                    </div>
+                    <div class="row-2-equal">
+                        <div class="form-group">
+                            <label>Middle Name</label>
+                            <input type="text" class="form-control" name="sa_middle_name">
+                        </div>
+                        <div class="form-group">
+                            <label>Suffix</label>
+                            <input type="text" class="form-control" name="sa_suffix" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div class="row-2-equal">
+                        <div class="form-group">
+                            <label>Phone Number<span class="required-mark">*</span></label>
+                            <input type="text" class="form-control" name="sa_phone_number" data-fill-now-required="true">
+                        </div>
+                        <div class="form-group">
+                            <label>Date of Birth<span class="required-mark">*</span></label>
+                            <input type="date" class="form-control" name="sa_date_of_birth" data-fill-now-required="true">
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer" style="margin-top:24px;">
                     <button type="button" class="btn btn-outline" id="cancel-sa-modal">Cancel</button>

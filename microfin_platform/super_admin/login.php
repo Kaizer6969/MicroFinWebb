@@ -4,7 +4,7 @@ session_start();
 if (isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
     $destination = !empty($_SESSION['super_admin_force_password_change'])
         ? 'force_change_password.php'
-        : 'super_admin.php';
+        : (!empty($_SESSION['super_admin_onboarding_required']) ? 'onboarding_profile.php' : 'super_admin.php');
     header('Location: ' . $destination);
     exit;
 }
@@ -13,6 +13,7 @@ $error_msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_once '../backend/db_connect.php';
+    require_once __DIR__ . '/super_admin_auth.php';
 
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
@@ -25,11 +26,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    username,
                    password_hash,
                    ui_theme,
-                   force_password_change
+                   force_password_change,
+                   status
             FROM users
             WHERE email = ?
               AND user_type = 'Super Admin'
-              AND status = 'Active'
               AND deleted_at IS NULL
             LIMIT 1
         ");
@@ -37,20 +38,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $admin = $stmt->fetch();
 
         if ($admin && password_verify($password, $admin['password_hash'])) {
-            $_SESSION['super_admin_logged_in'] = true;
-            $_SESSION['super_admin_id'] = (int) $admin['super_admin_id'];
-            $_SESSION['super_admin_username'] = $admin['username'];
-            $_SESSION['ui_theme'] = (($admin['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
-            $_SESSION['super_admin_force_password_change'] = (bool) ($admin['force_password_change'] ?? false);
+            $status = trim((string)($admin['status'] ?? ''));
+            if (!in_array($status, ['Active', 'Inactive'], true)) {
+                $error_msg = 'This account is not available. Please contact another platform owner.';
+            } else {
+                $_SESSION['super_admin_logged_in'] = true;
+                $_SESSION['super_admin_id'] = (int) $admin['super_admin_id'];
+                $_SESSION['super_admin_username'] = $admin['username'];
+                $_SESSION['ui_theme'] = sa_super_admin_theme($admin);
+                $_SESSION['super_admin_force_password_change'] = (bool) ($admin['force_password_change'] ?? false);
+                $_SESSION['super_admin_onboarding_required'] = ($status === 'Inactive' && empty($admin['force_password_change']));
 
-            $destination = !empty($_SESSION['super_admin_force_password_change'])
-                ? 'force_change_password.php'
-                : 'super_admin.php';
-            header('Location: ' . $destination);
-            exit;
+                $destination = !empty($_SESSION['super_admin_force_password_change'])
+                    ? 'force_change_password.php'
+                    : (!empty($_SESSION['super_admin_onboarding_required']) ? 'onboarding_profile.php' : 'super_admin.php');
+                header('Location: ' . $destination);
+                exit;
+            }
+        } else {
+            $error_msg = 'Invalid email or password.';
         }
-
-        $error_msg = 'Invalid email or password.';
     }
 }
 ?>

@@ -13,6 +13,12 @@ if (!empty($_SESSION['super_admin_force_password_change'])) {
     exit;
 }
 
+if (!empty($_SESSION['super_admin_onboarding_required'])) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Profile onboarding required']);
+    exit;
+}
+
 require_once '../backend/db_connect.php';
 require_once __DIR__ . '/report_data.php';
 

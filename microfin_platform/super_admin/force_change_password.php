@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../backend/db_connect.php';
+require_once __DIR__ . '/super_admin_auth.php';
 
 if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_in'] !== true) {
     header('Location: login.php');
@@ -13,16 +14,7 @@ if ($superAdminId <= 0) {
     exit;
 }
 
-$stmt = $pdo->prepare("
-    SELECT username, force_password_change, ui_theme
-    FROM users
-    WHERE user_id = ?
-      AND user_type = 'Super Admin'
-      AND deleted_at IS NULL
-    LIMIT 1
-");
-$stmt->execute([$superAdminId]);
-$superAdmin = $stmt->fetch(PDO::FETCH_ASSOC);
+$superAdmin = sa_load_super_admin_state($pdo, $superAdminId);
 
 if (!$superAdmin) {
     session_unset();
@@ -31,15 +23,17 @@ if (!$superAdmin) {
     exit;
 }
 
-$_SESSION['super_admin_force_password_change'] = (bool) ($superAdmin['force_password_change'] ?? false);
+sa_sync_super_admin_session_from_state($superAdmin);
 
 if (!$_SESSION['super_admin_force_password_change']) {
-    header('Location: super_admin.php');
+    $destination = !empty($_SESSION['super_admin_onboarding_required'])
+        ? 'onboarding_profile.php'
+        : 'super_admin.php';
+    header('Location: ' . $destination);
     exit;
 }
 
-$uiTheme = (($superAdmin['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
-$_SESSION['ui_theme'] = $uiTheme;
+$uiTheme = sa_super_admin_theme($superAdmin);
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -54,10 +48,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Password must be at least 8 characters.';
     } else {
         $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-        $updateStmt = $pdo->prepare('UPDATE users SET password_hash = ?, force_password_change = 0 WHERE user_id = ?');
+        $profileComplete = sa_super_admin_profile_is_complete($superAdmin);
+        $nextStatus = $profileComplete ? 'Active' : 'Inactive';
+        $updateStmt = $pdo->prepare('UPDATE users SET password_hash = ?, force_password_change = 0, status = ? WHERE user_id = ?');
 
-        if ($updateStmt->execute([$hashedPassword, $superAdminId])) {
+        if ($updateStmt->execute([$hashedPassword, $nextStatus, $superAdminId])) {
             $_SESSION['super_admin_force_password_change'] = false;
+            $_SESSION['super_admin_onboarding_required'] = !$profileComplete;
 
             $logStmt = $pdo->prepare("
                 INSERT INTO audit_logs (user_id, action_type, entity_type, description)
@@ -65,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $logStmt->execute([$superAdminId, 'Super admin completed forced password reset']);
 
-            header('Location: super_admin.php');
+            header('Location: ' . ($profileComplete ? 'super_admin.php' : 'onboarding_profile.php'));
             exit;
         }
 
@@ -214,6 +211,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <p>
             Welcome, <?php echo htmlspecialchars((string) ($superAdmin['username'] ?? 'Super Admin'), ENT_QUOTES, 'UTF-8'); ?>.
             Before accessing the super admin dashboard, you need to replace your temporary password with a new one.
+            <?php if (!sa_super_admin_profile_is_complete($superAdmin)): ?>
+            Your profile details will be completed right after this step.
+            <?php endif; ?>
         </p>
 
         <?php if ($error !== ''): ?>

@@ -1264,46 +1264,74 @@ CREATE TABLE IF NOT EXISTS tenant_feature_toggles (
 -- ============================================================
 -- PURPOSE: Tenant-managed public website content and selected layout template.
 --   Used by onboarding setup_website.php, website_editor.php, and site.php.
--- 📝 TEMP NOTE (2026-03-20): Template 2 and Template 3 remain in schema but are
---   temporarily disabled in admin/setup UI and backend selection. Application
---   currently forces new selections to template1 until other templates are released.
+--   All page content is stored in a single website_data JSON column.
+--   The builder (website_editor.php) reads/writes this JSON via AJAX.
+--   The public site (site.php) decodes website_data and renders the template.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS tenant_website_content (
     tenant_id VARCHAR(50) PRIMARY KEY,
-    layout_template ENUM('template1', 'template2', 'template3') DEFAULT 'template1',
+    
+    -- Flexible template string (allows adding templates via code without altering DB)
+    layout_template VARCHAR(50) DEFAULT 'template1.php',
 
-    -- Hero Section
-    hero_title VARCHAR(255),
-    hero_subtitle VARCHAR(255),
-    hero_description TEXT,
-    hero_cta_text VARCHAR(100) DEFAULT 'Learn More',
-    hero_cta_url VARCHAR(255) DEFAULT '#about',
-    hero_image_path VARCHAR(500),
-
-    -- About Section
-    about_heading VARCHAR(255) DEFAULT 'About Us',
-    about_body TEXT,
-    about_image_path VARCHAR(500),
-
-    -- Services Section
-    services_heading VARCHAR(255) DEFAULT 'Our Services',
-    services_json LONGTEXT COMMENT 'JSON array of service cards',
-
-    -- Contact/Footer Section
-    contact_address TEXT,
-    contact_phone VARCHAR(100),
-    contact_email VARCHAR(255),
-    contact_hours VARCHAR(255),
-
-    -- Advanced Website Options
-    custom_css LONGTEXT,
-    meta_description VARCHAR(255),
+    -- The JSON Bucket for all page content
+    website_data JSON NULL COMMENT 'Stores hero, about, services, toggles, and arrays',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
 );
+
+-- ─── website_data JSON SHAPE REFERENCE ───
+-- {
+--   "company_name": "string",
+--   "short_name": "string (optional brand acronym)",
+--
+--   "primary_color": "#hex",
+--   "border_color": "#hex",
+--   "border_radius": "0-40 (px)",
+--   "shadow_intensity": "0-0.3 (float)",
+--
+--   "text_heading_color": "#hex",
+--   "text_body_color": "#hex",
+--   "btn_bg_color": "#hex",
+--   "btn_text_color": "#hex",
+--
+--   "hero_title": "string",
+--   "hero_subtitle": "string",
+--   "hero_badge_text": "string",
+--   "hero_image": "url or relative path",
+--
+--   "about_body": "string",
+--   "download_description": "string",
+--   "footer_desc": "string",
+--
+--   "contact_address": "string",
+--   "contact_phone": "string",
+--   "contact_email": "string",
+--   "contact_hours": "string",
+--
+--   "show_services": true/false,
+--   "show_calculator": true/false,
+--   "show_stats": true/false,
+--   "show_about": true/false,
+--   "show_download": true/false,
+--
+--   "services": [
+--     { "icon": "material_icon_name", "title": "string", "description": "string" }
+--   ],
+--
+--   "section_styles": {
+--     "sec_hero": { "bg": "#hex", "gradient": bool, "grad_color2": "#hex", "grad_dir": "135deg|to right|circle" },
+--     "sec_services": { ... },
+--     "sec_stats": { ... },
+--     "sec_calc": { ... },
+--     "sec_about": { ... },
+--     "sec_download": { ... }
+--   }
+-- }
+-- ─── END JSON SHAPE ───
 
 
 -- ************************************************************
