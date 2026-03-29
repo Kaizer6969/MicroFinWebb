@@ -35,9 +35,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const loanPreviewRoot = document.querySelector('[data-loan-preview]');
     const loanPreviewAmountInput = document.getElementById('loan-preview-amount');
     const loanPreviewTermInput = document.getElementById('loan-preview-term');
+    const loanProductTypeSelect = document.getElementById('loan-product-type-select');
+    const loanCustomProductTypeWrap = document.getElementById('loan-custom-product-type-wrap');
+    const loanCustomProductTypeInput = document.getElementById('loan-custom-product-type');
     const viewsContainer = document.querySelector('.views-container');
     const receiptPeriodSelect = document.getElementById('receipt-period');
     const receiptPeriodFields = Array.from(document.querySelectorAll('[data-receipt-period-field]'));
+    const creditLimitRulesForm = document.getElementById('credit-limit-rules-form');
+    const creditLimitRulesSeed = document.getElementById('credit-limit-rules-seed');
+    const creditLimitRulesPayload = document.getElementById('credit-limit-rules-payload');
+    const creditLimitRulesContainer = document.getElementById('credit-category-rules');
+    const creditLimitRulesAddButton = document.getElementById('credit-add-category-rule');
+    const creditWorkflowInputs = Array.from(document.querySelectorAll('input[name="credit_approval_mode"]'));
+    const creditBaseLimitInput = document.getElementById('credit-base-limit');
+    const creditMinCompletedLoansInput = document.getElementById('credit-min-completed-loans');
+    const creditMaxLatePaymentsInput = document.getElementById('credit-max-late-payments');
+    const creditIncreaseTypeInput = document.getElementById('credit-increase-type');
+    const creditIncreaseValueInput = document.getElementById('credit-increase-value');
+    const creditAbsoluteMaxLimitInput = document.getElementById('credit-absolute-max-limit');
+    const creditSummaryWorkflow = document.getElementById('credit-summary-workflow');
+    const creditSummaryBaseLimit = document.getElementById('credit-summary-base-limit');
+    const creditSummaryUpgrade = document.getElementById('credit-summary-upgrade');
+    const creditSummaryIncrease = document.getElementById('credit-summary-increase');
+    const creditSummaryInitialLogic = document.getElementById('credit-summary-initial-logic');
+    const creditSummaryCategories = document.getElementById('credit-summary-categories');
+    const creditPreviewCategoryInput = document.getElementById('credit-preview-category');
+    const creditPreviewIncomeInput = document.getElementById('credit-preview-income');
+    const creditPreviewIncomeDisplay = document.getElementById('credit-preview-income-display');
+    const creditPreviewLimitOutput = document.getElementById('credit-preview-limit-output');
+    const creditPreviewLimitNote = document.getElementById('credit-preview-limit-note');
+    const creditPreviewLimitFill = document.getElementById('credit-preview-limit-fill');
 
     const sectionDefaults = {
         staff: 'staff-list',
@@ -274,6 +301,482 @@ document.addEventListener('DOMContentLoaded', () => {
     if (receiptPeriodSelect) {
         syncReceiptPeriodFields();
         receiptPeriodSelect.addEventListener('change', syncReceiptPeriodFields);
+    }
+
+    const CREDIT_STANDARD_CATEGORIES = [
+        'Student',
+        'Government Employee',
+        'Private Employee',
+        'Self-Employed',
+        'Business Owner',
+        'Freelancer',
+        'OFW',
+        'Farmer',
+        'Driver',
+        'Vendor',
+        'Senior Citizen',
+        'Unemployed',
+    ];
+    const CREDIT_WORKFLOW_LABELS = {
+        auto: 'Fully Automatic',
+        semi: 'Semi-Automatic',
+        manual: 'Fully Manual',
+    };
+
+    function formatPeso(value) {
+        const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
+        return `PHP ${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function parseCreditLimitRulesSeed() {
+        if (!creditLimitRulesSeed) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(creditLimitRulesSeed.textContent || '{}');
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function getCreditCategoryLabel(row) {
+        const select = row.querySelector('[data-credit-category-select]');
+        const custom = row.querySelector('[data-credit-category-custom]');
+        if (!select) {
+            return '';
+        }
+
+        if (select.value.trim() === '') {
+            return '';
+        }
+
+        if (select.value === 'Others') {
+            return custom ? custom.value.trim() : '';
+        }
+
+        return select.value.trim();
+    }
+
+    function updateCreditWorkflowSelection() {
+        creditWorkflowInputs.forEach((input) => {
+            const option = input.closest('.credit-workflow-option');
+            if (option) {
+                option.classList.toggle('is-active', input.checked);
+            }
+        });
+    }
+
+    function updateCreditCategoryPreview(row) {
+        const preview = row.querySelector('[data-credit-category-preview]');
+        const typeSelect = row.querySelector('[data-credit-category-type]');
+        const valueInput = row.querySelector('[data-credit-category-value]');
+        const customWrap = row.querySelector('[data-credit-category-custom-wrap]');
+        const customInput = row.querySelector('[data-credit-category-custom]');
+        const label = getCreditCategoryLabel(row);
+        const numericValue = Number.parseFloat(valueInput?.value || '0') || 0;
+
+        if (customWrap && customInput) {
+            const isCustom = row.querySelector('[data-credit-category-select]')?.value === 'Others';
+            customWrap.classList.toggle('is-visible', isCustom);
+            customInput.disabled = false;
+            if (!isCustom) {
+                customInput.value = '';
+            }
+        }
+
+        if (!preview || !typeSelect) {
+            return;
+        }
+
+        if (label === '') {
+            preview.textContent = 'Select a borrower category to preview this rule.';
+            return;
+        }
+
+        if (typeSelect.value === 'fixed') {
+            preview.textContent = `${label} starts at ${formatPeso(numericValue)}.`;
+            return;
+        }
+
+        preview.textContent = `${label} starts at ${numericValue.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% of monthly income.`;
+    }
+
+    function collectCreditLimitRulesState() {
+        const approvalMode = creditWorkflowInputs.find((input) => input.checked)?.value || 'semi';
+        const baseLimit = Number.parseFloat(creditBaseLimitInput?.value || '0') || 0;
+        const minCompletedLoans = Number.parseInt(creditMinCompletedLoansInput?.value || '0', 10) || 0;
+        const maxLatePayments = Number.parseInt(creditMaxLatePaymentsInput?.value || '0', 10) || 0;
+        const increaseType = creditIncreaseTypeInput?.value || 'percentage';
+        const increaseValue = Number.parseFloat(creditIncreaseValueInput?.value || '0') || 0;
+        const absoluteMaxLimit = Number.parseFloat(creditAbsoluteMaxLimitInput?.value || '0') || 0;
+        const customCategories = [];
+
+        if (creditLimitRulesContainer) {
+            creditLimitRulesContainer.querySelectorAll('.credit-category-row').forEach((row) => {
+                const typeSelect = row.querySelector('[data-credit-category-type]');
+                const valueInput = row.querySelector('[data-credit-category-value]');
+                const categoryName = getCreditCategoryLabel(row);
+                const value = Number.parseFloat(valueInput?.value || '0') || 0;
+
+                if (!categoryName || !typeSelect) {
+                    return;
+                }
+
+                customCategories.push({
+                    category_name: categoryName,
+                    limit_type: typeSelect.value || 'fixed',
+                    value,
+                });
+            });
+        }
+
+        return {
+            workflow: { approval_mode: approvalMode },
+            initial_limits: {
+                base_limit_default: baseLimit,
+                custom_categories: customCategories,
+            },
+            upgrade_eligibility: {
+                min_completed_loans: minCompletedLoans,
+                max_allowed_late_payments: maxLatePayments,
+            },
+            increase_rules: {
+                increase_type: increaseType,
+                increase_value: increaseValue,
+                absolute_max_limit: absoluteMaxLimit,
+            },
+        };
+    }
+
+    function renderCreditInitialLimitLogic(state) {
+        if (!creditSummaryInitialLogic) {
+            return;
+        }
+
+        const baseLimit = state.initial_limits.base_limit_default;
+        const defaultCard = `
+            <div class="credit-initial-logic-card is-default">
+                <div class="credit-initial-logic-top">
+                    <strong>Standard borrower</strong>
+                    <span>Base limit</span>
+                </div>
+                <div class="credit-initial-logic-amount">${escapeHtml(formatPeso(baseLimit))}</div>
+                <p>Every borrower starts from this standard limit unless a category override applies.</p>
+            </div>
+        `;
+
+        if (state.initial_limits.custom_categories.length === 0) {
+            creditSummaryInitialLogic.innerHTML = `${defaultCard}
+                <div class="credit-initial-logic-card">
+                    <div class="credit-initial-logic-top">
+                        <strong>No category overrides yet</strong>
+                        <span>Uses base limit</span>
+                    </div>
+                    <p>All borrowers will use the standard starting limit until you add an initial-limit rule.</p>
+                </div>`;
+            return;
+        }
+
+        const categoryCards = state.initial_limits.custom_categories.map((rule) => {
+            let amountLabel = '';
+            let note = '';
+            let badge = 'Custom rule';
+
+            if (rule.limit_type === 'fixed') {
+                amountLabel = formatPeso(rule.value);
+                note = 'Uses a fixed starting limit for this borrower category.';
+                badge = 'Fixed amount';
+            } else {
+                amountLabel = `${rule.value.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% of income`;
+                note = 'Starting limit depends on the borrower\'s monthly income.';
+                badge = 'Income percent';
+            }
+
+            return `
+                <div class="credit-initial-logic-card">
+                    <div class="credit-initial-logic-top">
+                        <strong>${escapeHtml(rule.category_name)}</strong>
+                        <span>${escapeHtml(badge)}</span>
+                    </div>
+                    <div class="credit-initial-logic-amount">${escapeHtml(amountLabel)}</div>
+                    <p>${escapeHtml(note)}</p>
+                </div>
+            `;
+        }).join('');
+
+        creditSummaryInitialLogic.innerHTML = defaultCard + categoryCards;
+    }
+
+    function refreshCreditLimitCalculator(state) {
+        if (!creditPreviewCategoryInput || !creditPreviewIncomeInput || !creditPreviewLimitOutput || !creditPreviewLimitNote) {
+            return;
+        }
+
+        const currentValue = creditPreviewCategoryInput.value || '';
+        const hasCustomRules = state.initial_limits.custom_categories.length > 0;
+        const categoryOptions = [hasCustomRules
+            ? '<option value="">Select a category rule</option>'
+            : '<option value="">No category rules yet</option>']
+            .concat(state.initial_limits.custom_categories.map((rule) => `<option value="${escapeHtml(rule.category_name)}">${escapeHtml(rule.category_name)}</option>`));
+        creditPreviewCategoryInput.innerHTML = categoryOptions.join('');
+        creditPreviewCategoryInput.disabled = !hasCustomRules;
+
+        const nextValue = state.initial_limits.custom_categories.some((rule) => rule.category_name === currentValue)
+            ? currentValue
+            : '';
+        creditPreviewCategoryInput.value = nextValue;
+
+        const income = Number.parseFloat(creditPreviewIncomeInput.value || '0') || 0;
+        const selectedRule = state.initial_limits.custom_categories.find((rule) => rule.category_name === creditPreviewCategoryInput.value);
+        const usesIncome = Boolean(selectedRule && selectedRule.limit_type === 'income_percent');
+
+        let amount = state.initial_limits.base_limit_default;
+        let note = hasCustomRules
+            ? 'Showing the standard starting limit. Select a category rule to preview its override.'
+            : 'No category rule yet. Showing the standard starting limit.';
+
+        if (selectedRule) {
+            if (selectedRule.limit_type === 'fixed') {
+                amount = selectedRule.value;
+                note = `${selectedRule.category_name} uses a fixed starting limit. The income slider only affects income-based rules.`;
+            } else {
+                amount = income * (selectedRule.value / 100);
+                note = `${selectedRule.category_name} starts at ${selectedRule.value}% of the borrower's monthly income.`;
+            }
+        }
+
+        const maxLimit = Math.max(state.increase_rules.absolute_max_limit, amount, state.initial_limits.base_limit_default, 1);
+        const fillWidth = Math.max(6, Math.min(100, (amount / maxLimit) * 100));
+
+        if (creditPreviewIncomeDisplay) {
+            creditPreviewIncomeDisplay.textContent = formatPeso(income);
+        }
+        creditPreviewIncomeInput.disabled = !usesIncome;
+        creditPreviewLimitOutput.textContent = formatPeso(amount);
+        creditPreviewLimitNote.textContent = note;
+        if (creditPreviewLimitFill) {
+            creditPreviewLimitFill.style.width = `${fillWidth}%`;
+        }
+    }
+
+    function refreshCreditLimitSummary() {
+        if (!creditLimitRulesForm) {
+            return;
+        }
+
+        updateCreditWorkflowSelection();
+
+        if (creditLimitRulesContainer) {
+            creditLimitRulesContainer.querySelectorAll('.credit-category-row').forEach((row) => {
+                updateCreditCategoryPreview(row);
+            });
+        }
+
+        const state = collectCreditLimitRulesState();
+        const increaseValueLabel = state.increase_rules.increase_type === 'percentage'
+            ? `${state.increase_rules.increase_value.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}%`
+            : formatPeso(state.increase_rules.increase_value);
+
+        if (creditSummaryWorkflow) {
+            creditSummaryWorkflow.textContent = CREDIT_WORKFLOW_LABELS[state.workflow.approval_mode] || 'Semi-Automatic';
+        }
+        if (creditSummaryBaseLimit) {
+            creditSummaryBaseLimit.textContent = formatPeso(state.initial_limits.base_limit_default);
+        }
+        if (creditSummaryUpgrade) {
+            creditSummaryUpgrade.textContent = `${state.upgrade_eligibility.min_completed_loans} completed loans, ${state.upgrade_eligibility.max_allowed_late_payments} late payments max`;
+        }
+        if (creditSummaryIncrease) {
+            creditSummaryIncrease.textContent = `${increaseValueLabel} up to ${formatPeso(state.increase_rules.absolute_max_limit)}`;
+        }
+        renderCreditInitialLimitLogic(state);
+        refreshCreditLimitCalculator(state);
+        if (creditSummaryCategories) {
+            if (state.initial_limits.custom_categories.length === 0) {
+                creditSummaryCategories.innerHTML = '<div class=\"credit-summary-empty\">No category-specific limit rules yet.</div>';
+            } else {
+                creditSummaryCategories.innerHTML = state.initial_limits.custom_categories.map((rule) => {
+                    let description = '';
+                    if (rule.limit_type === 'fixed') {
+                        description = `Starts at ${formatPeso(rule.value)}.`;
+                    } else {
+                        description = `Starts at ${rule.value.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% of monthly income.`;
+                    }
+                    return `<div class="credit-summary-category"><b>${escapeHtml(rule.category_name)}</b><br>${escapeHtml(description)}</div>`;
+                }).join('');
+            }
+        }
+        if (creditLimitRulesPayload) {
+            creditLimitRulesPayload.value = JSON.stringify(state);
+        }
+    }
+
+    function syncCreditCategoryRuleState() {
+        if (!creditLimitRulesContainer) {
+            return;
+        }
+
+        const rows = Array.from(creditLimitRulesContainer.querySelectorAll('.credit-category-row'));
+
+        if (creditLimitRulesAddButton) {
+            creditLimitRulesAddButton.style.display = rows.length === 0 ? 'none' : '';
+        }
+
+        if (rows.length > 0) {
+            const emptyRow = creditLimitRulesContainer.querySelector('.credit-category-empty-row');
+            if (emptyRow) {
+                emptyRow.remove();
+            }
+            return;
+        }
+
+        creditLimitRulesContainer.innerHTML = `
+            <div class="credit-category-empty-row">
+                <div>
+                    <strong>No initial limit rules yet</strong>
+                    <p>Add your first category rule to define a custom starting limit.</p>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline" data-credit-category-empty-add>
+                    <span class="material-symbols-rounded">add</span>
+                    Add Rule
+                </button>
+            </div>
+        `;
+
+        const emptyAddButton = creditLimitRulesContainer.querySelector('[data-credit-category-empty-add]');
+        if (emptyAddButton) {
+            emptyAddButton.addEventListener('click', () => {
+                buildCreditCategoryRow({});
+                refreshCreditLimitSummary();
+            });
+        }
+    }
+
+    function buildCreditCategoryRow(rule = {}) {
+        if (!creditLimitRulesContainer) {
+            return null;
+        }
+
+        const savedName = typeof rule.category_name === 'string' ? rule.category_name.trim() : '';
+        const isCustomCategory = savedName !== '' && !CREDIT_STANDARD_CATEGORIES.includes(savedName);
+        const selectedCategory = isCustomCategory ? 'Others' : (savedName !== '' ? savedName : '');
+        const limitType = typeof rule.limit_type === 'string' ? rule.limit_type : 'fixed';
+        const value = Number.isFinite(Number(rule.value)) ? Number(rule.value) : 0;
+
+        const emptyRow = creditLimitRulesContainer.querySelector('.credit-category-empty-row');
+        if (emptyRow) {
+            emptyRow.remove();
+        }
+
+        const row = document.createElement('div');
+        row.className = 'credit-category-row';
+        row.innerHTML = `
+            <div class="credit-category-row-grid">
+                <div>
+                    <label class="form-label">Borrower Category</label>
+                    <select class="form-control" name="credit_category_select[]" data-credit-category-select>
+                        <option value="" ${selectedCategory === '' ? 'selected' : ''}>Select category</option>
+                        ${CREDIT_STANDARD_CATEGORIES.map((category) => `<option value="${category}" ${selectedCategory === category ? 'selected' : ''}>${category}</option>`).join('')}
+                        <option value="Others" ${selectedCategory === 'Others' ? 'selected' : ''}>Others</option>
+                    </select>
+                    <div class="credit-category-custom-wrap ${selectedCategory === 'Others' ? 'is-visible' : ''}" data-credit-category-custom-wrap>
+                        <input type="text" class="form-control" name="credit_category_custom[]" data-credit-category-custom placeholder="Custom category name" value="${isCustomCategory ? escapeHtml(savedName) : ''}">
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Rule Type</label>
+                    <select class="form-control" name="credit_category_type[]" data-credit-category-type>
+                        <option value="fixed" ${limitType === 'fixed' ? 'selected' : ''}>Fixed amount</option>
+                        <option value="income_percent" ${limitType === 'income_percent' ? 'selected' : ''}>Income percent</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Value</label>
+                    <input type="number" class="form-control" name="credit_category_value[]" data-credit-category-value min="0" step="0.01" value="${value}">
+                </div>
+                <div style="display:flex; align-items:flex-end; height:100%;">
+                    <button type="button" class="credit-category-remove" data-credit-category-remove title="Remove rule">
+                        <span class="material-symbols-rounded">delete</span>
+                    </button>
+                </div>
+            </div>
+            <div class="credit-category-preview" data-credit-category-preview></div>
+        `;
+
+        const watchedInputs = row.querySelectorAll('select, input');
+        watchedInputs.forEach((input) => {
+            input.addEventListener('input', refreshCreditLimitSummary);
+            input.addEventListener('change', refreshCreditLimitSummary);
+        });
+
+        const removeButton = row.querySelector('[data-credit-category-remove]');
+        if (removeButton) {
+            removeButton.addEventListener('click', () => {
+                row.remove();
+                syncCreditCategoryRuleState();
+                refreshCreditLimitSummary();
+            });
+        }
+
+        creditLimitRulesContainer.appendChild(row);
+        syncCreditCategoryRuleState();
+        updateCreditCategoryPreview(row);
+
+        return row;
+    }
+
+    if (creditLimitRulesForm && creditLimitRulesContainer) {
+        const seed = parseCreditLimitRulesSeed();
+        const seededCategories = Array.isArray(seed?.initial_limits?.custom_categories) ? seed.initial_limits.custom_categories : [];
+
+        if (seededCategories.length > 0) {
+            seededCategories.forEach((rule) => buildCreditCategoryRow(rule));
+        }
+        syncCreditCategoryRuleState();
+
+        [
+            creditBaseLimitInput,
+            creditMinCompletedLoansInput,
+            creditMaxLatePaymentsInput,
+            creditIncreaseTypeInput,
+            creditIncreaseValueInput,
+            creditAbsoluteMaxLimitInput,
+            ...creditWorkflowInputs,
+        ].filter(Boolean).forEach((input) => {
+            input.addEventListener('input', refreshCreditLimitSummary);
+            input.addEventListener('change', refreshCreditLimitSummary);
+        });
+
+        if (creditLimitRulesAddButton) {
+            creditLimitRulesAddButton.addEventListener('click', () => {
+                buildCreditCategoryRow({});
+                refreshCreditLimitSummary();
+            });
+        }
+
+        [
+            creditPreviewCategoryInput,
+            creditPreviewIncomeInput,
+        ].filter(Boolean).forEach((input) => {
+            input.addEventListener('input', refreshCreditLimitSummary);
+            input.addEventListener('change', refreshCreditLimitSummary);
+        });
+
+        creditLimitRulesForm.addEventListener('submit', () => {
+            refreshCreditLimitSummary();
+        });
+
+        refreshCreditLimitSummary();
     }
 
     if (setupAlert && setupAlertToggle) {
@@ -634,7 +1137,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const productName = getField('product_name')?.value.trim() || 'Personal Cash Loan';
-        const productType = getField('product_type')?.value || 'Personal Loan';
+        const selectedProductType = getField('product_type')?.value || 'Personal Loan';
+        const customProductType = getField('custom_product_type')?.value.trim() || 'Custom Loan';
+        const productType = selectedProductType === 'Others' ? customProductType : selectedProductType;
         const description = getField('description')?.value.trim() || 'Borrowers will see a short description explaining what this loan is best for.';
 
         const minAmount = Math.max(0, normalizeLoanPreviewNumber(getField('min_amount')?.value, 0));
@@ -728,6 +1233,20 @@ document.addEventListener('DOMContentLoaded', () => {
         setPreviewText('insurance-fee-value', formatLoanPreviewCurrency(insuranceFeeValue));
         setPreviewText('service-charge-value', formatLoanPreviewCurrency(serviceCharge));
         setPreviewText('doc-stamp-value', formatLoanPreviewCurrency(documentaryStamp));
+    }
+
+    function syncLoanProductTypeField() {
+        if (!loanProductTypeSelect || !loanCustomProductTypeWrap || !loanCustomProductTypeInput) {
+            return;
+        }
+
+        const isCustomType = loanProductTypeSelect.value === 'Others';
+        loanCustomProductTypeWrap.classList.toggle('hidden-input', !isCustomType);
+        loanCustomProductTypeInput.required = isCustomType;
+
+        if (!isCustomType) {
+            loanCustomProductTypeInput.value = '';
+        }
     }
 
     function extractPaletteFromLogo() {
@@ -904,13 +1423,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (loanProductsForm && loanPreviewRoot) {
         const loanPreviewFields = Array.from(loanProductsForm.querySelectorAll(
-            '[name="product_name"], [name="product_type"], [name="description"], [name="min_amount"], [name="max_amount"], [name="interest_rate"], [name="interest_type"], [name="min_term_months"], [name="max_term_months"], [name="processing_fee_percentage"], [name="service_charge"], [name="documentary_stamp"], [name="insurance_fee_percentage"], [name="penalty_rate"], [name="penalty_type"], [name="grace_period_days"]'
+            '[name="product_name"], [name="product_type"], [name="custom_product_type"], [name="description"], [name="min_amount"], [name="max_amount"], [name="interest_rate"], [name="interest_type"], [name="min_term_months"], [name="max_term_months"], [name="processing_fee_percentage"], [name="service_charge"], [name="documentary_stamp"], [name="insurance_fee_percentage"], [name="penalty_rate"], [name="penalty_type"], [name="grace_period_days"]'
         ));
 
         loanPreviewFields.forEach((field) => {
             field.addEventListener('input', updateLoanProductsPreview);
             field.addEventListener('change', updateLoanProductsPreview);
         });
+
+        if (loanProductTypeSelect) {
+            loanProductTypeSelect.addEventListener('change', () => {
+                syncLoanProductTypeField();
+                updateLoanProductsPreview();
+            });
+        }
 
         [loanPreviewAmountInput, loanPreviewTermInput].forEach((field) => {
             if (!field) {
@@ -920,6 +1446,7 @@ document.addEventListener('DOMContentLoaded', () => {
             field.addEventListener('change', updateLoanProductsPreview);
         });
 
+        syncLoanProductTypeField();
         updateLoanProductsPreview();
     }
 

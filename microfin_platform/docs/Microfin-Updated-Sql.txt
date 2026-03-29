@@ -1035,3 +1035,32 @@ echo "Modified columns successfully. Error: " . $conn->error . "\n";
 
 
 mysql -u root -e "USE microfin_db; ALTER TABLE payments MODIFY COLUMN received_by INT NULL DEFAULT NULL;"
+
+SET SQL_SAFE_UPDATES = 0;
+
+-- Disable foreign key checks
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- Drop the table if it exists
+DROP TABLE IF EXISTS tenant_website_content;
+
+-- Recreate the table
+CREATE TABLE tenant_website_content (
+    tenant_id VARCHAR(50) PRIMARY KEY,
+    layout_template VARCHAR(50),
+    website_data LONGTEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_tenant_website_content_tenant
+        FOREIGN KEY (tenant_id)
+        REFERENCES tenants(tenant_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+-- Re-enable foreign key checks
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- Re-enable safe updates
+SET SQL_SAFE_UPDATES = 1;

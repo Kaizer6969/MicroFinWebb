@@ -924,13 +924,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 // POST Handler — Save Loan Products
 // ==========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_loan_products') {
-    $product_stmt = $pdo->prepare('SELECT * FROM loan_products WHERE tenant_id = ? LIMIT 1');
-    $product_stmt->execute([$tenant_id]);
-    $existing_product = $product_stmt->fetch(PDO::FETCH_ASSOC);
+    $loan_product_type_options = ['Personal Loan', 'Business Loan', 'Emergency Loan'];
+    $target_product_id = (int)($_POST['loan_product_id'] ?? 0);
+    $existing_product = null;
+    if ($target_product_id > 0) {
+        $product_stmt = $pdo->prepare('SELECT * FROM loan_products WHERE tenant_id = ? AND product_id = ? LIMIT 1');
+        $product_stmt->execute([$tenant_id, $target_product_id]);
+        $existing_product = $product_stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
 
     $form = [
         'product_name' => trim($_POST['product_name'] ?? ''),
         'product_type' => trim($_POST['product_type'] ?? 'Personal Loan'),
+        'custom_product_type' => trim($_POST['custom_product_type'] ?? ''),
         'description' => trim($_POST['description'] ?? ''),
         'min_amount' => trim($_POST['min_amount'] ?? '5000'),
         'max_amount' => trim($_POST['max_amount'] ?? '100000'),
@@ -946,11 +952,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'penalty_type' => trim($_POST['penalty_type'] ?? 'Daily'),
         'grace_period_days' => trim($_POST['grace_period_days'] ?? '3'),
     ];
+    $resolved_product_type = $form['product_type'] === 'Others' ? $form['custom_product_type'] : $form['product_type'];
 
     if ($form['product_name'] === '') {
         $_SESSION['admin_error'] = 'Product name is required.';
-    } elseif (!in_array($form['product_type'], ['Personal Loan', 'Business Loan', 'Emergency Loan'], true)) {
+    } elseif (!in_array($form['product_type'], array_merge($loan_product_type_options, ['Others']), true)) {
         $_SESSION['admin_error'] = 'Invalid product type.';
+    } elseif ($form['product_type'] === 'Others' && $form['custom_product_type'] === '') {
+        $_SESSION['admin_error'] = 'Please provide a custom product type name.';
     } elseif (!in_array($form['interest_type'], ['Fixed', 'Diminishing', 'Flat'], true)) {
         $_SESSION['admin_error'] = 'Invalid interest type.';
     } elseif (!in_array($form['penalty_type'], ['Daily', 'Monthly', 'Flat'], true)) {
@@ -966,10 +975,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     } elseif ((float)$form['interest_rate'] < 0 || (float)$form['interest_rate'] > 100) {
         $_SESSION['admin_error'] = 'Interest rate must be between 0 and 100.';
     } else {
+        $original_product_type = trim((string)($existing_product['product_type'] ?? ''));
+        $is_changing_product_type = !$existing_product || strcasecmp($original_product_type, $resolved_product_type) !== 0;
+
+        if ($is_changing_product_type) {
+            $duplicate_type_stmt = $pdo->prepare('SELECT product_id FROM loan_products WHERE tenant_id = ? AND product_type = ? AND (? = 0 OR product_id <> ?) LIMIT 1');
+            $duplicate_type_stmt->execute([$tenant_id, $resolved_product_type, $target_product_id, $target_product_id]);
+            $duplicate_type_exists = $duplicate_type_stmt->fetchColumn();
+
+            if ($duplicate_type_exists) {
+                $_SESSION['admin_error'] = 'This product type is already being used in your workspace. Please choose another one.';
+            }
+        }
+    }
+
+    if (!isset($_SESSION['admin_error'])) {
         if ($existing_product) {
             $stmt = $pdo->prepare('UPDATE loan_products SET product_name=?, product_type=?, description=?, min_amount=?, max_amount=?, interest_rate=?, interest_type=?, min_term_months=?, max_term_months=?, processing_fee_percentage=?, service_charge=?, documentary_stamp=?, insurance_fee_percentage=?, penalty_rate=?, penalty_type=?, grace_period_days=? WHERE tenant_id=? AND product_id=?');
             $stmt->execute([
-                $form['product_name'], $form['product_type'], $form['description'],
+                $form['product_name'], $resolved_product_type, $form['description'],
                 (float)$form['min_amount'], (float)$form['max_amount'], (float)$form['interest_rate'],
                 $form['interest_type'], (int)$form['min_term_months'], (int)$form['max_term_months'],
                 (float)$form['processing_fee_percentage'], (float)$form['service_charge'], (float)$form['documentary_stamp'],
@@ -979,7 +1003,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         } else {
             $stmt = $pdo->prepare('INSERT INTO loan_products (tenant_id, product_name, product_type, description, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage, service_charge, documentary_stamp, insurance_fee_percentage, penalty_rate, penalty_type, grace_period_days, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)');
             $stmt->execute([
-                $tenant_id, $form['product_name'], $form['product_type'], $form['description'],
+                $tenant_id, $form['product_name'], $resolved_product_type, $form['description'],
                 (float)$form['min_amount'], (float)$form['max_amount'], (float)$form['interest_rate'],
                 $form['interest_type'], (int)$form['min_term_months'], (int)$form['max_term_months'],
                 (float)$form['processing_fee_percentage'], (float)$form['service_charge'], (float)$form['documentary_stamp'],
@@ -992,9 +1016,172 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
         
         $_SESSION['admin_flash'] = "Loan product settings saved successfully.";
+        unset($_SESSION['loan_products_form']);
+    } else {
+        $_SESSION['loan_products_form'] = $form;
     }
-    header('Location: admin.php?tab=loan_products');
+    $redirect_product_id = $existing_product['product_id'] ?? (int)$pdo->lastInsertId();
+    $redirect_url = 'admin.php?tab=loan_products';
+    if ($redirect_product_id > 0) {
+        $redirect_url .= '&loan_product_id=' . $redirect_product_id;
+    } elseif ($target_product_id === 0) {
+        $redirect_url .= '&loan_product_mode=new';
+    }
+    header('Location: ' . $redirect_url);
     exit;
+}
+
+function credit_limit_rule_defaults(): array
+{
+    return [
+        'workflow' => [
+            'approval_mode' => 'semi',
+        ],
+        'initial_limits' => [
+            'base_limit_default' => 5000,
+            'custom_categories' => [],
+        ],
+        'upgrade_eligibility' => [
+            'min_completed_loans' => 2,
+            'max_allowed_late_payments' => 0,
+        ],
+        'increase_rules' => [
+            'increase_type' => 'percentage',
+            'increase_value' => 20,
+            'absolute_max_limit' => 50000,
+        ],
+    ];
+}
+
+function normalize_credit_limit_rules($payload): array
+{
+    $defaults = credit_limit_rule_defaults();
+    $rules = is_array($payload) ? array_replace_recursive($defaults, $payload) : $defaults;
+
+    $approval_mode = (string)($rules['workflow']['approval_mode'] ?? $defaults['workflow']['approval_mode']);
+    if (!in_array($approval_mode, ['auto', 'semi', 'manual'], true)) {
+        $approval_mode = $defaults['workflow']['approval_mode'];
+    }
+
+    $base_limit_default = max(0, (float)($rules['initial_limits']['base_limit_default'] ?? $defaults['initial_limits']['base_limit_default']));
+    $base_limit_default = round($base_limit_default, 2);
+
+    $custom_categories = [];
+    if (!empty($rules['initial_limits']['custom_categories']) && is_array($rules['initial_limits']['custom_categories'])) {
+        foreach ($rules['initial_limits']['custom_categories'] as $categoryRule) {
+            if (!is_array($categoryRule)) {
+                continue;
+            }
+
+            $category_name = trim((string)($categoryRule['category_name'] ?? ''));
+            $limit_type = (string)($categoryRule['limit_type'] ?? 'fixed');
+            $value = round(max(0, (float)($categoryRule['value'] ?? 0)), 2);
+
+            if ($category_name === '') {
+                continue;
+            }
+            if ($limit_type === 'multiplier') {
+                $value = round($base_limit_default * $value, 2);
+                $limit_type = 'fixed';
+            }
+            if (!in_array($limit_type, ['fixed', 'income_percent'], true)) {
+                $limit_type = 'fixed';
+            }
+
+            $custom_categories[] = [
+                'category_name' => substr($category_name, 0, 80),
+                'limit_type' => $limit_type,
+                'value' => $value,
+            ];
+        }
+    }
+
+    $min_completed_loans = max(0, (int)($rules['upgrade_eligibility']['min_completed_loans'] ?? $defaults['upgrade_eligibility']['min_completed_loans']));
+    $max_allowed_late_payments = max(0, (int)($rules['upgrade_eligibility']['max_allowed_late_payments'] ?? $defaults['upgrade_eligibility']['max_allowed_late_payments']));
+
+    $increase_type = (string)($rules['increase_rules']['increase_type'] ?? $defaults['increase_rules']['increase_type']);
+    if (!in_array($increase_type, ['percentage', 'fixed'], true)) {
+        $increase_type = $defaults['increase_rules']['increase_type'];
+    }
+
+    $increase_value = round(max(0, (float)($rules['increase_rules']['increase_value'] ?? $defaults['increase_rules']['increase_value'])), 2);
+    $absolute_max_limit = round(max(0, (float)($rules['increase_rules']['absolute_max_limit'] ?? $defaults['increase_rules']['absolute_max_limit'])), 2);
+
+    return [
+        'workflow' => [
+            'approval_mode' => $approval_mode,
+        ],
+        'initial_limits' => [
+            'base_limit_default' => $base_limit_default,
+            'custom_categories' => $custom_categories,
+        ],
+        'upgrade_eligibility' => [
+            'min_completed_loans' => $min_completed_loans,
+            'max_allowed_late_payments' => $max_allowed_late_payments,
+        ],
+        'increase_rules' => [
+            'increase_type' => $increase_type,
+            'increase_value' => $increase_value,
+            'absolute_max_limit' => $absolute_max_limit,
+        ],
+    ];
+}
+
+function build_credit_limit_rules_from_post(array $source): array
+{
+    $defaults = credit_limit_rule_defaults();
+
+    $rules = [
+        'workflow' => [
+            'approval_mode' => (string)($source['credit_approval_mode'] ?? $defaults['workflow']['approval_mode']),
+        ],
+        'initial_limits' => [
+            'base_limit_default' => (float)($source['credit_base_limit'] ?? $defaults['initial_limits']['base_limit_default']),
+            'custom_categories' => [],
+        ],
+        'upgrade_eligibility' => [
+            'min_completed_loans' => (int)($source['credit_min_completed_loans'] ?? $defaults['upgrade_eligibility']['min_completed_loans']),
+            'max_allowed_late_payments' => (int)($source['credit_max_late_payments'] ?? $defaults['upgrade_eligibility']['max_allowed_late_payments']),
+        ],
+        'increase_rules' => [
+            'increase_type' => (string)($source['credit_increase_type'] ?? $defaults['increase_rules']['increase_type']),
+            'increase_value' => (float)($source['credit_increase_value'] ?? $defaults['increase_rules']['increase_value']),
+            'absolute_max_limit' => (float)($source['credit_absolute_max_limit'] ?? $defaults['increase_rules']['absolute_max_limit']),
+        ],
+    ];
+
+    $selectedCategories = isset($source['credit_category_select']) && is_array($source['credit_category_select'])
+        ? $source['credit_category_select']
+        : [];
+    $customCategories = isset($source['credit_category_custom']) && is_array($source['credit_category_custom'])
+        ? $source['credit_category_custom']
+        : [];
+    $limitTypes = isset($source['credit_category_type']) && is_array($source['credit_category_type'])
+        ? $source['credit_category_type']
+        : [];
+    $limitValues = isset($source['credit_category_value']) && is_array($source['credit_category_value'])
+        ? $source['credit_category_value']
+        : [];
+
+    $rowCount = max(count($selectedCategories), count($customCategories), count($limitTypes), count($limitValues));
+    for ($index = 0; $index < $rowCount; $index++) {
+        $selectedCategory = trim((string)($selectedCategories[$index] ?? ''));
+        $categoryName = $selectedCategory === 'Others'
+            ? trim((string)($customCategories[$index] ?? ''))
+            : $selectedCategory;
+
+        if ($categoryName === '') {
+            continue;
+        }
+
+        $rules['initial_limits']['custom_categories'][] = [
+            'category_name' => $categoryName,
+            'limit_type' => (string)($limitTypes[$index] ?? 'fixed'),
+            'value' => (float)($limitValues[$index] ?? 0),
+        ];
+    }
+
+    return $rules;
 }
 
 // ==========================================
@@ -1047,6 +1234,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         $_SESSION['admin_flash'] = "Credit assessment settings saved successfully.";
     }
+    header('Location: admin.php?tab=credit_settings');
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_credit_limit_rules') {
+    $normalized_rules = normalize_credit_limit_rules(build_credit_limit_rules_from_post($_POST));
+    $encoded_rules = json_encode($normalized_rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    if ($encoded_rules === false) {
+        $_SESSION['admin_error'] = 'Unable to save credit limit rules right now.';
+    } else {
+        $upsert = $pdo->prepare(
+            'INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) '
+            . 'VALUES (?, ?, ?, ?, ?) '
+            . 'ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP'
+        );
+        $upsert->execute([$tenant_id, 'credit_limit_rules', $encoded_rules, 'Credit', 'JSON']);
+
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'CREDIT_LIMIT_RULES_UPDATED', 'system_settings', 'Credit limit rule settings updated', ?)");
+        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
+
+        $_SESSION['admin_flash'] = 'Credit limit rules saved successfully.';
+    }
+
     header('Location: admin.php?tab=credit_settings');
     exit;
 }
@@ -1645,13 +1856,35 @@ foreach ($toggles_stmt->fetchAll() as $row) {
 }
 
 // ── Loan Products Data ──
-$product_stmt = $pdo->prepare('SELECT * FROM loan_products WHERE tenant_id = ? LIMIT 1');
-$product_stmt->execute([$tenant_id]);
-$existing_product = $product_stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$loan_products_stmt = $pdo->prepare('SELECT * FROM loan_products WHERE tenant_id = ? ORDER BY is_active DESC, updated_at DESC, product_id DESC');
+$loan_products_stmt->execute([$tenant_id]);
+$loan_product_records = $loan_products_stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+$selected_loan_product_id = (int)($_GET['loan_product_id'] ?? 0);
+$existing_product = [];
+if ($selected_loan_product_id > 0) {
+    foreach ($loan_product_records as $loan_product_record) {
+        if ((int)($loan_product_record['product_id'] ?? 0) === $selected_loan_product_id) {
+            $existing_product = $loan_product_record;
+            break;
+        }
+    }
+}
+if (empty($existing_product) && !empty($loan_product_records)) {
+    $existing_product = $loan_product_records[0];
+    $selected_loan_product_id = (int)($existing_product['product_id'] ?? 0);
+}
+$loan_products_mode = (string)($_GET['loan_product_mode'] ?? '');
+if ($loan_products_mode === 'new') {
+    $existing_product = [];
+    $selected_loan_product_id = 0;
+}
+$loan_products_active_panel = (($_GET['loan_products_panel'] ?? '') === 'existing-loan-products') ? 'existing-loan-products' : 'loan-products-configure';
+$loan_product_type_options = ['Personal Loan', 'Business Loan', 'Emergency Loan'];
 
 $lp_form = [
     'product_name' => $existing_product['product_name'] ?? '',
     'product_type' => $existing_product['product_type'] ?? 'Personal Loan',
+    'custom_product_type' => '',
     'description' => $existing_product['description'] ?? '',
     'min_amount' => $existing_product['min_amount'] ?? '5000',
     'max_amount' => $existing_product['max_amount'] ?? '100000',
@@ -1667,10 +1900,22 @@ $lp_form = [
     'penalty_type' => $existing_product['penalty_type'] ?? 'Daily',
     'grace_period_days' => $existing_product['grace_period_days'] ?? '3',
 ];
+$loan_products_session_form = $_SESSION['loan_products_form'] ?? null;
+unset($_SESSION['loan_products_form']);
+if (is_array($loan_products_session_form)) {
+    $lp_form = array_merge($lp_form, $loan_products_session_form);
+}
+$lp_form_product_type = trim((string)($lp_form['product_type'] ?? ''));
+if ($lp_form_product_type !== '' && !in_array($lp_form_product_type, $loan_product_type_options, true) && $lp_form_product_type !== 'Others') {
+    $lp_form['custom_product_type'] = $lp_form_product_type;
+    $lp_form['product_type'] = 'Others';
+} elseif (($lp_form['product_type'] ?? '') !== 'Others') {
+    $lp_form['custom_product_type'] = trim((string)($lp_form['custom_product_type'] ?? ''));
+}
 
 // ── Credit Settings Data ──
-$cs_settings_stmt = $pdo->prepare('SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND setting_category = ?');
-$cs_settings_stmt->execute([$tenant_id, 'Credit']);
+$cs_settings_stmt = $pdo->prepare('SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND (setting_category = ? OR setting_key = ?)');
+$cs_settings_stmt->execute([$tenant_id, 'Credit', 'credit_limit_rules']);
 $cs_rows = $cs_settings_stmt->fetchAll(PDO::FETCH_ASSOC);
 $cs_stored = [];
 foreach ($cs_rows as $row) {
@@ -1687,6 +1932,21 @@ $cs_form = [
     'require_ci' => $cs_stored['require_credit_investigation'] ?? '0',
     'auto_reject_below' => $cs_stored['auto_reject_below_score'] ?? '30',
 ];
+$credit_weight_total = (int)$cs_form['income_weight']
+    + (int)$cs_form['employment_weight']
+    + (int)$cs_form['credit_history_weight']
+    + (int)$cs_form['collateral_weight']
+    + (int)$cs_form['character_weight']
+    + (int)$cs_form['business_weight'];
+$credit_limit_rules = credit_limit_rule_defaults();
+if (!empty($cs_stored['credit_limit_rules'])) {
+    $decoded_credit_limit_rules = json_decode((string)$cs_stored['credit_limit_rules'], true);
+    if (is_array($decoded_credit_limit_rules)) {
+        $credit_limit_rules = normalize_credit_limit_rules($decoded_credit_limit_rules);
+    }
+}
+$credit_limit_rules_json = json_encode($credit_limit_rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+$credit_limit_rules_json = $credit_limit_rules_json === false ? '{}' : $credit_limit_rules_json;
 
 // ── Website Editor Data ──
 $ws_stmt = $pdo->prepare('SELECT * FROM tenant_website_content WHERE tenant_id = ?');
@@ -3182,7 +3442,8 @@ function hexToRgb($hex) {
                         </div>
                     <?php endif; ?>
                 </section>
-
+
+
                 <?php endif; ?>
 
                 <!-- Staff & Roles View -->
@@ -3513,14 +3774,34 @@ function hexToRgb($hex) {
                 <section id="loan_products" class="view-section <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>">
                     <div class="section-intro">
                         <h2>Loan Products</h2>
-                        <p class="text-muted">Configure the loan products, rates, terms, and fees your team offers to borrowers.</p>
+                        <p class="text-muted">Configure the loan products, rates, terms, and borrower-facing offer details your team publishes.</p>
                     </div>
                     <div class="card">
-                        <h3><span class="material-symbols-rounded">inventory_2</span> Loan Product Configuration</h3>
-                        <p class="text-muted">Fill out the details, interest rates, and related charges for your loan products.</p>
-                        
-                        <form method="POST" action="admin.php">
+                        <div class="loan-products-builder-header">
+                            <div>
+                                <h3><span class="material-symbols-rounded">inventory_2</span> Loan Product Builder</h3>
+                                <p class="text-muted">Shape the offer, pricing, terms, and charges in one place while the borrower preview updates live beside you.</p>
+                            </div>
+                            <div class="loan-builder-tip">
+                                <span class="material-symbols-rounded">visibility</span>
+                                <?php echo !empty($existing_product) ? 'Previewing your saved product while you edit' : 'Start with a draft and watch the borrower preview update'; ?>
+                            </div>
+                            <a href="admin.php?tab=loan_products&loan_product_mode=new" class="btn btn-outline loan-products-new-btn">
+                                <span class="material-symbols-rounded" style="font-size:18px;">add</span> New Product
+                            </a>
+                        </div>
+
+                        <div class="tabs loan-products-tabs">
+                            <a href="admin.php?tab=loan_products" class="tab-btn <?php echo $loan_products_active_panel === 'loan-products-configure' ? 'active' : ''; ?>" data-tab="loan-products-configure">Configure Product</a>
+                            <a href="admin.php?tab=loan_products" class="tab-btn <?php echo $loan_products_active_panel === 'existing-loan-products' ? 'active' : ''; ?>" data-tab="existing-loan-products">Existing Loan Products</a>
+                        </div>
+
+                        <div id="loan-products-configure" class="tab-content <?php echo $loan_products_active_panel === 'loan-products-configure' ? 'active' : ''; ?>">
+                        <div class="loan-products-builder-layout">
+                            <div class="loan-products-form-column">
+                                <form method="POST" action="admin.php" id="loan-products-form" class="loan-form-stack">
                             <input type="hidden" name="action" value="save_loan_products">
+                            <input type="hidden" name="loan_product_id" value="<?php echo (int)($existing_product['product_id'] ?? 0); ?>">
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
                                 <div class="form-group">
                                     <label>Product Name <span style="color:#dc2626;">*</span></label>
@@ -3528,11 +3809,26 @@ function hexToRgb($hex) {
                                 </div>
                                 <div class="form-group">
                                     <label>Product Type <span style="color:#dc2626;">*</span></label>
-                                    <select class="form-control" name="product_type">
-                                        <option value="Personal Loan" <?php echo $lp_form['product_type'] === 'Personal Loan' ? 'selected' : ''; ?>>Personal Loan</option>
-                                        <option value="Business Loan" <?php echo $lp_form['product_type'] === 'Business Loan' ? 'selected' : ''; ?>>Business Loan</option>
-                                        <option value="Emergency Loan" <?php echo $lp_form['product_type'] === 'Emergency Loan' ? 'selected' : ''; ?>>Emergency Loan</option>
+                                    <select class="form-control" name="product_type" id="loan-product-type-select">
+                                        <?php foreach ($loan_product_type_options as $loan_product_type_option): ?>
+                                            <option value="<?php echo htmlspecialchars($loan_product_type_option); ?>" <?php echo $lp_form['product_type'] === $loan_product_type_option ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($loan_product_type_option); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                        <option value="Others" <?php echo $lp_form['product_type'] === 'Others' ? 'selected' : ''; ?>>Others</option>
                                     </select>
+                                </div>
+                                <div class="form-group <?php echo $lp_form['product_type'] === 'Others' ? '' : 'hidden-input'; ?>" id="loan-custom-product-type-wrap">
+                                    <label>Custom Product Type <span style="color:#dc2626;">*</span></label>
+                                    <input
+                                        type="text"
+                                        class="form-control"
+                                        name="custom_product_type"
+                                        id="loan-custom-product-type"
+                                        value="<?php echo htmlspecialchars((string)($lp_form['custom_product_type'] ?? '')); ?>"
+                                        placeholder="e.g. Salary Loan"
+                                        <?php echo $lp_form['product_type'] === 'Others' ? 'required' : ''; ?>
+                                    >
                                 </div>
                                 <div class="form-group" style="grid-column: 1 / -1;">
                                     <label>Description</label>
@@ -3614,98 +3910,399 @@ function hexToRgb($hex) {
                             
                             <div class="action-bar" style="margin-top: 24px;">
                                 <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
-                                    <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Configuration
+                                    <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Loan Product
                                 </button>
                             </div>
                         </form>
+                            </div>
+
+                            <aside class="loan-live-preview" data-loan-preview>
+                                <div class="loan-live-preview-header">
+                                    <span class="loan-live-preview-label"><span class="material-symbols-rounded">visibility</span>Live Borrower Preview</span>
+                                    <h4>Borrower-facing offer snapshot</h4>
+                                    <p>As you adjust the product configuration, this preview estimates what a borrower will understand about the offer.</p>
+                                </div>
+
+                                <div class="loan-borrower-preview-shell">
+                                    <div class="loan-borrower-preview-topbar">
+                                        <span>Mobile application card</span>
+                                        <span class="loan-borrower-preview-status">Ready to apply</span>
+                                    </div>
+                                    <div class="loan-borrower-preview-card">
+                                        <div class="loan-borrower-preview-type" data-loan-preview-bind="product-type">Personal Loan</div>
+                                        <h5 data-loan-preview-bind="product-name">Personal Cash Loan</h5>
+                                        <p data-loan-preview-bind="description">Borrowers will see a short description explaining what this loan is best for.</p>
+                                        <div class="loan-borrower-preview-chips">
+                                            <span class="loan-preview-chip loan-preview-chip-primary" data-loan-preview-bind="interest-chip">3.00% Diminishing</span>
+                                            <span class="loan-preview-chip" data-loan-preview-bind="grace-chip">3 days grace period</span>
+                                            <span class="loan-preview-chip" data-loan-preview-bind="penalty">0.50% daily</span>
+                                        </div>
+                                        <div class="loan-borrower-preview-stats">
+                                            <div class="loan-borrower-preview-stat">
+                                                <span>Maximum amount</span>
+                                                <strong data-loan-preview-bind="max-amount">₱100,000.00</strong>
+                                            </div>
+                                            <div class="loan-borrower-preview-stat">
+                                                <span>Term range</span>
+                                                <strong data-loan-preview-bind="term-range">3-24 months</strong>
+                                            </div>
+                                            <div class="loan-borrower-preview-stat">
+                                                <span>Est. cash release</span>
+                                                <strong data-loan-preview-bind="cash-release">₱0.00</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="loan-preview-simulator">
+                                        <div class="loan-preview-control">
+                                            <div class="loan-preview-control-head">
+                                                <strong>Sample loan amount</strong>
+                                                <span data-loan-preview-bind="selected-amount">₱0.00</span>
+                                            </div>
+                                            <input type="range" id="loan-preview-amount" class="loan-preview-range" min="0" max="0" step="100">
+                                            <div class="loan-preview-range-meta">
+                                                <span data-loan-preview-bind="min-amount">₱0.00</span>
+                                                <span data-loan-preview-bind="max-amount-range">₱0.00</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="loan-preview-control">
+                                            <div class="loan-preview-control-head">
+                                                <strong>Sample term</strong>
+                                                <span data-loan-preview-bind="selected-term">0 months</span>
+                                            </div>
+                                            <input type="range" id="loan-preview-term" class="loan-preview-range" min="1" max="1" step="1">
+                                            <div class="loan-preview-range-meta">
+                                                <span data-loan-preview-bind="min-term">1 mo</span>
+                                                <span data-loan-preview-bind="max-term">1 mo</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="loan-preview-summary-card">
+                                            <div class="loan-preview-summary-row">
+                                                <span>Estimated installment</span>
+                                                <strong data-loan-preview-bind="estimated-installment">₱0.00</strong>
+                                            </div>
+                                            <div class="loan-preview-summary-row">
+                                                <span>Total repayment</span>
+                                                <strong data-loan-preview-bind="total-repayment">₱0.00</strong>
+                                            </div>
+                                            <div class="loan-preview-summary-row">
+                                                <span>Total upfront charges</span>
+                                                <strong data-loan-preview-bind="charges-total">₱0.00</strong>
+                                            </div>
+                                            <div class="loan-preview-summary-row">
+                                                <span>Estimated cash release</span>
+                                                <strong data-loan-preview-bind="cash-release">₱0.00</strong>
+                                            </div>
+                                        </div>
+
+                                        <div class="loan-preview-fees-grid">
+                                            <div class="loan-preview-fee-card">
+                                                <span>Processing fee</span>
+                                                <strong data-loan-preview-bind="processing-fee-value">₱0.00</strong>
+                                            </div>
+                                            <div class="loan-preview-fee-card">
+                                                <span>Insurance fee</span>
+                                                <strong data-loan-preview-bind="insurance-fee-value">₱0.00</strong>
+                                            </div>
+                                            <div class="loan-preview-fee-card">
+                                                <span>Service charge</span>
+                                                <strong data-loan-preview-bind="service-charge-value">₱0.00</strong>
+                                            </div>
+                                            <div class="loan-preview-fee-card">
+                                                <span>Documentary stamp</span>
+                                                <strong data-loan-preview-bind="doc-stamp-value">₱0.00</strong>
+                                            </div>
+                                        </div>
+
+                                        <p class="loan-preview-footnote">This preview is an estimate for the borrower experience only. The final repayment and approval still follow your saved product rules.</p>
+                                    </div>
+                                </div>
+                            </aside>
+                        </div>
+                        </div>
+
+                        <div id="existing-loan-products" class="tab-content <?php echo $loan_products_active_panel === 'existing-loan-products' ? 'active' : ''; ?>">
+                            <?php if (empty($loan_product_records)): ?>
+                                <div class="credit-summary-empty" style="margin-top: 8px;">No loan products saved yet. Create your first product in the builder tab.</div>
+                            <?php else: ?>
+                                <div class="loan-products-existing-grid">
+                                    <?php foreach ($loan_product_records as $loan_product_record): ?>
+                                        <?php
+                                        $loan_record_id = (int)($loan_product_record['product_id'] ?? 0);
+                                        $loan_record_active = (int)($loan_product_record['is_active'] ?? 1) === 1;
+                                        ?>
+                                        <article class="loan-product-record-card <?php echo $loan_record_id === $selected_loan_product_id ? 'is-active' : ''; ?>">
+                                            <div class="loan-product-record-head">
+                                                <div>
+                                                    <div class="loan-product-record-type"><?php echo htmlspecialchars((string)($loan_product_record['product_type'] ?? 'Loan Product')); ?></div>
+                                                    <h4><?php echo htmlspecialchars((string)($loan_product_record['product_name'] ?? 'Untitled product')); ?></h4>
+                                                </div>
+                                                <span class="loan-product-record-badge <?php echo $loan_record_active ? 'is-active' : 'is-inactive'; ?>">
+                                                    <?php echo $loan_record_active ? 'Active' : 'Inactive'; ?>
+                                                </span>
+                                            </div>
+                                            <p class="loan-product-record-desc"><?php echo htmlspecialchars(trim((string)($loan_product_record['description'] ?? '')) !== '' ? (string)$loan_product_record['description'] : 'No product description added yet.'); ?></p>
+                                            <div class="loan-product-record-metrics">
+                                                <div class="loan-product-record-metric">
+                                                    <span>Amount range</span>
+                                                    <strong>PHP <?php echo number_format((float)($loan_product_record['min_amount'] ?? 0), 2); ?> to PHP <?php echo number_format((float)($loan_product_record['max_amount'] ?? 0), 2); ?></strong>
+                                                </div>
+                                                <div class="loan-product-record-metric">
+                                                    <span>Interest</span>
+                                                    <strong><?php echo number_format((float)($loan_product_record['interest_rate'] ?? 0), 2); ?>% <?php echo htmlspecialchars((string)($loan_product_record['interest_type'] ?? '')); ?></strong>
+                                                </div>
+                                                <div class="loan-product-record-metric">
+                                                    <span>Term</span>
+                                                    <strong><?php echo (int)($loan_product_record['min_term_months'] ?? 0); ?> to <?php echo (int)($loan_product_record['max_term_months'] ?? 0); ?> months</strong>
+                                                </div>
+                                                <div class="loan-product-record-metric">
+                                                    <span>Charges</span>
+                                                    <strong><?php echo number_format((float)($loan_product_record['processing_fee_percentage'] ?? 0), 2); ?>% processing</strong>
+                                                </div>
+                                            </div>
+                                            <div class="loan-product-record-meta">
+                                                <span>Penalty: <?php echo number_format((float)($loan_product_record['penalty_rate'] ?? 0), 2); ?>% <?php echo htmlspecialchars((string)($loan_product_record['penalty_type'] ?? '')); ?></span>
+                                                <span>Grace: <?php echo (int)($loan_product_record['grace_period_days'] ?? 0); ?> day(s)</span>
+                                            </div>
+                                            <div class="loan-product-record-actions">
+                                                <a href="admin.php?tab=loan_products&loan_product_id=<?php echo $loan_record_id; ?>" class="btn btn-outline" style="display:inline-flex; align-items:center; gap:8px; text-decoration:none;">
+                                                    <span class="material-symbols-rounded" style="font-size:18px;">edit</span> Edit Product
+                                                </a>
+                                            </div>
+                                        </article>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </section>
 
                 <!-- ═══ CREDIT SETTINGS ═══ -->
                 <section id="credit_settings" class="view-section <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>">
-                    <div class="section-intro">
-                        <h2>Credit Assessment</h2>
-                        <p class="text-muted">Fine-tune the automated risk scoring rules your team uses during borrower review.</p>
-                    </div>
-                    <div class="card">
-                        <form method="POST" action="admin.php">
-                            <input type="hidden" name="action" value="save_credit_settings">
-                            
-                            <h4 style="margin-bottom: 16px; font-weight: 600;"><span class="material-symbols-rounded" style="vertical-align: middle; margin-right: 4px; font-size: 18px;">rule</span> Scoring Thresholds</h4>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
-                                <div class="form-group" style="margin-bottom:0;">
-                                    <label>Minimum Credit Score to Approve</label>
-                                    <input type="number" class="form-control" name="minimum_credit_score" value="<?php echo htmlspecialchars($cs_form['minimum_credit_score']); ?>" min="0" max="100" required>
+                    <div class="credit-settings-stack">
+                        <div class="card credit-limit-engine-card credit-limit-workspace">
+                            <div class="credit-engine-header">
+                                <div>
+                                    <h3>Credit Limit Engine</h3>
+                                    <p class="text-muted">Configure how your workspace sets default borrower limits, upgrade eligibility, and growth rules in one cleaner workspace.</p>
                                 </div>
-                                <div class="form-group" style="margin-bottom:0;">
-                                    <label>Auto-Reject Applications Below Score</label>
-                                    <input type="number" class="form-control" name="auto_reject_below" value="<?php echo htmlspecialchars($cs_form['auto_reject_below']); ?>" min="0" max="100" required>
-                                </div>
-                                <div class="form-group" style="margin-bottom:0;">
-                                    <label>Mandatory Credit Investigation (CI)</label>
-                                    <select class="form-control" name="require_ci">
-                                        <option value="1" <?php echo $cs_form['require_ci'] === '1' ? 'selected' : ''; ?>>Always Required (System & Field)</option>
-                                        <option value="0" <?php echo $cs_form['require_ci'] === '0' ? 'selected' : ''; ?>>Optional / System AI Scored</option>
-                                    </select>
-                                </div>
+                                <span class="badge badge-blue">Saved in system settings</span>
                             </div>
-                            
-                            <h4 style="margin-bottom: 16px; font-weight: 600;"><span class="material-symbols-rounded" style="vertical-align: middle; margin-right: 4px; font-size: 18px;">pie_chart</span> Algorithm Weights</h4>
-                            <p class="text-muted" style="margin-bottom: 16px;">Set the influence percentage each factor has on the final score. Must equal 100%.</p>
-                            
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px;">
-                                <div class="form-group">
-                                    <label>Income / Capacity (%)</label>
-                                    <input type="number" class="form-control weight-input" name="income_weight" value="<?php echo htmlspecialchars($cs_form['income_weight']); ?>" min="0" max="100" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Employment / Stability (%)</label>
-                                    <input type="number" class="form-control weight-input" name="employment_weight" value="<?php echo htmlspecialchars($cs_form['employment_weight']); ?>" min="0" max="100" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Credit History (%)</label>
-                                    <input type="number" class="form-control weight-input" name="credit_history_weight" value="<?php echo htmlspecialchars($cs_form['credit_history_weight']); ?>" min="0" max="100" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Collateral (%)</label>
-                                    <input type="number" class="form-control weight-input" name="collateral_weight" value="<?php echo htmlspecialchars($cs_form['collateral_weight']); ?>" min="0" max="100" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Character Reference (%)</label>
-                                    <input type="number" class="form-control weight-input" name="character_weight" value="<?php echo htmlspecialchars($cs_form['character_weight']); ?>" min="0" max="100" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Business Risk (%)</label>
-                                    <input type="number" class="form-control weight-input" name="business_weight" value="<?php echo htmlspecialchars($cs_form['business_weight']); ?>" min="0" max="100" required>
-                                </div>
-                            </div>
-                            
-                            <div style="background: rgba(var(--primary-rgb), 0.05); padding: 16px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-color); margin-bottom: 24px;">
-                                <span style="font-weight: 500;">Total Weight:</span>
-                                <span style="font-size: 1.2rem; font-weight: 800; color: var(--primary-color);" id="total-weight-display">100%</span>
-                            </div>
-                            
-                            <script>
-                                document.addEventListener('DOMContentLoaded', function() {
-                                    const weights = document.querySelectorAll('.weight-input');
-                                    const display = document.getElementById('total-weight-display');
-                                    function update() {
-                                        let total = 0;
-                                        weights.forEach(w => total += (parseInt(w.value) || 0));
-                                        display.textContent = total + '%';
-                                        display.style.color = (total === 100) ? 'var(--primary-color)' : '#dc2626';
-                                    }
-                                    weights.forEach(w => w.addEventListener('input', update));
-                                    update();
-                                });
-                            </script>
 
-                            <div class="action-bar" style="margin-top: 24px;">
-                                <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
-                                    <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Configuration
-                                </button>
-                            </div>
-                        </form>
+                            <form method="POST" action="admin.php" id="credit-limit-rules-form">
+                                <input type="hidden" name="action" value="save_credit_limit_rules">
+                                <input type="hidden" name="credit_limit_rules_payload" id="credit-limit-rules-payload" value="<?php echo htmlspecialchars((string)$credit_limit_rules_json, ENT_QUOTES, 'UTF-8'); ?>">
+                                <script type="application/json" id="credit-limit-rules-seed"><?php echo htmlspecialchars((string)$credit_limit_rules_json, ENT_NOQUOTES, 'UTF-8'); ?></script>
+
+                                <div class="credit-limit-layout">
+                                    <div class="credit-limit-main">
+                                        <div class="tabs credit-builder-tabs">
+                                            <a href="admin.php?tab=credit_settings" class="tab-btn active" data-tab="credit-limit-policy">Policy Rules</a>
+                                            <a href="admin.php?tab=credit_settings" class="tab-btn" data-tab="credit-limit-initial">Initial Limits</a>
+                                        </div>
+
+                                        <div id="credit-limit-policy" class="tab-content active">
+                                            <div class="credit-engine-grid">
+                                                <div class="credit-engine-panel">
+                                                    <div class="credit-engine-panel-head">
+                                                        <div>
+                                                            <h4>Approval Workflow</h4>
+                                                            <p class="text-muted">Choose how much control the system keeps when assigning or approving a client credit limit.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-workflow-grid">
+                                                        <label class="credit-workflow-option <?php echo ($credit_limit_rules['workflow']['approval_mode'] ?? 'semi') === 'auto' ? 'is-active' : ''; ?>">
+                                                            <input type="radio" name="credit_approval_mode" value="auto" <?php echo ($credit_limit_rules['workflow']['approval_mode'] ?? 'semi') === 'auto' ? 'checked' : ''; ?>>
+                                                            <span class="credit-workflow-title">Fully Automatic</span>
+                                                            <span class="credit-workflow-desc">The platform approves and assigns the suggested limit without manual review.</span>
+                                                        </label>
+                                                        <label class="credit-workflow-option <?php echo ($credit_limit_rules['workflow']['approval_mode'] ?? 'semi') === 'semi' ? 'is-active' : ''; ?>">
+                                                            <input type="radio" name="credit_approval_mode" value="semi" <?php echo ($credit_limit_rules['workflow']['approval_mode'] ?? 'semi') === 'semi' ? 'checked' : ''; ?>>
+                                                            <span class="credit-workflow-title">Semi-Automatic</span>
+                                                            <span class="credit-workflow-desc">The system recommends the limit, but staff still confirms the approval.</span>
+                                                        </label>
+                                                        <label class="credit-workflow-option <?php echo ($credit_limit_rules['workflow']['approval_mode'] ?? 'semi') === 'manual' ? 'is-active' : ''; ?>">
+                                                            <input type="radio" name="credit_approval_mode" value="manual" <?php echo ($credit_limit_rules['workflow']['approval_mode'] ?? 'semi') === 'manual' ? 'checked' : ''; ?>>
+                                                            <span class="credit-workflow-title">Fully Manual</span>
+                                                            <span class="credit-workflow-desc">The team decides the final limit from scratch for every borrower.</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <div class="credit-engine-panel">
+                                                    <div class="credit-engine-panel-head">
+                                                        <div>
+                                                            <h4>Upgrade Eligibility</h4>
+                                                            <p class="text-muted">Set the minimum borrower track record needed before a limit increase is allowed.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-engine-inline-grid">
+                                                        <div class="form-group" style="margin-bottom: 0;">
+                                                            <label for="credit-min-completed-loans">Minimum Completed Loans</label>
+                                                            <input type="number" class="form-control" id="credit-min-completed-loans" name="credit_min_completed_loans" min="0" step="1" value="<?php echo htmlspecialchars((string)($credit_limit_rules['upgrade_eligibility']['min_completed_loans'] ?? 2)); ?>">
+                                                        </div>
+                                                        <div class="form-group" style="margin-bottom: 0;">
+                                                            <label for="credit-max-late-payments">Maximum Late Payments Allowed</label>
+                                                            <input type="number" class="form-control" id="credit-max-late-payments" name="credit_max_late_payments" min="0" step="1" value="<?php echo htmlspecialchars((string)($credit_limit_rules['upgrade_eligibility']['max_allowed_late_payments'] ?? 0)); ?>">
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="credit-engine-panel credit-engine-panel-span-2">
+                                                    <div class="credit-engine-panel-head">
+                                                        <div>
+                                                            <h4>Increase Rules</h4>
+                                                            <p class="text-muted">Choose whether successful borrowers grow by a percentage or a fixed amount, with a hard ceiling.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
+                                                        <div class="form-group" style="margin-bottom: 0;">
+                                                            <label for="credit-increase-type">Increase Type</label>
+                                                            <select class="form-control" id="credit-increase-type" name="credit_increase_type">
+                                                                <option value="percentage" <?php echo ($credit_limit_rules['increase_rules']['increase_type'] ?? 'percentage') === 'percentage' ? 'selected' : ''; ?>>Percentage (%)</option>
+                                                                <option value="fixed" <?php echo ($credit_limit_rules['increase_rules']['increase_type'] ?? 'percentage') === 'fixed' ? 'selected' : ''; ?>>Fixed Amount</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="form-group" style="margin-bottom: 0;">
+                                                            <label for="credit-increase-value">Increase Value</label>
+                                                            <input type="number" class="form-control" id="credit-increase-value" name="credit_increase_value" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_limit_rules['increase_rules']['increase_value'] ?? 20)); ?>">
+                                                        </div>
+                                                        <div class="form-group" style="margin-bottom: 0;">
+                                                            <label for="credit-absolute-max-limit">Absolute Maximum Limit</label>
+                                                            <div class="credit-input-with-prefix">
+                                                                <span class="credit-input-prefix">&#8369;</span>
+                                                                <input type="number" class="form-control" id="credit-absolute-max-limit" name="credit_absolute_max_limit" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_limit_rules['increase_rules']['absolute_max_limit'] ?? 50000)); ?>">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div id="credit-limit-initial" class="tab-content">
+                                            <div class="credit-engine-panel credit-engine-panel-wide">
+                                                <div class="credit-engine-panel-head">
+                                                    <div>
+                                                        <h4>Initial Limits</h4>
+                                                        <p class="text-muted">Define the standard starting limit and add custom category rules for borrower groups that need a different starting point.</p>
+                                                    </div>
+                                                    <button type="button" class="btn btn-sm btn-outline" id="credit-add-category-rule">
+                                                        <span class="material-symbols-rounded">add</span>
+                                                        Add Rule
+                                                    </button>
+                                                </div>
+                                                <div class="credit-engine-inline-grid">
+                                                    <div class="form-group" style="margin-bottom: 0;">
+                                                        <label for="credit-base-limit">Minimum Starting Limit</label>
+                                                        <div class="credit-input-with-prefix">
+                                                            <span class="credit-input-prefix">&#8369;</span>
+                                                            <input type="number" class="form-control" id="credit-base-limit" name="credit_base_limit" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_limit_rules['initial_limits']['base_limit_default'] ?? 5000)); ?>">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div id="credit-category-rules" class="credit-category-rules"></div>
+
+                                                <div class="credit-preview-calculator-card credit-preview-calculator-card-inline">
+                                                    <div class="credit-engine-panel-head">
+                                                        <div>
+                                                            <h4>Sample Borrower Calculator</h4>
+                                                            <p class="text-muted">Choose a borrower category, slide the income amount, and see the estimated starting limit instantly.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-calculator-grid">
+                                                        <div class="form-group" style="margin-bottom: 0;">
+                                                            <label for="credit-preview-category">Borrower Category</label>
+                                                            <select class="form-control" id="credit-preview-category">
+                                                                <option value="__default__">Standard borrower</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-calculator-slider-wrap">
+                                                        <div class="credit-calculator-slider-head">
+                                                            <strong>Monthly Income</strong>
+                                                            <span id="credit-preview-income-display">PHP 25,000.00</span>
+                                                        </div>
+                                                        <input type="range" class="credit-calculator-range" id="credit-preview-income" min="5000" max="150000" step="1000" value="25000">
+                                                        <div class="credit-calculator-range-meta">
+                                                            <span>PHP 5,000</span>
+                                                            <span>PHP 150,000</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-calculator-output">
+                                                        <span>Estimated starting limit</span>
+                                                        <strong id="credit-preview-limit-output">&#8369;5,000.00</strong>
+                                                        <div class="credit-calculator-meter">
+                                                            <span id="credit-preview-limit-fill" class="credit-calculator-meter-fill"></span>
+                                                        </div>
+                                                        <p id="credit-preview-limit-note">Uses the standard starting limit.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="action-bar" style="margin-top: 24px;">
+                                            <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+                                                <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Credit Limit Rules
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <aside class="credit-limit-preview-pane">
+                                        <div class="credit-engine-summary-card credit-limit-preview-card">
+                                            <div class="credit-engine-summary-card-head">
+                                                <div>
+                                                    <h4>Live Preview</h4>
+                                                    <p class="text-muted">A smaller summary of the current rules while you edit the engine.</p>
+                                                </div>
+                                            </div>
+
+                                            <div class="credit-preview-stack">
+                                                <div class="credit-engine-summary credit-engine-summary-compact">
+                                                    <div class="credit-engine-summary-item">
+                                                        <span>Workflow</span>
+                                                        <strong id="credit-summary-workflow">Semi-Automatic</strong>
+                                                    </div>
+                                                    <div class="credit-engine-summary-item">
+                                                        <span>Starting Limit</span>
+                                                        <strong id="credit-summary-base-limit">&#8369;5,000.00</strong>
+                                                    </div>
+                                                    <div class="credit-engine-summary-item">
+                                                        <span>Upgrade Rule</span>
+                                                        <strong id="credit-summary-upgrade">2 completed loans, 0 late payments</strong>
+                                                    </div>
+                                                    <div class="credit-engine-summary-item">
+                                                        <span>Increase Rule</span>
+                                                        <strong id="credit-summary-increase">20% up to &#8369;50,000.00</strong>
+                                                    </div>
+                                                </div>
+
+                                                <div class="credit-preview-initial-card">
+                                                    <div class="credit-engine-summary-card-head">
+                                                        <div>
+                                                            <h4>Initial Limit</h4>
+                                                            <p class="text-muted">Preview the standard starting limit and how category rules change it.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div id="credit-summary-initial-logic" class="credit-summary-initial-logic"></div>
+                                                </div>
+
+                                                <div class="credit-preview-category-card">
+                                                    <div class="credit-engine-summary-card-head">
+                                                        <div>
+                                                            <h4>Category Rule Preview</h4>
+                                                            <p class="text-muted">Review how the starting-limit rules read before saving.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div id="credit-summary-categories" class="credit-summary-categories"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </aside>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </section>
             </div>

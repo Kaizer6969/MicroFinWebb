@@ -17,6 +17,75 @@
  *   $show_services, $show_stats, $show_loan_calc, $show_about, $show_download,
  *   $e (htmlspecialchars helper), getBgStyle() function
  */
+
+$loan_calc_products = is_array($loan_products ?? null) ? array_values($loan_products) : [];
+$loan_calc_default = $loan_calc_products[0] ?? [
+    'product_name' => 'Demo Personal Loan',
+    'product_type' => 'Personal Loan',
+    'interest_rate' => 2.5,
+    'interest_type' => 'Flat',
+    'min_amount' => 1000,
+    'max_amount' => 50000,
+    'min_term_months' => 1,
+    'max_term_months' => 12,
+    'processing_fee_percentage' => 5,
+    'insurance_fee_percentage' => 0,
+    'service_charge' => 0,
+    'documentary_stamp' => 0,
+];
+
+$loan_calc_step = static function (float $min, float $max): int {
+    $range = max(0, $max - $min);
+    if ($range <= 20000) return 50;
+    if ($range <= 100000) return 100;
+    if ($range <= 500000) return 500;
+    return 1000;
+};
+
+$loan_calc_money = static function (float $amount): string {
+    return '&#8369;' . number_format(round($amount), 0);
+};
+
+$loan_calc_min_amount = max(0, (float)($loan_calc_default['min_amount'] ?? 1000));
+$loan_calc_max_amount = max($loan_calc_min_amount, (float)($loan_calc_default['max_amount'] ?? 50000));
+$loan_calc_amount_step = $loan_calc_step($loan_calc_min_amount, $loan_calc_max_amount);
+$loan_calc_amount_value = $loan_calc_min_amount;
+if ($loan_calc_max_amount > $loan_calc_min_amount) {
+    $loan_calc_amount_value = round((($loan_calc_min_amount + $loan_calc_max_amount) / 2) / $loan_calc_amount_step) * $loan_calc_amount_step;
+    $loan_calc_amount_value = min($loan_calc_max_amount, max($loan_calc_min_amount, $loan_calc_amount_value));
+}
+
+$loan_calc_min_term = max(1, (int)($loan_calc_default['min_term_months'] ?? 1));
+$loan_calc_max_term = max($loan_calc_min_term, (int)($loan_calc_default['max_term_months'] ?? 12));
+$loan_calc_term_value = max($loan_calc_min_term, min($loan_calc_max_term, (int)round(($loan_calc_min_term + $loan_calc_max_term) / 2)));
+
+$loan_calc_rate = max(0, (float)($loan_calc_default['interest_rate'] ?? 2.5)) / 100;
+$loan_calc_type = (string)($loan_calc_default['interest_type'] ?? 'Flat');
+$loan_calc_processing = max(0, (float)($loan_calc_default['processing_fee_percentage'] ?? 5));
+$loan_calc_insurance = max(0, (float)($loan_calc_default['insurance_fee_percentage'] ?? 0));
+$loan_calc_service_charge = max(0, (float)($loan_calc_default['service_charge'] ?? 0));
+$loan_calc_doc_stamp = max(0, (float)($loan_calc_default['documentary_stamp'] ?? 0));
+
+$loan_calc_monthly = 0.0;
+$loan_calc_interest_total = 0.0;
+$loan_calc_total = 0.0;
+
+if ($loan_calc_type === 'Diminishing') {
+    $loan_calc_monthly = $loan_calc_rate > 0
+        ? $loan_calc_amount_value * ($loan_calc_rate * pow(1 + $loan_calc_rate, $loan_calc_term_value)) / (pow(1 + $loan_calc_rate, $loan_calc_term_value) - 1)
+        : ($loan_calc_amount_value / max(1, $loan_calc_term_value));
+    $loan_calc_total = $loan_calc_monthly * $loan_calc_term_value;
+    $loan_calc_interest_total = $loan_calc_total - $loan_calc_amount_value;
+} else {
+    $loan_calc_interest_total = $loan_calc_amount_value * $loan_calc_rate * $loan_calc_term_value;
+    $loan_calc_total = $loan_calc_amount_value + $loan_calc_interest_total;
+    $loan_calc_monthly = $loan_calc_total / max(1, $loan_calc_term_value);
+}
+
+$loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
+    + ($loan_calc_amount_value * ($loan_calc_insurance / 100))
+    + $loan_calc_service_charge
+    + $loan_calc_doc_stamp;
 ?>
 <style>
     /* ─── TEMPLATE 1 SPECIFIC STYLES ─── */
@@ -124,6 +193,30 @@
         text-transform: uppercase;
         vertical-align: super;
         margin-left: 4px;
+    }
+
+    .lc-product-grid > [class*="col-"] {
+        display: flex;
+    }
+
+    .lc-product-btn {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        justify-content: space-between;
+        border-radius: calc(var(--radius) - 2px);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .lc-product-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .lc-product-meta {
+        display: grid;
+        gap: 2px;
     }
 </style>
 
@@ -272,13 +365,17 @@ if (is_string($show_calc_val))
         <div class="custom-card mx-auto p-5" style="max-width:820px;">
             <div class="mb-4">
                 <label class="small fw-700 text-uppercase text-muted mb-3">Select Loan Product</label>
-                <div class="row g-3">
+                <div class="row g-3 lc-product-grid">
                     <?php foreach (($loan_products ?? []) as $i => $prod): ?>
                         <div class="col-md-6">
                             <button type="button"
                                 class="btn w-100 text-start border p-3 lc-product-btn <?php echo $i === 0 ? 'border-primary bg-light' : 'bg-white'; ?>">
                                 <div class="fw-bold text-dark"><?php echo $e($prod['product_name'] ?? 'Demo Loan'); ?></div>
-                                <div class="small text-muted"><?php echo $e($prod['interest_rate'] ?? '2.5'); ?>% / mo</div>
+                                <div class="lc-product-meta">
+                                    <div class="small text-muted"><?php echo $e($prod['interest_rate'] ?? '2.5'); ?>% / mo · <?php echo $e($prod['interest_type'] ?? 'Flat'); ?></div>
+                                    <div class="small text-muted"><?php echo $loan_calc_money((float)($prod['min_amount'] ?? 1000)); ?> to <?php echo $loan_calc_money((float)($prod['max_amount'] ?? 50000)); ?></div>
+                                    <div class="small text-muted"><?php echo (int)($prod['min_term_months'] ?? 1); ?>-<?php echo (int)($prod['max_term_months'] ?? 12); ?> months</div>
+                                </div>
                             </button>
                         </div>
                     <?php endforeach; ?>
@@ -287,38 +384,38 @@ if (is_string($show_calc_val))
             <div class="mb-4 p-4 rounded bg-light border">
                 <div class="d-flex justify-content-between mb-1">
                     <label class="small fw-bold text-muted">Loan Amount</label>
-                    <span class="fw-bolder fs-4 text-brand headline" id="lc-amount-display">₱10,000</span>
+                    <span class="fw-bolder fs-4 text-brand headline" id="lc-amount-display"><?php echo $loan_calc_money($loan_calc_amount_value); ?></span>
                 </div>
-                <input type="range" class="form-range" id="lc-amount-slider" min="1000" max="50000" value="10000">
+                <input type="range" class="form-range" id="lc-amount-slider" min="<?php echo (int)$loan_calc_min_amount; ?>" max="<?php echo (int)$loan_calc_max_amount; ?>" step="<?php echo (int)$loan_calc_amount_step; ?>" value="<?php echo (int)$loan_calc_amount_value; ?>">
                 <div class="d-flex justify-content-between"><small class="text-muted"
-                        id="lc-min-amount">₱1,000</small><small class="text-muted" id="lc-max-amount">₱50,000</small>
+                        id="lc-min-amount"><?php echo $loan_calc_money($loan_calc_min_amount); ?></small><small class="text-muted" id="lc-max-amount"><?php echo $loan_calc_money($loan_calc_max_amount); ?></small>
                 </div>
             </div>
             <div class="mb-4 p-4 rounded bg-light border">
                 <div class="d-flex justify-content-between mb-1">
                     <label class="small fw-bold text-muted">Loan Term</label>
-                    <span class="fw-bolder fs-5 text-brand headline" id="lc-term-display">6 mo</span>
+                    <span class="fw-bolder fs-5 text-brand headline" id="lc-term-display"><?php echo (int)$loan_calc_term_value; ?> mo</span>
                 </div>
-                <input type="range" class="form-range" id="lc-term-slider" min="1" max="12" value="6">
-                <div class="d-flex justify-content-between"><small class="text-muted" id="lc-min-term">1
-                        mo</small><small class="text-muted" id="lc-max-term">12 mo</small></div>
+                <input type="range" class="form-range" id="lc-term-slider" min="<?php echo (int)$loan_calc_min_term; ?>" max="<?php echo (int)$loan_calc_max_term; ?>" value="<?php echo (int)$loan_calc_term_value; ?>">
+                <div class="d-flex justify-content-between"><small class="text-muted" id="lc-min-term"><?php echo (int)$loan_calc_min_term; ?>
+                        mo</small><small class="text-muted" id="lc-max-term"><?php echo (int)$loan_calc_max_term; ?> mo</small></div>
             </div>
             <div class="row g-3 text-center mt-3">
                 <div class="col-6 col-md-3">
                     <div class="small text-muted">Monthly</div>
-                    <div class="fw-bold headline fs-5" id="lc-monthly">—</div>
+                    <div class="fw-bold headline fs-5" id="lc-monthly"><?php echo $loan_calc_money($loan_calc_monthly); ?></div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="small text-muted">Interest</div>
-                    <div class="fw-bold headline fs-5" id="lc-interest">—</div>
+                    <div class="fw-bold headline fs-5" id="lc-interest"><?php echo $loan_calc_money($loan_calc_interest_total); ?></div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="small text-muted">Proc. Fee</div>
-                    <div class="fw-bold headline fs-5" id="lc-fee">—</div>
+                    <div class="small text-muted">Upfront Fees</div>
+                    <div class="fw-bold headline fs-5" id="lc-fee"><?php echo $loan_calc_money($loan_calc_fee_total); ?></div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="small text-muted">Total</div>
-                    <div class="fw-bold headline fs-5" id="lc-total">—</div>
+                    <div class="fw-bold headline fs-5" id="lc-total"><?php echo $loan_calc_money($loan_calc_total); ?></div>
                 </div>
             </div>
         </div>

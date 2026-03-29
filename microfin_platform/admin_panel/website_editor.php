@@ -296,7 +296,30 @@ if (!is_array($services)) $services = [];
 $stats = $pageData['stats'] ?? [['value' => '1.5k+', 'label' => 'Active Members']];
 if (!is_array($stats)) $stats = [];
 
-$loan_products = $pageData['loan_products'] ?? [['product_name' => 'Demo Personal Loan', 'interest_rate' => 2.5]];
+$loan_products = [];
+try {
+    $loanProductStmt = $pdo->prepare('SELECT product_name, product_type, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage, insurance_fee_percentage, service_charge, documentary_stamp FROM loan_products WHERE tenant_id = ? AND is_active = 1 ORDER BY product_name');
+    $loanProductStmt->execute([$tenant_id]);
+    $loan_products = $loanProductStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (PDOException $ex) {
+    $loan_products = [];
+}
+if (empty($loan_products)) {
+    $loan_products = $pageData['loan_products'] ?? [[
+        'product_name' => 'Demo Personal Loan',
+        'product_type' => 'Personal Loan',
+        'min_amount' => 1000,
+        'max_amount' => 50000,
+        'interest_rate' => 2.5,
+        'interest_type' => 'Flat',
+        'min_term_months' => 1,
+        'max_term_months' => 12,
+        'processing_fee_percentage' => 5,
+        'insurance_fee_percentage' => 0,
+        'service_charge' => 0,
+        'documentary_stamp' => 0,
+    ]];
+}
 if (!is_array($loan_products)) $loan_products = [];
 
 // Section toggles

@@ -204,14 +204,27 @@ if (!function_exists('getBgStyle')) {
 // Fetch active loan products from DB for calculator
 $loan_products = [];
 try {
-    $lp_stmt = $pdo->prepare('SELECT product_name, product_type, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage FROM loan_products WHERE tenant_id = ? AND is_active = 1 ORDER BY product_name');
+    $lp_stmt = $pdo->prepare('SELECT product_name, product_type, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage, insurance_fee_percentage, service_charge, documentary_stamp FROM loan_products WHERE tenant_id = ? AND is_active = 1 ORDER BY product_name');
     $lp_stmt->execute([$data['tenant_id']]);
     $loan_products = $lp_stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $ex) {
     $loan_products = [];
 }
 if (empty($loan_products)) {
-    $loan_products = [['product_name' => 'Demo Personal Loan', 'product_type' => 'Personal Loan', 'interest_rate' => 2.5, 'interest_type' => 'Flat', 'min_amount' => 1000, 'max_amount' => 50000, 'min_term_months' => 1, 'max_term_months' => 12, 'processing_fee_percentage' => 5]];
+    $loan_products = [[
+        'product_name' => 'Demo Personal Loan',
+        'product_type' => 'Personal Loan',
+        'interest_rate' => 2.5,
+        'interest_type' => 'Flat',
+        'min_amount' => 1000,
+        'max_amount' => 50000,
+        'min_term_months' => 1,
+        'max_term_months' => 12,
+        'processing_fee_percentage' => 5,
+        'insurance_fee_percentage' => 0,
+        'service_charge' => 0,
+        'documentary_stamp' => 0,
+    ]];
 }
 
 // Misc variables expected by templates
@@ -300,6 +313,9 @@ document.querySelectorAll('.fade-up').forEach(function(el) { obs.observe(el); })
           'minTerm'    => (int)($p['min_term_months'] ?? 1),
           'maxTerm'    => (int)($p['max_term_months'] ?? 12),
           'processing' => (float)($p['processing_fee_percentage'] ?? 5),
+          'insurance'  => (float)($p['insurance_fee_percentage'] ?? 0),
+          'service'    => (float)($p['service_charge'] ?? 0),
+          'docStamp'   => (float)($p['documentary_stamp'] ?? 0),
       ];
   }, $loan_products), JSON_UNESCAPED_UNICODE); ?>;
 
@@ -360,7 +376,7 @@ document.querySelectorAll('.fade-up').forEach(function(el) { obs.observe(el); })
           monthly  = rate > 0 ? amt * (rate * Math.pow(1+rate,term)) / (Math.pow(1+rate,term)-1) : amt/term;
           total    = monthly * term; interest = total - amt;
       }
-      var fee = amt * (p.processing / 100);
+      var fee = (amt * (p.processing / 100)) + (amt * (p.insurance / 100)) + p.service + p.docStamp;
       
       var elMo = document.getElementById('lc-monthly');
       var elInt = document.getElementById('lc-interest');
