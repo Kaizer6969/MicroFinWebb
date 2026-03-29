@@ -242,6 +242,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="password" id="password" name="password" class="form-input" placeholder="••••••••" required>
             </div>
 
+            <div style="text-align: right; margin-top: -0.5rem; margin-bottom: 0.5rem;">
+                <a href="forgot_password.php" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;">Forgot Password?</a>
+            </div>
+
             <button type="submit" class="btn-submit" id="submit-btn">Sign In to Dashboard</button>
             <div style="margin-top: 1.5rem; text-align: center;">
                 <a href="../public_website/index.php" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">

@@ -13,16 +13,21 @@ $tenant_slug = '';
 if ($token) {
     // Validate token and check if it's expired
     $stmt = $pdo->prepare("
-        SELECT u.user_id, u.tenant_id, b.theme_primary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, t.tenant_slug
+        SELECT u.user_id, u.tenant_id, u.status, b.theme_primary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, t.tenant_slug
         FROM users u
         JOIN tenants t ON u.tenant_id = t.tenant_id
         LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id
         WHERE u.reset_token = ? AND u.reset_token_expiry > NOW()
+          AND u.deleted_at IS NULL
     ");
     $stmt->execute([$token]);
     $user = $stmt->fetch();
 
     if ($user) {
+        if (trim((string)($user['status'] ?? '')) !== 'Active') {
+            $message_type = 'error';
+            $message = 'This account is no longer eligible for password reset.';
+        } else {
         $user_id = $user['user_id'];
         $tenant_id = $user['tenant_id'];
         $theme_color = $user['theme_primary_color'] ?: '#2563eb';
@@ -32,6 +37,7 @@ if ($token) {
         $theme_bg_card = $user['theme_bg_card'] ?: '#ffffff';
         $theme_font = $user['font_family'] ?: 'Inter';
         $tenant_slug = $user['tenant_slug'];
+        }
     } else {
         $message_type = 'error';
         $message = 'This password reset link is invalid or has expired. Please request a new one.';
@@ -58,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user_id) {
         
         $update = $pdo->prepare("
             UPDATE users 
-            SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL 
+            SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL, force_password_change = 0
             WHERE user_id = ?
         ");
         

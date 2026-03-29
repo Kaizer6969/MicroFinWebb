@@ -28,19 +28,12 @@ if ($step_data && (bool)$step_data['setup_completed']) {
     exit;
 }
 
-if ($current_step !== 3) {
-    if (in_array($current_step, [1, 2])) {
-        $pdo->prepare('UPDATE tenants SET setup_current_step = 3 WHERE tenant_id = ?')->execute([$tenant_id]);
-        $current_step = 3;
-    } else {
-        $setup_routes = [0 => 'force_change_password.php', 4 => 'setup_branding.php', 5 => 'setup_billing.php'];
-        if (isset($setup_routes[$current_step])) {
-            header('Location: ' . $setup_routes[$current_step]);
-        } else {
-            header('Location: ../admin_panel/admin.php');
-        }
-        exit;
+if ($step_data && !(bool)$step_data['setup_completed']) {
+    if ($current_step < 5) {
+        $pdo->prepare('UPDATE tenants SET setup_current_step = 5 WHERE tenant_id = ?')->execute([$tenant_id]);
     }
+    header('Location: setup_billing.php');
+    exit;
 }
 
 // ==========================================

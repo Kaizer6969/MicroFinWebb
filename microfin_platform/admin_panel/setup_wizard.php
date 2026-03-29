@@ -20,18 +20,13 @@ if ($tenant_data && (bool)$tenant_data['setup_completed']) {
     exit;
 }
 
-// This page is deprecated — loan config is now step 1 in tenant_login/setup_loan_products.php
+// This page is deprecated. Billing is now the first onboarding gate after password reset.
 $current_step = (int)($tenant_data['setup_current_step'] ?? 0);
 if ($current_step < 6) {
-    $setup_pages = [
-        0 => '../tenant_login/force_change_password.php',
-        1 => '../tenant_login/setup_loan_products.php',
-        2 => '../tenant_login/setup_credit.php',
-        3 => '../tenant_login/setup_website.php',
-        4 => '../tenant_login/setup_branding.php',
-        5 => '../tenant_login/setup_billing.php',
-    ];
-    header('Location: ' . ($setup_pages[$current_step] ?? '../tenant_login/force_change_password.php'));
+    if ($current_step < 5) {
+        $pdo->prepare('UPDATE tenants SET setup_current_step = 5 WHERE tenant_id = ?')->execute([$tenant_id]);
+    }
+    header('Location: ../tenant_login/setup_billing.php');
     exit;
 }
 

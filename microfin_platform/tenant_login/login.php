@@ -169,7 +169,7 @@ if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_admin = ((bool)$user['is_system_role'] || stripos($user['role_name'], 'Admin') !== false);
 
                 if ($is_admin) {
-                     // Admin routing: password → branding → website → billing → dashboard
+                    // Admin routing: password → billing → dashboard
                     if (isset($user['force_password_change']) && (bool)$user['force_password_change']) {
                         header('Location: force_change_password.php');
                         exit;
@@ -177,19 +177,11 @@ if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (!(bool)$tenant['setup_completed']) {
                         $setup_step = (int)($tenant['setup_current_step'] ?? 0);
-                        $setup_routes = [
-                            0 => 'force_change_password.php',
-                            1 => 'setup_loan_products.php',
-                            2 => 'setup_credit.php',
-                            3 => 'setup_website.php',
-                            4 => 'setup_branding.php',
-                            5 => 'setup_billing.php',
-                        ];
-                        if (isset($setup_routes[$setup_step])) {
-                            header('Location: ' . $setup_routes[$setup_step]);
-                            exit;
+                        if ($setup_step < 5) {
+                            $pdo->prepare('UPDATE tenants SET setup_current_step = 5 WHERE tenant_id = ?')->execute([$tenant['tenant_id']]);
                         }
-                        // step >= 6: proceed to admin.php
+                        header('Location: setup_billing.php');
+                        exit;
                     }
 
                     header('Location: ../admin_panel/admin.php');

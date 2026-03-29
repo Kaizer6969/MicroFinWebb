@@ -166,7 +166,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>1,000</strong> Max Clients</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> <strong>250</strong> Max Users</li>
+                        <li><span class="material-symbols-rounded">check_circle</span> <strong>250</strong> Max Staffs</li>
                     </ul>
                 </div>
                 
@@ -179,7 +179,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>2,500</strong> Max Clients</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> <strong>750</strong> Max Users</li>
+                        <li><span class="material-symbols-rounded">check_circle</span> <strong>750</strong> Max Staffs</li>
                     </ul>
                 </div>
 
@@ -191,7 +191,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>5,000</strong> Max Clients</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> <strong>2,000</strong> Max Users</li>
+                        <li><span class="material-symbols-rounded">check_circle</span> <strong>2,000</strong> Max Staffs</li>
                     </ul>
                 </div>
 
@@ -203,7 +203,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>10,000</strong> Max Clients</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> <strong>5,000</strong> Max Users</li>
+                        <li><span class="material-symbols-rounded">check_circle</span> <strong>5,000</strong> Max Staffs</li>
                     </ul>
                 </div>
 
@@ -215,7 +215,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>Unlimited</strong> Clients</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> <strong>Unlimited</strong> Users</li>
+                        <li><span class="material-symbols-rounded">check_circle</span> <strong>Unlimited</strong> Max Staffs</li>
                     </ul>
                 </div>
             </div>

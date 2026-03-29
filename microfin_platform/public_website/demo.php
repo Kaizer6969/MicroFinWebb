@@ -876,21 +876,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <h3 style="color:#0f172a; font-size:1rem; margin:24px 0 8px;">2. Subscription &amp; Payment Rules</h3>
             <p style="font-size:0.9rem;">Upon approval and completion of your billing setup, the following payment rules apply:</p>
             <ul style="font-size:0.9rem; padding-left:20px; margin-top:8px;">
-                <li><strong>Prorated Initial Charge:</strong> Your first charge will be a prorated amount calculated from your activation date to your next selected billing date (1st or 15th of the month).</li>
-                <li><strong>Recurring Billing:</strong> After the initial prorated charge, you will be billed the full monthly subscription fee on either the 1st or 15th of each month, depending on your selected billing cycle.</li>
+                <li><strong>Initial Activation Charge:</strong> Your first charge is the full monthly subscription fee paid immediately when your account is activated.</li>
+                <li><strong>Recurring Billing:</strong> After activation, your subscription renews automatically every 30 days using your saved payment method.</li>
                 <li><strong>Automatic Deduction:</strong> Payments are automatically charged to your registered payment method. It is your responsibility to ensure sufficient funds are available.</li>
                 <li><strong>Late Payment:</strong> Failure to complete payment may result in suspension of your tenant account until the outstanding balance is settled.</li>
-                <li><strong>Plan Changes:</strong> Upgrades take effect immediately with a prorated adjustment. Downgrades take effect on the next billing cycle.</li>
+                <li><strong>Plan Changes:</strong> Upgrades or downgrades follow the subscription change settings applied to your account.</li>
                 <li><strong>Billing Disputes:</strong> Any billing disputes must be raised within 30 days of the charge date by contacting MicroFin support.</li>
             </ul>
 
             <h3 style="color:#b91c1c; font-size:1rem; margin:24px 0 8px;">3. No-Refund Policy</h3>
             <p style="font-size:0.9rem;">All subscription fees paid to MicroFin are <strong>strictly non-refundable</strong>. This includes, but is not limited to:</p>
             <ul style="font-size:0.9rem; padding-left:20px; margin-top:8px;">
-                <li>Prorated initial charges upon account activation.</li>
+                <li>Initial activation charges upon account activation.</li>
                 <li>Monthly recurring subscription fees, regardless of usage during the billing period.</li>
                 <li>Fees charged during any period prior to account suspension or cancellation.</li>
-                <li>Any partial month charges resulting from mid-cycle plan changes.</li>
+                <li>Any charges already billed before cancellation or deactivation.</li>
             </ul>
             <p style="font-size:0.9rem; margin-top:8px;">We encourage you to evaluate the platform thoroughly during any trial or demo period before committing to a paid subscription.</p>
 

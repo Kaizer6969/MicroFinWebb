@@ -220,6 +220,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     syncSuperAdminProfileMode();
 
+    // Tenant Deactivation Modal
+    const tenantStatusModalBackdrop = document.getElementById('modal-tenant-status-backdrop');
+    const tenantStatusModalForm = tenantStatusModalBackdrop ? tenantStatusModalBackdrop.querySelector('form') : null;
+    const btnCloseTenantStatusModal = document.getElementById('close-tenant-status-modal');
+    const btnCancelTenantStatusModal = document.getElementById('cancel-tenant-status-modal');
+    const tenantStatusTenantId = document.getElementById('tenant-status-tenant-id');
+    const tenantStatusTenantName = document.getElementById('tenant-status-tenant-name');
+    const tenantStatusReason = document.getElementById('tenant-status-reason');
+
+    function closeTenantStatusModal() {
+        if (!tenantStatusModalBackdrop) {
+            return;
+        }
+
+        tenantStatusModalBackdrop.classList.remove('show');
+        if (tenantStatusModalForm) {
+            tenantStatusModalForm.reset();
+        }
+    }
+
+    function openTenantStatusModal(buttonEl) {
+        if (!tenantStatusModalBackdrop || !tenantStatusModalForm || !buttonEl) {
+            return;
+        }
+
+        tenantStatusModalForm.reset();
+        if (tenantStatusTenantId) {
+            tenantStatusTenantId.value = buttonEl.dataset.tenantId || '';
+        }
+        if (tenantStatusTenantName) {
+            tenantStatusTenantName.value = buttonEl.dataset.tenantName || '';
+        }
+
+        tenantStatusModalBackdrop.classList.add('show');
+        if (tenantStatusReason) {
+            tenantStatusReason.focus();
+        }
+    }
+
+    if (btnCloseTenantStatusModal) btnCloseTenantStatusModal.addEventListener('click', closeTenantStatusModal);
+    if (btnCancelTenantStatusModal) btnCancelTenantStatusModal.addEventListener('click', closeTenantStatusModal);
+    if (tenantStatusModalBackdrop) {
+        tenantStatusModalBackdrop.addEventListener('click', (e) => {
+            if (e.target === tenantStatusModalBackdrop) {
+                closeTenantStatusModal();
+            }
+        });
+    }
+
     // Audit Details Modal
     const auditModalBackdrop = document.getElementById('modal-audit-backdrop');
     const btnCloseAuditModal = document.getElementById('close-audit-modal');
@@ -257,6 +306,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.addEventListener('click', (e) => {
+        const deactivateTrigger = e.target.closest('.btn-tenant-deactivate');
+        if (deactivateTrigger) {
+            e.preventDefault();
+            openTenantStatusModal(deactivateTrigger);
+            return;
+        }
+
         const trigger = e.target.closest('.audit-detail-btn');
         if (!trigger) return;
         e.preventDefault();
@@ -962,9 +1018,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         data: (data.revenue_chart || []).map(d => parseFloat(d.total)),
                         borderColor: chartColors.green,
                         backgroundColor: chartColors.greenLight,
+                        borderWidth: 3,
+                        showLine: true,
+                        spanGaps: true,
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 4,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
                         pointBackgroundColor: chartColors.green
                     }]
                 },

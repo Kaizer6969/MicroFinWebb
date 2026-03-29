@@ -24,15 +24,26 @@ $tenant_name = $tenant ? $tenant['tenant_name'] : 'System';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
     $email = trim($_POST['email']);
-    
-    // We only process if tenant context is valid or if this is an admin lookup
-    // Actually, users table needs tenant_id to be unique.
+
     if ($tenant) {
-        $stmt = $pdo->prepare("SELECT user_id, username FROM users WHERE email = ? AND tenant_id = ?");
+        $stmt = $pdo->prepare("
+            SELECT user_id, username, status
+            FROM users
+            WHERE email = ?
+              AND tenant_id = ?
+              AND deleted_at IS NULL
+            LIMIT 1
+        ");
         $stmt->execute([$email, $tenant['tenant_id']]);
         $user = $stmt->fetch();
 
-        if ($user) {
+        if (!$user) {
+            $message_type = 'error';
+            $message = 'No account found with that email for this workspace.';
+        } elseif (trim((string)($user['status'] ?? '')) !== 'Active') {
+            $message_type = 'error';
+            $message = 'This account is not eligible for password reset because it is currently ' . strtolower((string)$user['status']) . '.';
+        } else {
             // Generate token
             $token = bin2hex(random_bytes(32));
             $expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
@@ -70,14 +81,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
             if ($result_msg !== 'Email sent successfully.') {
                 $email_send_error = $result_msg;
             }
-        }
 
-        if (isset($email_send_error)) {
-            $message_type = 'error';
-            $message = 'Failed to send email. Error: ' . $email_send_error;
-        } else {
-            $message_type = 'success';
-            $message = 'If an account exists with that email in our system, a password reset link has been sent.';
+            if (isset($email_send_error)) {
+                $message_type = 'error';
+                $message = 'Failed to send email. Error: ' . $email_send_error;
+            } else {
+                $message_type = 'success';
+                $message = 'A password reset link has been sent to that email address.';
+            }
         }
     } else {
         $message_type = 'error';

@@ -182,6 +182,55 @@ function admin_safe_fetch_row(PDO $pdo, string $sql, array $params = [], array $
     }
 }
 
+function admin_store_brand_logo(array $file, string $tenantId): array
+{
+    if (!isset($file['error']) || (int)$file['error'] === UPLOAD_ERR_NO_FILE) {
+        return ['path' => '', 'error' => ''];
+    }
+
+    if ((int)$file['error'] !== UPLOAD_ERR_OK) {
+        return ['path' => '', 'error' => 'Logo upload failed. Please try again.'];
+    }
+
+    $original_name = (string)($file['name'] ?? '');
+    $tmp_name = (string)($file['tmp_name'] ?? '');
+    $size_bytes = (int)($file['size'] ?? 0);
+    $extension = strtolower((string)pathinfo($original_name, PATHINFO_EXTENSION));
+    $allowed_extensions = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+
+    if (!in_array($extension, $allowed_extensions, true)) {
+        return ['path' => '', 'error' => 'Invalid logo format. Allowed formats: PNG, JPG, JPEG, WEBP, SVG.'];
+    }
+
+    if ($size_bytes <= 0 || $size_bytes > (3 * 1024 * 1024)) {
+        return ['path' => '', 'error' => 'Logo size must be between 1 byte and 3MB.'];
+    }
+
+    if (!is_uploaded_file($tmp_name)) {
+        return ['path' => '', 'error' => 'Uploaded logo file is invalid.'];
+    }
+
+    $upload_dir = __DIR__ . '/../uploads/tenant_logos';
+    if (!is_dir($upload_dir) && !mkdir($upload_dir, 0775, true) && !is_dir($upload_dir)) {
+        return ['path' => '', 'error' => 'Unable to create logo upload directory.'];
+    }
+
+    $safe_tenant_id = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenantId);
+    $file_name = $safe_tenant_id . '_' . date('YmdHis') . '_' . substr(bin2hex(random_bytes(4)), 0, 8) . '.' . $extension;
+    $destination = rtrim($upload_dir, '/\\') . DIRECTORY_SEPARATOR . $file_name;
+
+    if (!move_uploaded_file($tmp_name, $destination)) {
+        return ['path' => '', 'error' => 'Failed to save uploaded logo.'];
+    }
+
+    $app_base_path = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
+    if ($app_base_path === '') {
+        $app_base_path = '/';
+    }
+
+    return ['path' => $app_base_path . '/uploads/tenant_logos/' . $file_name, 'error' => ''];
+}
+
 $tenant_id = $_SESSION['tenant_id'];
 $tenant_name = $_SESSION['tenant_name'] ?? 'Company Admin';
 $role_name = $_SESSION['role_name'] ?? ($_SESSION['role'] ?? 'User');
@@ -220,35 +269,31 @@ if ($user_id_check > 0) {
     }
 }
 
-// Check if setup is completed. If not, redirect to setup wizard.
-// For impersonating Super Admins, allow bypassing or handle it based on setup_completed.
+// Check if setup is completed. Billing is the only required onboarding gate before dashboard access.
 $tenant_stmt = $pdo->prepare('SELECT setup_completed, setup_current_step FROM tenants WHERE tenant_id = ?');
 $tenant_stmt->execute([$tenant_id]);
 $tenant_data = $tenant_stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($tenant_data && !(bool)$tenant_data['setup_completed']) {
     $setup_step = (int)($tenant_data['setup_current_step'] ?? 0);
-    if ($setup_step < 6) {
-        $setup_pages = [
-            0 => '../tenant_login/force_change_password.php',
-            1 => '../tenant_login/setup_loan_products.php',
-            2 => '../tenant_login/setup_credit.php',
-            3 => '../tenant_login/setup_website.php',
-            4 => '../tenant_login/setup_branding.php',
-            5 => '../tenant_login/setup_billing.php',
-        ];
-        header('Location: ' . ($setup_pages[$setup_step] ?? '../tenant_login/force_change_password.php'));
-        exit;
+    if ($setup_step < 5) {
+        $pdo->prepare('UPDATE tenants SET setup_current_step = 5 WHERE tenant_id = ?')->execute([$tenant_id]);
     }
+    header('Location: ../tenant_login/setup_billing.php');
+    exit;
 }
 
 $default_settings = [
     'company_name' => $tenant_name,
     'primary_color' => '#4f46e5',
+    'secondary_color' => '#991b1b',
     'text_main' => '#0f172a',
     'text_muted' => '#64748b',
     'bg_body' => '#f8fafc',
     'bg_card' => '#ffffff',
+    'border_color' => '#e2e8f0',
+    'card_border_width' => '1',
+    'card_shadow' => 'sm',
     'font_family' => 'Inter',
     'logo_path' => '',
     'support_email' => '',
@@ -267,18 +312,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $settings = [
         'company_name' => trim($_POST['company_name'] ?? $default_settings['company_name']),
         'primary_color' => trim($_POST['primary_color'] ?? $default_settings['primary_color']),
+        'secondary_color' => trim($_POST['secondary_color'] ?? $default_settings['secondary_color']),
         'text_main' => trim($_POST['text_main'] ?? $default_settings['text_main']),
         'text_muted' => trim($_POST['text_muted'] ?? $default_settings['text_muted']),
         'bg_body' => trim($_POST['bg_body'] ?? $default_settings['bg_body']),
         'bg_card' => trim($_POST['bg_card'] ?? $default_settings['bg_card']),
+        'border_color' => trim($_POST['border_color'] ?? $default_settings['border_color']),
+        'card_border_width' => trim($_POST['card_border_width'] ?? $default_settings['card_border_width']),
+        'card_shadow' => trim($_POST['card_shadow'] ?? $default_settings['card_shadow']),
         'font_family' => trim($_POST['font_family'] ?? $default_settings['font_family']),
-        'logo_path' => trim($_POST['logo_path'] ?? ''),
-        'support_email' => trim($_POST['support_email'] ?? ''),
-        'support_phone' => trim($_POST['support_phone'] ?? '')
+        'logo_path' => trim($_POST['existing_logo_path'] ?? ''),
+        'support_email' => trim($_POST['support_email'] ?? admin_get_system_setting($pdo, (string)$tenant_id, 'support_email', '')),
+        'support_phone' => trim($_POST['support_phone'] ?? admin_get_system_setting($pdo, (string)$tenant_id, 'support_phone', ''))
     ];
 
     $hex_pattern = '/^#[0-9a-fA-F]{6}$/';
-    foreach (['primary_color', 'text_main', 'text_muted', 'bg_body', 'bg_card'] as $ck) {
+    foreach (['primary_color', 'secondary_color', 'text_main', 'text_muted', 'bg_body', 'bg_card', 'border_color'] as $ck) {
         if (!preg_match($hex_pattern, $settings[$ck])) {
             $settings[$ck] = $default_settings[$ck];
         }
@@ -293,6 +342,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $settings['company_name'] = $default_settings['company_name'];
     }
 
+    $settings['card_border_width'] = (string)max(0, min(3, round((float)$settings['card_border_width'] * 10) / 10));
+    if (!in_array($settings['card_shadow'], ['none', 'sm', 'md', 'lg'], true)) {
+        $settings['card_shadow'] = $default_settings['card_shadow'];
+    }
+
+    if (!empty($_FILES['logo_file']) && (int)($_FILES['logo_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $logo_upload = admin_store_brand_logo($_FILES['logo_file'], (string)$tenant_id);
+        if ($logo_upload['error'] !== '') {
+            $_SESSION['admin_error'] = $logo_upload['error'];
+            header('Location: admin.php?tab=settings');
+            exit;
+        }
+        if ($logo_upload['path'] !== '') {
+            $settings['logo_path'] = $logo_upload['path'];
+        }
+    }
+
     $toggles = [
         'booking_system' => isset($_POST['toggle_booking_system']) ? 1 : 0,
         'user_registration' => isset($_POST['toggle_user_registration']) ? 1 : 0,
@@ -304,7 +370,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $upsert_setting = $pdo->prepare('INSERT INTO system_settings (tenant_id, setting_key, setting_value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)');
     foreach ($settings as $key => $value) {
         // Skip keys that belong in the tenants table
-        if (in_array($key, ['company_name', 'primary_color', 'text_main', 'text_muted', 'bg_body', 'bg_card', 'font_family', 'logo_path'])) {
+        if (in_array($key, ['company_name', 'primary_color', 'secondary_color', 'text_main', 'text_muted', 'bg_body', 'bg_card', 'border_color', 'card_border_width', 'card_shadow', 'font_family', 'logo_path'])) {
             continue;
         }
         $upsert_setting->execute([$tenant_id, $key, $value]);
@@ -317,14 +383,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $tenant_id
     ]);
 
-    $upsert_branding = $pdo->prepare('INSERT INTO tenant_branding (tenant_id, theme_primary_color, theme_text_main, theme_text_muted, theme_bg_body, theme_bg_card, font_family, logo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE theme_primary_color = VALUES(theme_primary_color), theme_text_main = VALUES(theme_text_main), theme_text_muted = VALUES(theme_text_muted), theme_bg_body = VALUES(theme_bg_body), theme_bg_card = VALUES(theme_bg_card), font_family = VALUES(font_family), logo_path = VALUES(logo_path)');
+    $upsert_branding = $pdo->prepare('INSERT INTO tenant_branding (tenant_id, theme_primary_color, theme_secondary_color, theme_text_main, theme_text_muted, theme_bg_body, theme_bg_card, theme_border_color, card_border_width, card_shadow, font_family, logo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE theme_primary_color = VALUES(theme_primary_color), theme_secondary_color = VALUES(theme_secondary_color), theme_text_main = VALUES(theme_text_main), theme_text_muted = VALUES(theme_text_muted), theme_bg_body = VALUES(theme_bg_body), theme_bg_card = VALUES(theme_bg_card), theme_border_color = VALUES(theme_border_color), card_border_width = VALUES(card_border_width), card_shadow = VALUES(card_shadow), font_family = VALUES(font_family), logo_path = VALUES(logo_path)');
     $upsert_branding->execute([
         $tenant_id,
         $settings['primary_color'],
+        $settings['secondary_color'],
         $settings['text_main'],
         $settings['text_muted'],
         $settings['bg_body'],
         $settings['bg_card'],
+        $settings['border_color'],
+        $settings['card_border_width'],
+        $settings['card_shadow'],
         $settings['font_family'],
         $settings['logo_path']
     ]);
@@ -336,9 +406,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     $_SESSION['tenant_name'] = $settings['company_name'];
     $_SESSION['theme'] = $settings['primary_color'];
-    $_SESSION['admin_flash'] = 'Settings saved successfully.';
+    $_SESSION['admin_flash'] = 'Branding saved successfully.';
 
-    header('Location: admin.php');
+    header('Location: admin.php?tab=settings');
     exit;
 }
 
@@ -1496,10 +1566,20 @@ $settings = $default_settings;
 $toggles = $default_toggles;
 
 // Get direct columns from tenants + branding
-$tenant_settings_stmt = $pdo->prepare('SELECT t.tenant_name as company_name, b.theme_primary_color as primary_color, b.theme_text_main as text_main, b.theme_text_muted as text_muted, b.theme_bg_body as bg_body, b.theme_bg_card as bg_card, b.font_family, b.logo_path FROM tenants t LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id WHERE t.tenant_id = ?');
+$tenant_settings_stmt = $pdo->prepare('SELECT t.tenant_name as company_name, b.theme_primary_color as primary_color, b.theme_secondary_color as secondary_color, b.theme_text_main as text_main, b.theme_text_muted as text_muted, b.theme_bg_body as bg_body, b.theme_bg_card as bg_card, b.theme_border_color as border_color, b.card_border_width, b.card_shadow, b.font_family, b.logo_path FROM tenants t LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id WHERE t.tenant_id = ?');
 $tenant_settings_stmt->execute([$tenant_id]);
 if ($t = $tenant_settings_stmt->fetch(PDO::FETCH_ASSOC)) {
     $settings = array_merge($settings, array_filter($t, function($v) { return $v !== null && $v !== ''; }));
+}
+
+$support_settings_stmt = $pdo->prepare("SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND setting_key IN ('support_email', 'support_phone')");
+$support_settings_stmt->execute([$tenant_id]);
+foreach ($support_settings_stmt->fetchAll(PDO::FETCH_ASSOC) as $support_row) {
+    $key = (string)($support_row['setting_key'] ?? '');
+    $value = trim((string)($support_row['setting_value'] ?? ''));
+    if ($key !== '' && array_key_exists($key, $settings) && $value !== '') {
+        $settings[$key] = $value;
+    }
 }
 
 $toggles_stmt = $pdo->prepare('SELECT toggle_key, is_enabled FROM tenant_feature_toggles WHERE tenant_id = ?');
@@ -1556,6 +1636,7 @@ $cs_form = [
 $ws_stmt = $pdo->prepare('SELECT * FROM tenant_website_content WHERE tenant_id = ?');
 $ws_stmt->execute([$tenant_id]);
 $ws = $ws_stmt->fetch(PDO::FETCH_ASSOC);
+$website_record_exists = is_array($ws);
 if (!$ws) {
     $ws = [
         'layout_template' => 'template1',
@@ -1597,6 +1678,58 @@ while (count($ws_stats) < 4) { $ws_stats[] = ['value' => '', 'label' => '']; }
 $e = function($v) { return htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8'); };
 $tenant_slug = $_SESSION['tenant_slug'] ?? '';
 $site_url = '../site.php?site=' . urlencode($tenant_slug);
+
+$branding_setup_complete = trim((string)($settings['logo_path'] ?? '')) !== '';
+$website_content_complete = $website_record_exists && (
+    trim((string)($ws['hero_title'] ?? '')) !== ''
+    || trim((string)($ws['hero_subtitle'] ?? '')) !== ''
+    || trim((string)($ws['about_body'] ?? '')) !== ''
+    || trim((string)($ws['contact_address'] ?? '')) !== ''
+    || trim((string)($ws['contact_phone'] ?? '')) !== ''
+    || trim((string)($ws['contact_email'] ?? '')) !== ''
+    || !empty($ws_services)
+);
+$website_published = !empty($toggles['public_website_enabled']);
+$website_step_complete = $website_content_complete && $website_published;
+$website_step_description = !$website_content_complete
+    ? 'Add homepage copy, services, and contact details for your public site.'
+    : 'Your website content is ready. Publish it to make your public tenant page live.';
+$website_step_action = !$website_content_complete
+    ? 'Click here to finish website'
+    : ($website_published ? 'Website is live' : 'Click here to publish your site');
+$workspace_setup_checklist = [
+    [
+        'title' => 'Set up your public website',
+        'description' => $website_step_description,
+        'icon' => 'language',
+        'complete' => $website_step_complete,
+        'href' => 'admin.php?tab=website',
+        'action_label' => $website_step_action,
+    ],
+    [
+        'title' => 'Upload logo and branding',
+        'description' => 'Set your workspace logo so your dashboard and website match your brand.',
+        'icon' => 'palette',
+        'complete' => $branding_setup_complete,
+        'href' => 'admin.php?tab=settings',
+        'action_label' => $branding_setup_complete ? 'Branding ready' : 'Click here to finish branding',
+    ],
+];
+$workspace_setup_completed_items = 0;
+$workspace_setup_pending_items = [];
+foreach ($workspace_setup_checklist as $checklist_item) {
+    if (!empty($checklist_item['complete'])) {
+        $workspace_setup_completed_items++;
+    } else {
+        $workspace_setup_pending_items[] = $checklist_item;
+    }
+}
+$workspace_setup_total_items = count($workspace_setup_checklist);
+$workspace_setup_pending_count = count($workspace_setup_pending_items);
+$workspace_setup_progress = $workspace_setup_total_items > 0
+    ? (int)round(($workspace_setup_completed_items / $workspace_setup_total_items) * 100)
+    : 100;
+$workspace_setup_pending = $workspace_setup_completed_items < $workspace_setup_total_items;
 
 $flash_message = $_SESSION['admin_flash'] ?? '';
 unset($_SESSION['admin_flash']);
@@ -1771,8 +1904,8 @@ function hexToRgb($hex) {
                 'dashboard' => 'Dashboard',
                 'staff' => 'Staff & Roles',
                 'website' => 'Website Editor',
-                'settings' => 'Settings',
-                'personal' => 'Personal Settings',
+                'settings' => 'Branding',
+                'personal' => 'Personal Profile',
                 'features' => 'Feature Toggles',
                 'billing' => 'Billing & Subscription',
                 'statements' => 'Receipts',
@@ -1794,7 +1927,7 @@ function hexToRgb($hex) {
                     <span>Staff Accounts</span>
                 </a>
 
-                <span class="sidebar-section-title">Platform Settings</span>
+                <span class="sidebar-section-title">Workspace</span>
                 <a href="admin.php?tab=loan_products" class="nav-item <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>" data-target="loan_products" data-title="Loan Products">
                     <span class="material-symbols-rounded">payments</span>
                     <span>Loan Products</span>
@@ -1811,6 +1944,10 @@ function hexToRgb($hex) {
                     <span class="material-symbols-rounded">toggle_on</span>
                     <span>Feature Toggles</span>
                 </a>
+                <a href="admin.php?tab=settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Branding">
+                    <span class="material-symbols-rounded">palette</span>
+                    <span>Branding</span>
+                </a>
 
                 <?php if ($can_manage_billing): ?>
                 <span class="sidebar-section-title">Billing & Subscription</span>
@@ -1826,11 +1963,7 @@ function hexToRgb($hex) {
 
 
                 <span class="sidebar-section-title">Account</span>
-                <a href="admin.php?tab=settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Settings">
-                    <span class="material-symbols-rounded">settings</span>
-                    <span>General Settings</span>
-                </a>
-                <a href="admin.php?tab=personal" class="nav-item <?php echo $active_view === 'personal' ? 'active' : ''; ?>" data-target="settings" data-subtab="personal-profile" data-title="Personal Settings">
+                <a href="admin.php?tab=personal" class="nav-item <?php echo $active_view === 'personal' ? 'active' : ''; ?>" data-target="personal" data-title="Personal Profile">
                     <span class="material-symbols-rounded">person</span>
                     <span>Personal Profile</span>
                 </a>
@@ -1871,6 +2004,11 @@ function hexToRgb($hex) {
                 <?php echo htmlspecialchars($flash_message); ?>
             </div>
             <?php endif; ?>
+            <?php if (isset($_SESSION['admin_error'])): ?>
+            <div class="site-alert site-alert-error" style="margin: 1rem 2rem 0; padding: 0.75rem 1rem; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-weight: 500;">
+                <?php echo htmlspecialchars($_SESSION['admin_error']); unset($_SESSION['admin_error']); ?>
+            </div>
+            <?php endif; ?>
 
             <!-- Views Container -->
             <div class="views-container">
@@ -1884,7 +2022,7 @@ function hexToRgb($hex) {
                             <p>Track daily operations, borrower activity, staff capacity, and collection momentum from one place.</p>
                             <div class="dashboard-pill-row">
                                 <span class="dashboard-pill">Plan: <?php echo htmlspecialchars($dashboard_plan_name); ?></span>
-                                <span class="dashboard-pill">MRR: &#8369;<?php echo number_format($dashboard_plan_price, 2); ?></span>
+                                <span class="dashboard-pill">Monthly Payment: &#8369;<?php echo number_format($dashboard_plan_price, 2); ?></span>
                                 <span class="dashboard-pill">Active Clients: <?php echo number_format($dashboard_active_clients); ?></span>
                                 <span class="dashboard-pill">Alerts: <?php echo number_format($dashboard_system_alerts + $dashboard_overdue_loans); ?></span>
                             </div>
@@ -1987,7 +2125,7 @@ function hexToRgb($hex) {
                                 <div class="dashboard-meta-card">
                                     <span class="dashboard-meta-label">Workspace Plan</span>
                                     <strong><?php echo htmlspecialchars($dashboard_plan_name); ?></strong>
-                                    <small>&#8369;<?php echo number_format($dashboard_plan_price, 2); ?> monthly recurring value</small>
+                                    <small>&#8369;<?php echo number_format($dashboard_plan_price, 2); ?> monthly payment</small>
                                 </div>
                                 <div class="dashboard-meta-card">
                                     <span class="dashboard-meta-label">Support Email</span>
@@ -2043,9 +2181,9 @@ function hexToRgb($hex) {
                                 </a>
                                 <?php endif; ?>
                                 <a href="admin.php?tab=settings" class="dashboard-action-card">
-                                    <span class="material-symbols-rounded">settings</span>
+                                    <span class="material-symbols-rounded">palette</span>
                                     <div>
-                                        <strong>General Settings</strong>
+                                        <strong>Branding</strong>
                                         <small>Keep company info and branding current.</small>
                                     </div>
                                 </a>
@@ -2134,17 +2272,55 @@ function hexToRgb($hex) {
                     </div>
                 </section>
 
-                <!-- General Settings View -->
-                <section id="settings" class="view-section <?php echo in_array($active_view, ['settings', 'personal'], true) ? 'active' : ''; ?>">
-                    <div class="tabs">
-                        <a href="admin.php?tab=settings" class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'personal') ? 'active' : ''; ?>" data-tab="company-profile">Company Profile</a>
-                        <a href="admin.php?tab=personal" class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'personal') ? 'active' : ''; ?>" data-tab="personal-profile">Personal Profile</a>
+                <?php if ($workspace_setup_pending && $active_view === 'dashboard'): ?>
+                <aside class="dashboard-setup-alert" aria-live="polite">
+                    <div class="dashboard-setup-alert-head">
+                        <div>
+                            <span class="dashboard-setup-alert-kicker">Setup Alert</span>
+                            <h3>Finish your workspace</h3>
+                            <p>Your subscription is active. Click any step below whenever you're ready.</p>
+                        </div>
+                        <div class="dashboard-setup-alert-controls">
+                            <div class="dashboard-setup-alert-progress">
+                                <strong><?php echo $workspace_setup_completed_items; ?>/<?php echo $workspace_setup_total_items; ?></strong>
+                                <span><?php echo $workspace_setup_pending_count; ?> left</span>
+                            </div>
+                            <button
+                                type="button"
+                                class="dashboard-setup-alert-toggle"
+                                data-setup-alert-toggle
+                                aria-expanded="true"
+                                title="Minimize setup alert"
+                            >
+                                <span class="material-symbols-rounded">remove</span>
+                            </button>
+                        </div>
                     </div>
+                    <div class="dashboard-setup-alert-list">
+                        <?php foreach ($workspace_setup_pending_items as $item): ?>
+                        <div class="dashboard-setup-alert-item">
+                            <div class="dashboard-setup-alert-icon">
+                                <span class="material-symbols-rounded"><?php echo htmlspecialchars($item['icon']); ?></span>
+                            </div>
+                            <div class="dashboard-setup-alert-copy">
+                                <strong><?php echo htmlspecialchars($item['title']); ?></strong>
+                                <p><?php echo htmlspecialchars($item['description']); ?></p>
+                                <a href="<?php echo htmlspecialchars($item['href']); ?>" class="dashboard-setup-alert-link">
+                                    <?php echo htmlspecialchars($item['action_label']); ?>
+                                </a>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </aside>
+                <?php endif; ?>
 
-                    <div id="company-profile" class="tab-content <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'personal') ? 'active' : ''; ?>">
-                        <div class="settings-panel">
-                            <form id="settings-form" method="POST" action="">
+                <!-- Branding View -->
+                <section id="settings" class="view-section <?php echo $active_view === 'settings' ? 'active' : ''; ?>">
+                    <div class="settings-panel">
+                        <form id="settings-form" method="POST" action="" enctype="multipart/form-data">
                                 <input type="hidden" name="action" value="save_settings">
+                                <input type="hidden" name="existing_logo_path" id="existing-logo-path" value="<?php echo htmlspecialchars($settings['logo_path'] ?? ''); ?>">
                                 <input type="hidden" id="hidden-toggle-booking" name="toggle_booking_system" value="1" <?php echo ((int) $toggles['booking_system'] === 1) ? '' : 'disabled'; ?>>
                                 <input type="hidden" id="hidden-toggle-registration" name="toggle_user_registration" value="1" <?php echo ((int) $toggles['user_registration'] === 1) ? '' : 'disabled'; ?>>
                                 <input type="hidden" id="hidden-toggle-maintenance" name="toggle_maintenance_mode" value="1" <?php echo ((int) $toggles['maintenance_mode'] === 1) ? '' : 'disabled'; ?>>
@@ -2152,104 +2328,171 @@ function hexToRgb($hex) {
                                 <input type="hidden" id="hidden-toggle-website" name="toggle_public_website_enabled" value="1" <?php echo ((int) ($toggles['public_website_enabled'] ?? 0) === 1) ? '' : 'disabled'; ?>>
 
                             <div class="card">
-                                <h3>Branding Configuration</h3>
-                                <div class="form-group">
-                                    <label for="company-name">Company Name</label>
-                                    <input type="text" id="company-name" name="company_name" value="<?php echo htmlspecialchars($settings['company_name'] ?? ''); ?>" class="form-control">
-                                </div>
-                                <div class="form-group">
-                                    <label>Logo Upload</label>
-                                    <div class="file-upload">
-                                        <input type="file" id="logo-upload" class="hidden-input">
-                                        <label for="logo-upload" class="upload-btn">
-                                            <span class="material-symbols-rounded">upload</span> Choose Image
-                                        </label>
-                                        <span class="file-name">No file chosen</span>
-                                    </div>
-                                </div>
-                                <div class="form-group" style="margin-top: 10px;">
-                                    <label for="logo-path">Logo URL Path</label>
-                                    <input type="text" id="logo-path" name="logo_path" value="<?php echo htmlspecialchars($settings['logo_path'] ?? ''); ?>" class="form-control" placeholder="https://example.com/logo.png">
-                                    <small class="text-muted">Enter a direct URL to your logo.</small>
-                                </div>
-                            </div>
-
-                            <div class="card">
-                                <h3>Theme Settings</h3>
-                                <p class="text-muted">Customize the platform colors to match your brand.</p>
-
-                                <div class="form-group" style="margin-bottom: 20px;">
-                                    <label>Font Family</label>
-                                    <select name="font_family" class="form-control">
-                                        <?php
-                                        $allowed_fonts_list = ['Inter', 'Poppins', 'Outfit', 'Roboto', 'Open Sans', 'Lato', 'Nunito', 'Montserrat', 'DM Sans', 'Plus Jakarta Sans'];
-                                        foreach ($allowed_fonts_list as $fnt):
-                                        ?>
-                                        <option value="<?php echo htmlspecialchars($fnt); ?>" <?php echo ($settings['font_family'] ?? '') === $fnt ? 'selected' : ''; ?>><?php echo htmlspecialchars($fnt); ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-
-                                <div class="theme-colors">
+                                <h3>Brand Identity</h3>
+                                <p class="text-muted">Set the company name and logo that power your dashboard, staff portal, client app, and website branding.</p>
+                                <div class="config-two-col">
                                     <div class="form-group">
-                                        <label>Primary Color</label>
-                                        <div class="color-picker-wrapper">
-                                            <input type="color" id="primary-color" name="primary_color" value="<?php echo htmlspecialchars($settings['primary_color'] ?? ''); ?>">
-                                            <span class="color-hex"><?php echo htmlspecialchars($settings['primary_color'] ?? ''); ?></span>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Text Main</label>
-                                        <div class="color-picker-wrapper">
-                                            <input type="color" name="text_main" value="<?php echo htmlspecialchars($settings['text_main'] ?? ''); ?>">
-                                            <span class="color-hex"><?php echo htmlspecialchars($settings['text_main'] ?? ''); ?></span>
-                                        </div>
+                                        <label for="company-name">Company Name</label>
+                                        <input type="text" id="company-name" name="company_name" value="<?php echo htmlspecialchars($settings['company_name'] ?? ''); ?>" class="form-control" required>
                                     </div>
                                     <div class="form-group">
-                                        <label>Text Muted</label>
-                                        <div class="color-picker-wrapper">
-                                            <input type="color" name="text_muted" value="<?php echo htmlspecialchars($settings['text_muted'] ?? ''); ?>">
-                                            <span class="color-hex"><?php echo htmlspecialchars($settings['text_muted'] ?? ''); ?></span>
+                                        <label>Logo Upload</label>
+                                        <div class="config-logo-upload">
+                                            <input type="file" class="form-control" id="logo_file" name="logo_file" accept=".png,.jpg,.jpeg,.webp,.svg">
+                                            <span class="text-muted">Upload a new logo to replace the current one. PNG, JPG, WEBP, or SVG, up to 3MB.</span>
                                         </div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Background Body</label>
-                                        <div class="color-picker-wrapper">
-                                            <input type="color" name="bg_body" value="<?php echo htmlspecialchars($settings['bg_body'] ?? ''); ?>">
-                                            <span class="color-hex"><?php echo htmlspecialchars($settings['bg_body'] ?? ''); ?></span>
-                                        </div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Background Card</label>
-                                        <div class="color-picker-wrapper">
-                                            <input type="color" name="bg_card" value="<?php echo htmlspecialchars($settings['bg_card'] ?? ''); ?>">
-                                            <span class="color-hex"><?php echo htmlspecialchars($settings['bg_card'] ?? ''); ?></span>
-                                        </div>
+                                        <button type="button" id="extract-palette-btn" class="btn-extract-palette" style="display:none;">
+                                            <span class="material-symbols-rounded">palette</span>
+                                            Match Colors from Logo
+                                        </button>
                                     </div>
                                 </div>
                             </div>
 
                             <div class="card">
-                                <h3>Module: Contact Information</h3>
-                                <div class="form-group">
-                                    <label>Support Email</label>
-                                    <input type="email" id="support-email" name="support_email" class="form-control" value="<?php echo htmlspecialchars($settings['support_email'] ?? ''); ?>">
+                                <div class="card-header-flex">
+                                    <div>
+                                        <h3>Branding Studio</h3>
+                                        <p class="text-muted">This mirrors the onboarding branding flow, but you can fine-tune it here any time without setup restrictions.</p>
+                                    </div>
+                                    <button type="button" id="sync-btn" class="sync-btn" title="Automatically adjusts text colors for readability">
+                                        <span class="material-symbols-rounded">contrast</span>
+                                        Smart Contrast Sync: Off
+                                    </button>
                                 </div>
-                                <div class="form-group">
-                                    <label>Support Phone</label>
-                                    <input type="text" id="support-phone" name="support_phone" class="form-control" value="<?php echo htmlspecialchars($settings['support_phone'] ?? ''); ?>">
+
+                                <div class="config-studio-grid">
+                                    <div>
+                                        <div class="form-group">
+                                            <label>Font Style</label>
+                                            <select class="form-control" id="font_family" name="font_family">
+                                                <?php foreach (['Inter', 'Poppins', 'Outfit', 'Roboto', 'Open Sans', 'Lato', 'Nunito', 'Montserrat', 'DM Sans', 'Plus Jakarta Sans'] as $fnt): ?>
+                                                <option value="<?php echo htmlspecialchars($fnt); ?>" <?php echo ($settings['font_family'] ?? '') === $fnt ? 'selected' : ''; ?> style="font-family:'<?php echo htmlspecialchars($fnt); ?>',sans-serif"><?php echo htmlspecialchars($fnt); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Brand Color</label>
+                                                <span class="color-item-desc">Buttons, links, active highlights</span>
+                                            </div>
+                                            <div class="color-input-group">
+                                                <input type="color" id="picker-primary" value="<?php echo htmlspecialchars($settings['primary_color']); ?>">
+                                                <input type="text" class="form-control" id="primary_color" name="primary_color" value="<?php echo htmlspecialchars($settings['primary_color']); ?>" maxlength="7">
+                                            </div>
+                                        </div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Page Background</label>
+                                                <span class="color-item-desc">Main area behind cards and content</span>
+                                            </div>
+                                            <div class="color-input-group">
+                                                <input type="color" id="picker-bg-body" value="<?php echo htmlspecialchars($settings['bg_body']); ?>">
+                                                <input type="text" class="form-control" id="bg_body" name="bg_body" value="<?php echo htmlspecialchars($settings['bg_body']); ?>" maxlength="7">
+                                            </div>
+                                        </div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Card & Sidebar</label>
+                                                <span class="color-item-desc">Panels, cards, sidebar background</span>
+                                            </div>
+                                            <div class="color-input-group">
+                                                <input type="color" id="picker-bg-card" value="<?php echo htmlspecialchars($settings['bg_card']); ?>">
+                                                <input type="text" class="form-control" id="bg_card" name="bg_card" value="<?php echo htmlspecialchars($settings['bg_card']); ?>" maxlength="7">
+                                            </div>
+                                        </div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Heading Text</label>
+                                                <span class="color-item-desc">Titles, nav labels, sidebar items</span>
+                                            </div>
+                                            <div class="color-input-group">
+                                                <input type="color" id="picker-text-main" value="<?php echo htmlspecialchars($settings['text_main']); ?>">
+                                                <input type="text" class="form-control" id="text_main" name="text_main" value="<?php echo htmlspecialchars($settings['text_main']); ?>" maxlength="7">
+                                            </div>
+                                        </div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Body Text</label>
+                                                <span class="color-item-desc">Paragraphs, descriptions, timestamps</span>
+                                            </div>
+                                            <div class="color-input-group">
+                                                <input type="color" id="picker-text-muted" value="<?php echo htmlspecialchars($settings['text_muted']); ?>">
+                                                <input type="text" class="form-control" id="text_muted" name="text_muted" value="<?php echo htmlspecialchars($settings['text_muted']); ?>" maxlength="7">
+                                            </div>
+                                        </div>
+
+                                        <input type="hidden" name="secondary_color" id="secondary_color" value="<?php echo htmlspecialchars($settings['secondary_color']); ?>">
+
+                                        <div class="config-subsection-title">Card & Sidebar Style</div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Border Color</label>
+                                                <span class="color-item-desc">Card edges, dividers, and separators</span>
+                                            </div>
+                                            <div class="color-input-group">
+                                                <input type="color" id="picker-border-color" value="<?php echo htmlspecialchars($settings['border_color']); ?>">
+                                                <input type="text" class="form-control" id="border_color" name="border_color" value="<?php echo htmlspecialchars($settings['border_color']); ?>" maxlength="7">
+                                            </div>
+                                        </div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Border Width</label>
+                                                <span class="color-item-desc">Thickness of card and sidebar outlines</span>
+                                            </div>
+                                            <div style="display:flex; align-items:center; gap:8px;">
+                                                <input type="range" id="card_border_width" name="card_border_width" min="0" max="3" step="0.1" value="<?php echo htmlspecialchars($settings['card_border_width']); ?>" style="width:120px; accent-color:var(--primary-color);">
+                                                <span id="border-width-label" class="config-inline-value"><?php echo htmlspecialchars($settings['card_border_width']); ?>px</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="color-item">
+                                            <div class="color-item-info">
+                                                <label>Card Shadow</label>
+                                                <span class="color-item-desc">Depth and elevation of workspace panels</span>
+                                            </div>
+                                            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                                                <?php foreach (['none' => 'None', 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large'] as $val => $label): ?>
+                                                <button type="button" class="shadow-opt<?php echo ($settings['card_shadow'] ?? 'sm') === $val ? ' active' : ''; ?>" data-shadow="<?php echo $val; ?>"><?php echo $label; ?></button>
+                                                <?php endforeach; ?>
+                                                <input type="hidden" id="card_shadow" name="card_shadow" value="<?php echo htmlspecialchars($settings['card_shadow'] ?? 'sm'); ?>">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div class="preview-switch">
+                                            <button type="button" class="preview-btn active" data-view="admin">Admin View</button>
+                                            <button type="button" class="preview-btn" data-view="staff">Staff View</button>
+                                            <button type="button" class="preview-btn" data-view="mobile">Client App View</button>
+                                            <button type="button" class="preview-btn" data-view="website">Website View</button>
+                                        </div>
+                                        <div class="preview-stage" id="preview-stage">
+                                            <div class="preview-screen active" data-preview="admin"><div class="preview-shell admin-layout"><div class="admin-sidebar"><div class="admin-sidebar-header"><div class="admin-sidebar-logo"><span class="material-symbols-rounded">diamond</span><img class="preview-logo-image" alt="Logo"></div><div class="admin-sidebar-name preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></div></div><div class="admin-sidebar-nav"><div class="admin-nav-item active"><span class="material-symbols-rounded">dashboard</span>Dashboard</div><div class="admin-nav-item"><span class="material-symbols-rounded">groups</span>Staff & Roles</div><div class="admin-nav-item"><span class="material-symbols-rounded">language</span>Website</div><div class="admin-nav-item"><span class="material-symbols-rounded">receipt_long</span>Billing</div><div class="admin-nav-item"><span class="material-symbols-rounded">palette</span>Branding</div></div><div class="admin-sidebar-footer"><div class="admin-nav-item logout"><span class="material-symbols-rounded">logout</span>Logout</div></div></div><div class="admin-main"><div class="admin-topbar"><div class="admin-topbar-title">Dashboard</div><div class="admin-topbar-right"><span class="material-symbols-rounded" style="font-size:15px; color:var(--theme-text-muted);">dark_mode</span><div class="admin-topbar-avatar">A</div><div class="admin-topbar-info"><strong class="preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></strong>Admin</div></div></div><div class="admin-dashboard-content"><div class="admin-stat-grid"><div class="admin-stat-card"><div class="admin-stat-icon" style="background:rgba(var(--primary-r),var(--primary-g),var(--primary-b),0.1);"><span class="material-symbols-rounded" style="color:var(--theme-primary);">book</span></div><div><div class="admin-stat-label">Total Clients</div><div class="admin-stat-value">1,240</div></div></div><div class="admin-stat-card"><div class="admin-stat-icon" style="background:rgba(34,197,94,0.1);"><span class="material-symbols-rounded" style="color:#22c55e;">group</span></div><div><div class="admin-stat-label">Active Staff</div><div class="admin-stat-value">24</div></div></div><div class="admin-stat-card"><div class="admin-stat-icon" style="background:rgba(245,158,11,0.14);"><span class="material-symbols-rounded" style="color:#f59e0b;">warning</span></div><div><div class="admin-stat-label">Alerts</div><div class="admin-stat-value">3</div></div></div></div><div class="admin-activity-card"><div class="admin-activity-title">Recent Activity</div><div class="admin-activity-item"><div class="admin-activity-dot" style="background:var(--theme-primary);"></div><span class="admin-activity-text">New staff account created</span><span class="admin-activity-time">2m ago</span></div><div class="admin-activity-item"><div class="admin-activity-dot" style="background:#22c55e;"></div><span class="admin-activity-text">Loan product updated</span><span class="admin-activity-time">15m ago</span></div><div class="admin-activity-item"><div class="admin-activity-dot" style="background:#f59e0b;"></div><span class="admin-activity-text">Payment recorded</span><span class="admin-activity-time">1h ago</span></div></div></div></div></div></div>
+                                            <div class="preview-screen" data-preview="staff"><div class="preview-shell staff-layout"><div class="staff-sidebar"><div class="staff-sidebar-header"><div class="staff-sidebar-logo"><span class="material-symbols-rounded">account_balance</span><img class="preview-logo-image" alt="Logo"></div><div class="staff-sidebar-name preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></div><div class="staff-sidebar-sub">Employee Portal</div></div><div class="staff-nav-item active"><span class="material-symbols-rounded">home</span>Home</div><div class="staff-nav-item"><span class="material-symbols-rounded">group</span>Clients</div><div class="staff-nav-item"><span class="material-symbols-rounded">real_estate_agent</span>Loans</div><div class="staff-nav-item"><span class="material-symbols-rounded">description</span>Applications</div><div class="staff-nav-item"><span class="material-symbols-rounded">payments</span>Payments</div><div class="staff-nav-item"><span class="material-symbols-rounded">bar_chart</span>Reports</div><div class="staff-nav-spacer"></div><div class="staff-nav-item logout"><span class="material-symbols-rounded">logout</span>Sign Out</div></div><div class="staff-main"><div class="staff-topbar"><div class="staff-topbar-title">Home</div><div class="staff-topbar-right"><div class="staff-walkin-btn"><span class="material-symbols-rounded">person_add</span>Walk-In</div><div class="staff-avatar-pill"><div class="staff-avatar-circle">J</div><div class="staff-avatar-info"><strong>Juan</strong>Loan Officer</div></div></div></div><div class="staff-dashboard-content"><div class="staff-welcome-card"><div class="staff-welcome-icon"><span class="material-symbols-rounded">waving_hand</span></div><div class="staff-welcome-text"><h4>Welcome back, Juan!</h4><p>Here is your daily overview and pending tasks.</p></div></div><div class="staff-widget-grid"><div class="staff-widget-card"><div class="staff-widget-header"><span class="material-symbols-rounded">task</span><span>Pending Loans</span></div><div class="staff-widget-value">8</div><div class="staff-widget-sub">Awaiting review</div></div><div class="staff-widget-card"><div class="staff-widget-header"><span class="material-symbols-rounded">receipt_long</span><span>Today's Collections</span></div><div class="staff-widget-value">&#8369;48,200</div><div class="staff-widget-sub">12 payments received</div></div></div></div></div></div></div>
+                                            <div class="preview-screen" data-preview="mobile"><div class="phone-shell"><div class="phone-notch"></div><div class="phone-statusbar"><span>9:41</span><span style="display:flex;gap:3px;align-items:center;"><span class="material-symbols-rounded" style="font-size:10px;">signal_cellular_alt</span><span class="material-symbols-rounded" style="font-size:10px;">wifi</span><span class="material-symbols-rounded" style="font-size:10px;">battery_full</span></span></div><div class="client-home-header"><div class="client-greeting">Good morning,</div><div class="client-name" style="color:var(--theme-text-main);">Maria Santos</div></div><div class="client-balance-card"><div class="client-balance-label">Outstanding Balance</div><div class="client-balance-amount">&#8369;24,500.00</div><div class="client-balance-sub">Next payment: Apr 29, 2026</div><div class="client-balance-row"><div class="client-balance-stat"><div class="client-balance-stat-val">&#8369;2,450</div><div class="client-balance-stat-lbl">Monthly Due</div></div><div class="client-balance-stat"><div class="client-balance-stat-val">6 / 12</div><div class="client-balance-stat-lbl">Payments Made</div></div><div class="client-balance-stat"><div class="client-balance-stat-val">On Time</div><div class="client-balance-stat-lbl">Status</div></div></div></div><div class="client-quick-actions"><div class="client-action-btn"><span class="material-symbols-rounded">payments</span>Pay Now</div><div class="client-action-btn"><span class="material-symbols-rounded">add_circle</span>Apply</div><div class="client-action-btn"><span class="material-symbols-rounded">calendar_month</span>Schedule</div><div class="client-action-btn"><span class="material-symbols-rounded">chat</span>Support</div></div><div class="client-section-title">Active Loan</div><div class="client-loan-card"><div class="client-loan-top"><span class="client-loan-name">Personal Loan</span><span class="client-loan-badge">Active</span></div><div class="client-loan-progress"><div class="client-loan-progress-fill" style="width:50%;"></div></div><div class="client-loan-details"><span>&#8369;24,500 remaining</span><span>&#8369;49,000 total</span></div></div><div class="phone-bottom-nav"><div class="phone-nav-item active"><span class="material-symbols-rounded">home</span>Home</div><div class="phone-nav-item"><span class="material-symbols-rounded">receipt_long</span>Loans</div><div class="phone-nav-item"><span class="material-symbols-rounded">payments</span>Payments</div><div class="phone-nav-item"><span class="material-symbols-rounded">person</span>Profile</div></div></div></div>
+                                            <div class="preview-screen" data-preview="website"><div class="website-preview-shell"><div class="wp-nav"><div class="wp-nav-brand preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></div><div class="wp-nav-links"><a href="#">Home</a><a href="#">About</a><a href="#">Services</a><a href="#">Contact</a></div><div class="wp-nav-btns"><button type="button" class="btn-login">Login</button><button type="button" class="btn-cta">Apply Now</button></div></div><div class="wp-hero"><div><div class="wp-badge"><span class="material-symbols-rounded">verified</span>Trusted Financial Services</div><div class="wp-hero-title">Build your future with <span class="preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></span></div><div class="wp-hero-sub">Flexible loan products, reliable service, and a digital experience shaped by your brand.</div><div class="wp-hero-actions"><button type="button" class="wp-btn-p">Get Started</button><button type="button" class="wp-btn-s">Learn More</button></div></div><div class="wp-illus"><div class="wp-stat-card"><div class="wp-stat-icon" style="background:var(--theme-primary);"><span class="material-symbols-rounded">check_circle</span></div><div><div class="wp-stat-label">Approved</div><div class="wp-stat-value">1,240</div></div></div><div class="wp-stat-card"><div class="wp-stat-icon" style="background:#10b981;"><span class="material-symbols-rounded">group</span></div><div><div class="wp-stat-label">Members</div><div class="wp-stat-value">856</div></div></div><div class="wp-stat-card"><div class="wp-stat-icon" style="background:#f59e0b;"><span class="material-symbols-rounded">trending_up</span></div><div><div class="wp-stat-label">Growth</div><div class="wp-stat-value">+24%</div></div></div></div></div><div class="wp-services"><div class="wp-section-label">What We Offer</div><div class="wp-section-heading">Our Services</div><div class="wp-svc-grid"><div class="wp-svc-card"><span class="material-symbols-rounded" style="color:var(--theme-primary);">account_balance_wallet</span><h6>Personal Loans</h6><p>Flexible terms for your needs.</p></div><div class="wp-svc-card"><span class="material-symbols-rounded" style="color:#10b981;">store</span><h6>Business Loans</h6><p>Grow your enterprise.</p></div><div class="wp-svc-card"><span class="material-symbols-rounded" style="color:#f59e0b;">emergency</span><h6>Emergency Loans</h6><p>Quick access when needed.</p></div></div></div><div class="wp-about"><div class="wp-about-label">About Us</div><div class="wp-about-title">Who We Are</div><div class="wp-about-body">We are committed to empowering communities through accessible financial services and sustainable growth.</div></div><div class="wp-footer"><div><div class="wp-footer-brand preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></div><div class="wp-footer-desc">Your trusted partner in financial growth.</div></div><div><div class="wp-footer-contact-label">Contact</div><div class="wp-footer-contact-item"><span class="material-symbols-rounded">call</span><?php echo htmlspecialchars(($settings['support_phone'] ?? '') !== '' ? $settings['support_phone'] : '(02) 1234-5678'); ?></div><div class="wp-footer-contact-item"><span class="material-symbols-rounded">mail</span><?php echo htmlspecialchars(($settings['support_email'] ?? '') !== '' ? $settings['support_email'] : 'info@example.com'); ?></div><div class="wp-footer-contact-item"><span class="material-symbols-rounded">schedule</span>Mon-Fri 8am-5pm</div></div></div></div></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
                             <div class="action-bar">
-                                <button class="btn btn-primary" id="save-settings" type="submit">Save Settings</button>
+                                <button class="btn btn-primary" id="save-settings" type="submit">Save Branding</button>
                             </div>
-                            </form>
-                        </div>
+                        </form>
                     </div>
 
-                    <div id="personal-profile" class="tab-content <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'personal') ? 'active' : ''; ?>">
+                </section>
+
+                <section id="personal" class="view-section <?php echo $active_view === 'personal' ? 'active' : ''; ?>">
                         <div class="settings-panel">
                             <?php
                                 $personal_data = ['first_name' => '', 'last_name' => '', 'email' => ''];
@@ -2292,7 +2535,6 @@ function hexToRgb($hex) {
                                 </div>
                             </form>
                         </div>
-                    </div>
                 </section>
 
                 <!-- Feature Toggles View -->

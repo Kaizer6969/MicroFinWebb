@@ -4,6 +4,7 @@ session_start();
 require_once '../backend/db_connect.php';
 require_once '../backend/billing_access.php';
 require_once '../backend/lazy_billing_resolver.php';
+require_once '../backend/billing_notifications.php';
 require_once __DIR__ . '/super_admin_auth.php';
 
 // Resolve any pending tenant subscriptions automagically!
@@ -95,7 +96,7 @@ function sa_compute_next_billing_date(string $billingCycle, ?string $baseDate = 
     } elseif ($cycle === 'Quarterly') {
         $base->modify('+3 months');
     } else {
-        $base->modify('+1 month');
+        $base->modify('+30 days');
     }
 
     return $base->format('Y-m-d');
@@ -252,6 +253,81 @@ function sa_build_super_admin_login_url(): string
     return sa_resolve_app_base_url() . '/super_admin/login.php';
 }
 
+function sa_get_tenant_contact(PDO $pdo, string $tenantId): ?array
+{
+    if (function_exists('mf_billing_get_contact')) {
+        $contact = mf_billing_get_contact($pdo, $tenantId);
+        if (is_array($contact) && trim((string)($contact['email'] ?? '')) !== '') {
+            return $contact;
+        }
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT
+            t.tenant_name,
+            u.email,
+            u.username,
+            u.first_name,
+            u.last_name
+        FROM tenants t
+        LEFT JOIN users u
+            ON u.tenant_id = t.tenant_id
+           AND u.deleted_at IS NULL
+           AND TRIM(COALESCE(u.email, '')) <> ''
+        WHERE t.tenant_id = ?
+          AND t.deleted_at IS NULL
+        ORDER BY
+            CASE WHEN u.user_type = 'Admin' THEN 0 ELSE 1 END,
+            CASE WHEN u.status = 'Active' THEN 0 ELSE 1 END,
+            u.user_id ASC
+        LIMIT 1
+    ");
+    $stmt->execute([$tenantId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return is_array($row) ? $row : null;
+}
+
+function sa_send_tenant_deactivation_email(PDO $pdo, string $tenantId, string $reason): string
+{
+    if (!function_exists('mf_send_brevo_email')) {
+        return 'Brevo email helper is unavailable.';
+    }
+
+    $contact = sa_get_tenant_contact($pdo, $tenantId);
+    if (!$contact || trim((string)($contact['email'] ?? '')) === '') {
+        return 'No tenant contact email found.';
+    }
+
+    $tenantNameRaw = trim((string)($contact['tenant_name'] ?? 'MicroFin Tenant'));
+    $tenantName = htmlspecialchars($tenantNameRaw, ENT_QUOTES, 'UTF-8');
+    $recipientName = function_exists('mf_billing_contact_name')
+        ? mf_billing_contact_name($contact)
+        : trim((string)($contact['first_name'] ?? '') . ' ' . (string)($contact['last_name'] ?? ''));
+    $recipientName = $recipientName !== '' ? $recipientName : 'Customer';
+    $recipientName = htmlspecialchars($recipientName, ENT_QUOTES, 'UTF-8');
+    $reasonHtml = nl2br(htmlspecialchars($reason, ENT_QUOTES, 'UTF-8'));
+    $noticeDate = htmlspecialchars(date('F j, Y g:i A'), ENT_QUOTES, 'UTF-8');
+
+    $html = "
+        <div style=\"font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;\">
+            <h2 style=\"margin: 0 0 12px;\">Tenant Account Deactivated</h2>
+            <p>Hello {$recipientName},</p>
+            <p>Your <strong>{$tenantName}</strong> workspace has been temporarily deactivated by the MicroFin platform team.</p>
+            <div style=\"margin: 20px 0; padding: 16px; border: 1px solid #fecaca; border-radius: 12px; background: #fff7f7;\">
+                <p style=\"margin: 0 0 8px;\"><strong>Status:</strong> Suspended</p>
+                <p style=\"margin: 0 0 8px;\"><strong>Effective date:</strong> {$noticeDate}</p>
+                <p style=\"margin: 0 0 8px;\"><strong>Reason provided:</strong></p>
+                <div style=\"padding: 12px; border-radius: 10px; background: #ffffff; border: 1px solid #fecaca;\">{$reasonHtml}</div>
+            </div>
+            <p>Dashboard access will remain unavailable until your workspace is reactivated.</p>
+            <p>If you need help or believe this was done in error, you may reply to this email.</p>
+            <p style=\"margin-top: 24px;\">Thank you,<br>MicroFin Platform Team</p>
+        </div>
+    ";
+
+    return mf_send_brevo_email((string)$contact['email'], "{$tenantNameRaw} - Account Deactivation Notice", $html);
+}
+
 $provision_success = '';
 $provision_error = '';
 
@@ -328,7 +404,7 @@ try {
         SET next_billing_date = CASE billing_cycle
             WHEN 'Yearly' THEN DATE_ADD(CURDATE(), INTERVAL 1 YEAR)
             WHEN 'Quarterly' THEN DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
-            ELSE DATE_ADD(CURDATE(), INTERVAL 1 MONTH)
+            ELSE DATE_ADD(CURDATE(), INTERVAL 30 DAY)
         END
         WHERE deleted_at IS NULL
           AND (next_billing_date IS NULL OR next_billing_date = '0000-00-00')
@@ -788,16 +864,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: super_admin.php?section=subscriptions');
         exit;
     } elseif ($action === 'toggle_status') {
-        $tenant_id = $_POST['tenant_id'] ?? '';
-        $new_status = $_POST['new_status'] ?? 'Active';
+        $tenant_id = trim((string)($_POST['tenant_id'] ?? ''));
+        $new_status = trim((string)($_POST['new_status'] ?? 'Active'));
+        $deactivation_reason = trim((string)($_POST['deactivation_reason'] ?? ''));
 
-        $update = $pdo->prepare("UPDATE tenants SET status = ? WHERE tenant_id = ?");
-        $update->execute([$new_status, $tenant_id]);
+        if ($tenant_id === '') {
+            $_SESSION['sa_error'] = 'Tenant ID is required.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
 
-        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'TENANT_STATUS_CHANGE', 'tenant', ?, ?)");
-        $log->execute([$_SESSION['super_admin_id'], "Tenant status changed to {$new_status}", $tenant_id]);
+        if (!in_array($new_status, ['Active', 'Suspended'], true)) {
+            $_SESSION['sa_error'] = 'Invalid tenant status update requested.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
 
-        $_SESSION['sa_flash'] = "Tenant status updated to {$new_status}.";
+        if ($new_status === 'Suspended') {
+            $deactivation_reason = str_replace(["\r\n", "\r"], "\n", $deactivation_reason);
+            $deactivation_reason = trim($deactivation_reason);
+            if ($deactivation_reason === '') {
+                $_SESSION['sa_error'] = 'Please provide a reason before deactivating this tenant.';
+                header('Location: super_admin.php?section=tenants');
+                exit;
+            }
+            if (strlen($deactivation_reason) > 1000) {
+                $deactivation_reason = substr($deactivation_reason, 0, 1000);
+            }
+        }
+
+        $tenantStmt = $pdo->prepare("SELECT tenant_name, status FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $tenantStmt->execute([$tenant_id]);
+        $tenantRow = $tenantStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$tenantRow) {
+            $_SESSION['sa_error'] = 'Tenant not found.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $tenantName = (string)($tenantRow['tenant_name'] ?? $tenant_id);
+        $currentStatus = trim((string)($tenantRow['status'] ?? ''));
+
+        if ($currentStatus === $new_status) {
+            $_SESSION['sa_flash'] = "{$tenantName} is already marked as {$new_status}.";
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $actionType = $new_status === 'Suspended' ? 'TENANT_DEACTIVATED' : 'TENANT_REACTIVATED';
+        $logDescription = $new_status === 'Suspended'
+            ? "Tenant {$tenantName} was deactivated. Reason: " . preg_replace('/\s+/', ' ', $deactivation_reason)
+            : "Tenant {$tenantName} was reactivated.";
+
+        $pdo->beginTransaction();
+
+        try {
+            $update = $pdo->prepare("UPDATE tenants SET status = ? WHERE tenant_id = ?");
+            $update->execute([$new_status, $tenant_id]);
+
+            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, ?, 'tenant', ?, ?)");
+            $log->execute([$_SESSION['super_admin_id'], $actionType, $logDescription, $tenant_id]);
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $_SESSION['sa_error'] = 'Unable to update tenant status right now.';
+            header('Location: super_admin.php?section=tenants');
+            exit;
+        }
+
+        $emailStatus = '';
+        if ($new_status === 'Suspended') {
+            $emailResult = sa_send_tenant_deactivation_email($pdo, $tenant_id, $deactivation_reason);
+            if ($emailResult === 'Email sent successfully.') {
+                $emailStatus = ' A deactivation email was sent to the tenant.';
+            } else {
+                $emailStatus = ' Deactivation email failed: ' . $emailResult;
+            }
+        }
+
+        $_SESSION['sa_flash'] = "Tenant status updated to {$new_status}." . $emailStatus;
         header('Location: super_admin.php?section=tenants');
         exit;
     } elseif ($action === 'reject_tenant') {
@@ -1775,14 +1923,14 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                     <?php endif; ?>
 
                                                     <!-- Suspend -->
-                                                    <form method="POST" style="display:inline;">
-                                                        <input type="hidden" name="action" value="toggle_status">
-                                                        <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($t['tenant_id']); ?>">
-                                                        <input type="hidden" name="new_status" value="Suspended">
-                                                        <button type="submit" class="btn btn-outline btn-sm" style="color:#b91c1c; border-color:#fca5a5;" title="Suspend Tenant">
+                                                    <button type="button"
+                                                        class="btn btn-outline btn-sm btn-tenant-deactivate"
+                                                        style="color:#b91c1c; border-color:#fca5a5;"
+                                                        title="Deactivate Tenant"
+                                                        data-tenant-id="<?php echo htmlspecialchars($t['tenant_id']); ?>"
+                                                        data-tenant-name="<?php echo htmlspecialchars($t['tenant_name']); ?>">
                                                             <span class="material-symbols-rounded" style="font-size:16px;">block</span>
                                                         </button>
-                                                    </form>
                                                 <?php elseif ($status === 'Suspended'): ?>
                                                     <!-- Reactivate -->
                                                     <form method="POST" style="display:inline;">
@@ -2942,6 +3090,34 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline" id="cancel-modal">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="submit-tenant"><span class="material-symbols-rounded">rocket_launch</span> Provision Instance</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tenant Deactivation Modal -->
+    <div id="modal-tenant-status-backdrop" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Deactivate Tenant</h2>
+                <button class="icon-btn" id="close-tenant-status-modal"><span class="material-symbols-rounded">close</span></button>
+            </div>
+            <form class="modal-body" method="POST" action="">
+                <input type="hidden" name="action" value="toggle_status">
+                <input type="hidden" name="tenant_id" id="tenant-status-tenant-id" value="">
+                <input type="hidden" name="new_status" value="Suspended">
+                <div class="form-group">
+                    <label>Tenant</label>
+                    <input type="text" id="tenant-status-tenant-name" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Reason for Deactivation<span class="required-mark">*</span></label>
+                    <textarea id="tenant-status-reason" class="form-control" name="deactivation_reason" rows="5" maxlength="1000" placeholder="Tell the tenant why their account is being deactivated." required></textarea>
+                    <small class="form-hint">This reason will be recorded in the audit log and emailed to the tenant contact.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="cancel-tenant-status-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="background:#b91c1c; border-color:#b91c1c;">Deactivate Tenant</button>
                 </div>
             </form>
         </div>

@@ -24,6 +24,48 @@ require_once __DIR__ . '/report_data.php';
 
 header('Content-Type: application/json');
 
+function mf_sa_sales_period_labels(string $period, string $dateFrom, string $dateTo): array
+{
+    $labels = [];
+
+    if ($period === 'yearly') {
+        $cursor = new DateTimeImmutable(date('Y-01-01', strtotime($dateFrom)));
+        $end = new DateTimeImmutable(date('Y-01-01', strtotime($dateTo)));
+        while ($cursor <= $end) {
+            $labels[] = $cursor->format('Y');
+            $cursor = $cursor->modify('+1 year');
+        }
+        return $labels;
+    }
+
+    $cursor = new DateTimeImmutable(date('Y-m-01', strtotime($dateFrom)));
+    $end = new DateTimeImmutable(date('Y-m-01', strtotime($dateTo)));
+    while ($cursor <= $end) {
+        $labels[] = $cursor->format('Y-m');
+        $cursor = $cursor->modify('+1 month');
+    }
+
+    return $labels;
+}
+
+function mf_sa_fill_sales_periods(array $labels, array $rows): array
+{
+    $mapped = [];
+    foreach ($rows as $row) {
+        $mapped[(string)($row['period_label'] ?? '')] = (float)($row['total'] ?? 0);
+    }
+
+    $filled = [];
+    foreach ($labels as $label) {
+        $filled[] = [
+            'period_label' => $label,
+            'total' => $mapped[$label] ?? 0,
+        ];
+    }
+
+    return $filled;
+}
+
 $action = $_GET['action'] ?? 'dashboard';
 
 try {
@@ -229,7 +271,9 @@ try {
                 ORDER BY period_label ASC
             ");
             $stmt->execute([$date_format, $date_from, $date_to]);
-            $data['revenue_chart'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $revenueRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $periodLabels = mf_sa_sales_period_labels($period, $date_from, $date_to);
+            $data['revenue_chart'] = mf_sa_fill_sales_periods($periodLabels, $revenueRows);
 
             // Recent transactions
             $stmt = $pdo->prepare("

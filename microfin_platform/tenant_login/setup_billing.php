@@ -1,21 +1,77 @@
 <?php
 session_start();
 require_once "../backend/db_connect.php";
+require_once "../backend/billing_notifications.php";
 
 if (!isset($_SESSION["user_logged_in"]) || $_SESSION["user_logged_in"] !== true) {
     header("Location: login.php");
     exit;
 }
 
+function billing_add_30_days(string $dateString): string
+{
+    $source = DateTimeImmutable::createFromFormat('Y-m-d', $dateString) ?: new DateTimeImmutable($dateString);
+    return $source->add(new DateInterval('P30D'))->format('Y-m-d');
+}
+
 $tenant_id = $_SESSION['tenant_id'] ?? '';
 $user_id = $_SESSION['user_id'] ?? 0;
 
 // Check current setup step — this page is step 5 (billing - final)
-$step_stmt = $pdo->prepare('SELECT setup_current_step, setup_completed, mrr FROM tenants WHERE tenant_id = ?');
+$step_stmt = $pdo->prepare('SELECT setup_current_step, setup_completed, plan_tier, max_clients, max_users, mrr FROM tenants WHERE tenant_id = ?');
 $step_stmt->execute([$tenant_id]);
 $step_data = $step_stmt->fetch(PDO::FETCH_ASSOC);
 $current_step = (int)($step_data['setup_current_step'] ?? 0);
-$monthly_price = (float)($step_data['mrr'] ?? 0);
+
+$plan_catalog = [
+    'Starter' => [
+        'price' => 4999,
+        'max_clients' => 1000,
+        'max_users' => 250,
+        'description' => 'Best for newly launched microfinance teams.'
+    ],
+    'Growth' => [
+        'price' => 9999,
+        'max_clients' => 2500,
+        'max_users' => 750,
+        'description' => 'Most popular for growing operations and branches.',
+        'popular' => true
+    ],
+    'Pro' => [
+        'price' => 14999,
+        'max_clients' => 5000,
+        'max_users' => 2000,
+        'description' => 'Built for mature teams with larger daily volume.'
+    ],
+    'Enterprise' => [
+        'price' => 22999,
+        'max_clients' => 10000,
+        'max_users' => 5000,
+        'description' => 'For high-scale lending operations and multi-team workflows.'
+    ],
+    'Unlimited' => [
+        'price' => 29999,
+        'max_clients' => -1,
+        'max_users' => -1,
+        'description' => 'No cap on clients or users for enterprise growth.'
+    ]
+];
+
+$plan_aliases = [
+    'Professional' => 'Pro',
+    'Elite' => 'Enterprise'
+];
+
+$current_plan_tier = trim((string)($step_data['plan_tier'] ?? 'Starter'));
+if (isset($plan_aliases[$current_plan_tier])) {
+    $current_plan_tier = $plan_aliases[$current_plan_tier];
+}
+if (!isset($plan_catalog[$current_plan_tier])) {
+    $current_plan_tier = 'Starter';
+}
+
+$selected_plan_tier = $current_plan_tier;
+$monthly_price = (float)($plan_catalog[$selected_plan_tier]['price'] ?? ($step_data['mrr'] ?? 0));
 
 if ($step_data && (bool)$step_data['setup_completed']) {
     header('Location: ../admin_panel/admin.php');
@@ -23,12 +79,12 @@ if ($step_data && (bool)$step_data['setup_completed']) {
 }
 
 if ($current_step !== 5) {
-    if (in_array($current_step, [1, 2])) {
-        // Upgrade any tenants stuck on removed steps 1 or 2 up to step 5
+    if ($current_step > 0 && $current_step < 5) {
+        // Billing is now the first onboarding gate after password reset.
         $pdo->prepare('UPDATE tenants SET setup_current_step = 5 WHERE tenant_id = ?')->execute([$tenant_id]);
         $current_step = 5;
     } else {
-        $setup_routes = [0 => 'force_change_password.php', 3 => 'setup_website.php', 4 => 'setup_branding.php'];
+        $setup_routes = [0 => 'force_change_password.php'];
         if (isset($setup_routes[$current_step])) {
             header('Location: ' . $setup_routes[$current_step]);
         } else {
@@ -46,7 +102,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $exp_month = (int) ($_POST['exp_month'] ?? 0);
     $exp_year = (int) ($_POST['exp_year'] ?? 0);
     $card_brand = trim($_POST['card_brand'] ?? '');
-    $billing_cycle_preference = trim($_POST['billing_cycle_preference'] ?? '1');
+    $selected_plan_tier = trim((string)($_POST['subscription_plan'] ?? $current_plan_tier));
+
+    if (isset($plan_aliases[$selected_plan_tier])) {
+        $selected_plan_tier = $plan_aliases[$selected_plan_tier];
+    }
+    if (!isset($plan_catalog[$selected_plan_tier])) {
+        $selected_plan_tier = $current_plan_tier;
+    }
+    $selected_plan = $plan_catalog[$selected_plan_tier];
+    $monthly_price = (float)$selected_plan['price'];
 
     // Validate
     $card_clean = preg_replace('/\s+/', '', $card_number);
@@ -77,91 +142,115 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else $card_brand = 'Other';
         }
 
-        $stmt = $pdo->prepare('INSERT INTO tenant_billing_payment_methods (tenant_id, last_four_digits, card_brand, cardholder_name, exp_month, exp_year, card_number_encrypted, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)');
-        $stmt->execute([$tenant_id, $last_four, $card_brand, $cardholder_name, $exp_month, $exp_year, $encrypted_with_iv]);
+        $receipt_email_details = null;
 
-        if (!in_array($billing_cycle_preference, ['1', '15'], true)) {
-            $billing_cycle_preference = '1';
-        }
+        try {
+            $pdo->beginTransaction();
 
-        // billing_cycle DB column is ENUM('Monthly','Quarterly','Yearly').
-        // Both day-of-month options ('1' and '15') are Monthly cycles.
-        // The actual billing day is encoded via next_billing_date.
-        $billing_cycle_enum = 'Monthly';
-        
-        $today_ts = time();
-        $current_day = (int) date('j', $today_ts);
-        $current_month_days = (int) date('t', $today_ts);
-        $is_full_month = false;
+            $stmt = $pdo->prepare('INSERT INTO tenant_billing_payment_methods (tenant_id, last_four_digits, card_brand, cardholder_name, exp_month, exp_year, card_number_encrypted, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)');
+            $stmt->execute([$tenant_id, $last_four, $card_brand, $cardholder_name, $exp_month, $exp_year, $encrypted_with_iv]);
 
-        if ($billing_cycle_preference === '1') {
-            if ($current_day === 1) {
-                // Exactly the 1st
-                $next_billing = date('Y-m-01', strtotime('+1 month', $today_ts));
-                $prorated_days = 30;
-                $is_full_month = true;
-            } else {
-                $next_billing = date('Y-m-01', strtotime('+1 month', $today_ts));
-                $prorated_days = $current_month_days - $current_day + 1;
-            }
-        } else {
-            if ($current_day === 15) {
-                // Exactly the 15th
-                $next_billing = date('Y-m-15', strtotime('+1 month', $today_ts));
-                $prorated_days = 30;
-                $is_full_month = true;
-            } elseif ($current_day < 15) {
-                $next_billing = date('Y-m-15', $today_ts);
-                $prorated_days = 15 - $current_day;
-            } else {
-                $next_billing = date('Y-m-15', strtotime('+1 month', $today_ts));
-                $prorated_days = ($current_month_days - $current_day + 1) + 14;
-            }
-        }
+            $billing_cycle_enum = 'Monthly';
+            $charge_timestamp = date('Y-m-d H:i:s');
+            $activation_date = date('Y-m-d', strtotime($charge_timestamp));
+            $next_billing = billing_add_30_days($activation_date);
+            $payment_method_desc = $card_brand . ' ending in ' . $last_four;
 
-        $upd = $pdo->prepare('UPDATE tenants SET billing_cycle = ?, next_billing_date = ?, setup_current_step = 6, setup_completed = TRUE WHERE tenant_id = ? AND setup_current_step = 5');
-        $upd->execute([$billing_cycle_enum, $next_billing, $tenant_id]);
-
-        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'BILLING_SETUP', 'tenant', 'Payment method added during onboarding', ?)");
-        $log->execute([$user_id, $tenant_id]);
-
-        // Generate the initial/prorated invoice immediately
-        $tenant_stmt = $pdo->prepare("SELECT mrr FROM tenants WHERE tenant_id = ?");
-        $tenant_stmt->execute([$tenant_id]);
-        $monthly_price = (float) $tenant_stmt->fetchColumn();
-
-        if ($monthly_price > 0) {
-            if ($is_full_month) {
-                $prorated_amount = $monthly_price;
-            } else {
-                $daily_rate = $monthly_price / 30;
-                $prorated_amount = round($daily_rate * $prorated_days, 2);
-            }
-
-            $invoice_number = 'INV-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
-            $period_start = date('Y-m-d', $today_ts);
-            $period_end = date('Y-m-d', strtotime($next_billing . ' -1 day'));
-
-            $inv_stmt = $pdo->prepare("
-                INSERT INTO tenant_billing_invoices 
-                (tenant_id, invoice_number, amount, billing_period_start, billing_period_end, due_date, status, paid_at) 
-                VALUES (?, ?, ?, ?, ?, ?, 'Paid', NOW())
-            ");
-            $inv_stmt->execute([
-                $tenant_id,
-                $invoice_number,
-                $prorated_amount,
-                $period_start,
-                $period_end,
-                $period_start // due immediately on setup
+            $upd = $pdo->prepare('UPDATE tenants SET plan_tier = ?, mrr = ?, max_clients = ?, max_users = ?, billing_cycle = ?, next_billing_date = ?, setup_current_step = 6, setup_completed = TRUE WHERE tenant_id = ? AND setup_current_step = 5');
+            $upd->execute([
+                $selected_plan_tier,
+                $monthly_price,
+                (int)$selected_plan['max_clients'],
+                (int)$selected_plan['max_users'],
+                $billing_cycle_enum,
+                $next_billing,
+                $tenant_id
             ]);
 
-            $log2 = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'BILLING_PRORATION', 'invoice', ?, ?)");
-            $log2->execute([$user_id, "Generated initial invoice {$invoice_number}. Amount: {$prorated_amount} for {$prorated_days} days.", $tenant_id]);
-        }
+            $upsert_setting = $pdo->prepare("
+                INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type)
+                VALUES (?, ?, ?, 'Billing', 'String')
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP
+            ");
+            $upsert_setting->execute([$tenant_id, 'next_billing_date', $next_billing]);
 
-        header('Location: ../admin_panel/admin.php');
-        exit;
+            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'BILLING_SETUP', 'tenant', 'Payment method added during onboarding', ?)");
+            $log->execute([$user_id, $tenant_id]);
+
+            if ($selected_plan_tier !== $current_plan_tier) {
+                $plan_log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'SUBSCRIPTION_UPDATE', 'tenant', ?, ?)");
+                $plan_log->execute([$user_id, "Subscription plan selected during onboarding: {$selected_plan_tier}", $tenant_id]);
+            }
+
+            if ($monthly_price > 0) {
+                $charged_amount = $monthly_price;
+                $reference_suffix = strtoupper(substr(hash('sha256', $tenant_id . $charge_timestamp . random_int(1000, 9999)), 0, 10));
+                $invoice_number = 'INV-' . date('Ymd') . '-' . substr($reference_suffix, 0, 6);
+                $payment_reference = 'SUB-' . $reference_suffix;
+                $period_start = $activation_date;
+                $period_end = date('Y-m-d', strtotime($next_billing . ' -1 day'));
+
+                $pay_stmt = $pdo->prepare("
+                    INSERT INTO payments (tenant_id, payment_amount, payment_status, payment_date, payment_reference, payment_method)
+                    VALUES (?, ?, 'Posted', ?, ?, ?)
+                ");
+                $pay_stmt->execute([
+                    $tenant_id,
+                    $charged_amount,
+                    $charge_timestamp,
+                    $payment_reference,
+                    $payment_method_desc
+                ]);
+
+                $inv_stmt = $pdo->prepare("
+                    INSERT INTO tenant_billing_invoices 
+                    (tenant_id, invoice_number, amount, billing_period_start, billing_period_end, due_date, status, paid_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, 'Paid', NOW())
+                ");
+                $inv_stmt->execute([
+                    $tenant_id,
+                    $invoice_number,
+                    $charged_amount,
+                    $period_start,
+                    $period_end,
+                    $period_start
+                ]);
+
+                $log2 = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'BILLING_ACTIVATION', 'invoice', ?, ?)");
+                $log2->execute([$user_id, "Generated initial activation billing records {$invoice_number} / {$payment_reference}. Amount: {$charged_amount}. Next billing date: {$next_billing}.", $tenant_id]);
+
+                $receipt_email_details = [
+                    'plan_tier' => $selected_plan_tier,
+                    'amount' => $charged_amount,
+                    'payment_date' => $charge_timestamp,
+                    'payment_reference' => $payment_reference,
+                    'invoice_number' => $invoice_number,
+                    'payment_method' => $payment_method_desc,
+                    'period_start' => $period_start,
+                    'period_end' => $period_end,
+                    'next_billing_date' => $next_billing,
+                ];
+            }
+
+            $pdo->commit();
+
+            if (is_array($receipt_email_details)) {
+                $email_result = mf_billing_send_receipt_email($pdo, (string)$tenant_id, $receipt_email_details);
+                if ($email_result !== 'Email sent successfully.') {
+                    error_log('setup_billing receipt email failed for tenant ' . $tenant_id . ': ' . $email_result);
+                }
+            }
+
+            $_SESSION['admin_flash'] = "Subscription activated on the {$selected_plan_tier} plan. You can now use your dashboard and finish your website and branding from the setup checklist.";
+            header('Location: ../admin_panel/admin.php');
+            exit;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('setup_billing activation error for tenant ' . $tenant_id . ': ' . $e->getMessage());
+            $error = 'Unable to activate the subscription right now. Please try again.';
+        }
     }
 }
 
@@ -190,14 +279,34 @@ $current_year = (int) date('Y');
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: '<?php echo htmlspecialchars($t_font); ?>', sans-serif; background: <?php echo htmlspecialchars($t_bg); ?>; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-        .wizard-card { background: <?php echo htmlspecialchars($t_card); ?>; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 10px 15px -3px rgba(0,0,0,0.05); width: 100%; max-width: 560px; overflow: hidden; }
+        .wizard-card { background: <?php echo htmlspecialchars($t_card); ?>; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 10px 15px -3px rgba(0,0,0,0.05); width: 100%; max-width: 1120px; overflow: hidden; }
         .wizard-header { background: linear-gradient(135deg, <?php echo htmlspecialchars($accent); ?>, #8b5cf6); padding: 32px; color: white; }
         .wizard-header h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
         .wizard-header p { opacity: 0.85; font-size: 0.9rem; }
-        .step-indicator { display: flex; gap: 8px; margin-top: 16px; }
-        .step { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.3); }
-        .step.active { background: white; }
         .wizard-body { padding: 32px; }
+        .wizard-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr); gap: 28px; align-items: start; }
+        .plans-panel h2,
+        .payment-panel h2 { font-size: 1.1rem; color: <?php echo htmlspecialchars($t_text); ?>; margin-bottom: 8px; }
+        .section-copy { color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.9rem; line-height: 1.6; margin-bottom: 18px; }
+        .plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        .plan-option { position: relative; }
+        .plan-option input { position: absolute; opacity: 0; pointer-events: none; }
+        .plan-card { display: block; height: 100%; border: 1px solid #dbe7f3; border-radius: 18px; padding: 18px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; position: relative; }
+        .plan-card:hover { transform: translateY(-2px); border-color: rgba(2,132,199,0.35); box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08); }
+        .plan-option input:checked + .plan-card { border-color: <?php echo htmlspecialchars($accent); ?>; box-shadow: 0 18px 36px rgba(2,132,199,0.18); background: linear-gradient(180deg, rgba(2,132,199,0.08) 0%, rgba(255,255,255,1) 100%); }
+        .plan-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+        .plan-name { font-size: 1.05rem; font-weight: 700; color: <?php echo htmlspecialchars($t_text); ?>; }
+        .plan-description { margin-top: 6px; color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.82rem; line-height: 1.5; }
+        .plan-popular-badge { display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; border-radius: 999px; background: rgba(245, 158, 11, 0.14); color: #b45309; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+        .plan-price { display: flex; align-items: baseline; gap: 4px; color: <?php echo htmlspecialchars($t_text); ?>; margin-bottom: 14px; }
+        .plan-price strong { font-size: 1.8rem; line-height: 1; }
+        .plan-price span { font-size: 0.92rem; color: <?php echo htmlspecialchars($t_muted); ?>; }
+        .plan-feature-list { display: grid; gap: 10px; }
+        .plan-feature { display: flex; align-items: center; gap: 10px; color: #0f172a; font-size: 0.92rem; }
+        .plan-feature .material-symbols-rounded { color: #16a34a; font-size: 20px; }
+        .selected-plan-summary { padding: 16px 18px; background: linear-gradient(135deg, rgba(2,132,199,0.08), rgba(14,165,233,0.14)); border: 1px solid rgba(2,132,199,0.18); border-radius: 14px; margin-bottom: 20px; }
+        .selected-plan-summary strong { display: block; color: <?php echo htmlspecialchars($t_text); ?>; font-size: 1rem; margin-bottom: 4px; }
+        .selected-plan-summary p { margin: 0; color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.85rem; line-height: 1.55; }
         .form-group { margin-bottom: 20px; }
         .form-group label { display: block; font-weight: 500; margin-bottom: 8px; color: #475569; font-size: 0.9rem; }
         .form-control { width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 0.95rem; color: #0f172a; transition: border-color 0.2s; }
@@ -215,104 +324,158 @@ $current_year = (int) date('Y');
         .error { color: #ef4444; background: #fef2f2; border: 1px solid #fecaca; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; }
         .security-note { display: flex; align-items: center; gap: 8px; padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; margin-bottom: 24px; font-size: 0.85rem; color: #166534; }
         small { color: #94a3b8; font-size: 0.8rem; }
+        @media (max-width: 980px) {
+            .wizard-layout { grid-template-columns: 1fr; }
+            .plan-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+            .wizard-body { padding: 24px; }
+            .row-2 { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
     <div class="wizard-card">
         <div class="wizard-header">
-            <h1>Payment Method</h1>
-            <p>Add a payment method for your <?php echo htmlspecialchars($tenant_name); ?> subscription.</p>
-            <div class="step-indicator">
-                <div class="step active"></div>
-                <div class="step active"></div>
-                <div class="step active"></div>
-                <div class="step active"></div>
-            </div>
+            <h1>Activate Your Subscription</h1>
+            <p>Make your first payment for <?php echo htmlspecialchars($tenant_name); ?> to activate the subscription and enter the dashboard right away.</p>
         </div>
         <div class="wizard-body">
             <?php if ($error): ?>
                 <div class="error"><?php echo htmlspecialchars($error); ?></div>
             <?php endif; ?>
 
-            <!-- Card Preview -->
-            <div class="card-preview">
-                <div class="card-brand-display" id="preview-brand">VISA</div>
-                <div class="card-number" id="preview-number">&bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull;</div>
-                <div class="card-name" id="preview-name">CARDHOLDER NAME</div>
-                <div class="card-expiry" id="preview-expiry">MM/YY</div>
-            </div>
-
-            <div class="security-note">
-                <span class="material-symbols-rounded" style="font-size: 18px;">lock</span>
-                Your card details are encrypted with AES-256. We never store your CVC.
-            </div>
-
             <form method="POST">
-                <div class="form-group">
-                    <label>Cardholder Name</label>
-                    <input type="text" class="form-control" name="cardholder_name" id="cardholder_name" placeholder="Juan Dela Cruz" required oninput="updateCardPreview();">
+                <div class="wizard-layout">
+                    <section class="plans-panel">
+                        <h2>Choose Your Subscription Plan</h2>
+                        <p class="section-copy">Pick the plan that fits your current operations. Your selected subscription will be activated as soon as the payment method is authorized.</p>
+
+                        <div class="plan-grid">
+                            <?php foreach ($plan_catalog as $plan_name => $plan_meta): ?>
+                                <?php
+                                $plan_id = 'plan_' . strtolower(preg_replace('/[^a-z0-9]+/i', '_', $plan_name));
+                                $clients_label = ((int)$plan_meta['max_clients'] < 0)
+                                    ? 'Unlimited Clients'
+                                    : number_format((int)$plan_meta['max_clients']) . ' Max Clients';
+                                $users_label = ((int)$plan_meta['max_users'] < 0)
+                                    ? 'Unlimited Users'
+                                    : number_format((int)$plan_meta['max_users']) . ' Max Users';
+                                ?>
+                                <div class="plan-option">
+                                    <input
+                                        type="radio"
+                                        name="subscription_plan"
+                                        id="<?php echo htmlspecialchars($plan_id); ?>"
+                                        value="<?php echo htmlspecialchars($plan_name); ?>"
+                                        <?php echo $selected_plan_tier === $plan_name ? 'checked' : ''; ?>
+                                    >
+                                    <label class="plan-card" for="<?php echo htmlspecialchars($plan_id); ?>">
+                                        <div class="plan-card-header">
+                                            <div>
+                                                <div class="plan-name"><?php echo htmlspecialchars($plan_name); ?></div>
+                                                <p class="plan-description"><?php echo htmlspecialchars($plan_meta['description']); ?></p>
+                                            </div>
+                                            <?php if (!empty($plan_meta['popular'])): ?>
+                                                <span class="plan-popular-badge">Most Popular</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="plan-price">
+                                            <strong>₱<?php echo number_format((float)$plan_meta['price'], 0); ?></strong>
+                                            <span>/mo</span>
+                                        </div>
+                                        <div class="plan-feature-list">
+                                            <div class="plan-feature">
+                                                <span class="material-symbols-rounded">check_circle</span>
+                                                <span><?php echo htmlspecialchars($clients_label); ?></span>
+                                            </div>
+                                            <div class="plan-feature">
+                                                <span class="material-symbols-rounded">check_circle</span>
+                                                <span><?php echo htmlspecialchars($users_label); ?></span>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </section>
+
+                    <section class="payment-panel">
+                        <h2>Secure Payment Details</h2>
+                        <p class="section-copy">Add the card you want to use for activation. We will save it as your default billing method for recurring subscription payments.</p>
+
+                        <div class="selected-plan-summary" id="selected-plan-summary">
+                            <strong id="selected-plan-name"><?php echo htmlspecialchars($selected_plan_tier); ?> Plan</strong>
+                            <p id="selected-plan-description">Your selected plan includes the current monthly price and usage limits shown on the left.</p>
+                        </div>
+
+                        <div class="card-preview">
+                            <div class="card-brand-display" id="preview-brand">VISA</div>
+                            <div class="card-number" id="preview-number">&bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull;</div>
+                            <div class="card-name" id="preview-name">CARDHOLDER NAME</div>
+                            <div class="card-expiry" id="preview-expiry">MM/YY</div>
+                        </div>
+
+                        <div class="security-note">
+                            <span class="material-symbols-rounded" style="font-size: 18px;">lock</span>
+                            Your card details are encrypted with AES-256. We never store your CVC.
+                        </div>
+
+                        <div class="form-group">
+                            <label>Cardholder Name</label>
+                            <input type="text" class="form-control" name="cardholder_name" id="cardholder_name" placeholder="Juan Dela Cruz" required oninput="updateCardPreview();">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Card Number</label>
+                            <input type="text" class="form-control" name="card_number" id="card_number" placeholder="4242 4242 4242 4242" maxlength="24" required oninput="formatCardNumber(this); updateCardPreview();">
+                        </div>
+
+                        <input type="hidden" name="card_brand" id="card_brand" value="">
+
+                        <div class="row-2" style="grid-template-columns: 1fr 1fr 1fr;">
+                            <div class="form-group">
+                                <label>Expiration Month</label>
+                                <select class="form-control" name="exp_month" id="exp_month" required onchange="updateCardPreview();">
+                                    <option value="">Month</option>
+                                    <?php for ($m = 1; $m <= 12; $m++): ?>
+                                    <option value="<?php echo $m; ?>"><?php echo str_pad($m, 2, '0', STR_PAD_LEFT) . ' - ' . date('F', mktime(0, 0, 0, $m, 1)); ?></option>
+                                    <?php endfor; ?>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Expiration Year</label>
+                                <select class="form-control" name="exp_year" id="exp_year" required onchange="updateCardPreview();">
+                                    <option value="">Year</option>
+                                    <?php for ($y = $current_year; $y <= $current_year + 15; $y++): ?>
+                                    <option value="<?php echo $y; ?>"><?php echo $y; ?></option>
+                                    <?php endfor; ?>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>CVV / CVC</label>
+                                <input type="password" class="form-control" name="cvv" id="cvv" placeholder="123" maxlength="4" required style="letter-spacing: 2px;">
+                            </div>
+                        </div>
+
+                        <div id="checkout-summary" style="display: none; padding: 14px; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 8px; margin-top: 10px; margin-bottom: 24px;">
+                            <h4 style="margin: 0 0 6px 0; color: #0369a1; font-size: 0.95rem;">&#128274; Checkout Summary</h4>
+                            <p id="checkout-text" style="margin: 0; color: #0c4a6e; font-size: 0.85rem; line-height: 1.5;"></p>
+                        </div>
+
+                        <div class="form-group" style="padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; margin-top: 4px;">
+                            <label style="display: flex; align-items: flex-start; gap: 8px; margin: 0; cursor: pointer; font-size: 0.85rem; font-weight: 500; color: #166534;">
+                                <input type="checkbox" name="agree_billing" id="agree_billing" required style="margin-top: 3px; accent-color: <?php echo htmlspecialchars($accent); ?>;">
+            <span style="line-height: 1.4;">I authorize MicroFin to save this payment method, charge the selected monthly plan immediately, and continue recurring billing every 30 days starting from this activation payment. I agree to the <a href="#" id="open-billing-tos" style="color: #0369a1; text-decoration: underline; font-weight: 600;">Billing Terms &amp; No-Refund Policy</a>.</span>
+                            </label>
+                        </div>
+
+                        <button type="button" id="btn-pay-submit" class="btn btn-primary" style="display:flex; align-items:center; gap:8px; width:100%; justify-content:center; margin-top:16px; font-size:1rem; padding:12px;">
+                            <span class="material-symbols-rounded" style="font-size:1.2rem;">lock</span> Authorize &amp; Activate Subscription
+                        </button>
+                        <input type="submit" id="real-submit" style="display:none;">
+                    </section>
                 </div>
-
-                <div class="form-group">
-                    <label>Card Number</label>
-                    <input type="text" class="form-control" name="card_number" id="card_number" placeholder="4242 4242 4242 4242" maxlength="24" required oninput="formatCardNumber(this); updateCardPreview();">
-                </div>
-
-                <input type="hidden" name="card_brand" id="card_brand" value="">
-
-                <div class="form-group" style="padding: 16px; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px;">
-                    <label>Preferred Billing Cycle</label>
-                    <select class="form-control" name="billing_cycle_preference" id="billing_cycle_preference" required style="margin-bottom: 8px;">
-                        <option value="1">1st of the Month (Start of Month)</option>
-                        <option value="15">15th of the Month (Middle of Month)</option>
-                    </select>
-                    <div style="font-size: 0.8rem; color: #b45309; display: flex; gap: 6px; align-items: flex-start; padding-top: 4px;">
-                        <span class="material-symbols-rounded" style="font-size: 16px;">warning</span>
-                        <p style="margin:0; line-height: 1.4;">Warning: This anchors your permanent billing cycle date and <strong>cannot be changed again</strong> after completion.</p>
-                    </div>
-                </div>
-
-                <div class="row-2" style="grid-template-columns: 1fr 1fr 1fr;">
-                    <div class="form-group">
-                        <label>Expiration Month</label>
-                        <select class="form-control" name="exp_month" id="exp_month" required onchange="updateCardPreview();">
-                            <option value="">Month</option>
-                            <?php for ($m = 1; $m <= 12; $m++): ?>
-                            <option value="<?php echo $m; ?>"><?php echo str_pad($m, 2, '0', STR_PAD_LEFT) . ' - ' . date('F', mktime(0, 0, 0, $m, 1)); ?></option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Expiration Year</label>
-                        <select class="form-control" name="exp_year" id="exp_year" required onchange="updateCardPreview();">
-                            <option value="">Year</option>
-                            <?php for ($y = $current_year; $y <= $current_year + 15; $y++): ?>
-                            <option value="<?php echo $y; ?>"><?php echo $y; ?></option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>CVV / CVC</label>
-                        <input type="password" class="form-control" name="cvv" id="cvv" placeholder="123" maxlength="4" required style="letter-spacing: 2px;">
-                    </div>
-                </div>
-
-                <div id="proration-summary" style="display: none; padding: 14px; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 8px; margin-top: 10px; margin-bottom: 24px;">
-                    <h4 style="margin: 0 0 6px 0; color: #0369a1; font-size: 0.95rem;">&#128274; Checkout Summary</h4>
-                    <p id="proration-text" style="margin: 0; color: #0c4a6e; font-size: 0.85rem; line-height: 1.5;"></p>
-                </div>
-
-                <div class="form-group" style="padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; margin-top: 4px;">
-                    <label style="display: flex; align-items: flex-start; gap: 8px; margin: 0; cursor: pointer; font-size: 0.85rem; font-weight: 500; color: #166534;">
-                        <input type="checkbox" name="agree_billing" id="agree_billing" required style="margin-top: 3px; accent-color: <?php echo htmlspecialchars($accent); ?>;">
-                        <span style="line-height: 1.4;">I authorize MicroFin to save this payment method, charge the prorated amount immediately, and continue recurring billing. I agree to the <a href="#" id="open-billing-tos" style="color: #0369a1; text-decoration: underline; font-weight: 600;">Billing Terms &amp; No-Refund Policy</a>.</span>
-                    </label>
-                </div>
-
-                <button type="button" id="btn-pay-submit" class="btn btn-primary" style="display:flex; align-items:center; gap:8px; width:100%; justify-content:center; margin-top:16px; font-size:1rem; padding:12px;">
-                    <span class="material-symbols-rounded" style="font-size:1.2rem;">lock</span> Authorize &amp; Activate Subscription
-                </button>
-                <input type="submit" id="real-submit" style="display:none;">
             </form>
         </div>
     </div>
@@ -341,12 +504,12 @@ $current_year = (int) date('Y');
                 <button type="button" id="close-billing-tos" style="background:none; border:none; cursor:pointer; font-size:1.5rem; color:#64748b; line-height:1;">&times;</button>
             </div>
             <p style="font-size:0.78rem; color:#64748b; margin-bottom:14px;">Effective Date: <?php echo date('F d, Y'); ?> &mdash; MicroFin Platform</p>
-            <h3 style="color:#0369a1; font-size:0.87rem; margin:14px 0 5px;">1. Prorated Initial Charge</h3>
-            <p style="font-size:0.83rem;">You will be charged a prorated amount from today until your next selected billing date. This aligns your account billing cycle.</p>
-            <h3 style="color:#0369a1; font-size:0.87rem; margin:14px 0 5px;">2. Recurring Monthly Billing</h3>
-            <p style="font-size:0.83rem;">Your subscription renews automatically on your billing date each month. The full monthly fee is deducted from your payment method.</p>
+            <h3 style="color:#0369a1; font-size:0.87rem; margin:14px 0 5px;">1. Initial Activation Charge</h3>
+            <p style="font-size:0.83rem;">You will be charged the full monthly amount for your selected plan today. Your subscription becomes active as soon as the payment is accepted.</p>
+                                <h3 style="color:#0369a1; font-size:0.87rem; margin:14px 0 5px;">2. Recurring Monthly Billing</h3>
+                                <p style="font-size:0.83rem;">Your subscription renews automatically 30 days after your activation payment, and every 30 days after each successful renewal. The full monthly fee is deducted from your payment method.</p>
             <h3 style="color:#b91c1c; font-size:0.87rem; margin:14px 0 5px;">3. No-Refund Policy</h3>
-            <p style="font-size:0.83rem; background:#fef2f2; padding:10px 12px; border-radius:6px; border-left:3px solid #f87171;"><strong>All fees are strictly non-refundable.</strong> This includes the prorated initial charge, monthly fees, and any fees incurred before cancellation. No exceptions are made for partial usage.</p>
+            <p style="font-size:0.83rem; background:#fef2f2; padding:10px 12px; border-radius:6px; border-left:3px solid #f87171;"><strong>All fees are strictly non-refundable.</strong> This includes the activation charge, monthly fees, and any fees incurred before cancellation. No exceptions are made for partial usage.</p>
             <div style="margin-top:22px; text-align:right;">
                 <button type="button" id="close-billing-tos-btn" style="background:<?php echo htmlspecialchars($accent); ?>; color:#fff; border:none; border-radius:8px; padding:9px 22px; font-weight:600; cursor:pointer;">Got it &mdash; I Agree</button>
             </div>
@@ -437,72 +600,80 @@ $current_year = (int) date('Y');
             document.getElementById('card_brand').value = brand;
         }
 
-        const mrr = <?php echo json_encode($monthly_price); ?>;
-        
-        function updateProrationPreview() {
-            const cycle = document.getElementById('billing_cycle_preference').value;
-            const summaryDiv = document.getElementById('proration-summary');
-            const summaryText = document.getElementById('proration-text');
-            
+        const planCatalog = <?php echo json_encode($plan_catalog, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        const selectedPlanInputs = Array.from(document.querySelectorAll('input[name="subscription_plan"]'));
+
+        function getSelectedPlanName() {
+            const selectedInput = selectedPlanInputs.find((input) => input.checked);
+            return selectedInput ? selectedInput.value : <?php echo json_encode($selected_plan_tier); ?>;
+        }
+
+        function formatPlanLimit(limitValue, singularLabel, pluralLabel) {
+            if (Number(limitValue) < 0) {
+                return `Unlimited ${pluralLabel}`;
+            }
+
+            return `${Number(limitValue).toLocaleString('en-US')} ${Number(limitValue) === 1 ? singularLabel : pluralLabel}`;
+        }
+
+        function updateSelectedPlanSummary() {
+            const selectedPlanName = getSelectedPlanName();
+            const selectedPlan = planCatalog[selectedPlanName];
+            const planNameEl = document.getElementById('selected-plan-name');
+            const planDescriptionEl = document.getElementById('selected-plan-description');
+
+            if (!selectedPlan || !planNameEl || !planDescriptionEl) {
+                return;
+            }
+
+            const monthlyPrice = Number(selectedPlan.price || 0).toLocaleString('en-US', {
+                style: 'currency',
+                currency: 'PHP'
+            });
+            const clientsText = formatPlanLimit(selectedPlan.max_clients, 'Client', 'Clients');
+            const usersText = formatPlanLimit(selectedPlan.max_users, 'User', 'Users');
+
+            planNameEl.textContent = `${selectedPlanName} Plan`;
+            planDescriptionEl.textContent = `${monthlyPrice} per month. Includes ${clientsText} and ${usersText}.`;
+        }
+
+        function addThirtyDays(date) {
+            const nextDate = new Date(date);
+            nextDate.setDate(nextDate.getDate() + 30);
+            return nextDate;
+        }
+
+        function updateCheckoutSummary() {
+            const summaryDiv = document.getElementById('checkout-summary');
+            const summaryText = document.getElementById('checkout-text');
+            const selectedPlanName = getSelectedPlanName();
+            const selectedPlan = planCatalog[selectedPlanName];
+            const mrr = Number(selectedPlan?.price || 0);
+
             if (!mrr || mrr <= 0) {
                 summaryDiv.style.display = 'none';
                 return;
             }
 
-            const today = new Date();
-            const currentDay = today.getDate();
-            const currentMonthDays = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-            let proratedDays = 0;
-            let nextBillingDateStr = '';
-
             const formatNextDate = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-            
-            if (cycle === '1') {
-                if (currentDay === 1) {
-                    proratedDays = 30; // standard full month
-                    const nextDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-                    nextBillingDateStr = formatNextDate(nextDate);
-                } else {
-                    proratedDays = currentMonthDays - currentDay + 1;
-                    const nextDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-                    nextBillingDateStr = formatNextDate(nextDate);
-                }
-            } else { // cycle === '15'
-                if (currentDay === 15) {
-                    proratedDays = 30; // standard full month
-                    const nextDate = new Date(today.getFullYear(), today.getMonth() + 1, 15);
-                    nextBillingDateStr = formatNextDate(nextDate);
-                } else if (currentDay < 15) {
-                    proratedDays = 15 - currentDay;
-                    const nextDate = new Date(today.getFullYear(), today.getMonth(), 15);
-                    nextBillingDateStr = formatNextDate(nextDate);
-                } else { // currentDay > 15
-                    proratedDays = (currentMonthDays - currentDay + 1) + 14;
-                    const nextDate = new Date(today.getFullYear(), today.getMonth() + 1, 15);
-                    nextBillingDateStr = formatNextDate(nextDate);
-                }
-            }
-
-            const isFullMonth = (proratedDays === 30 && (currentDay === 1 || currentDay === 15));
-            let amount = 0;
-            if (isFullMonth) {
-                amount = mrr;
-            } else {
-                const dailyRate = mrr / 30;
-                amount = (dailyRate * proratedDays);
-            }
-            
-            const amountFormatted = amount.toLocaleString('en-US', { style: 'currency', currency: 'PHP' });
+            const today = new Date();
+            const nextBillingDate = addThirtyDays(today);
+            const amountFormatted = mrr.toLocaleString('en-US', { style: 'currency', currency: 'PHP' });
             const mrrFormatted = mrr.toLocaleString('en-US', { style: 'currency', currency: 'PHP' });
 
             summaryDiv.style.display = 'block';
-            summaryText.innerHTML = `You will be charged an initial prorated amount of <strong>${amountFormatted}</strong> today for <strong>${proratedDays} days</strong> of service to align your account. Your standard recurring billing of <strong>${mrrFormatted}</strong> will begin on <strong>${nextBillingDateStr}</strong>.`;
+            summaryText.innerHTML = `You selected the <strong>${selectedPlanName}</strong> plan. You will be charged <strong>${amountFormatted}</strong> today to activate your account. Your recurring billing of <strong>${mrrFormatted}</strong> will renew on <strong>${formatNextDate(nextBillingDate)}</strong> and continue every 30 days after each successful charge.`;
         }
 
-        document.getElementById('billing_cycle_preference').addEventListener('change', updateProrationPreview);
-        
-        // Initial call
-        updateProrationPreview();
+        selectedPlanInputs.forEach((input) => {
+            input.addEventListener('change', () => {
+                updateSelectedPlanSummary();
+                updateCheckoutSummary();
+            });
+        });
+
+        updateCheckoutSummary();
+        updateSelectedPlanSummary();
     </script>
 </body>
 </html>
