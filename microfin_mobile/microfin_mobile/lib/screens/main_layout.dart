@@ -6,6 +6,8 @@ import 'dashboard_screen.dart';
 import 'my_loans_screen.dart';
 import 'loan_application_screen.dart';
 import 'profile_screen.dart';
+import 'client_verification_screen.dart';
+import '../utils/app_dialogs.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -14,25 +16,53 @@ class MainLayout extends StatefulWidget {
   State<MainLayout> createState() => _MainLayoutState();
 }
 
-class _MainLayoutState extends State<MainLayout> {
+class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
   int _selectedIndex = 0;
+  late AnimationController _navAnimController;
 
   late final List<Widget> _screens = [
-    const DashboardScreen(),
-    const MyLoansScreen(),
-    const LoanApplicationScreen(),
-    const ProfileScreen(),
+    DashboardScreen(),
+    MyLoansScreen(),
+    LoanApplicationScreen(),
+    ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _navAnimController = AnimationController(
+      duration: Duration(milliseconds: 300),
+      vsync: this,
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _navAnimController.dispose();
+    super.dispose();
+  }
+
+
 
   void _onNavTap(int index) {
     HapticFeedback.selectionClick();
+
+    if (index == 1 || index == 2) {
+      final vStatus =
+          currentUser.value?['verification_status'] ?? 'Unverified';
+      if (vStatus != 'Approved') {
+        AppDialogs.showVerificationRequired(context, activeTenant.value.themePrimaryColor, status: vStatus);
+        return;
+      }
+    }
+
     setState(() => _selectedIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
     final tenant = activeTenant.value;
-    final primary = tenant.primaryColor;
+    final primary = tenant.themePrimaryColor;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -41,6 +71,7 @@ class _MainLayoutState extends State<MainLayout> {
       ),
       child: Scaffold(
         backgroundColor: AppColors.bg,
+        extendBody: true,
         body: IndexedStack(
           index: _selectedIndex,
           children: _screens,
@@ -52,55 +83,62 @@ class _MainLayoutState extends State<MainLayout> {
 
   Widget _buildBottomNav(Color primary) {
     return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        border: const Border(
-            top: BorderSide(color: AppColors.separator, width: 1)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(40),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+            spreadRadius: -4,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 20,
-            offset: const Offset(0, -4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _NavItem(
-                icon: Icons.home_outlined,
+                icon: Icons.home_rounded,
                 selectedIcon: Icons.home_rounded,
-                label: 'Home',
+                label: 'HOME',
                 index: 0,
                 currentIndex: _selectedIndex,
                 primary: primary,
                 onTap: _onNavTap,
               ),
               _NavItem(
-                icon: Icons.account_balance_wallet_outlined,
-                selectedIcon: Icons.account_balance_wallet_rounded,
-                label: 'My Loans',
+                icon: Icons.payments_outlined,
+                selectedIcon: Icons.payments,
+                label: 'PAYMENTS',
                 index: 1,
                 currentIndex: _selectedIndex,
                 primary: primary,
                 onTap: _onNavTap,
               ),
               _NavItem(
-                icon: Icons.add_circle_outline_rounded,
-                selectedIcon: Icons.add_circle_rounded,
-                label: 'Apply',
+                icon: Icons.account_balance_outlined,
+                selectedIcon: Icons.account_balance_rounded,
+                label: 'LOANS',
                 index: 2,
                 currentIndex: _selectedIndex,
                 primary: primary,
                 onTap: _onNavTap,
               ),
               _NavItem(
-                icon: Icons.person_outline_rounded,
-                selectedIcon: Icons.person_rounded,
-                label: 'Profile',
+                icon: Icons.settings_outlined,
+                selectedIcon: Icons.settings_rounded,
+                label: 'SETTINGS',
                 index: 3,
                 currentIndex: _selectedIndex,
                 primary: primary,
@@ -136,40 +174,66 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isSelected = index == currentIndex;
+
     return GestureDetector(
       onTap: () => onTap(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? primary.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
-              child: Icon(
-                isSelected ? selectedIcon : icon,
-                key: ValueKey(isSelected),
-                size: 24,
-                color: isSelected ? primary : AppColors.textMuted,
+              transitionBuilder: (child, animation) => ScaleTransition(
+                scale: animation,
+                child: child,
               ),
+              child: isSelected
+                  ? Container(
+                      key: const ValueKey('selected'),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: primary,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: primary.withOpacity(0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      child: Icon(
+                        selectedIcon,
+                        size: 20,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Padding(
+                      key: const ValueKey('unselected'),
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Icon(
+                        icon,
+                        size: 24,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                    ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight:
-                    isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? primary : AppColors.textMuted,
-                letterSpacing: -0.1,
+            if (!isSelected) ...[
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF9CA3AF),
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
+            ]
           ],
         ),
       ),

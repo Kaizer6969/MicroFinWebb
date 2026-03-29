@@ -1,42 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'models/tenant_branding.dart';
 import 'screens/splash_screen.dart';
-import 'screens/login_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // Global active tenant — drives all UI theming across the app
 final ValueNotifier<TenantBranding> activeTenant =
-    ValueNotifier(TenantBranding.fundline);
+    ValueNotifier(TenantBranding.defaultTenant);
 
-/// The tenant slug passed via URL (Flutter Web only).
-/// e.g. site.php?site=fundline  →  Flutter app URL?tenant=fundline
-String? _urlTenantSlug;
+// Global current user — tracks logged in state
+final ValueNotifier<Map<String, dynamic>?> currentUser = ValueNotifier(null);
+
+// Global notifications — tracks notification lists for unread indicators and popups
+final ValueNotifier<List<dynamic>> globalNotifications = ValueNotifier([]);
+
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // ── Web deep-link: read ?tenant= from the browser URL ──────────────────────
-  if (kIsWeb) {
-    final uri = Uri.base;
-    final slug = uri.queryParameters['tenant'];
-    if (slug != null && slug.isNotEmpty) {
-      final found = TenantBranding.fromTenantId(slug.trim().toLowerCase());
-      if (found != null) {
-        activeTenant.value = found;
-        _urlTenantSlug = found.slug;
-      }
-    }
-  }
-
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
+    SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
     ),
   );
-  runApp(const MicroFinApp());
+  runApp(MicroFinApp());
 }
 
 class MicroFinApp extends StatelessWidget {
@@ -51,70 +39,94 @@ class MicroFinApp extends StatelessWidget {
           title: tenant.appName,
           debugShowCheckedModeBanner: false,
           theme: _buildTheme(tenant),
-          // If a tenant slug was injected via URL, skip the picker and go
-          // straight to LoginScreen with that company already active.
-          home: _urlTenantSlug != null
-              ? const LoginScreen()
-              : const SplashScreen(),
+          home: SplashScreen(),
         );
       },
     );
   }
 
   ThemeData _buildTheme(TenantBranding tenant) {
+    // Try applying GoogleFonts. If it fails due to unknown font, fallback to standard text theme
+    TextTheme buildTextTheme() {
+      try {
+        return GoogleFonts.getTextTheme(tenant.fontFamily);
+      } catch (e) {
+        return ThemeData.light().textTheme.apply(fontFamily: tenant.fontFamily);
+      }
+    }
+
+    final textTheme = buildTextTheme().apply(
+      bodyColor: tenant.themeTextMain,
+      displayColor: tenant.themeTextMain,
+    );
+
     return ThemeData(
       useMaterial3: true,
+      fontFamily: tenant.fontFamily,
+      textTheme: textTheme,
       colorScheme: ColorScheme.light(
-        primary: tenant.primaryColor,
-        secondary: tenant.secondaryColor,
-        surface: Colors.white,
-        onPrimary: Colors.white,
-        onSecondary: Colors.white,
-        onSurface: const Color(0xFF0F172A),
+        primary: tenant.themePrimaryColor,
+        secondary: tenant.themeSecondaryColor,
+        surface: tenant.themeBgCard,
+        onPrimary: tenant.themeBgCard,
+        onSecondary: tenant.themeBgCard,
+        onSurface: tenant.themeTextMain,
+        outline: tenant.themeBorderColor,
       ),
-      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+      scaffoldBackgroundColor: tenant.themeBgBody,
+      appBarTheme: AppBarTheme(
+        backgroundColor: tenant.themeBgCard,
+        foregroundColor: tenant.themeTextMain,
+        elevation: 0,
+        iconTheme: IconThemeData(color: tenant.themeTextMain),
+        titleTextStyle: textTheme.titleLarge?.copyWith(
+          color: tenant.themeTextMain,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: tenant.primaryColor,
-          foregroundColor: Colors.white,
+          backgroundColor: tenant.themePrimaryColor,
+          foregroundColor: tenant.themeBgCard,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(999), // 999px for pill buttons
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          textStyle: textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w600,
             fontSize: 16,
           ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFFF1F5F9),
+        fillColor: tenant.themeBgCard,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: BorderSide(color: tenant.themeBorderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: BorderSide(color: tenant.themeBorderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: tenant.primaryColor, width: 2),
+          borderSide: BorderSide(color: tenant.themePrimaryColor, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFEF4444)),
+          borderSide: BorderSide(color: tenant.themeTextMain),
         ),
-        hintStyle: const TextStyle(
-          color: Color(0xFF94A3B8),
-          fontSize: 15,
-          fontWeight: FontWeight.w400,
+        hintStyle: textTheme.bodyMedium?.copyWith(
+          color: tenant.themeTextMuted,
+          fontSize: 16,
         ),
       ),
     );
   }
 }
+
+

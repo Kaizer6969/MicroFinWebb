@@ -1,133 +1,150 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../utils/api_config.dart';
 
-/// Holds branding data for a single tenant.
+/// Holds all branding data for a single tenant.
+/// Fetched from the database via the API.
 class TenantBranding {
-  final String tenantId;
+  final String id;
   final String slug;
   final String appName;
-  final String tagline;
-  final Color primaryColor;
-  final Color secondaryColor;
-  final String emoji;
-  final String description;
-  final String logo;
+  final String logoPath;
+  final String fontFamily;
+  final Color themePrimaryColor;
+  final Color themeSecondaryColor;
+  final Color themeTextMain;
+  final Color themeTextMuted;
+  final Color themeBgBody;
+  final Color themeBgCard;
+  final Color themeBorderColor;
+  final double cardBorderWidth;
+  final String cardShadowStr;
 
-  const TenantBranding({
-    required this.tenantId,
+  TenantBranding({
+    required this.id,
     required this.slug,
     required this.appName,
-    required this.tagline,
-    required this.primaryColor,
-    required this.secondaryColor,
-    required this.emoji,
-    required this.description,
-    required this.logo,
+    required this.logoPath,
+    required this.fontFamily,
+    required this.themePrimaryColor,
+    required this.themeSecondaryColor,
+    required this.themeTextMain,
+    required this.themeTextMuted,
+    required this.themeBgBody,
+    required this.themeBgCard,
+    required this.themeBorderColor,
+    required this.cardBorderWidth,
+    required this.cardShadowStr,
   });
 
-  Color get primaryLight => primaryColor.withOpacity(0.12);
-  Color get primaryVeryLight => primaryColor.withOpacity(0.06);
-  Color get primaryExtraLight => primaryColor.withOpacity(0.08);
+  // Dynamic tenants list
+  static List<TenantBranding> tenants = [];
 
-  static const TenantBranding fundline = TenantBranding(
-    tenantId: 'fundline',
-    slug: 'fundline',
-    appName: 'Fundline Mobile',
-    tagline: 'Your trusted lending partner',
-    primaryColor: Color(0xFFDC2626),
-    secondaryColor: Color(0xFF991B1B),
-    emoji: '\u{1F4B3}',
-    description: 'Personal and Business Loans at low rates',
-    logo: 'images/fundline_logo.png',
-  );
-
-  static const TenantBranding plaridel = TenantBranding(
-    tenantId: 'plaridel',
-    slug: 'plaridel',
-    appName: 'PlaridelMFB',
-    tagline: 'Banking for every Filipino',
-    primaryColor: Color(0xFF1D4ED8),
-    secondaryColor: Color(0xFF1E40AF),
-    emoji: '\u{1F3E6}',
-    description: 'Agricultural and Rural Financing Solutions',
-    logo: 'images/plaridel_logo.png',
-  );
-
-  static const TenantBranding sacredheart = TenantBranding(
-    tenantId: 'sacredheart',
-    slug: 'sacredheart',
-    appName: 'Sacred Heart Coop',
-    tagline: 'Community-driven microfinance',
-    primaryColor: Color(0xFF059669),
-    secondaryColor: Color(0xFF065F46),
-    emoji: '\u{1F33F}',
-    description: 'Cooperative loans for the community',
-    logo: 'images/sacred_logo.jpg',
-  );
-
-  static const List<TenantBranding> tenants = [fundline, plaridel, sacredheart];
-
-  static TenantBranding? fromTenantId(String id) {
-    final normalized = id.toLowerCase();
-    try {
-      return tenants.firstWhere((t) => t.slug == normalized);
-    } catch (_) {
-      return null;
+  /// Parse hex color (e.g., "#dc2626") to Flutter Color object.
+  static Color _parseColor(String? hexColor, Color fallback) {
+    if (hexColor == null || hexColor.isEmpty) return fallback;
+    hexColor = hexColor.toUpperCase().replaceAll("#", "");
+    if (hexColor.length == 6) {
+      hexColor = "FF$hexColor";
     }
+    return Color(int.tryParse(hexColor, radix: 16) ?? fallback.value);
+  }
+  
+  static double _parseDouble(String? val, double fallback) {
+    if (val == null || val.isEmpty) return fallback;
+    // Strip "px" if present
+    String cleanVal = val.toLowerCase().replaceAll('px', '').trim();
+    return double.tryParse(cleanVal) ?? fallback;
   }
 
-  /// Returns null when API row has no real tenant_id.
-  static TenantBranding? fromApiTenant(Map<String, dynamic> row) {
-    final tenantId = (row['tenant_id'] ?? '').toString().trim();
-    if (tenantId.isEmpty) {
-      return null;
+  // Parse CSS-like box shadow into Flutter BoxShadow
+  List<BoxShadow> get cardShadow {
+    if (cardShadowStr == 'none' || cardShadowStr.isEmpty) {
+      return [];
     }
+    // Simple basic parsing. Real parsing could get complex.
+    // E.g., '0px 4px 6px rgba(0, 0, 0, 0.1)' -> simplified to a fallback if complex
+    // If it has "rgba" or "black", we try to approximate
+    return [
+      BoxShadow(
+        color: Color(0x1A000000), // Default generic subtle shadow
+        blurRadius: 16,
+        offset: Offset(0, 4),
+        spreadRadius: 0,
+      )
+    ];
+  }
 
-    final rawSlug = (row['tenant_slug'] ?? '').toString().trim().toLowerCase();
-    final slug = rawSlug.isEmpty ? tenantId.toLowerCase() : rawSlug;
-    final tenantName = (row['tenant_name'] ?? slug).toString().trim();
-    final staticMatch = fromTenantId(slug);
-    final primaryFromApi = _parseHexColor(row['primary_color']);
-    final secondaryFromApi = _parseHexColor(row['secondary_color']);
-
-    if (staticMatch != null) {
-      return TenantBranding(
-        tenantId: tenantId,
-        slug: staticMatch.slug,
-        appName: tenantName.isNotEmpty ? tenantName : staticMatch.appName,
-        tagline: staticMatch.tagline,
-        primaryColor: primaryFromApi ?? staticMatch.primaryColor,
-        secondaryColor: secondaryFromApi ?? staticMatch.secondaryColor,
-        emoji: staticMatch.emoji,
-        description: staticMatch.description,
-        logo: staticMatch.logo,
-      );
-    }
-
-    const fallbackPrimary = Color(0xFF2563EB);
-    const fallbackSecondary = Color(0xFF1E3A8A);
+  factory TenantBranding.fromJson(Map<String, dynamic> json) {
     return TenantBranding(
-      tenantId: tenantId,
-      slug: slug,
-      appName: tenantName.isEmpty ? 'Unknown Tenant' : tenantName,
-      tagline: 'Active tenant',
-      primaryColor: primaryFromApi ?? fallbackPrimary,
-      secondaryColor: secondaryFromApi ?? fallbackSecondary,
-      emoji: '\u{1F3E6}',
-      description: 'Tenant slug: $slug',
-      logo: '',
+      id: json['id'] ?? json['slug'] ?? 'default',
+      slug: json['slug'] ?? 'default',
+      appName: json['appName'] ?? 'MicroFin',
+      logoPath: json['logo_path'] ?? '',
+      fontFamily: json['font_family'] ?? 'Inter',
+      themePrimaryColor: _parseColor(json['theme_primary_color'], Color(0xFF1D4ED8)),
+      themeSecondaryColor: _parseColor(json['theme_secondary_color'], Color(0xFF1E40AF)),
+      themeTextMain: _parseColor(json['theme_text_main'], Color(0xFF0F172A)),
+      themeTextMuted: _parseColor(json['theme_text_muted'], Color(0xFF64748B)),
+      themeBgBody: _parseColor(json['theme_bg_body'], Color(0xFFF8FAFC)),
+      themeBgCard: _parseColor(json['theme_bg_card'], Color(0xFFFFFFFF)),
+      themeBorderColor: _parseColor(json['theme_border_color'], Color(0xFFE2E8F0)),
+      cardBorderWidth: _parseDouble(json['card_border_width']?.toString(), 0.0),
+      cardShadowStr: json['card_shadow'] ?? 'none',
     );
   }
 
-  static Color? _parseHexColor(dynamic raw) {
-    if (raw == null) return null;
-    final input = raw.toString().trim().replaceAll('#', '');
-    if (input.isEmpty) return null;
+  /// Default fallback in case the API fails or no tenants are active
+  static TenantBranding defaultTenant = TenantBranding(
+    id: 'default',
+    slug: 'default',
+    appName: 'MicroFin',
+    logoPath: '',
+    fontFamily: 'Inter',
+    themePrimaryColor: Color(0xFF1D4ED8),
+    themeSecondaryColor: Color(0xFF1E40AF),
+    themeTextMain: Color(0xFF0F172A),
+    themeTextMuted: Color(0xFF64748B),
+    themeBgBody: Color(0xFFF8FAFC),
+    themeBgCard: Color(0xFFFFFFFF),
+    themeBorderColor: Color(0xFFE2E8F0),
+    cardBorderWidth: 0.0,
+    cardShadowStr: 'none',
+  );
 
-    final normalized = input.length == 6 ? 'FF$input' : input;
-    if (normalized.length != 8) return null;
+  /// Fetch dynamic tenants from API
+  static Future<void> loadTenants() async {
+    try {
+      final url = Uri.parse(ApiConfig.getUrl('api_get_tenants.php'));
+      final response = await http.get(url).timeout(Duration(seconds: 10));
 
-    final value = int.tryParse(normalized, radix: 16);
-    if (value == null) return null;
-    return Color(value);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          final List dynamicList = data['data'];
+          tenants = dynamicList.map((j) => TenantBranding.fromJson(j)).toList();
+          
+          if (tenants.isEmpty) {
+             tenants = [defaultTenant];
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading tenants: $e');
+      if (tenants.isEmpty) {
+         tenants = [defaultTenant];
+      }
+    }
+  }
+
+  static TenantBranding? fromTenantId(String id) {
+    try {
+      return tenants.firstWhere((t) => t.slug == id);
+    } catch (_) {
+      return tenants.isNotEmpty ? tenants.first : defaultTenant;
+    }
   }
 }
+
+

@@ -10,3 +10,4 @@ void main() {
     expect(find.byType(MicroFinApp), findsOneWidget);
   });
 }
+

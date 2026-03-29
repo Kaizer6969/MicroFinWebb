@@ -220,7 +220,14 @@ if ($method === 'POST' && $action === 'verify_document') {
                 WHEN document_verification_status = 'Rejected' THEN 'Rejected'
                 ELSE 'Pending'
             END
-        )
+        ),
+        credit_limit = (
+            CASE 
+                WHEN document_verification_status = 'Verified' THEN 50000.00
+                ELSE credit_limit
+            END
+        ),
+        updated_at = NOW()
         WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
     ")->execute([$doc_id]);
 
@@ -256,10 +263,13 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
     $pdo->prepare("UPDATE client_documents SET verification_status = 'Verified', verified_by = ?, verification_date = NOW() WHERE client_id = ? AND tenant_id = ? AND verification_status != 'Verified'")
         ->execute([$verified_by2, $client_id, $tenant_id]);
 
-    // Set client status unconditionally to verified/approved
+    // Set client status unconditionally to verified/approved and set credit limit
     $pdo->prepare("
         UPDATE clients 
-        SET document_verification_status = 'Verified', verification_status = 'Approved', updated_at = NOW() 
+        SET document_verification_status = 'Verified', 
+            verification_status = 'Approved', 
+            credit_limit = 50000.00,
+            updated_at = NOW() 
         WHERE client_id = ? AND tenant_id = ?
     ")->execute([$client_id, $tenant_id]);
 

@@ -451,7 +451,9 @@ if (is_string($show_download_val))
         <h2 class="headline fw-800 mb-4 display-5 text-white">Get Our Mobile App</h2>
         <div class="mb-5 lh-lg opacity-75 mx-auto text-white" style="max-width:600px;" data-edit="download_description"
             contenteditable="true"><?php echo $e($download_description ?? 'Track your loans easily.'); ?></div>
-        <button class="btn btn-outline-light rounded-pill px-5 py-3 fw-bold">Download Now</button>
+        <a href="downloads/microfin_<?php echo urlencode($site_slug ?? ''); ?>.apk" 
+           class="btn btn-outline-light rounded-pill px-5 py-3 fw-bold text-decoration-none" 
+           download contenteditable="false">Download APK (<?php echo $e($company_name ?? ''); ?>)</a>
     </div>
 </section>
 

@@ -5,8 +5,7 @@
 $charset = 'utf8mb4';
 
 // ---------------------------------------------------------------
-// Primary (hosted) DB defaults — Railway production credentials.
-// These are used when environment variables are not available.
+// Primary (local) DB defaults — Localhost (XAMPP/WAMP) credentials.
 // ---------------------------------------------------------------
 $host = 'centerbeam.proxy.rlwy.net';
 $port = 52624;
@@ -14,22 +13,14 @@ $db = 'railway';
 $user = 'root';
 $pass = 'zVULvPIbSyHVavTRnPFAkMWGVmvRwInd';
 
-// ---------------------------------------------------------------
-// Local localhost fallback — only used when the primary/hosted
-// connection above fails (e.g. developing offline).
-// ---------------------------------------------------------------
-$localHost = 'localhost';
-$localPort = 3306;
-$localDb = 'microfin_db';
-$localUser = 'root';
-$localPass = '1234';
+// (Old local fallback variables removed as the primary is now localhost)
 
 function mf_env_first(array $keys)
 {
     foreach ($keys as $key) {
         $value = getenv($key);
-        if ($value !== false && trim((string)$value) !== '') {
-            return (string)$value;
+        if ($value !== false && trim((string) $value) !== '') {
+            return (string) $value;
         }
     }
 
@@ -39,10 +30,10 @@ function mf_env_first(array $keys)
 function mf_db_target_signature(array $target): string
 {
     return implode('|', [
-        (string)($target['host'] ?? ''),
-        (string)($target['port'] ?? ''),
-        (string)($target['db'] ?? ''),
-        (string)($target['user'] ?? ''),
+        (string) ($target['host'] ?? ''),
+        (string) ($target['port'] ?? ''),
+        (string) ($target['db'] ?? ''),
+        (string) ($target['user'] ?? ''),
     ]);
 }
 
@@ -59,7 +50,7 @@ function mf_local_config_value(string $key, string $default = ''): string
 {
     global $mf_local_mail_config;
     if (isset($mf_local_mail_config[$key])) {
-        $value = trim((string)$mf_local_mail_config[$key]);
+        $value = trim((string) $mf_local_mail_config[$key]);
         if ($value !== '') {
             return $value;
         }
@@ -73,19 +64,19 @@ if ($databaseUrl !== null) {
     $parts = parse_url($databaseUrl);
     if ($parts !== false) {
         if (!empty($parts['host'])) {
-            $host = (string)$parts['host'];
+            $host = (string) $parts['host'];
         }
         if (!empty($parts['port'])) {
-            $port = (int)$parts['port'];
+            $port = (int) $parts['port'];
         }
         if (array_key_exists('user', $parts)) {
-            $user = urldecode((string)$parts['user']);
+            $user = urldecode((string) $parts['user']);
         }
         if (array_key_exists('pass', $parts)) {
-            $pass = urldecode((string)$parts['pass']);
+            $pass = urldecode((string) $parts['pass']);
         }
         if (!empty($parts['path'])) {
-            $db = ltrim((string)$parts['path'], '/');
+            $db = ltrim((string) $parts['path'], '/');
         }
     }
 }
@@ -98,7 +89,7 @@ if ($envHost !== null) {
 }
 $envPort = mf_env_first(['MYSQLPORT', 'DB_PORT']);
 if ($envPort !== null) {
-    $port = (int)$envPort;
+    $port = (int) $envPort;
 }
 $envDb = mf_env_first(['MYSQLDATABASE', 'DB_NAME']);
 if ($envDb !== null) {
@@ -113,7 +104,7 @@ if ($envPass !== null) {
     $pass = $envPass;
 }
 
-$resolvedBrevoApiKey = mf_env_first(['BREVO_API_KEY']) ?? mf_local_config_value('BREVO_API_KEY', '');
+$resolvedBrevoApiKey = mf_env_first(['BREVO_API_KEY']) ?? mf_local_config_value('BREVO_API_KEY', 'YOUR_BREVO_API_KEY');
 $resolvedBrevoSenderEmail = mf_env_first(['BREVO_SENDER_EMAIL']) ?? mf_local_config_value('BREVO_SENDER_EMAIL', 'microfin.statements@gmail.com');
 $resolvedBrevoSenderName = mf_env_first(['BREVO_SENDER_NAME']) ?? mf_local_config_value('BREVO_SENDER_NAME', 'MicroFin');
 
@@ -129,24 +120,24 @@ if (!defined('BREVO_SENDER_NAME')) {
 
 function mf_send_brevo_email($toEmail, $subject, $htmlContent)
 {
-    $recipient = trim((string)$toEmail);
+    $recipient = trim((string) $toEmail);
     if ($recipient === '' || !filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
         return 'Invalid recipient email address.';
     }
 
-    $apiKey = trim((string)BREVO_API_KEY);
+    $apiKey = trim((string) BREVO_API_KEY);
     if ($apiKey === '' || stripos($apiKey, 'YOUR_BREVO_API_KEY') !== false) {
         return 'Brevo API key is not configured.';
     }
 
     $payload = json_encode([
         'sender' => [
-            'name' => (string)BREVO_SENDER_NAME,
-            'email' => (string)BREVO_SENDER_EMAIL,
+            'name' => (string) BREVO_SENDER_NAME,
+            'email' => (string) BREVO_SENDER_EMAIL,
         ],
         'to' => [['email' => $recipient]],
-        'subject' => (string)$subject,
-        'htmlContent' => (string)$htmlContent,
+        'subject' => (string) $subject,
+        'htmlContent' => (string) $htmlContent,
     ]);
 
     if ($payload === false) {
@@ -172,7 +163,7 @@ function mf_send_brevo_email($toEmail, $subject, $htmlContent)
     ]);
 
     $result = curl_exec($ch);
-    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlError = curl_error($ch);
     curl_close($ch);
 
@@ -196,83 +187,17 @@ $options = [
 ];
 
 try {
-    // Prefer localhost first, then fail over to the hosted Railway config.
-    $connectionTargets = [];
-    $seenConnectionTargets = [];
+    $targetDsn = sprintf(
+        'mysql:host=%s;port=%d;dbname=%s;charset=%s',
+        $host,
+        (int)$port,
+        $db,
+        $charset
+    );
 
-    foreach ([
-        [
-            'label' => 'localhost',
-            'host' => $localHost,
-            'port' => $localPort,
-            'db' => $localDb,
-            'user' => $localUser,
-            'pass' => $localPass,
-        ],
-        [
-            'label' => 'Railway',
-            'host' => $host,
-            'port' => $port,
-            'db' => $db,
-            'user' => $user,
-            'pass' => $pass,
-        ],
-    ] as $candidateTarget) {
-        $signature = mf_db_target_signature($candidateTarget);
-        if (isset($seenConnectionTargets[$signature])) {
-            continue;
-        }
+    $pdo = new PDO($targetDsn, $user, $pass, $options);
 
-        $seenConnectionTargets[$signature] = true;
-        $connectionTargets[] = $candidateTarget;
-    }
-
-    $connectionErrors = [];
-    foreach ($connectionTargets as $index => $target) {
-        $targetDsn = sprintf(
-            'mysql:host=%s;port=%d;dbname=%s;charset=%s',
-            $target['host'],
-            (int)$target['port'],
-            $target['db'],
-            $charset
-        );
-
-        try {
-            $pdo = new PDO($targetDsn, $target['user'], $target['pass'], $options);
-            $host = $target['host'];
-            $port = (int)$target['port'];
-            $db = $target['db'];
-            $user = $target['user'];
-            $pass = $target['pass'];
-
-            if ($index > 0) {
-                $previousTarget = $connectionTargets[$index - 1]['label'];
-                $previousError = $connectionErrors[$previousTarget] ?? 'Unknown connection error.';
-                error_log(
-                    sprintf(
-                        '%s DB connection failed; switched to %s fallback. Error: %s',
-                        $previousTarget,
-                        $target['label'],
-                        $previousError
-                    )
-                );
-            }
-
-            break;
-        }
-        catch (\Throwable $connectionError) {
-            $connectionErrors[$target['label']] = $connectionError->getMessage();
-        }
-    }
-
-    if (!isset($pdo)) {
-        $errorParts = [];
-        foreach ($connectionErrors as $targetLabel => $message) {
-            $errorParts[] = $targetLabel . ' failed: ' . $message;
-        }
-
-        throw new RuntimeException(implode(' | ', $errorParts));
-    }
+    // Proceed with schema guards and migrations inside the same main try block
 
     // Schema guard for newer website customization flows.
     // This keeps older databases compatible without a manual migration step.
@@ -293,22 +218,19 @@ try {
         foreach ($websiteContentColumnMigrations as $migrationSql) {
             try {
                 $pdo->exec($migrationSql);
-            }
-            catch (\PDOException $columnError) {
-            // Column already exists or DB flavor differs; safe to ignore.
+            } catch (\PDOException $columnError) {
+                // Column already exists or DB flavor differs; safe to ignore.
             }
         }
-    }
-    catch (\PDOException $migrationError) {
+    } catch (\PDOException $migrationError) {
         error_log('Schema guard warning (tenant_website_content): ' . $migrationError->getMessage());
     }
 
     // Migrate layout_template to flexible VARCHAR from old ENUM
     try {
         $pdo->exec("ALTER TABLE tenant_website_content MODIFY COLUMN layout_template VARCHAR(50) DEFAULT 'template1.php'");
-    }
-    catch (\PDOException $e) {
-    // Already migrated or table does not exist yet.
+    } catch (\PDOException $e) {
+        // Already migrated or table does not exist yet.
     }
 
     // Add setup step tracking column for onboarding wizard
@@ -325,29 +247,24 @@ try {
                     ELSE 0
                 END
         ");
-    }
-    catch (\PDOException $migrationError) {
-    // Column already exists. Ignore.
+    } catch (\PDOException $migrationError) {
+        // Column already exists. Ignore.
     }
 
     // Add card style columns to tenant_branding
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN theme_border_color VARCHAR(10) DEFAULT '#e2e8f0' COMMENT 'Card border/divider color'");
-    }
-    catch (\PDOException $e) {
+    } catch (\PDOException $e) {
     }
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_border_width TINYINT DEFAULT 1 COMMENT 'Card border width in px (0-3)'");
-    }
-    catch (\PDOException $e) {
+    } catch (\PDOException $e) {
     }
     try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_shadow VARCHAR(10) DEFAULT 'sm' COMMENT 'Card shadow: none, sm, md, lg'");
+    } catch (\PDOException $e) {
     }
-    catch (\PDOException $e) {
-    }
-}
-catch (\Throwable $e) {
+} catch (\Throwable $e) {
     error_log('Database Connection Failed: ' . $e->getMessage());
     header('Content-Type: application/json');
     http_response_code(500);

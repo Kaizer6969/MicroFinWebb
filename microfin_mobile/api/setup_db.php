@@ -1,9 +1,9 @@
 <?php
-$conn = new mysqli("localhost", "root", "1234");
+$conn = new mysqli("centerbeam.proxy.rlwy.net", "root", "zVULvPIbSyHVavTRnPFAkMWGVmvRwInd", "railway", 52624);
 
 $sql = "
-CREATE DATABASE IF NOT EXISTS microfin_db;
-USE microfin_db;
+// CREATE DATABASE IF NOT EXISTS microfin_db;
+// USE microfin_db;
 
 CREATE TABLE IF NOT EXISTS tenants (
     tenant_id VARCHAR(50) PRIMARY KEY,
