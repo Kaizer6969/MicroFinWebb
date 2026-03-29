@@ -61,10 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = 'This account is not eligible for password reset while its status is ' . strtolower($status) . '.';
             } else {
                 $token = bin2hex(random_bytes(32));
-                $expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
-
-                $update = $pdo->prepare("UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE user_id = ?");
-                $update->execute([$token, $expiry, $superAdmin['user_id']]);
+                $update = $pdo->prepare("UPDATE users SET reset_token = ?, reset_token_expiry = DATE_ADD(NOW(), INTERVAL 1 HOUR) WHERE user_id = ?");
+                $update->execute([$token, $superAdmin['user_id']]);
 
                 $name = trim((string)($superAdmin['first_name'] ?? '') . ' ' . (string)($superAdmin['last_name'] ?? ''));
                 if ($name === '') {
@@ -81,8 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div style='text-align: center; margin: 30px 0;'>
                             <a href='" . htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8') . "' style='background-color: #0f172a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Reset Password</a>
                         </div>
-                        <p>If the button does not work, copy and paste this link into your browser:</p>
-                        <p style='word-break: break-all; color: #64748b;'>" . htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8') . "</p>
                         <hr style='border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;' />
                         <p style='font-size: 12px; color: #94a3b8;'>If you did not request a password reset, you can safely ignore this email.</p>
                     </div>

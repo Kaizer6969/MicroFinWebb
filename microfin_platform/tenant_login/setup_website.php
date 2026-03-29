@@ -12,6 +12,61 @@ $user_id = (int) ($_SESSION['user_id'] ?? 0);
 $tenant_name = $_SESSION['tenant_name'] ?? 'Your Organization';
 $tenant_slug = $_SESSION['tenant_slug'] ?? '';
 
+function builder_app_base_path(): string
+{
+    $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $base = rtrim(str_replace('\\', '/', dirname(dirname($script))), '/');
+    return $base === '.' ? '' : $base;
+}
+
+function builder_normalize_asset_path(string $path): string
+{
+    $path = trim($path);
+    if ($path === '') {
+        return '';
+    }
+    if (preg_match('~^(?:https?:)?//|^data:~i', $path)) {
+        return $path;
+    }
+    if ($path[0] === '/') {
+        return $path;
+    }
+    $path = preg_replace('~^(?:\./)+~', '', $path);
+    $path = preg_replace('~^(?:\.\./)+~', '', $path);
+    return builder_app_base_path() . '/' . ltrim($path, '/');
+}
+
+function builder_store_uploaded_asset(array $file, string $directoryName, string $prefix, string $tenantId, array $allowedExtensions): string
+{
+    if ((int)($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return '';
+    }
+
+    $extension = strtolower((string)pathinfo((string)($file['name'] ?? ''), PATHINFO_EXTENSION));
+    if ($extension === '' || !in_array($extension, $allowedExtensions, true)) {
+        return '';
+    }
+
+    $baseUploadDir = realpath(__DIR__ . '/../uploads');
+    if ($baseUploadDir === false) {
+        $baseUploadDir = __DIR__ . '/../uploads';
+    }
+
+    $targetDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR . trim($directoryName, '/\\');
+    if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+        return '';
+    }
+
+    $safeTenant = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenantId);
+    $filename = $prefix . '_' . $safeTenant . '_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 8) . '.' . $extension;
+    $destination = $targetDir . DIRECTORY_SEPARATOR . $filename;
+    if (!move_uploaded_file((string)($file['tmp_name'] ?? ''), $destination)) {
+        return '';
+    }
+
+    return builder_app_base_path() . '/uploads/' . trim(str_replace('\\', '/', $directoryName), '/') . '/' . $filename;
+}
+
 if ($tenant_id === '') {
     header('Location: login.php');
     exit;
@@ -56,6 +111,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $payload = json_decode($jsonRaw, true);
         if (!is_array($payload)) $payload = [];
 
+        $existingWebsiteStmt = $pdo->prepare("SELECT layout_template, website_data FROM tenant_website_content WHERE tenant_id = ? LIMIT 1");
+        $existingWebsiteStmt->execute([$tenant_id]);
+        $existingWebsite = $existingWebsiteStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $existingWebsiteData = [];
+        if (!empty($existingWebsite['website_data'])) {
+            $decodedWebsiteData = json_decode((string)$existingWebsite['website_data'], true);
+            if (is_array($decodedWebsiteData)) {
+                $existingWebsiteData = $decodedWebsiteData;
+            }
+        }
+
+        $existingBrandStmt = $pdo->prepare("SELECT logo_path FROM tenant_branding WHERE tenant_id = ? LIMIT 1");
+        $existingBrandStmt->execute([$tenant_id]);
+        $existingBrandLogo = trim((string)$existingBrandStmt->fetchColumn());
+        $resolvedLogoPath = builder_normalize_asset_path($existingBrandLogo);
+
+        $payload = array_merge($existingWebsiteData, $payload);
+
         // Extract branding fields (saved to tenant_branding)
         $primary_color = $payload['primary_color'] ?? '#2563eb';
         $border_color  = $payload['border_color'] ?? '#e2e8f0';
@@ -71,34 +144,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $brandUpsert->execute([$tenant_id, $primary_color, $border_color]);
 
         if (!empty($_FILES['logo_file']) && $_FILES['logo_file']['error'] === UPLOAD_ERR_OK) {
-            $uploadDir = '../uploads/logos/';
-            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-            $ext = pathinfo($_FILES['logo_file']['name'], PATHINFO_EXTENSION);
-            $filename = 'logo_' . $tenant_id . '_' . time() . '.' . $ext;
-            $targetPath = $uploadDir . $filename;
-            if (move_uploaded_file($_FILES['logo_file']['tmp_name'], $targetPath)) {
-                $logoRelPath = 'uploads/logos/' . $filename;
+            $logoRelPath = builder_store_uploaded_asset($_FILES['logo_file'], 'tenant_logos', 'logo', (string)$tenant_id, ['png', 'jpg', 'jpeg', 'webp', 'svg']);
+            if ($logoRelPath !== '') {
                 $pdo->prepare('UPDATE tenant_branding SET logo_path = ? WHERE tenant_id = ?')
                     ->execute([$logoRelPath, $tenant_id]);
-                $payload['logo_url'] = $logoRelPath;
+                $resolvedLogoPath = $logoRelPath;
+            }
+        }
+
+        if ($resolvedLogoPath === '' && !empty($payload['logo_url'])) {
+            $resolvedLogoPath = builder_normalize_asset_path((string)$payload['logo_url']);
+            if ($resolvedLogoPath !== '') {
+                $pdo->prepare('INSERT INTO tenant_branding (tenant_id, logo_path) VALUES (?, ?) ON DUPLICATE KEY UPDATE logo_path = VALUES(logo_path), updated_at = CURRENT_TIMESTAMP')
+                    ->execute([$tenant_id, $resolvedLogoPath]);
             }
         }
 
         if (!empty($_FILES['hero_image_file']) && $_FILES['hero_image_file']['error'] === UPLOAD_ERR_OK) {
-            $uploadDir = '../uploads/hero/';
-            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-            $ext = pathinfo($_FILES['hero_image_file']['name'], PATHINFO_EXTENSION);
-            $filename = 'hero_' . $tenant_id . '_' . time() . '.' . $ext;
-            $targetPath = $uploadDir . $filename;
-            if (move_uploaded_file($_FILES['hero_image_file']['tmp_name'], $targetPath)) {
-                $payload['hero_image'] = 'uploads/hero/' . $filename;
+            $storedHeroPath = builder_store_uploaded_asset($_FILES['hero_image_file'], 'hero', 'hero', (string)$tenant_id, ['png', 'jpg', 'jpeg', 'webp']);
+            if ($storedHeroPath !== '') {
+                $payload['hero_image'] = $storedHeroPath;
             }
         } elseif (!empty($_POST['hero_preset_path'])) {
-            $payload['hero_image'] = $_POST['hero_preset_path'];
+            $payload['hero_image'] = builder_normalize_asset_path((string)$_POST['hero_preset_path']);
+        } elseif (!empty($payload['hero_image'])) {
+            $payload['hero_image'] = builder_normalize_asset_path((string)$payload['hero_image']);
         }
 
-        $selectedTemplate = $payload['selected_template'] ?? 'template1.php';
-        unset($payload['selected_template'], $payload['primary_color'], $payload['border_color']);
+        $selectedTemplate = $payload['selected_template'] ?? ($existingWebsite['layout_template'] ?? 'template1.php');
+        unset($payload['selected_template'], $payload['primary_color'], $payload['border_color'], $payload['logo_url']);
 
         $websiteUpsert = $pdo->prepare('
             INSERT INTO tenant_website_content (tenant_id, layout_template, website_data)
@@ -122,7 +196,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->prepare('UPDATE tenants SET setup_current_step = 4 WHERE tenant_id = ? AND setup_current_step = 3')->execute([$tenant_id]);
 
-        echo json_encode(['status' => 'success']);
+        echo json_encode([
+            'status' => 'success',
+            'logo_url' => $resolvedLogoPath,
+            'hero_image' => (string)($payload['hero_image'] ?? '')
+        ]);
     } catch (Exception $ex) {
         echo json_encode(['status' => 'error', 'message' => $ex->getMessage()]);
     }
@@ -196,9 +274,11 @@ if (empty($preset_images)) {
         'https://images.unsplash.com/photo-1556740714-a8395b3bf30f?auto=format&fit=crop&w=600&h=800&q=80',
         'https://images.unsplash.com/photo-1556742044-3c52d6e88c62?auto=format&fit=crop&w=600&h=800&q=80'
     ];
+} else {
+    $preset_images = array_map(static fn($img) => builder_normalize_asset_path((string)$img), $preset_images);
 }
 
-$logo          = $branding['logo_path'] ?? '';
+$logo          = builder_normalize_asset_path((string)($branding['logo_path'] ?? ($pageData['logo_url'] ?? '')));
 $primary       = $branding['theme_primary_color'] ?? '#2563eb';
 $border_color  = $branding['theme_border_color'] ?? '#e2e8f0';
 $border_radius = $pageData['border_radius'] ?? '16';
@@ -225,9 +305,11 @@ $contact_email   = $pageData['contact_email'] ?? 'hello@microfin.os';
 $contact_hours   = $pageData['contact_hours'] ?? 'Mon-Fri: 8AM - 5PM';
 $footer_desc     = $pageData['footer_desc'] ?? 'Your trusted microfinance partner.';
 
-$hero_image       = $pageData['hero_image'] ?? '';
+$hero_image       = builder_normalize_asset_path((string)($pageData['hero_image'] ?? ''));
 $default_hero_img = $preset_images[0] ?? '';
 $display_image    = $hero_image ? $hero_image : $default_hero_img;
+$logo_action_label = $logo !== '' ? 'Change Logo' : 'Upload Logo';
+$hero_action_label = $hero_image !== '' ? 'Change Hero Image' : 'Upload Hero Image';
 
 $services = $pageData['services'] ?? [['icon' => 'person', 'title' => 'Personal Loan', 'description' => 'Fast approval for your personal needs.']];
 if (!is_array($services)) $services = [];
@@ -323,9 +405,19 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
             <label class="form-label small fw-bold mt-1">Brand Acronym <span class="text-muted fw-normal">(Optional)</span></label>
             <input type="text" id="inp_short_name" class="form-control form-control-sm mb-1" placeholder="e.g. BDO" value="<?php echo $e($short_name); ?>">
 
-            <label class="form-label small fw-bold border-top pt-3 w-100">Brand Logo</label>
-            <input type="file" id="inp_logo" class="form-control form-control-sm mb-2" accept="image/png, image/jpeg, image/svg+xml">
-            <button id="btn_match_color" class="btn btn-sm btn-outline-primary w-100 fw-bold d-none mb-3">✨ Match Color to Logo</button>
+            <label class="form-label small fw-bold border-top pt-3 w-100"><?php echo $e($logo_action_label); ?></label>
+            <input type="file" id="inp_logo" class="d-none" accept="image/png, image/jpeg, image/svg+xml">
+            <label for="inp_logo" id="logo_upload_action" class="btn btn-outline-primary w-100 fw-bold mb-2" style="cursor:pointer;"><?php echo $e($logo_action_label); ?></label>
+            <?php if ($logo !== ''): ?>
+                <div class="small d-flex align-items-center gap-2 rounded border bg-white px-2 py-2 mb-2">
+                    <img id="current_logo_thumb" src="<?php echo $e($logo); ?>" alt="Current logo" style="width:44px;height:44px;object-fit:contain;border-radius:10px;border:1px solid #e2e8f0;padding:4px;background:#fff;">
+                    <div>
+                        <div class="fw-bold text-dark">Current logo loaded</div>
+                        <div class="text-muted">This saved logo is already linked to your website.</div>
+                    </div>
+                </div>
+            <?php endif; ?>
+            <button id="btn_match_color" class="btn btn-sm btn-outline-primary w-100 fw-bold <?php echo $logo !== '' ? '' : 'd-none'; ?> mb-3">✨ Match Color to Logo</button>
 
             <label class="form-label small fw-bold mt-2">Primary Color</label>
             <input type="color" id="inp_color" class="form-control form-control-color w-100" value="<?php echo $primary; ?>">
@@ -413,8 +505,8 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
                 <button type="button" class="btn-close" id="closeImagePicker"></button>
             </div>
             <div class="mb-4">
-                <label for="inp_hero_upload" class="btn btn-primary w-100 fw-bold text-center" style="cursor:pointer; display:block;">
-                    Upload Custom Photo
+                <label for="inp_hero_upload" id="hero_upload_action" class="btn btn-primary w-100 fw-bold text-center" style="cursor:pointer; display:block;">
+                    <?php echo $e($hero_action_label); ?>
                 </label>
                 <input type="file" id="inp_hero_upload" class="d-none" accept="image/png, image/jpeg, image/webp">
             </div>
@@ -499,8 +591,12 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
         const inpLogo = document.getElementById('inp_logo');
         const previewLogo = document.getElementById('preview_logo');
         const hiddenLogo = document.getElementById('hiddenLogo');
+        const currentLogoThumb = document.getElementById('current_logo_thumb');
+        const logoUploadAction = document.getElementById('logo_upload_action');
         const btnMatch = document.getElementById('btn_match_color');
         let uploadedLogoFile = null;
+        let currentLogoPath = <?php echo json_encode($logo, JSON_UNESCAPED_SLASHES); ?>;
+        let currentHeroImagePath = <?php echo json_encode($hero_image, JSON_UNESCAPED_SLASHES); ?>;
 
         inpLogo.addEventListener('change', function(e) {
             if (this.files && this.files[0]) {
@@ -509,6 +605,9 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
                 reader.onload = function(e) {
                     if (previewLogo) { previewLogo.src = e.target.result; previewLogo.style.display = 'block'; }
                     hiddenLogo.src = e.target.result;
+                    if (logoUploadAction) {
+                        logoUploadAction.textContent = 'Change Logo';
+                    }
                     btnMatch.classList.remove('d-none');
                 }
                 reader.readAsDataURL(uploadedLogoFile);
@@ -561,6 +660,7 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
         const imagePickerOverlay = document.getElementById('imagePickerOverlay');
         const closeImagePicker = document.getElementById('closeImagePicker');
         const inpHeroUpload = document.getElementById('inp_hero_upload');
+        const heroUploadAction = document.getElementById('hero_upload_action');
         let uploadedHeroFile = null;
         let selectedPresetHero = "";
 
@@ -584,8 +684,15 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
                 const src = this.getAttribute('data-src');
                 const previewHero = document.getElementById('preview_hero');
                 const heroContainer = document.getElementById('hero_img_container');
-                if (previewHero) previewHero.src = src;
+                if (previewHero) {
+                    previewHero.src = src;
+                    previewHero.style.display = 'block';
+                }
+                currentHeroImagePath = src;
                 selectedPresetHero = src; uploadedHeroFile = null; inpHeroUpload.value = '';
+                if (heroUploadAction) {
+                    heroUploadAction.textContent = 'Change Hero Image';
+                }
                 const tempImg = new Image();
                 tempImg.onload = function() { if (heroContainer) heroContainer.style.aspectRatio = this.width + " / " + this.height; };
                 tempImg.src = src;
@@ -600,7 +707,13 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
                 reader.onload = function(e) {
                     const previewHero = document.getElementById('preview_hero');
                     const heroContainer = document.getElementById('hero_img_container');
-                    if (previewHero) previewHero.src = e.target.result;
+                    if (previewHero) {
+                        previewHero.src = e.target.result;
+                        previewHero.style.display = 'block';
+                    }
+                    if (heroUploadAction) {
+                        heroUploadAction.textContent = 'Change Hero Image';
+                    }
                     const tempImg = new Image();
                     tempImg.onload = function() { if (heroContainer) heroContainer.style.aspectRatio = this.width + " / " + this.height; };
                     tempImg.src = e.target.result;
@@ -717,6 +830,8 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
                 selected_template: document.getElementById('inp_template').value,
                 company_name: document.getElementById('inp_company_name').value.trim(),
                 short_name: document.getElementById('inp_short_name').value.trim(),
+                logo_url: currentLogoPath,
+                hero_image: currentHeroImagePath,
                 primary_color: document.getElementById('inp_color').value,
                 text_heading_color: document.getElementById('inp_text_heading').value,
                 text_body_color: document.getElementById('inp_text_body').value,
@@ -737,6 +852,17 @@ $e = function ($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
+                        currentLogoPath = data.logo_url || currentLogoPath;
+                        currentHeroImagePath = data.hero_image || currentHeroImagePath;
+                        if (logoUploadAction && currentLogoPath) {
+                            logoUploadAction.textContent = 'Change Logo';
+                        }
+                        if (heroUploadAction && currentHeroImagePath) {
+                            heroUploadAction.textContent = 'Change Hero Image';
+                        }
+                        if (currentLogoThumb && currentLogoPath) {
+                            currentLogoThumb.src = currentLogoPath;
+                        }
                         window.location.href = 'setup_branding.php'; // Proceed to next step
                     } else {
                         console.error("Save Error:", data.message);

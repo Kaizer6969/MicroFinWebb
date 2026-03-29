@@ -160,14 +160,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 $plan_pricing_map = [
                     'Starter' => 4999.00,
-                    'Growth' => 9999.00,
                     'Pro' => 14999.00,
-                    'Enterprise' => 22999.00,
+                    'Enterprise' => 19999.00,
                     'Unlimited' => 29999.00,
                 ];
                 $plan_limits_map = [
                     'Starter' => ['clients' => 1000, 'users' => 250],
-                    'Growth' => ['clients' => 2500, 'users' => 750],
                     'Pro' => ['clients' => 5000, 'users' => 2000],
                     'Enterprise' => ['clients' => 10000, 'users' => 5000],
                     'Unlimited' => ['clients' => -1, 'users' => -1],
@@ -377,6 +375,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -549,10 +548,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .text-danger { color: #ef4444; }
 
+        .location-helper {
+            color: #64748b;
+            font-size: 0.8rem;
+            margin-top: 6px;
+            display: block;
+        }
+
+        .location-search-wrap {
+            position: relative;
+            z-index: 1200;
+        }
+
+        .location-suggestions {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            display: none;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+            overflow: hidden;
+            z-index: 1300;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        .location-suggestions.is-open {
+            display: block;
+        }
+
+        .location-suggestion {
+            display: block;
+            width: 100%;
+            text-align: left;
+            border: 0;
+            background: transparent;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .location-suggestion:last-child {
+            border-bottom: 0;
+        }
+
+        .location-suggestion:hover,
+        .location-suggestion.is-active {
+            background: #eff6ff;
+        }
+
+        .location-suggestion-title {
+            display: block;
+            color: #0f172a;
+            font-size: 0.88rem;
+            line-height: 1.45;
+            font-weight: 600;
+        }
+
+        .location-suggestion-sub {
+            display: block;
+            color: #64748b;
+            font-size: 0.76rem;
+            line-height: 1.45;
+            margin-top: 4px;
+        }
+
+        .location-suggestion-empty {
+            padding: 12px 14px;
+            color: #64748b;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            background: #ffffff;
+        }
+
+        .location-map-wrap {
+            display: block;
+            margin-top: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #ffffff;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+            position: relative;
+            z-index: 1;
+        }
+
+        .location-map-wrap.is-visible {
+            display: block;
+        }
+
+        .location-map-frame {
+            width: 100%;
+            height: 280px;
+            border: 0;
+            display: block;
+            background: #e2e8f0;
+        }
+
+        .location-map-frame .leaflet-control-attribution {
+            font-size: 0.68rem;
+        }
+
+        .location-map-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 12px 14px;
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+        }
+
+        .location-map-status {
+            color: #475569;
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
         .plan-helper { font-size: 0.8rem; color: var(--text-gray); margin-top: -2px; margin-bottom: 12px; }
 
         .plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
         .plan-option { position: relative; display: block; cursor: pointer; }
+        .plan-option.plan-option-wide { grid-column: 1 / -1; }
         .plan-option input { position: absolute; opacity: 0; pointer-events: none; }
 
         /* Updated Plan Cards */
@@ -573,11 +695,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .plan-option input:focus + .plan-card-content { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
         .plan-option input:checked + .plan-card-content {
-            border-color: var(--accent); background: #faf5ff;
-            box-shadow: 0 0 0 1px var(--accent), 0 8px 20px rgba(139, 92, 246, 0.15);
+            background: #eff6ff;
         }
-        .plan-option input:checked + .plan-card-content::after {
-            background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 3px #ffffff;
+        .plan-option.plan-starter input:checked + .plan-card-content {
+            border-color: #16a34a; background: #f0fdf4;
+            box-shadow: 0 0 0 1px #16a34a, 0 8px 20px rgba(22, 163, 74, 0.16);
+        }
+        .plan-option.plan-starter input:checked + .plan-card-content::after {
+            background: #16a34a; border-color: #16a34a; box-shadow: inset 0 0 0 3px #ffffff;
+        }
+        .plan-option.plan-pro input:checked + .plan-card-content {
+            border-color: #2563eb; background: #eff6ff;
+            box-shadow: 0 0 0 1px #2563eb, 0 8px 20px rgba(37, 99, 235, 0.16);
+        }
+        .plan-option.plan-pro input:checked + .plan-card-content::after {
+            background: #2563eb; border-color: #2563eb; box-shadow: inset 0 0 0 3px #ffffff;
+        }
+        .plan-option.plan-enterprise input:checked + .plan-card-content {
+            border-color: #d97706; background: #fff7ed;
+            box-shadow: 0 0 0 1px #d97706, 0 8px 20px rgba(217, 119, 6, 0.16);
+        }
+        .plan-option.plan-enterprise input:checked + .plan-card-content::after {
+            background: #d97706; border-color: #d97706; box-shadow: inset 0 0 0 3px #ffffff;
+        }
+        .plan-option.plan-unlimited input:checked + .plan-card-content {
+            border-color: #8b5cf6; background: #faf5ff;
+            box-shadow: 0 0 0 1px #8b5cf6, 0 8px 20px rgba(139, 92, 246, 0.18);
+        }
+        .plan-option.plan-unlimited input:checked + .plan-card-content::after {
+            background: #8b5cf6; border-color: #8b5cf6; box-shadow: inset 0 0 0 3px #ffffff;
         }
 
         .plan-name { display: block; font-weight: 700; color: var(--text-dark); font-size: 1rem; letter-spacing: -0.2px; }
@@ -666,7 +812,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <li><span class="material-symbols-rounded">bolt</span><span>Rapid setup with guided onboarding and migration assistance.</span></li>
                     <li><span class="material-symbols-rounded">support_agent</span><span>Hands-on support from implementation through go-live.</span></li>
                 </ul>
-                <p class="intro-note">Average review time for new demo requests is within 24 hours.</p>
+                <p class="intro-note">Average review time for application request is within 24 hours.</p>
             </aside>
 
             <div class="demo-card">
@@ -725,8 +871,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </div>
 
                     <div class="form-group">
-                        <label>Location</label>
-                        <input type="text" class="input-field" name="location" placeholder="e.g. City, Region or Country">
+                        <label>Company Location</label>
+                        <div class="location-search-wrap">
+                            <input type="text" class="input-field" name="location" id="company_location" placeholder="e.g. 123 Main St, Makati City, Metro Manila" autocomplete="off">
+                            <div class="location-suggestions" id="company-location-suggestions" role="listbox" aria-label="Company location suggestions"></div>
+                        </div>
+                        <small class="location-helper">Type your company address or click the map below to pin the exact location.</small>
+                        <div class="location-map-wrap" id="company-location-map-wrap">
+                            <div
+                                id="company-location-map"
+                                class="location-map-frame"
+                                aria-label="Company location map picker"></div>
+                            <div class="location-map-actions">
+                                <span class="location-map-status" id="company-location-map-status">Click anywhere on the map to pin your company address.</span>
+                            </div>
+                        </div>
                     </div>
 
                     <?php if ($is_talk_to_expert): ?>
@@ -750,7 +909,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <label>Subscription Plan <span class="text-danger">*</span></label>
                         <p class="plan-helper">Select one plan to match your expected operational scale.</p>
                         <div class="plan-grid">
-                            <label class="plan-option">
+                            <label class="plan-option plan-starter">
                                 <input type="radio" name="plan_tier" value="Starter" required>
                                 <span class="plan-card-content">
                                     <span class="plan-name">Starter</span>
@@ -761,18 +920,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 </span>
                             </label>
 
-                            <label class="plan-option">
-                                <input type="radio" name="plan_tier" value="Growth">
-                                <span class="plan-card-content">
-                                    <span class="plan-name">Growth</span>
-                                    <span class="plan-meta">
-                                        <span class="plan-capacity">Up to 2,500 clients and 750 users</span>
-                                        <span class="plan-price">Php 9,999/mo</span>
-                                    </span>
-                                </span>
-                            </label>
-
-                            <label class="plan-option">
+                            <label class="plan-option plan-pro">
                                 <input type="radio" name="plan_tier" value="Pro">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Pro</span>
@@ -783,18 +931,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 </span>
                             </label>
 
-                            <label class="plan-option">
+                            <label class="plan-option plan-enterprise">
                                 <input type="radio" name="plan_tier" value="Enterprise">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Enterprise</span>
                                     <span class="plan-meta">
                                         <span class="plan-capacity">Up to 10,000 clients and 5,000 users</span>
-                                        <span class="plan-price">Php 22,999/mo</span>
+                                        <span class="plan-price">Php 19,999/mo</span>
                                     </span>
                                 </span>
                             </label>
 
-                            <label class="plan-option">
+                            <label class="plan-option plan-option-wide plan-unlimited">
                                 <input type="radio" name="plan_tier" value="Unlimited">
                                 <span class="plan-card-content">
                                     <span class="plan-name">Unlimited</span>
@@ -919,6 +1067,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     });
     </script>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const demoForm = document.getElementById('demo-form');
@@ -962,6 +1111,404 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         const isOtpVerified = document.getElementById('is_otp_verified');
         const emailHelpText = document.getElementById('email-help-text');
         const otpCountdown = document.getElementById('otp-countdown');
+        const companyLocationInput = document.getElementById('company_location');
+        const companyLocationMapWrap = document.getElementById('company-location-map-wrap');
+        const companyLocationMap = document.getElementById('company-location-map');
+        const companyLocationMapLink = document.getElementById('company-location-map-link');
+        const companyLocationMapStatus = document.getElementById('company-location-map-status');
+        const companyLocationSuggestions = document.getElementById('company-location-suggestions');
+        const companyLocationSearchWrap = companyLocationInput ? companyLocationInput.closest('.location-search-wrap') : null;
+        let companyLocationLeafletMap = null;
+        let companyLocationMarker = null;
+        let companyLocationSearchTimer = null;
+        let companyLocationSearchController = null;
+        let companyLocationReverseController = null;
+        let companyLocationSuppressSearch = false;
+        let companyLocationLastPinned = null;
+        let companyLocationResults = [];
+        let companyLocationActiveIndex = -1;
+
+        const setCompanyLocationStatus = (message) => {
+            if (companyLocationMapStatus) {
+                companyLocationMapStatus.textContent = message;
+            }
+        };
+
+        const updateCompanyLocationLink = (queryOrCoords) => {
+            if (!companyLocationMapLink) {
+                return;
+            }
+
+            if (!queryOrCoords) {
+                companyLocationMapLink.href = '#';
+                return;
+            }
+
+            companyLocationMapLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryOrCoords)}`;
+        };
+
+        const closeCompanyLocationSuggestions = (clearResults = false) => {
+            if (!companyLocationSuggestions) {
+                return;
+            }
+
+            companyLocationSuggestions.classList.remove('is-open');
+            companyLocationSuggestions.innerHTML = '';
+            companyLocationActiveIndex = -1;
+
+            if (clearResults) {
+                companyLocationResults = [];
+            }
+        };
+
+        const setActiveCompanyLocationSuggestion = (index) => {
+            if (!companyLocationSuggestions || !companyLocationResults.length) {
+                companyLocationActiveIndex = -1;
+                return;
+            }
+
+            const suggestionButtons = Array.from(companyLocationSuggestions.querySelectorAll('.location-suggestion'));
+            if (!suggestionButtons.length) {
+                companyLocationActiveIndex = -1;
+                return;
+            }
+
+            if (index < 0) {
+                index = suggestionButtons.length - 1;
+            } else if (index >= suggestionButtons.length) {
+                index = 0;
+            }
+
+            companyLocationActiveIndex = index;
+
+            suggestionButtons.forEach((button, buttonIndex) => {
+                const isActive = buttonIndex === index;
+                button.classList.toggle('is-active', isActive);
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+                if (isActive) {
+                    button.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        };
+
+        const focusCompanyLocationPoint = (lat, lng, zoomLevel = 16) => {
+            if (!companyLocationLeafletMap) {
+                return;
+            }
+
+            companyLocationLastPinned = { lat, lng };
+            companyLocationMapWrap?.classList.add('is-visible');
+            ensureCompanyLocationMarker(lat, lng);
+            companyLocationLeafletMap.setView([lat, lng], zoomLevel);
+        };
+
+        const selectCompanyLocationSuggestion = (result) => {
+            if (!result) {
+                return;
+            }
+
+            const lat = parseFloat(result.lat);
+            const lng = parseFloat(result.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                return;
+            }
+
+            const displayName = typeof result.display_name === 'string' ? result.display_name.trim() : '';
+
+            if (companyLocationInput && displayName !== '') {
+                companyLocationSuppressSearch = true;
+                companyLocationInput.value = displayName;
+                companyLocationSuppressSearch = false;
+            }
+
+            focusCompanyLocationPoint(lat, lng, 16);
+            updateCompanyLocationLink(displayName || `${lat},${lng}`);
+            setCompanyLocationStatus(displayName ? `Selected: ${displayName}` : `Pinned coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+            closeCompanyLocationSuggestions();
+        };
+
+        const renderCompanyLocationSuggestions = (results, emptyMessage = 'No matching addresses found yet.') => {
+            if (!companyLocationSuggestions) {
+                return;
+            }
+
+            companyLocationSuggestions.innerHTML = '';
+            companyLocationResults = Array.isArray(results) ? results : [];
+            companyLocationActiveIndex = -1;
+
+            if (!companyLocationResults.length) {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'location-suggestion-empty';
+                emptyState.textContent = emptyMessage;
+                companyLocationSuggestions.appendChild(emptyState);
+                companyLocationSuggestions.classList.add('is-open');
+                return;
+            }
+
+            companyLocationResults.forEach((result, index) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'location-suggestion';
+                button.setAttribute('role', 'option');
+                button.setAttribute('aria-selected', 'false');
+
+                const displayName = typeof result.display_name === 'string' ? result.display_name.trim() : '';
+                const displayParts = displayName
+                    .split(',')
+                    .map((part) => part.trim())
+                    .filter(Boolean);
+
+                const title = document.createElement('span');
+                title.className = 'location-suggestion-title';
+                title.textContent = displayParts[0] || displayName || 'Suggested location';
+
+                const subtitle = document.createElement('span');
+                subtitle.className = 'location-suggestion-sub';
+                subtitle.textContent = displayParts.slice(1).join(', ') || 'Click to pin this address on the map.';
+
+                button.appendChild(title);
+                button.appendChild(subtitle);
+                button.addEventListener('mouseenter', () => {
+                    setActiveCompanyLocationSuggestion(index);
+                });
+                button.addEventListener('click', () => {
+                    selectCompanyLocationSuggestion(result);
+                });
+
+                companyLocationSuggestions.appendChild(button);
+            });
+
+            companyLocationSuggestions.classList.add('is-open');
+        };
+
+        const ensureCompanyLocationMarker = (lat, lng) => {
+            if (!companyLocationLeafletMap || typeof L === 'undefined') {
+                return;
+            }
+
+            if (!companyLocationMarker) {
+                companyLocationMarker = L.marker([lat, lng], { draggable: true }).addTo(companyLocationLeafletMap);
+                companyLocationMarker.on('dragend', () => {
+                    const dragged = companyLocationMarker.getLatLng();
+                    handlePinnedLocation(dragged.lat, dragged.lng, true);
+                });
+            } else {
+                companyLocationMarker.setLatLng([lat, lng]);
+            }
+        };
+
+        const reverseGeocodeCompanyLocation = async (lat, lng, updateInput = true) => {
+            if (companyLocationReverseController) {
+                companyLocationReverseController.abort();
+            }
+
+            companyLocationReverseController = new AbortController();
+
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`,
+                    {
+                        signal: companyLocationReverseController.signal,
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error('Reverse geocoding failed');
+                }
+
+                const data = await response.json();
+                const resolvedAddress = (data && typeof data.display_name === 'string') ? data.display_name.trim() : '';
+
+                if (updateInput && resolvedAddress && companyLocationInput) {
+                    companyLocationSuppressSearch = true;
+                    companyLocationInput.value = resolvedAddress;
+                    companyLocationSuppressSearch = false;
+                }
+
+                closeCompanyLocationSuggestions(true);
+                updateCompanyLocationLink(resolvedAddress || `${lat},${lng}`);
+                setCompanyLocationStatus(resolvedAddress ? `Pinned: ${resolvedAddress}` : `Pinned coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    closeCompanyLocationSuggestions(true);
+                    updateCompanyLocationLink(`${lat},${lng}`);
+                    setCompanyLocationStatus(`Pinned coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                }
+            }
+        };
+
+        const handlePinnedLocation = (lat, lng, shouldReverseGeocode = false) => {
+            if (!companyLocationLeafletMap) {
+                return;
+            }
+
+            focusCompanyLocationPoint(lat, lng, Math.max(companyLocationLeafletMap.getZoom(), 16));
+            closeCompanyLocationSuggestions(true);
+            updateCompanyLocationLink(`${lat},${lng}`);
+            setCompanyLocationStatus(`Pinned coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+            if (shouldReverseGeocode) {
+                reverseGeocodeCompanyLocation(lat, lng, true);
+            }
+        };
+
+        const searchCompanyLocationAddress = async (address) => {
+            if (!address || address.length < 3) {
+                closeCompanyLocationSuggestions(true);
+                setCompanyLocationStatus('Click anywhere on the map to pin your company address.');
+                updateCompanyLocationLink('');
+                return;
+            }
+
+            if (companyLocationSearchController) {
+                companyLocationSearchController.abort();
+            }
+
+            companyLocationSearchController = new AbortController();
+            renderCompanyLocationSuggestions([], 'Searching company locations...');
+            setCompanyLocationStatus('Searching for your company address...');
+
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=1&q=${encodeURIComponent(address)}`,
+                    {
+                        signal: companyLocationSearchController.signal,
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error('Geocoding failed');
+                }
+
+                const results = await response.json();
+                if (!Array.isArray(results) || !results.length) {
+                    renderCompanyLocationSuggestions([], 'No matching addresses yet. Try a more specific company location.');
+                    updateCompanyLocationLink(address);
+                    setCompanyLocationStatus('No exact match yet. You can still click the map to pin the correct address.');
+                    return;
+                }
+
+                renderCompanyLocationSuggestions(results);
+                updateCompanyLocationLink(address);
+                setCompanyLocationStatus('Choose the best match from the dropdown, or pin the map manually.');
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    renderCompanyLocationSuggestions([], 'We could not load suggestions right now.');
+                    updateCompanyLocationLink(address);
+                    setCompanyLocationStatus('We could not find that address automatically. You can click the map to pin it manually.');
+                }
+            }
+        };
+
+        if (companyLocationInput && companyLocationMap && typeof L !== 'undefined') {
+            companyLocationLeafletMap = L.map(companyLocationMap, {
+                zoomControl: true,
+                scrollWheelZoom: false
+            }).setView([14.5995, 120.9842], 6);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(companyLocationLeafletMap);
+
+            companyLocationLeafletMap.on('click', (event) => {
+                handlePinnedLocation(event.latlng.lat, event.latlng.lng, true);
+            });
+
+            companyLocationMapWrap?.classList.add('is-visible');
+            updateCompanyLocationLink('');
+            setCompanyLocationStatus('Click anywhere on the map to pin your company address.');
+
+            const queueCompanyLocationSearch = () => {
+                if (companyLocationSuppressSearch) {
+                    return;
+                }
+
+                const value = companyLocationInput.value.trim();
+                clearTimeout(companyLocationSearchTimer);
+
+                if (!value) {
+                    closeCompanyLocationSuggestions(true);
+                    updateCompanyLocationLink('');
+                    setCompanyLocationStatus('Click anywhere on the map to pin your company address.');
+                    return;
+                }
+
+                updateCompanyLocationLink(value);
+                companyLocationSearchTimer = window.setTimeout(() => {
+                    searchCompanyLocationAddress(value);
+                }, 650);
+            };
+
+            companyLocationInput.addEventListener('input', queueCompanyLocationSearch);
+            companyLocationInput.addEventListener('change', queueCompanyLocationSearch);
+            companyLocationInput.addEventListener('focus', () => {
+                const value = companyLocationInput.value.trim();
+                if (value.length >= 3) {
+                    queueCompanyLocationSearch();
+                }
+            });
+            companyLocationInput.addEventListener('keydown', (event) => {
+                const suggestionsOpen = companyLocationSuggestions && companyLocationSuggestions.classList.contains('is-open');
+                const hasResults = companyLocationResults.length > 0;
+
+                if (!suggestionsOpen) {
+                    if (event.key === 'Escape') {
+                        closeCompanyLocationSuggestions();
+                    }
+                    return;
+                }
+
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    if (hasResults) {
+                        setActiveCompanyLocationSuggestion(companyLocationActiveIndex + 1);
+                    }
+                    return;
+                }
+
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    if (hasResults) {
+                        setActiveCompanyLocationSuggestion(companyLocationActiveIndex - 1);
+                    }
+                    return;
+                }
+
+                if (event.key === 'Enter') {
+                    if (hasResults) {
+                        event.preventDefault();
+                        const selectedIndex = companyLocationActiveIndex >= 0 ? companyLocationActiveIndex : 0;
+                        selectCompanyLocationSuggestion(companyLocationResults[selectedIndex]);
+                    }
+                    return;
+                }
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeCompanyLocationSuggestions();
+                }
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!companyLocationSearchWrap || companyLocationSearchWrap.contains(event.target)) {
+                    return;
+                }
+
+                closeCompanyLocationSuggestions();
+            });
+
+            if (companyLocationInput.value.trim()) {
+                queueCompanyLocationSearch();
+            }
+        }
 
         // OTP expiry countdown (5 minutes)
         let otpExpiryInterval = null;

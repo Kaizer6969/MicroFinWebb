@@ -170,19 +170,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     </ul>
                 </div>
                 
-                <!-- Growth -->
-                <div class="pricing-card popular">
-                    <div class="popular-badge">Most Popular</div>
-                    <div class="pricing-header">
-                        <h3>Growth</h3>
-                        <div class="price">₱9,999<span>/mo</span></div>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><span class="material-symbols-rounded">check_circle</span> <strong>2,500</strong> Max Clients</li>
-                        <li><span class="material-symbols-rounded">check_circle</span> <strong>750</strong> Max Staffs</li>
-                    </ul>
-                </div>
-
                 <!-- Pro -->
                 <div class="pricing-card">
                     <div class="pricing-header">
@@ -199,7 +186,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <div class="pricing-card">
                     <div class="pricing-header">
                         <h3>Enterprise</h3>
-                        <div class="price">₱22,999<span>/mo</span></div>
+                        <div class="price">₱19,999<span>/mo</span></div>
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>10,000</strong> Max Clients</li>

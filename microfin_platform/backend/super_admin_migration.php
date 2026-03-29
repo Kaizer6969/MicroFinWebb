@@ -16,10 +16,10 @@ try {
     
     // Normalize legacy tier names and set MRR based on current plan pricing.
     $pdo->exec("UPDATE tenants SET plan_tier = 'Starter' WHERE plan_tier = 'Basic'");
+    $pdo->exec("UPDATE tenants SET plan_tier = 'Pro' WHERE plan_tier = 'Growth'");
     $pdo->exec("UPDATE tenants SET mrr = 4999.00 WHERE plan_tier = 'Starter' AND mrr = 0.00");
-    $pdo->exec("UPDATE tenants SET mrr = 9999.00 WHERE plan_tier = 'Growth' AND mrr = 0.00");
     $pdo->exec("UPDATE tenants SET mrr = 14999.00 WHERE plan_tier = 'Pro' AND mrr = 0.00");
-    $pdo->exec("UPDATE tenants SET mrr = 22999.00 WHERE plan_tier = 'Enterprise' AND mrr = 0.00");
+    $pdo->exec("UPDATE tenants SET mrr = 19999.00 WHERE plan_tier = 'Enterprise' AND mrr = 0.00");
     $pdo->exec("UPDATE tenants SET mrr = 29999.00 WHERE plan_tier = 'Unlimited' AND mrr = 0.00");
 
     echo "Database successfully modified for Super Admin features.";

@@ -5,6 +5,25 @@
 
 require_once 'backend/db_connect.php';
 
+function site_normalize_asset_path(string $path): string
+{
+    $path = trim($path);
+    if ($path === '') {
+        return '';
+    }
+    if (preg_match('~^(?:https?:)?//|^data:~i', $path)) {
+        return $path;
+    }
+    if ($path[0] === '/') {
+        return $path;
+    }
+    $path = preg_replace('~^(?:\./)+~', '', $path);
+    $path = preg_replace('~^(?:\.\./)+~', '', $path);
+    $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $base = rtrim(str_replace('\\', '/', dirname($script)), '/');
+    return ($base === '' ? '' : $base) . '/' . ltrim($path, '/');
+}
+
 $slug = trim($_GET['site'] ?? '');
 $error_page = false;
 $error_msg = '';
@@ -108,7 +127,7 @@ if (!file_exists($template_path)) $template_path = $templates_dir . 'template1.p
 // ==========================================
 // GLOBAL TOKENS (Prioritize JSON over DB)
 // ==========================================
-$logo          = $data['logo_path'] ?? '';
+$logo          = site_normalize_asset_path((string)($data['logo_path'] ?? ''));
 $primary       = $data['theme_primary_color'] ?: '#2563eb';
 $border_color  = $data['theme_border_color'] ?? '#e2e8f0';
 $border_radius = $pageData['border_radius'] ?? '16';
@@ -130,7 +149,7 @@ $site_slug        = $slug;
 $hero_title       = $pageData['hero_title'] ?? 'Empowering Your Financial Future';
 $hero_subtitle    = $pageData['hero_subtitle'] ?? 'Get flexible loans with fast approval and transparent terms.';
 $hero_badge_text  = $pageData['hero_badge_text'] ?? 'Verified Partner';
-$hero_image       = $pageData['hero_image'] ?? '';
+$hero_image       = site_normalize_asset_path((string)($pageData['hero_image'] ?? ''));
 $display_image    = $hero_image ?: '';
 
 $about_body       = $pageData['about_body'] ?? 'We believe in empowering our community through accessible financial tools.';
@@ -362,4 +381,4 @@ document.querySelectorAll('.fade-up').forEach(function(el) { obs.observe(el); })
 <?php endif; ?>
 </script>
 </body>
-</html>
+</html>

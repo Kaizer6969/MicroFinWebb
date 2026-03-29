@@ -140,6 +140,7 @@
         $tid_val = $tenant_id ?? ($data['tenant_id'] ?? '');
         $is_editor = strpos($_SERVER['PHP_SELF'], 'editor') !== false || strpos($_SERVER['PHP_SELF'], 'setup') !== false;
         $login_href = $is_editor ? "../tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1" : "tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1";
+        $apply_href = $is_editor ? "../public_website/demo.php" : "public_website/demo.php";
         ?>
         <a href="<?php echo $login_href; ?>" class="btn btn-brand rounded-pill px-4 shadow-sm" contenteditable="false">Log In</a>
     </div>
@@ -161,17 +162,17 @@
                 <p class="fs-5 text-muted mb-5" data-edit="hero_subtitle" contenteditable="true">
                     <?php echo $e($hero_subtitle ?? 'Get flexible loans with fast approval and transparent terms.'); ?>
                 </p>
-                <button class="btn btn-brand btn-lg px-5 shadow rounded-pill" contenteditable="false">Apply Now</button>
+                <a href="<?php echo $apply_href; ?>" class="btn btn-brand btn-lg px-5 shadow rounded-pill" contenteditable="false">Apply Now</a>
             </div>
             <div class="col-lg-6 text-center">
                 <div id="hero_img_container" class="position-relative shadow-sm"
                     style="aspect-ratio: 1/1; min-height: 350px; border-radius: var(--radius); border: 1px solid var(--border-clr); background: #fff; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-direction: column; transition: aspect-ratio 0.3s ease;">
                     <img id="preview_hero" src="<?php echo $e($display_image ?? ''); ?>"
-                        style="position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1;">
+                        style="position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; <?php if (!($display_image ?? '')) echo 'display:none;'; ?>">
                     <div
                         style="z-index: 2; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
                         <button type="button" id="btn_open_hero_picker"
-                            class="btn btn-outline-primary btn-sm mb-0 fw-bold shadow-sm">Change Photo</button>
+                            class="btn btn-outline-primary btn-sm mb-0 fw-bold shadow-sm"><?php echo $e(($hero_image ?? '') !== '' ? 'Change Hero Image' : 'Upload Hero Image'); ?></button>
                     </div>
                 </div>
             </div>
@@ -230,7 +231,7 @@ if (is_string($show_stats_val))
     $show_stats_val = filter_var($show_stats_val, FILTER_VALIDATE_BOOLEAN);
 ?>
 <section id="sec_stats" class="py-5 editable-section"
-    style="<?php echo getBgStyle('sec_stats', $sec_styles, '#2563eb'); ?> <?php if (!$show_stats_val)
+    style="<?php echo getBgStyle('sec_stats', $sec_styles, $primary ?? '#2563eb'); ?> <?php if (!$show_stats_val)
               echo 'display:none;'; ?>">
     <div class="container py-5 text-center text-white" contenteditable="false">
         <h2 class="headline fw-800 mb-2 text-white">Our Impact</h2>

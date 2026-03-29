@@ -343,15 +343,13 @@ if (isset($_SESSION['sa_error'])) {
 
 $plan_pricing_map = [
     'Starter' => 4999.00,
-    'Growth' => 9999.00,
     'Pro' => 14999.00,
-    'Enterprise' => 22999.00,
+    'Enterprise' => 19999.00,
     'Unlimited' => 29999.00,
 ];
 
 $plan_limits_map = [
     'Starter' => ['clients' => 1000, 'users' => 250],
-    'Growth' => ['clients' => 2500, 'users' => 750],
     'Pro' => ['clients' => 5000, 'users' => 2000],
     'Enterprise' => ['clients' => 10000, 'users' => 5000],
     'Unlimited' => ['clients' => -1, 'users' => -1],
@@ -2693,13 +2691,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <td>₱4,999.00</td>
                                         </tr>
                                         <tr>
-                                            <td><span class="badge" style="background:rgba(59,130,246,0.15); color:#3b82f6;">Growth</span></td>
-                                            <td>2,500</td>
-                                            <td>750</td>
-                                            <td>10.00 GB</td>
-                                            <td>₱9,999.00</td>
-                                        </tr>
-                                        <tr>
                                             <td><span class="badge badge-blue">Pro</span></td>
                                             <td>5,000</td>
                                             <td>2,000</td>
@@ -2711,7 +2702,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <td>10,000</td>
                                             <td>5,000</td>
                                             <td>50.00 GB</td>
-                                            <td>₱22,999.00</td>
+                                            <td>₱19,999.00</td>
                                         </tr>
                                         <tr>
                                             <td><span class="badge" style="background:rgba(244,114,182,0.15); color:#db2777;">Unlimited</span></td>
@@ -3080,9 +3071,8 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                         <label>Plan Tier</label>
                         <select class="form-control" name="plan_tier">
                             <option value="Starter">Starter (₱4,999/mo)</option>
-                            <option value="Growth">Growth (₱9,999/mo)</option>
                             <option value="Pro">Pro (₱14,999/mo)</option>
-                            <option value="Enterprise">Enterprise (₱22,999/mo)</option>
+                            <option value="Enterprise">Enterprise (₱19,999/mo)</option>
                             <option value="Unlimited">Unlimited (₱29,999/mo)</option>
                         </select>
                     </div>

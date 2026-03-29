@@ -56,8 +56,8 @@ CREATE TABLE IF NOT EXISTS tenants (
 
     -- Plan & Limits
     plan_tier VARCHAR(250) DEFAULT 'Starter',
-    max_clients INT DEFAULT 1000 COMMENT '1000=Starter, 2500=Growth, 5000=Pro, 10000=Enterprise, -1=Unlimited',
-    max_users INT DEFAULT 250 COMMENT '250=Starter, 750=Growth, 2000=Pro, 5000=Enterprise, -1=Unlimited',
+    max_clients INT DEFAULT 1000 COMMENT '1000=Starter, 5000=Pro, 10000=Enterprise, -1=Unlimited',
+    max_users INT DEFAULT 250 COMMENT '250=Starter, 2000=Pro, 5000=Enterprise, -1=Unlimited',
     storage_limit_gb DECIMAL(5,2) DEFAULT 5.00,
     modules_enabled JSON,
     mrr DECIMAL(10,2) DEFAULT 0.00,

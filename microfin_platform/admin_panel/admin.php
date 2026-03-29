@@ -231,6 +231,61 @@ function admin_store_brand_logo(array $file, string $tenantId): array
     return ['path' => $app_base_path . '/uploads/tenant_logos/' . $file_name, 'error' => ''];
 }
 
+function admin_sync_stats_section_branding(PDO $pdo, string $tenantId, string $primaryColor): void
+{
+    if ($tenantId === '' || !preg_match('/^#[0-9a-fA-F]{6}$/', $primaryColor)) {
+        return;
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT layout_template, website_data FROM tenant_website_content WHERE tenant_id = ? LIMIT 1');
+        $stmt->execute([$tenantId]);
+        $existing = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $websiteData = [];
+        if (!empty($existing['website_data'])) {
+            $decoded = json_decode((string)$existing['website_data'], true);
+            if (is_array($decoded)) {
+                $websiteData = $decoded;
+            }
+        }
+
+        if (!isset($websiteData['section_styles']) || !is_array($websiteData['section_styles'])) {
+            $websiteData['section_styles'] = [];
+        }
+
+        $statsStyle = $websiteData['section_styles']['sec_stats'] ?? [];
+        if (!is_array($statsStyle)) {
+            $statsStyle = [];
+        }
+
+        $statsStyle['bg'] = $primaryColor;
+        $statsStyle['gradient'] = false;
+        unset($statsStyle['grad_color2'], $statsStyle['grad_dir']);
+        $websiteData['section_styles']['sec_stats'] = $statsStyle;
+
+        $layoutTemplate = trim((string)($existing['layout_template'] ?? ''));
+        if ($layoutTemplate === '') {
+            $layoutTemplate = 'template1.php';
+        }
+
+        $upsert = $pdo->prepare('
+            INSERT INTO tenant_website_content (tenant_id, layout_template, website_data)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                layout_template = VALUES(layout_template),
+                website_data = VALUES(website_data),
+                updated_at = CURRENT_TIMESTAMP
+        ');
+        $upsert->execute([
+            $tenantId,
+            $layoutTemplate,
+            json_encode($websiteData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        ]);
+    } catch (Throwable $ignore) {
+    }
+}
+
 $tenant_id = $_SESSION['tenant_id'];
 $tenant_name = $_SESSION['tenant_name'] ?? 'Company Admin';
 $role_name = $_SESSION['role_name'] ?? ($_SESSION['role'] ?? 'User');
@@ -399,6 +454,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $settings['logo_path']
     ]);
 
+    admin_sync_stats_section_branding($pdo, (string)$tenant_id, $settings['primary_color']);
+
     $upsert_toggle = $pdo->prepare('INSERT INTO tenant_feature_toggles (tenant_id, toggle_key, is_enabled) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE is_enabled = VALUES(is_enabled)');
     foreach ($toggles as $key => $value) {
         $upsert_toggle->execute([$tenant_id, $key, $value]);
@@ -427,7 +484,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         }
         $valid_plans = [
             'Starter' => ['max_clients' => 1000, 'max_users' => 250],
-            'Growth' => ['max_clients' => 2500, 'max_users' => 750],
             'Pro' => ['max_clients' => 5000, 'max_users' => 2000],
             'Enterprise' => ['max_clients' => 10000, 'max_users' => 5000],
             'Unlimited' => ['max_clients' => -1, 'max_users' => -1]
@@ -443,9 +499,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             
             $plan_prices = [
                 'Starter' => 4999,
-                'Growth' => 9999,
                 'Pro' => 14999,
-                'Enterprise' => 22999,
+                'Enterprise' => 19999,
                 'Unlimited' => 29999
             ];
             $mrr = $plan_prices[$new_plan] ?? 0;
@@ -708,13 +763,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
         $allowed = ['jpg', 'jpeg', 'png', 'webp'];
         if (in_array($extension, $allowed, true) && $size_bytes <= (3 * 1024 * 1024)) {
-            $upload_dir = __DIR__ . '/../uploads/tenant_logos';
+            $upload_dir = __DIR__ . '/../uploads/hero';
             if (!is_dir($upload_dir)) mkdir($upload_dir, 0775, true);
             $safe_tenant = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenant_id);
             $new_name = $safe_tenant . '_bg_' . time() . '.' . $extension;
             if (move_uploaded_file($tmp_name, $upload_dir . '/' . $new_name)) {
                 $app_path = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
-                $hero_image_path = ($app_path === '' ? '/' : $app_path) . '/uploads/tenant_logos/' . $new_name;
+                $hero_image_path = ($app_path === '' ? '/' : $app_path) . '/uploads/hero/' . $new_name;
             }
         }
     }
@@ -1679,42 +1734,34 @@ $e = function($v) { return htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8'); };
 $tenant_slug = $_SESSION['tenant_slug'] ?? '';
 $site_url = '../site.php?site=' . urlencode($tenant_slug);
 
-$branding_setup_complete = trim((string)($settings['logo_path'] ?? '')) !== '';
-$website_content_complete = $website_record_exists && (
+$website_has_homepage_copy = $website_record_exists && (
     trim((string)($ws['hero_title'] ?? '')) !== ''
     || trim((string)($ws['hero_subtitle'] ?? '')) !== ''
     || trim((string)($ws['about_body'] ?? '')) !== ''
-    || trim((string)($ws['contact_address'] ?? '')) !== ''
+);
+$website_has_services = !empty($ws_services);
+$website_has_contact_details = $website_record_exists && (
+    trim((string)($ws['contact_address'] ?? '')) !== ''
     || trim((string)($ws['contact_phone'] ?? '')) !== ''
     || trim((string)($ws['contact_email'] ?? '')) !== ''
-    || !empty($ws_services)
 );
+$website_content_complete = $website_has_homepage_copy && $website_has_services && $website_has_contact_details;
 $website_published = !empty($toggles['public_website_enabled']);
-$website_step_complete = $website_content_complete && $website_published;
 $website_step_description = !$website_content_complete
     ? 'Add homepage copy, services, and contact details for your public site.'
     : 'Your website content is ready. Publish it to make your public tenant page live.';
 $website_step_action = !$website_content_complete
     ? 'Click here to finish website'
-    : ($website_published ? 'Website is live' : 'Click here to publish your site');
-$workspace_setup_checklist = [
-    [
-        'title' => 'Set up your public website',
-        'description' => $website_step_description,
-        'icon' => 'language',
-        'complete' => $website_step_complete,
-        'href' => 'admin.php?tab=website',
-        'action_label' => $website_step_action,
-    ],
-    [
-        'title' => 'Upload logo and branding',
-        'description' => 'Set your workspace logo so your dashboard and website match your brand.',
-        'icon' => 'palette',
-        'complete' => $branding_setup_complete,
-        'href' => 'admin.php?tab=settings',
-        'action_label' => $branding_setup_complete ? 'Branding ready' : 'Click here to finish branding',
-    ],
-];
+    : 'Click here to publish your site';
+$website_step_href = !$website_content_complete ? 'admin.php?tab=website' : 'admin.php?tab=features';
+$workspace_setup_checklist = !$website_published ? [[
+    'title' => 'Set up your public website',
+    'description' => $website_step_description,
+    'icon' => 'language',
+    'complete' => false,
+    'href' => $website_step_href,
+    'action_label' => $website_step_action,
+]] : [];
 $workspace_setup_completed_items = 0;
 $workspace_setup_pending_items = [];
 foreach ($workspace_setup_checklist as $checklist_item) {
@@ -2296,7 +2343,7 @@ function hexToRgb($hex) {
                             </button>
                         </div>
                     </div>
-                    <div class="dashboard-setup-alert-list">
+                        <div class="dashboard-setup-alert-list">
                         <?php foreach ($workspace_setup_pending_items as $item): ?>
                         <div class="dashboard-setup-alert-item">
                             <div class="dashboard-setup-alert-icon">
@@ -2305,7 +2352,7 @@ function hexToRgb($hex) {
                             <div class="dashboard-setup-alert-copy">
                                 <strong><?php echo htmlspecialchars($item['title']); ?></strong>
                                 <p><?php echo htmlspecialchars($item['description']); ?></p>
-                                <a href="<?php echo htmlspecialchars($item['href']); ?>" class="dashboard-setup-alert-link">
+                                <a href="<?php echo htmlspecialchars((string)($item['href'] ?? 'admin.php?tab=website')); ?>" class="dashboard-setup-alert-link">
                                     <?php echo htmlspecialchars($item['action_label']); ?>
                                 </a>
                             </div>
@@ -2340,6 +2387,16 @@ function hexToRgb($hex) {
                                         <div class="config-logo-upload">
                                             <input type="file" class="form-control" id="logo_file" name="logo_file" accept=".png,.jpg,.jpeg,.webp,.svg">
                                             <span class="text-muted">Upload a new logo to replace the current one. PNG, JPG, WEBP, or SVG, up to 3MB.</span>
+                                            <?php if (!empty($settings['logo_path'])): ?>
+                                            <div class="config-current-logo">
+                                                <img src="<?php echo htmlspecialchars($settings['logo_path']); ?>" alt="Current logo" class="config-current-logo-image">
+                                                <div class="config-current-logo-copy">
+                                                    <strong>Current logo already uploaded</strong>
+                                                    <span>Upload a new file only if you want to replace the current logo.</span>
+                                                    <a href="<?php echo htmlspecialchars($settings['logo_path']); ?>" target="_blank" rel="noopener">Open current logo</a>
+                                                </div>
+                                            </div>
+                                            <?php endif; ?>
                                         </div>
                                         <button type="button" id="extract-palette-btn" class="btn-extract-palette" style="display:none;">
                                             <span class="material-symbols-rounded">palette</span>
@@ -2472,7 +2529,6 @@ function hexToRgb($hex) {
                                             <button type="button" class="preview-btn active" data-view="admin">Admin View</button>
                                             <button type="button" class="preview-btn" data-view="staff">Staff View</button>
                                             <button type="button" class="preview-btn" data-view="mobile">Client App View</button>
-                                            <button type="button" class="preview-btn" data-view="website">Website View</button>
                                         </div>
                                         <div class="preview-stage" id="preview-stage">
                                             <div class="preview-screen active" data-preview="admin"><div class="preview-shell admin-layout"><div class="admin-sidebar"><div class="admin-sidebar-header"><div class="admin-sidebar-logo"><span class="material-symbols-rounded">diamond</span><img class="preview-logo-image" alt="Logo"></div><div class="admin-sidebar-name preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></div></div><div class="admin-sidebar-nav"><div class="admin-nav-item active"><span class="material-symbols-rounded">dashboard</span>Dashboard</div><div class="admin-nav-item"><span class="material-symbols-rounded">groups</span>Staff & Roles</div><div class="admin-nav-item"><span class="material-symbols-rounded">language</span>Website</div><div class="admin-nav-item"><span class="material-symbols-rounded">receipt_long</span>Billing</div><div class="admin-nav-item"><span class="material-symbols-rounded">palette</span>Branding</div></div><div class="admin-sidebar-footer"><div class="admin-nav-item logout"><span class="material-symbols-rounded">logout</span>Logout</div></div></div><div class="admin-main"><div class="admin-topbar"><div class="admin-topbar-title">Dashboard</div><div class="admin-topbar-right"><span class="material-symbols-rounded" style="font-size:15px; color:var(--theme-text-muted);">dark_mode</span><div class="admin-topbar-avatar">A</div><div class="admin-topbar-info"><strong class="preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></strong>Admin</div></div></div><div class="admin-dashboard-content"><div class="admin-stat-grid"><div class="admin-stat-card"><div class="admin-stat-icon" style="background:rgba(var(--primary-r),var(--primary-g),var(--primary-b),0.1);"><span class="material-symbols-rounded" style="color:var(--theme-primary);">book</span></div><div><div class="admin-stat-label">Total Clients</div><div class="admin-stat-value">1,240</div></div></div><div class="admin-stat-card"><div class="admin-stat-icon" style="background:rgba(34,197,94,0.1);"><span class="material-symbols-rounded" style="color:#22c55e;">group</span></div><div><div class="admin-stat-label">Active Staff</div><div class="admin-stat-value">24</div></div></div><div class="admin-stat-card"><div class="admin-stat-icon" style="background:rgba(245,158,11,0.14);"><span class="material-symbols-rounded" style="color:#f59e0b;">warning</span></div><div><div class="admin-stat-label">Alerts</div><div class="admin-stat-value">3</div></div></div></div><div class="admin-activity-card"><div class="admin-activity-title">Recent Activity</div><div class="admin-activity-item"><div class="admin-activity-dot" style="background:var(--theme-primary);"></div><span class="admin-activity-text">New staff account created</span><span class="admin-activity-time">2m ago</span></div><div class="admin-activity-item"><div class="admin-activity-dot" style="background:#22c55e;"></div><span class="admin-activity-text">Loan product updated</span><span class="admin-activity-time">15m ago</span></div><div class="admin-activity-item"><div class="admin-activity-dot" style="background:#f59e0b;"></div><span class="admin-activity-text">Payment recorded</span><span class="admin-activity-time">1h ago</span></div></div></div></div></div></div>
@@ -2642,13 +2698,16 @@ function hexToRgb($hex) {
                                 }
                                 $plan_catalog = [
                                     'Starter' => ['label' => 'Starter', 'price' => 4999],
-                                    'Growth' => ['label' => 'Growth', 'price' => 9999],
                                     'Pro' => ['label' => 'Pro', 'price' => 14999],
-                                    'Enterprise' => ['label' => 'Enterprise', 'price' => 22999],
+                                    'Enterprise' => ['label' => 'Enterprise', 'price' => 19999],
                                     'Unlimited' => ['label' => 'Unlimited', 'price' => 29999]
                                 ];
                                 if (!isset($plan_catalog[$current_plan])) {
-                                    $plan_catalog[$current_plan] = ['label' => $current_plan, 'price' => 0];
+                                    if ($current_plan === 'Growth') {
+                                        $plan_catalog[$current_plan] = ['label' => 'Growth (Legacy)', 'price' => 9999];
+                                    } else {
+                                        $plan_catalog[$current_plan] = ['label' => $current_plan, 'price' => 0];
+                                    }
                                 }
 
                                 $max_clients = (int)$tenant_plan['max_clients'];
@@ -2722,9 +2781,8 @@ function hexToRgb($hex) {
                                                 <input type="hidden" name="action" value="update_subscription_plan">
                                                 <select name="new_plan" id="new-plan-select" style="flex: 1; min-width: 140px; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">
                                                     <option value="Starter" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - ₱4,999/mo</option>
-                                                    <option value="Growth" <?php echo $current_plan === 'Growth' ? 'selected' : ''; ?>>Growth - ₱9,999/mo</option>
                                                     <option value="Pro" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - ₱14,999/mo</option>
-                                                    <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱22,999/mo</option>
+                                                    <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱19,999/mo</option>
                                                     <option value="Unlimited" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - ₱29,999/mo</option>
                                                 </select>
                                                 <select name="change_timing" style="min-width: 130px; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">

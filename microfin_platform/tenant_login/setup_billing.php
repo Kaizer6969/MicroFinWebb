@@ -14,6 +14,22 @@ function billing_add_30_days(string $dateString): string
     return $source->add(new DateInterval('P30D'))->format('Y-m-d');
 }
 
+function billing_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+
+    $safe_column = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM `{$table}` LIKE '{$safe_column}'");
+    $stmt->execute();
+    $cache[$key] = (bool)$stmt->fetch();
+
+    return $cache[$key];
+}
+
 $tenant_id = $_SESSION['tenant_id'] ?? '';
 $user_id = $_SESSION['user_id'] ?? 0;
 
@@ -30,13 +46,6 @@ $plan_catalog = [
         'max_users' => 250,
         'description' => 'Best for newly launched microfinance teams.'
     ],
-    'Growth' => [
-        'price' => 9999,
-        'max_clients' => 2500,
-        'max_users' => 750,
-        'description' => 'Most popular for growing operations and branches.',
-        'popular' => true
-    ],
     'Pro' => [
         'price' => 14999,
         'max_clients' => 5000,
@@ -44,7 +53,7 @@ $plan_catalog = [
         'description' => 'Built for mature teams with larger daily volume.'
     ],
     'Enterprise' => [
-        'price' => 22999,
+        'price' => 19999,
         'max_clients' => 10000,
         'max_users' => 5000,
         'description' => 'For high-scale lending operations and multi-team workflows.'
@@ -62,16 +71,27 @@ $plan_aliases = [
     'Elite' => 'Enterprise'
 ];
 
-$current_plan_tier = trim((string)($step_data['plan_tier'] ?? 'Starter'));
-if (isset($plan_aliases[$current_plan_tier])) {
-    $current_plan_tier = $plan_aliases[$current_plan_tier];
-}
-if (!isset($plan_catalog[$current_plan_tier])) {
-    $current_plan_tier = 'Starter';
+$legacy_plan_catalog = [
+    'Growth' => [
+        'price' => 9999,
+        'max_clients' => 2500,
+        'max_users' => 750,
+        'description' => 'Legacy plan from an earlier application.'
+    ]
+];
+
+$application_plan_tier = trim((string)($step_data['plan_tier'] ?? 'Starter'));
+if (isset($plan_aliases[$application_plan_tier])) {
+    $application_plan_tier = $plan_aliases[$application_plan_tier];
 }
 
+$application_plan_meta = $plan_catalog[$application_plan_tier] ?? ($legacy_plan_catalog[$application_plan_tier] ?? null);
+$application_plan_is_available = isset($plan_catalog[$application_plan_tier]);
+$current_plan_tier = $application_plan_is_available ? $application_plan_tier : 'Starter';
 $selected_plan_tier = $current_plan_tier;
 $monthly_price = (float)($plan_catalog[$selected_plan_tier]['price'] ?? ($step_data['mrr'] ?? 0));
+$tenants_has_billing_cycle = billing_column_exists($pdo, 'tenants', 'billing_cycle');
+$tenants_has_next_billing_date = billing_column_exists($pdo, 'tenants', 'next_billing_date');
 
 if ($step_data && (bool)$step_data['setup_completed']) {
     header('Location: ../admin_panel/admin.php');
@@ -147,6 +167,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
 
+            $pdo->prepare('UPDATE tenant_billing_payment_methods SET is_default = FALSE WHERE tenant_id = ?')
+                ->execute([$tenant_id]);
             $stmt = $pdo->prepare('INSERT INTO tenant_billing_payment_methods (tenant_id, last_four_digits, card_brand, cardholder_name, exp_month, exp_year, card_number_encrypted, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)');
             $stmt->execute([$tenant_id, $last_four, $card_brand, $cardholder_name, $exp_month, $exp_year, $encrypted_with_iv]);
 
@@ -156,16 +178,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $next_billing = billing_add_30_days($activation_date);
             $payment_method_desc = $card_brand . ' ending in ' . $last_four;
 
-            $upd = $pdo->prepare('UPDATE tenants SET plan_tier = ?, mrr = ?, max_clients = ?, max_users = ?, billing_cycle = ?, next_billing_date = ?, setup_current_step = 6, setup_completed = TRUE WHERE tenant_id = ? AND setup_current_step = 5');
-            $upd->execute([
+            $tenant_update_parts = [
+                'plan_tier = ?',
+                'mrr = ?',
+                'max_clients = ?',
+                'max_users = ?',
+                'setup_current_step = 6',
+                'setup_completed = TRUE'
+            ];
+            $tenant_update_params = [
                 $selected_plan_tier,
                 $monthly_price,
                 (int)$selected_plan['max_clients'],
-                (int)$selected_plan['max_users'],
-                $billing_cycle_enum,
-                $next_billing,
-                $tenant_id
-            ]);
+                (int)$selected_plan['max_users']
+            ];
+            if ($tenants_has_billing_cycle) {
+                $tenant_update_parts[] = 'billing_cycle = ?';
+                $tenant_update_params[] = $billing_cycle_enum;
+            }
+            if ($tenants_has_next_billing_date) {
+                $tenant_update_parts[] = 'next_billing_date = ?';
+                $tenant_update_params[] = $next_billing;
+            }
+            $tenant_update_params[] = $tenant_id;
+            $upd = $pdo->prepare('UPDATE tenants SET ' . implode(', ', $tenant_update_parts) . ' WHERE tenant_id = ? AND setup_current_step = 5');
+            $upd->execute($tenant_update_params);
 
             $upsert_setting = $pdo->prepare("
                 INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type)
@@ -177,9 +214,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'BILLING_SETUP', 'tenant', 'Payment method added during onboarding', ?)");
             $log->execute([$user_id, $tenant_id]);
 
-            if ($selected_plan_tier !== $current_plan_tier) {
+            if ($selected_plan_tier !== $application_plan_tier) {
                 $plan_log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'SUBSCRIPTION_UPDATE', 'tenant', ?, ?)");
-                $plan_log->execute([$user_id, "Subscription plan selected during onboarding: {$selected_plan_tier}", $tenant_id]);
+                $plan_log->execute([$user_id, "Subscription plan changed during onboarding from {$application_plan_tier} to {$selected_plan_tier}", $tenant_id]);
             }
 
             if ($monthly_price > 0) {
@@ -189,18 +226,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $payment_reference = 'SUB-' . $reference_suffix;
                 $period_start = $activation_date;
                 $period_end = date('Y-m-d', strtotime($next_billing . ' -1 day'));
-
-                $pay_stmt = $pdo->prepare("
-                    INSERT INTO payments (tenant_id, payment_amount, payment_status, payment_date, payment_reference, payment_method)
-                    VALUES (?, ?, 'Posted', ?, ?, ?)
-                ");
-                $pay_stmt->execute([
-                    $tenant_id,
-                    $charged_amount,
-                    $charge_timestamp,
-                    $payment_reference,
-                    $payment_method_desc
-                ]);
 
                 $inv_stmt = $pdo->prepare("
                     INSERT INTO tenant_billing_invoices 
@@ -294,16 +319,21 @@ $current_year = (int) date('Y');
         .plan-card { display: block; height: 100%; border: 1px solid #dbe7f3; border-radius: 18px; padding: 18px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; position: relative; }
         .plan-card:hover { transform: translateY(-2px); border-color: rgba(2,132,199,0.35); box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08); }
         .plan-option input:checked + .plan-card { border-color: <?php echo htmlspecialchars($accent); ?>; box-shadow: 0 18px 36px rgba(2,132,199,0.18); background: linear-gradient(180deg, rgba(2,132,199,0.08) 0%, rgba(255,255,255,1) 100%); }
+        .plan-card-current { border-color: rgba(245, 158, 11, 0.45); box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18); }
         .plan-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
         .plan-name { font-size: 1.05rem; font-weight: 700; color: <?php echo htmlspecialchars($t_text); ?>; }
         .plan-description { margin-top: 6px; color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.82rem; line-height: 1.5; }
         .plan-popular-badge { display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; border-radius: 999px; background: rgba(245, 158, 11, 0.14); color: #b45309; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+        .plan-current-badge { display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; border-radius: 999px; background: rgba(2,132,199,0.1); color: #0369a1; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
         .plan-price { display: flex; align-items: baseline; gap: 4px; color: <?php echo htmlspecialchars($t_text); ?>; margin-bottom: 14px; }
         .plan-price strong { font-size: 1.8rem; line-height: 1; }
         .plan-price span { font-size: 0.92rem; color: <?php echo htmlspecialchars($t_muted); ?>; }
         .plan-feature-list { display: grid; gap: 10px; }
         .plan-feature { display: flex; align-items: center; gap: 10px; color: #0f172a; font-size: 0.92rem; }
         .plan-feature .material-symbols-rounded { color: #16a34a; font-size: 20px; }
+        .application-plan-banner { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(2,132,199,0.18); background: rgba(2,132,199,0.08); margin-bottom: 18px; }
+        .application-plan-banner strong { display: block; color: <?php echo htmlspecialchars($t_text); ?>; margin-bottom: 4px; font-size: 0.96rem; }
+        .application-plan-banner p { margin: 0; color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.84rem; line-height: 1.55; }
         .selected-plan-summary { padding: 16px 18px; background: linear-gradient(135deg, rgba(2,132,199,0.08), rgba(14,165,233,0.14)); border: 1px solid rgba(2,132,199,0.18); border-radius: 14px; margin-bottom: 20px; }
         .selected-plan-summary strong { display: block; color: <?php echo htmlspecialchars($t_text); ?>; font-size: 1rem; margin-bottom: 4px; }
         .selected-plan-summary p { margin: 0; color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.85rem; line-height: 1.55; }
@@ -323,6 +353,16 @@ $current_year = (int) date('Y');
         .btn-primary:hover { filter: brightness(0.9); }
         .error { color: #ef4444; background: #fef2f2; border: 1px solid #fecaca; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; }
         .security-note { display: flex; align-items: center; gap: 8px; padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; margin-bottom: 24px; font-size: 0.85rem; color: #166534; }
+        .confirm-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.62); z-index: 9999; padding: 24px; align-items: center; justify-content: center; }
+        .confirm-backdrop.is-open { display: flex; }
+        .confirm-modal { width: 100%; max-width: 460px; background: #ffffff; border-radius: 18px; padding: 28px; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28); border: 1px solid rgba(226,232,240,0.95); }
+        .confirm-modal-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: rgba(2,132,199,0.08); color: #0369a1; font-size: 0.76rem; font-weight: 700; margin-bottom: 14px; }
+        .confirm-modal h3 { color: <?php echo htmlspecialchars($t_text); ?>; font-size: 1.15rem; margin-bottom: 10px; }
+        .confirm-modal p { color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.9rem; line-height: 1.6; margin-bottom: 18px; }
+        .confirm-modal-summary { padding: 14px 16px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; font-size: 0.86rem; line-height: 1.6; margin-bottom: 20px; }
+        .confirm-modal-actions { display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+        .btn-outline-muted { background: #ffffff; color: #475569; border: 1px solid #cbd5e1; }
+        .btn-outline-muted:hover { background: #f8fafc; border-color: #94a3b8; }
         small { color: #94a3b8; font-size: 0.8rem; }
         @media (max-width: 980px) {
             .wizard-layout { grid-template-columns: 1fr; }
@@ -351,6 +391,17 @@ $current_year = (int) date('Y');
                         <h2>Choose Your Subscription Plan</h2>
                         <p class="section-copy">Pick the plan that fits your current operations. Your selected subscription will be activated as soon as the payment method is authorized.</p>
 
+                        <div class="application-plan-banner">
+                            <strong>Current application plan: <?php echo htmlspecialchars($application_plan_tier); ?></strong>
+                            <p>
+                                <?php if ($application_plan_is_available): ?>
+                                    This is the plan submitted during your application. You can keep it, or switch plans before activation and we will ask you to confirm the change.
+                                <?php else: ?>
+                                    This plan came from an older application and is no longer offered. Please choose one of the available plans below before activation.
+                                <?php endif; ?>
+                            </p>
+                        </div>
+
                         <div class="plan-grid">
                             <?php foreach ($plan_catalog as $plan_name => $plan_meta): ?>
                                 <?php
@@ -361,6 +412,7 @@ $current_year = (int) date('Y');
                                 $users_label = ((int)$plan_meta['max_users'] < 0)
                                     ? 'Unlimited Users'
                                     : number_format((int)$plan_meta['max_users']) . ' Max Users';
+                                $is_application_plan = $plan_name === $application_plan_tier;
                                 ?>
                                 <div class="plan-option">
                                     <input
@@ -370,13 +422,15 @@ $current_year = (int) date('Y');
                                         value="<?php echo htmlspecialchars($plan_name); ?>"
                                         <?php echo $selected_plan_tier === $plan_name ? 'checked' : ''; ?>
                                     >
-                                    <label class="plan-card" for="<?php echo htmlspecialchars($plan_id); ?>">
+                                    <label class="plan-card <?php echo $is_application_plan ? 'plan-card-current' : ''; ?>" for="<?php echo htmlspecialchars($plan_id); ?>">
                                         <div class="plan-card-header">
                                             <div>
                                                 <div class="plan-name"><?php echo htmlspecialchars($plan_name); ?></div>
                                                 <p class="plan-description"><?php echo htmlspecialchars($plan_meta['description']); ?></p>
                                             </div>
-                                            <?php if (!empty($plan_meta['popular'])): ?>
+                                            <?php if ($is_application_plan): ?>
+                                                <span class="plan-current-badge">Current Application Plan</span>
+                                            <?php elseif (!empty($plan_meta['popular'])): ?>
                                                 <span class="plan-popular-badge">Most Popular</span>
                                             <?php endif; ?>
                                         </div>
@@ -516,6 +570,22 @@ $current_year = (int) date('Y');
         </div>
     </div>
 
+    <div id="plan-change-backdrop" class="confirm-backdrop" aria-hidden="true">
+        <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="plan-change-title">
+            <div class="confirm-modal-badge">
+                <span class="material-symbols-rounded" style="font-size: 18px;">swap_horiz</span>
+                Plan Change Confirmation
+            </div>
+            <h3 id="plan-change-title">Confirm your subscription change</h3>
+            <p id="plan-change-copy">You are changing the plan you selected during your application.</p>
+            <div class="confirm-modal-summary" id="plan-change-summary"></div>
+            <div class="confirm-modal-actions">
+                <button type="button" id="plan-change-cancel" class="btn btn-outline-muted">Keep Current Plan</button>
+                <button type="button" id="plan-change-confirm" class="btn btn-primary" style="width:auto;">Yes, Change Plan</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const tosBtn = document.getElementById('open-billing-tos');
@@ -526,15 +596,73 @@ $current_year = (int) date('Y');
             const realSubmit = document.getElementById('real-submit');
             const overlay = document.getElementById('payment-overlay');
             const form = document.querySelector('form');
+            const planChangeBackdrop = document.getElementById('plan-change-backdrop');
+            const planChangeCopy = document.getElementById('plan-change-copy');
+            const planChangeSummary = document.getElementById('plan-change-summary');
+            const planChangeCancel = document.getElementById('plan-change-cancel');
+            const planChangeConfirm = document.getElementById('plan-change-confirm');
             
             if (tosBtn) tosBtn.addEventListener('click', e => { e.preventDefault(); tosModal.style.display = 'block'; });
             if (closeTos1) closeTos1.addEventListener('click', () => tosModal.style.display = 'none');
             if (closeTos2) closeTos2.addEventListener('click', () => tosModal.style.display = 'none');
             if (tosModal) tosModal.addEventListener('click', e => { if (e.target === tosModal) tosModal.style.display = 'none'; });
 
+            function showPlanChangeModal(currentPlanName, selectedPlanName) {
+                return new Promise((resolve) => {
+                    if (!planChangeBackdrop || !planChangeCopy || !planChangeSummary || !planChangeCancel || !planChangeConfirm) {
+                        resolve(true);
+                        return;
+                    }
+
+                    const close = (result) => {
+                        planChangeBackdrop.classList.remove('is-open');
+                        planChangeBackdrop.setAttribute('aria-hidden', 'true');
+                        document.body.style.overflow = '';
+                        planChangeCancel.removeEventListener('click', onCancel);
+                        planChangeConfirm.removeEventListener('click', onConfirm);
+                        planChangeBackdrop.removeEventListener('click', onBackdropClick);
+                        document.removeEventListener('keydown', onEscape);
+                        resolve(result);
+                    };
+
+                    const onCancel = () => close(false);
+                    const onConfirm = () => close(true);
+                    const onBackdropClick = (event) => {
+                        if (event.target === planChangeBackdrop) {
+                            close(false);
+                        }
+                    };
+                    const onEscape = (event) => {
+                        if (event.key === 'Escape') {
+                            close(false);
+                        }
+                    };
+
+                    planChangeCopy.textContent = `You originally applied for the ${currentPlanName} plan, and you are about to activate the ${selectedPlanName} plan instead.`;
+                    planChangeSummary.innerHTML = `<strong>Current application plan:</strong> ${currentPlanName}<br><strong>New activation plan:</strong> ${selectedPlanName}`;
+                    planChangeBackdrop.classList.add('is-open');
+                    planChangeBackdrop.setAttribute('aria-hidden', 'false');
+                    document.body.style.overflow = 'hidden';
+
+                    planChangeCancel.addEventListener('click', onCancel);
+                    planChangeConfirm.addEventListener('click', onConfirm);
+                    planChangeBackdrop.addEventListener('click', onBackdropClick);
+                    document.addEventListener('keydown', onEscape);
+                });
+            }
+
             if (payBtn) payBtn.addEventListener('click', async (e) => {
                 if (!form.reportValidity()) return;
                 e.preventDefault();
+
+                const selectedPlanName = getSelectedPlanName();
+                if (applicationPlanName && selectedPlanName !== applicationPlanName) {
+                    const confirmed = await showPlanChangeModal(applicationPlanName, selectedPlanName);
+                    if (!confirmed) {
+                        return;
+                    }
+                }
+
                 overlay.style.display = 'flex';
                 
                 const steps = [
@@ -602,6 +730,8 @@ $current_year = (int) date('Y');
 
         const planCatalog = <?php echo json_encode($plan_catalog, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
         const selectedPlanInputs = Array.from(document.querySelectorAll('input[name="subscription_plan"]'));
+        const applicationPlanName = <?php echo json_encode($application_plan_tier, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        const applicationPlanAvailable = <?php echo $application_plan_is_available ? 'true' : 'false'; ?>;
 
         function getSelectedPlanName() {
             const selectedInput = selectedPlanInputs.find((input) => input.checked);
@@ -634,7 +764,13 @@ $current_year = (int) date('Y');
             const usersText = formatPlanLimit(selectedPlan.max_users, 'User', 'Users');
 
             planNameEl.textContent = `${selectedPlanName} Plan`;
-            planDescriptionEl.textContent = `${monthlyPrice} per month. Includes ${clientsText} and ${usersText}.`;
+            if (selectedPlanName === applicationPlanName && applicationPlanAvailable) {
+                planDescriptionEl.textContent = `${monthlyPrice} per month. This matches the plan from your application and includes ${clientsText} and ${usersText}.`;
+            } else if (selectedPlanName !== applicationPlanName && applicationPlanName) {
+                planDescriptionEl.textContent = `${monthlyPrice} per month. You originally applied for ${applicationPlanName}, and you are switching to ${selectedPlanName}. Includes ${clientsText} and ${usersText}.`;
+            } else {
+                planDescriptionEl.textContent = `${monthlyPrice} per month. Includes ${clientsText} and ${usersText}.`;
+            }
         }
 
         function addThirtyDays(date) {
