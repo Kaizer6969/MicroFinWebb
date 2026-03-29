@@ -1,0 +1,43 @@
+# Files and folders to exclude from auto-sync to InfinityFree
+
+# Sensitive configuration files
+config/db.php
+
+# Environment files
+.env
+*.env
+
+# Git files
+.git/
+.gitignore
+.github/
+
+# Uploads and user data (already on server)
+uploads/
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# Temporary files
+*.log
+*.tmp
+*.cache
+
+# Test and setup files (not needed on production)
+test_*.php
+check_*.php
+fix_*.php
+insert_superadmin.php
+setup_super_admin.php
+test_email_real.php
+test_forgot_password.php
+
+# This sync ignore file itself
+.syncignore

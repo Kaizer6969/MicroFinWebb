@@ -1,0 +1,34 @@
+# Sensitive configuration files
+config/db.php
+
+# Environment files
+.env
+*.env
+
+# Uploads and user data
+uploads/*
+!uploads/.htaccess
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# Temporary files
+*.log
+*.tmp
+*.cache
+
+# Test and setup files
+test_*.php
+check_*.php
+fix_*.php
+insert_superadmin.php
+setup_super_admin.php
+test_email_real.php
+test_forgot_password.php

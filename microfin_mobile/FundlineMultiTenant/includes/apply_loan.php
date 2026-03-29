@@ -1,0 +1,3124 @@
+<?php
+/**
+ * Client Loan Application Page
+ * Allows clients to submit new loan applications
+ */
+
+session_start();
+
+// Check if user is logged in and is a client
+if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'Client') {
+    header("Location: login.php");
+    exit();
+}
+
+require_once '../config/db.php';
+
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'];
+$avatar_letter = strtoupper(substr($username, 0, 1));
+
+// Get client_id and profile details including verification status
+$stmt = $conn->prepare("SELECT client_id, first_name, middle_name, last_name, suffix, 
+    date_of_birth, gender, civil_status, contact_number,
+    present_house_no, present_street, present_barangay, present_city, present_province,
+    employment_status, monthly_income, document_verification_status, verification_rejection_reason, seen_approval_modal, seen_rejection_modal, credit_limit, last_seen_credit_limit,
+    comaker_name, comaker_relationship, comaker_contact, comaker_income,
+    comaker_house_no, comaker_street, comaker_barangay, comaker_city, comaker_province, comaker_postal_code
+    FROM clients WHERE user_id = ?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$client_data = $result->fetch_assoc();
+$stmt->close();
+
+if (!$client_data) {
+    // Client record not found for this user
+    echo "<div style='padding:20px; text-align:center;'>
+            <h2>Profile Not Found</h2>
+            <p>We could not find your client profile data. Please contact support.</p>
+            <p>Debug: User ID " . htmlspecialchars($user_id) . "</p>
+            <a href='logout.php'>Logout</a>
+          </div>";
+    exit();
+}
+
+$client_id = $client_data['client_id'];
+$verification_status = $client_data['document_verification_status'];
+$rejection_reason = $client_data['verification_rejection_reason'];
+$seen_rejection_modal = $client_data['seen_rejection_modal'];
+
+// Check if profile is complete
+$required_fields = [
+    'date_of_birth', 'gender', 'civil_status', 'contact_number',
+    'present_house_no', 'present_street', 'present_barangay', 
+    'present_city', 'present_province',
+    'employment_status', 'monthly_income'
+];
+
+$missing_fields = [];
+$profile_incomplete = false;
+foreach ($required_fields as $field) {
+    if (empty($client_data[$field])) {
+        $missing_fields[] = $field;
+        $profile_incomplete = true;
+    }
+}
+
+// Check document verification status
+$show_verification_modal = false;
+$verification_modal_message = '';
+$is_profile_locked = false;
+
+if ($profile_incomplete) {
+    $show_verification_modal = true;
+    $verification_modal_message = 'Please complete your profile and submit required documents.';
+    $is_profile_locked = true;
+} elseif ($verification_status === 'Unverified') {
+    $show_verification_modal = true;
+    $verification_modal_message = 'Please submit required documents for verification before applying for a loan.';
+    $is_profile_locked = true;
+} elseif ($verification_status === 'Pending') {
+    $show_verification_modal = true;
+    $verification_modal_message = 'Your documents are currently under review. Please wait for admin approval.';
+    $is_profile_locked = true; // FIX: Prevent loan application while pending
+} elseif ($verification_status === 'Rejected') {
+    $show_verification_modal = true;
+    $verification_modal_message = 'Your documents were rejected. Reason: ' . htmlspecialchars($rejection_reason) . '. Please resubmit.';
+    $is_profile_locked = true;
+} elseif ($verification_status !== 'Approved') {
+    // Fallback
+    $show_verification_modal = true;
+    $verification_modal_message = 'Please submit required documents for verification before applying for a loan.';
+    $is_profile_locked = true;
+}
+
+
+// Server-side block only: Don't show generic warning modal, let verification modal handle the UI
+$prevent_loan_submission = $is_profile_locked;
+
+// Calculate used credit from active loans
+$used_credit_loans = 0;
+$active_loan_types = [];
+$loan_query = "
+    SELECT l.principal_amount, lp.product_type 
+    FROM loans l
+    JOIN loan_products lp ON l.product_id = lp.product_id
+    WHERE l.client_id = ? AND l.loan_status IN ('Active', 'Overdue', 'Restructured')
+";
+$loan_stmt = $conn->prepare($loan_query);
+$loan_stmt->bind_param("i", $client_id);
+$loan_stmt->execute();
+$loan_res = $loan_stmt->get_result();
+while ($loan_row = $loan_res->fetch_assoc()) {
+    $used_credit_loans += floatval($loan_row['principal_amount']);
+    $active_loan_types[] = $loan_row['product_type'];
+}
+$loan_stmt->close();
+
+// Calculate used credit from pending applications
+$used_credit_apps = 0;
+$pending_app_types = [];
+$app_query = "
+    SELECT la.requested_amount, lp.product_type 
+    FROM loan_applications la
+    JOIN loan_products lp ON la.product_id = lp.product_id
+    WHERE la.client_id = ? AND la.application_status IN ('Submitted', 'Pending', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval')
+";
+$app_stmt = $conn->prepare($app_query);
+$app_stmt->bind_param("i", $client_id);
+$app_stmt->execute();
+$app_res = $app_stmt->get_result();
+while ($app_row = $app_res->fetch_assoc()) {
+    $used_credit_apps += floatval($app_row['requested_amount']);
+    $pending_app_types[] = $app_row['product_type'];
+}
+$app_stmt->close();
+
+// Combine all active loan types (from both loans and applications)
+$all_active_types = array_merge($active_loan_types, $pending_app_types);
+
+// No blocking alert by default - we'll check during form submission
+$blocking_alert = null;
+
+// Pre-select logic
+$preselected_type = isset($_GET['type']) ? ucfirst($_GET['type']) : '';
+if ($preselected_type === 'Emergency') $preselected_type = 'Medical'; // Map Emergency to Medical
+
+// Check for Approval Modal
+$show_approval_modal = false;
+if ($client_data['document_verification_status'] === 'Approved' && !$client_data['seen_approval_modal']) {
+    $show_approval_modal = true;
+}
+
+// Check for Credit Limit Increase Modal
+$show_credit_increase_modal = false;
+$previous_credit_limit = 0;
+$credit_increase_amount = 0;
+$last_seen_credit = floatval($client_data['last_seen_credit_limit'] ?? 0);
+$current_credit = floatval($client_data['credit_limit'] ?? 0);
+
+if ($current_credit > $last_seen_credit) {
+    // If last_seen is 0, we treat it as an increase (initial setting or first time feature use)
+    $show_credit_increase_modal = true;
+    $previous_credit_limit = $last_seen_credit;
+    $credit_increase_amount = $current_credit - $last_seen_credit;
+}
+
+// Get active loan products
+$products = [];
+$stmt = $conn->prepare("SELECT * FROM loan_products WHERE is_active = TRUE ORDER BY product_name");
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $products[] = $row;
+}
+$stmt->close();
+
+// Get document types
+$document_types = [];
+$stmt = $conn->prepare("SELECT * FROM document_types WHERE is_active = TRUE ORDER BY is_required DESC, document_name");
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $document_types[] = $row;
+}
+$stmt->close();
+
+// Get existing client documents
+$existing_documents = [];
+$stmt = $conn->prepare("SELECT cd.*, dt.document_name FROM client_documents cd 
+    JOIN document_types dt ON cd.document_type_id = dt.document_type_id 
+    WHERE cd.client_id = ?");
+$stmt->bind_param("i", $client_id);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $existing_documents[$row['document_type_id']] = $row;
+}
+$stmt->close();
+
+
+// Helper function to get or create document type ID
+function getOrCreateDocTypeId($conn, $name) {
+    $stmt = $conn->prepare("SELECT document_type_id FROM document_types WHERE document_name = ? LIMIT 1");
+    $stmt->bind_param("s", $name);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res->num_rows > 0) {
+        $id = $res->fetch_assoc()['document_type_id'];
+    } else {
+        $stmt_ins = $conn->prepare("INSERT INTO document_types (document_name, is_required, is_active) VALUES (?, 1, 1)");
+        $stmt_ins->bind_param("s", $name);
+        $stmt_ins->execute();
+        $id = $stmt_ins->insert_id;
+        $stmt_ins->close();
+    }
+    $stmt->close();
+    return $id;
+}
+
+// Get IDs for new dynamic requirements
+$bp_id = getOrCreateDocTypeId($conn, 'Business Permit');
+$dti_id = getOrCreateDocTypeId($conn, 'DTI/SEC Registration');
+$med_id = getOrCreateDocTypeId($conn, 'Medical Certificate');
+$abstract_id = getOrCreateDocTypeId($conn, 'Clinical Abstract');
+$school_id = getOrCreateDocTypeId($conn, 'Enrollment Form / Assessment');
+$school_id_card_id = getOrCreateDocTypeId($conn, 'School ID');
+$bill_mat_id = getOrCreateDocTypeId($conn, 'Bill of Materials / Title');
+$agri_id = getOrCreateDocTypeId($conn, 'Land Title / Brgy Certificate');
+
+// ... (Existing code) ...
+
+
+
+
+
+// Get Client Credit Limit and calculate remaining credit
+$credit_limit = 0;
+$stmt_cl = $conn->prepare("SELECT credit_limit FROM clients WHERE client_id = ?");
+$stmt_cl->bind_param("i", $client_id);
+$stmt_cl->execute();
+$res_cl = $stmt_cl->get_result();
+if ($row_cl = $res_cl->fetch_assoc()) {
+    $credit_limit = floatval($row_cl['credit_limit']);
+}
+$stmt_cl->close();
+
+// Calculate remaining credit
+$used_credit = $used_credit_loans + $used_credit_apps;
+$remaining_credit = $credit_limit - $used_credit;
+$success_message = '';
+$error_message = '';
+$blocking_alert = $blocking_alert ?? null; // Ensure initialized if not set by check block
+
+// Handle Verification Form Submission
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_verification'])) {
+    // 1. Update Profile Information
+    $update_stmt = $conn->prepare("UPDATE clients SET 
+        first_name = ?, middle_name = ?, last_name = ?, suffix = ?, 
+        date_of_birth = ?, gender = ?, civil_status = ?, 
+        contact_number = ?, alternate_contact = ?, 
+        present_house_no = ?, present_street = ?, present_barangay = ?, present_city = ?, present_province = ?, present_postal_code = ?,
+        employment_status = ?, employer_name = ?, occupation = ?, monthly_income = ?,
+        comaker_name = ?, comaker_relationship = ?, comaker_contact = ?, comaker_income = ?,
+        comaker_house_no = ?, comaker_street = ?, comaker_barangay = ?, comaker_city = ?, comaker_province = ?, comaker_postal_code = ?
+        WHERE client_id = ?");
+    
+    // Assign variables for bind_param (expressions cannot be passed by reference)
+    $first_name = $_POST['first_name'];
+    $middle_name = $_POST['middle_name'] ?? '';
+    $last_name = $_POST['last_name'];
+    $suffix = $_POST['suffix'] ?? '';
+    $dob = $_POST['date_of_birth'];
+    $gender = $_POST['gender'];
+    $civil_status = $_POST['civil_status'];
+    $contact = $_POST['contact_number'];
+    $alt_contact = $_POST['alternate_contact'] ?? '';
+    $house = $_POST['present_house_no'];
+    $street = $_POST['present_street'];
+    $barangay = $_POST['present_barangay'];
+    $city = $_POST['present_city'];
+    $province = $_POST['present_province'];
+    $postal = $_POST['present_postal_code'];
+    $emp_status = $_POST['employment_status'];
+    $employer = $_POST['employer_name'] ?? '';
+    $occupation = $_POST['occupation'] ?? '';
+    $income = $_POST['monthly_income'];
+    
+    // Co-maker variables
+    $cm_name = $_POST['comaker_name'] ?? '';
+    $cm_rel = $_POST['comaker_relationship'] ?? '';
+    $cm_contact = $_POST['comaker_contact'] ?? '';
+    $cm_income = $_POST['comaker_income'] ?? 0;
+    $cm_house = $_POST['comaker_house_no'] ?? '';
+    $cm_street = $_POST['comaker_street'] ?? '';
+    $cm_barangay = $_POST['comaker_barangay'] ?? '';
+    $cm_city = $_POST['comaker_city'] ?? '';
+    $cm_province = $_POST['comaker_province'] ?? '';
+    $cm_postal = $_POST['comaker_postal_code'] ?? '';
+    
+    $update_stmt->bind_param("ssssssssssssssssssdsssdssssssi", 
+        $first_name, $middle_name, $last_name, $suffix,
+        $dob, $gender, $civil_status,
+        $contact, $alt_contact,
+        $house, $street, $barangay, $city, $province, $postal,
+        $emp_status, $employer, $occupation, $income,
+        $cm_name, $cm_rel, $cm_contact, $cm_income,
+        $cm_house, $cm_street, $cm_barangay, $cm_city, $cm_province, $cm_postal,
+        $client_id
+    );
+    
+    if ($update_stmt->execute()) {
+        // 2. Handle Document Uploads
+        $upload_dir = "../uploads/documents/"; // ensure this exists
+        if (!file_exists($upload_dir)) mkdir($upload_dir, 0777, true);
+        
+        // Map form field names to database document names
+        $doc_name_map = [
+            'proof_of_income' => 'Proof of Income',
+            'proof_of_address' => 'Proof of Address', // Corrected to match DB
+            'valid_id_front' => 'Valid ID Front',  // Updated to new document type
+            'valid_id_back' => 'Valid ID Back'
+        ];
+        
+        // Get document type IDs
+        $doc_type_ids = [];
+        $res = $conn->query("SELECT document_type_id, document_name FROM document_types");
+        while ($row = $res->fetch_assoc()) {
+            $doc_type_ids[$row['document_name']] = $row['document_type_id'];
+        }
+
+        foreach ($doc_name_map as $input_name => $db_name) {
+            if (isset($_FILES[$input_name]) && $_FILES[$input_name]['error'] == 0) {
+                // Get the document type ID
+                $type_id = $doc_type_ids[$db_name] ?? 0;
+                
+                if ($type_id == 0) {
+                    // Document type not found - skip or log error
+                    continue;
+                }
+
+                $file = $_FILES[$input_name];
+                $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+                $filename = "verif_" . $client_id . "_" . $input_name . "_" . time() . "." . $ext;
+                $target_path = $upload_dir . $filename;
+                
+                if (move_uploaded_file($file['tmp_name'], $target_path)) {
+                    // Check if document exists
+                    $check = $conn->query("SELECT client_document_id FROM client_documents WHERE client_id = $client_id AND document_type_id = $type_id");
+                    if ($check->num_rows > 0) {
+                        $existing_doc = $check->fetch_assoc();
+                        $doc_id = $existing_doc['client_document_id'];
+                        
+                        $upd = $conn->prepare("UPDATE client_documents SET file_name = ?, file_path = ?, upload_date = NOW() WHERE client_document_id = ?");
+                        $upd->bind_param("ssi", $file['name'], $filename, $doc_id);
+                        $upd->execute();
+                    } else {
+                        $ins = $conn->prepare("INSERT INTO client_documents (client_id, document_type_id, file_name, file_path) VALUES (?, ?, ?, ?)");
+                        $ins->bind_param("iiss", $client_id, $type_id, $file['name'], $filename);
+                        $ins->execute();
+                    }
+                }
+            }
+        }
+        
+        // 3. Update Verification Status
+        $conn->query("UPDATE clients SET document_verification_status = 'Pending', verification_rejection_reason = NULL WHERE client_id = $client_id");
+        
+        // Refresh page to show Pending state
+        header("Location: apply_loan.php?verification_submitted=1");
+        exit();
+    } else {
+        $error_message = "Failed to update profile: " . $conn->error;
+    }
+}
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && (isset($_POST['submit_application']) || isset($_POST['ajax_submit']))) {
+    $is_ajax = isset($_POST['ajax_submit']);
+    $response = ['success' => false, 'message' => ''];
+
+    if ($blocking_alert || $prevent_loan_submission) {
+        $error_message = $blocking_alert ?: ($verification_modal_message ?? "Profile is locked.");
+    } else {
+        // Restore Variables
+        $product_id = intval($_POST['product_id']);
+        $requested_amount = floatval($_POST['requested_amount']);
+        $loan_term_months = intval($_POST['loan_term_months']);
+        $loan_purpose_category = $_POST['loan_purpose_category'] ?? '';
+        $loan_purpose_desc = trim($_POST['loan_purpose']);
+        
+        // Validations
+        // Check if requested amount exceeds remaining credit
+        if ($credit_limit > 0 && $requested_amount > $remaining_credit) {
+             $error_message = "Requested amount (₱" . number_format($requested_amount, 2) . ") exceeds your remaining credit of ₱" . number_format($remaining_credit, 2) . ". You have ₱" . number_format($used_credit, 2) . " in active loans/applications.";
+        }
+        
+        // Enforce Minimum Loan Duration of 6 Months
+        if ($loan_term_months < 6) {
+            $error_message = "Minimum loan duration is 6 months.";
+        }
+        
+        // Check for duplicate loan type
+        if (empty($error_message)) {
+            // Get the product type of the requested loan
+            $product_type_stmt = $conn->prepare("SELECT product_type FROM loan_products WHERE product_id = ?");
+            $product_type_stmt->bind_param("i", $product_id);
+            $product_type_stmt->execute();
+            $product_type_res = $product_type_stmt->get_result();
+            if ($product_type_row = $product_type_res->fetch_assoc()) {
+                $requested_product_type = $product_type_row['product_type'];
+                
+                // Check if this loan type already exists in active loans or pending applications
+                if (in_array($requested_product_type, $all_active_types)) {
+                    $error_message = "You already have an active or pending " . $requested_product_type . ". You cannot apply for multiple loans of the same type simultaneously.";
+                }
+            }
+            $product_type_stmt->close();
+        }
+        
+        if (empty($error_message)) {
+            $loan_purpose = $loan_purpose_category ? "[$loan_purpose_category] $loan_purpose_desc" : $loan_purpose_desc;
+    
+    // Co-maker Mandatory
+    // Co-maker Mandatory (Pulled from Profile)
+    $has_comaker = 1;
+    $comaker_name = $client_data['comaker_name'];
+    $comaker_relationship = $client_data['comaker_relationship'];
+    $comaker_contact = $client_data['comaker_contact'];
+    $comaker_income = floatval($client_data['comaker_income']);
+    
+    // Construct Address
+    $parts = [];
+    if($client_data['comaker_house_no']) $parts[] = $client_data['comaker_house_no'];
+    if($client_data['comaker_street']) $parts[] = $client_data['comaker_street'];
+    if($client_data['comaker_barangay']) $parts[] = 'Brgy. ' . $client_data['comaker_barangay'];
+    if($client_data['comaker_city']) $parts[] = $client_data['comaker_city'];
+    if($client_data['comaker_province']) $parts[] = $client_data['comaker_province'];
+    if($client_data['comaker_postal_code']) $parts[] = $client_data['comaker_postal_code'];
+    
+    $comaker_address = implode(', ', $parts);
+    
+    // Get product details for interest rate
+    $stmt = $conn->prepare("SELECT interest_rate FROM loan_products WHERE product_id = ?");
+    $stmt->bind_param("i", $product_id);
+    $stmt->execute();
+    $product_result = $stmt->get_result();
+    $product = $product_result->fetch_assoc();
+    $interest_rate = $product['interest_rate'];
+    $stmt->close();
+
+    // RULE: Business interest rate is fixed at 3%
+    if ($loan_purpose_category === 'Business') {
+        $interest_rate = 3.00;
+    }
+    
+    // Gather Application Data (JSON)
+    $app_data = [];
+    if ($loan_purpose_category === 'Business') {
+        $app_data['Business Name'] = $_POST['business_name'] ?? '';
+        $app_data['Nature of Business'] = $_POST['business_nature'] ?? '';
+        $app_data['Years in Operation'] = $_POST['business_years'] ?? '';
+    } elseif ($loan_purpose_category === 'Medical') {
+        $app_data['Patient Name'] = $_POST['med_patient_name'] ?? '';
+        $app_data['Relationship'] = $_POST['med_relationship'] ?? '';
+        $app_data['Hospital'] = $_POST['med_hospital'] ?? '';
+    } elseif ($loan_purpose_category === 'Education') {
+        $app_data['Student Name'] = $_POST['edu_student_name'] ?? '';
+        $app_data['School'] = $_POST['edu_school'] ?? '';
+        $app_data['Course/Year'] = $_POST['edu_course'] ?? '';
+    } elseif ($loan_purpose_category === 'Housing') {
+        $app_data['Project Address'] = $_POST['house_address'] ?? '';
+        $app_data['Type of Work'] = $_POST['house_work_type'] ?? '';
+    } elseif ($loan_purpose_category === 'Agricultural') {
+        $app_data['Location'] = $_POST['agri_location'] ?? '';
+        $app_data['Land Area'] = $_POST['agri_area'] ?? '';
+        $app_data['Crops'] = $_POST['agri_crops'] ?? '';
+    }
+    $application_data_json = !empty($app_data) ? json_encode($app_data) : null;
+
+    // Generate application number
+    $application_number = 'APP' . date('Y') . '-' . str_pad($client_id, 6, '0', STR_PAD_LEFT) . '-' . time();
+    
+    // Insert application
+    $stmt = $conn->prepare("
+        INSERT INTO loan_applications (
+            application_number, client_id, product_id, requested_amount, 
+            loan_term_months, interest_rate, loan_purpose, application_data, application_status,
+            has_comaker, comaker_name, comaker_relationship, comaker_contact,
+            comaker_address, comaker_income, submitted_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', ?, ?, ?, ?, ?, ?, NOW())
+    ");
+    
+    $stmt->bind_param("siididssissssd", 
+        $application_number, $client_id, $product_id, $requested_amount,
+        $loan_term_months, $interest_rate, $loan_purpose, $application_data_json, $has_comaker,
+        $comaker_name, $comaker_relationship, $comaker_contact,
+        $comaker_address, $comaker_income
+    );
+    
+    if ($stmt->execute()) {
+        $application_id = $stmt->insert_id;
+        
+        // Handle document uploads and reuse
+        $app_upload_dir = '../uploads/loan_applications/' . $application_id . '/';
+        if (!file_exists($app_upload_dir)) {
+            if (!mkdir($app_upload_dir, 0777, true)) {
+                 $error_message = "Failed to create application upload directory. Check server permissions.";
+                 // Delete incomplete application to prevent orphan records
+                 $conn->query("DELETE FROM loan_applications WHERE application_id = $application_id");
+            }
+        }
+        
+        $client_upload_dir = '../uploads/client_documents/' . $client_id . '/';
+        if (!file_exists($client_upload_dir)) {
+            if (!mkdir($client_upload_dir, 0777, true)) {
+                 // Non-fatal if just checking for existence, but good to know
+            }
+        }
+
+        if (empty($error_message)) {
+
+        
+        // Automatically attach documents from client profile
+        $stmt_docs = $conn->prepare("SELECT client_document_id, document_type_id, file_name, file_path FROM client_documents WHERE client_id = ?");
+        $stmt_docs->bind_param("i", $client_id);
+        $stmt_docs->execute();
+        $client_docs_result = $stmt_docs->get_result();
+
+        while ($doc = $client_docs_result->fetch_assoc()) {
+            $existing_file_path = $doc['file_path'];
+            $existing_file_name = $doc['file_name'];
+            $doc_type_id = $doc['document_type_id'];
+
+            // Prepend the upload directory if the path is relative
+            if (!file_exists($existing_file_path)) {
+                // Try with the documents upload directory
+                $existing_file_path = '../uploads/documents/' . $existing_file_path;
+            }
+
+            if (file_exists($existing_file_path)) {
+                // Copy file to application folder
+                $new_file_path = $app_upload_dir . $existing_file_name;
+                if (copy($existing_file_path, $new_file_path)) {
+                    // Insert into application_documents
+                    $doc_stmt = $conn->prepare("
+                        INSERT INTO application_documents (application_id, document_type_id, file_name, file_path)
+                        VALUES (?, ?, ?, ?)
+                    ");
+                    $doc_stmt->bind_param("iiss", $application_id, $doc_type_id, $existing_file_name, $new_file_path);
+                    $doc_stmt->execute();
+                    $doc_stmt->close();
+                } else {
+                    // Log warning but don't fail the whole app? Or show warning?
+                    // Let's add it to a warning message
+                    $warnings[] = "Failed to copy document: $existing_file_name";
+                }
+            } else {
+                 $warnings[] = "Document file not found: $existing_file_name (Path: $existing_file_path)";
+            }
+        }
+        
+
+        
+        $stmt_docs->close();
+        
+        // Dynamic Document Upload Handling
+        $upload_configs = [
+            'Business' => [
+                ['input' => 'business_permit', 'db_id' => $bp_id, 'prefix' => 'bp_'],
+                ['input' => 'business_dti', 'db_id' => $dti_id, 'prefix' => 'dti_']
+            ],
+            'Medical' => [
+                ['input' => 'medical_doc', 'db_id' => $med_id, 'prefix' => 'med_'],
+                ['input' => 'medical_abstract', 'db_id' => $abstract_id, 'prefix' => 'abstract_']
+            ],
+            'Education' => [
+                ['input' => 'school_doc', 'db_id' => $school_id, 'prefix' => 'edu_'],
+                ['input' => 'school_id_card', 'db_id' => $school_id_card_id, 'prefix' => 'schoolid_']
+            ],
+            'Housing' => [
+                ['input' => 'housing_doc', 'db_id' => $bill_mat_id, 'prefix' => 'house_']
+            ],
+            'Agricultural' => [
+                ['input' => 'agri_doc', 'db_id' => $agri_id, 'prefix' => 'agri_']
+            ]
+        ];
+
+        // Process uploads
+        $category = $_POST['loan_purpose_category'] ?? '';
+        if (isset($upload_configs[$category])) {
+            foreach ($upload_configs[$category] as $config) {
+                $input_name = $config['input'];
+                
+                if (isset($_FILES[$input_name]) && $_FILES[$input_name]['error'] == 0) {
+                    $filename = $_FILES[$input_name]['name'];
+                    $ext = pathinfo($filename, PATHINFO_EXTENSION);
+                    $new_name = $config['prefix'] . time() . '_' . uniqid() . '.' . $ext;
+                    $path = $app_upload_dir . $new_name;
+                    
+                    if (move_uploaded_file($_FILES[$input_name]['tmp_name'], $path)) {
+                         $doc_stmt = $conn->prepare("INSERT INTO application_documents (application_id, document_type_id, file_name, file_path) VALUES (?, ?, ?, ?)");
+                         $doc_stmt->bind_param("iiss", $application_id, $config['db_id'], $new_name, $path);
+                         $doc_stmt->execute();
+                         $doc_stmt->close();
+                    } else {
+                        // Only warn if it's a primary doc (how to distinguish? maybe check array index 0)
+                        if ($config === $upload_configs[$category][0]) {
+                            $warnings[] = "Failed to upload required document: " . $input_name;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Log audit
+        $audit_stmt = $conn->prepare("
+            INSERT INTO audit_logs (user_id, action_type, entity_type, entity_id, description, ip_address)
+            VALUES (?, 'CREATE', 'LOAN_APPLICATION', ?, 'Client submitted loan application', ?)
+        ");
+        $ip_address = $_SERVER['REMOTE_ADDR'];
+        $audit_stmt->bind_param("iis", $user_id, $application_id, $ip_address);
+        $audit_stmt->execute();
+        $audit_stmt->close();
+        
+        $success_message = "Loan application submitted successfully! Application Number: " . $application_number;
+        if (!empty($warnings)) {
+            $success_message .= " <br><small>Note: " . implode(", ", $warnings) . "</small>";
+        }
+    } else {
+        $error_message = "Failed to submit application. Error: " . $stmt->error;
+    }
+    $stmt->close();
+    
+    // Recalculate credit limits for AJAX response or page reload
+    if (($is_ajax && empty($error_message)) || !$is_ajax) {
+        // Re-calculate used credit logic (Copying logic from top of file essentially, or we can wrap it in a function ideally, but for now inline is safer for localized change)
+        $new_used_credit_loans = 0;
+        $loan_query_new = "SELECT principal_amount FROM loans WHERE client_id = ? AND loan_status IN ('Active', 'Overdue', 'Restructured')";
+        $stmt_new = $conn->prepare($loan_query_new);
+        $stmt_new->bind_param("i", $client_id);
+        $stmt_new->execute();
+        $res_new = $stmt_new->get_result();
+        while ($row_new = $res_new->fetch_assoc()) {
+            $new_used_credit_loans += floatval($row_new['principal_amount']);
+        }
+        $stmt_new->close();
+
+        $new_used_credit_apps = 0;
+        $app_query_new = "SELECT requested_amount FROM loan_applications WHERE client_id = ? AND application_status IN ('Submitted', 'Pending', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval')";
+        $stmt_new = $conn->prepare($app_query_new);
+        $stmt_new->bind_param("i", $client_id);
+        $stmt_new->execute();
+        $res_new = $stmt_new->get_result();
+        while ($row_new = $res_new->fetch_assoc()) {
+            $new_used_credit_apps += floatval($row_new['requested_amount']);
+        }
+        $stmt_new->close();
+        
+        $new_used_credit = $new_used_credit_loans + $new_used_credit_apps;
+        $new_remaining_credit = $credit_limit - $new_used_credit;
+    }
+
+    if ($is_ajax) {
+        if (!empty($error_message)) {
+            $response['message'] = $error_message;
+        } else {
+            $response['success'] = true;
+            $response['message'] = $success_message;
+            $response['remaining_credit'] = $new_remaining_credit;
+            $response['used_credit'] = $new_used_credit;
+            $response['used_credit_loans'] = $new_used_credit_loans;
+            $response['used_credit_apps'] = $new_used_credit_apps;
+            $response['credit_limit'] = $credit_limit;
+            
+            // Also return updated active types
+            $new_active_types = [];
+            // Re-fetch types
+             $type_q = "
+                SELECT lp.product_type 
+                FROM loans l
+                JOIN loan_products lp ON l.product_id = lp.product_id
+                WHERE l.client_id = ? AND l.loan_status IN ('Active', 'Overdue', 'Restructured')
+            ";
+            $stmt_t = $conn->prepare($type_q);
+            $stmt_t->bind_param("i", $client_id);
+            $stmt_t->execute();
+            $res_t = $stmt_t->get_result();
+            while($r = $res_t->fetch_assoc()) $new_active_types[] = $r['product_type'];
+            $stmt_t->close();
+            
+             $type_q2 = "
+                SELECT lp.product_type 
+                FROM loan_applications la
+                JOIN loan_products lp ON la.product_id = lp.product_id
+                WHERE la.client_id = ? AND la.application_status IN ('Submitted', 'Pending', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval')
+            ";
+            $stmt_t2 = $conn->prepare($type_q2);
+            $stmt_t2->bind_param("i", $client_id);
+            $stmt_t2->execute();
+            $res_t2 = $stmt_t2->get_result();
+            while($r = $res_t2->fetch_assoc()) $new_active_types[] = $r['product_type'];
+            $stmt_t2->close();
+            
+            $response['active_types'] = array_unique($new_active_types);
+        }
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    } else {
+        $error_message = "Database error: " . $conn->error;
+    }
+    } // End else block (validation)
+    } // End main if
+}
+
+
+// $conn->close(); // Removed to allow header to access DB
+
+?>
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Apply for Loan - Fundline</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Fundline Design System -->
+    <link href="../assets/css/main_style.css" rel="stylesheet">
+
+    
+    <style>
+        /* Mobile Sidebar Handling */
+        @media (max-width: 991.98px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .main-content { margin-left: 0 !important; }
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0,0,0,0.5);
+                z-index: 1025;
+            }
+            .sidebar-overlay.show { display: block; }
+        }
+        
+        /* Custom Card Styling */
+        .custom-card {
+            background-color: var(--color-surface-light, #fff);
+            border: 1px solid var(--color-border-subtle, #e2e8f0);
+            border-radius: var(--radius-xl, 1rem);
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .dark .custom-card {
+            background-color: var(--color-surface-dark, #1e293b);
+            border-color: var(--color-border-subtle, #334155);
+        }
+
+        .form-label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            color: var(--color-text-main);
+        }
+        
+        .input-group-text {
+            background-color: var(--color-background);
+            border-color: var(--color-border-input);
+            color: var(--color-text-muted);
+        }
+        .dark .input-group-text {
+            background-color: var(--color-background-dark);
+            border-color: var(--color-border-input-dark);
+        }
+        
+        /* Credit Limit Card (Atome Style) */
+        .credit-limit-card {
+            background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%); /* Brand Red */
+            color: white;
+            padding: 1.5rem;
+            border-radius: var(--radius-xl, 1rem);
+            margin-bottom: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(185, 28, 28, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        .credit-limit-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+        .cl-label { 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em; 
+            opacity: 0.8; 
+            font-weight: 600;
+        }
+        .cl-amount { 
+            font-size: 2rem; 
+            font-weight: 800; 
+            background: linear-gradient(to right, #ffffff, #fca5a5); 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+            margin: 0.25rem 0 0.75rem 0;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+        .section-header .material-symbols-outlined {
+            font-size: 1.5rem;
+            background: rgba(var(--color-primary-rgb), 0.1);
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .upload-box {
+            border: 2px dashed var(--color-border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            text-align: center;
+            transition: border-color 0.2s;
+            cursor: pointer;
+        }
+        .upload-box:hover {
+            border-color: var(--color-primary);
+            background-color: rgba(var(--color-primary-rgb), 0.02);
+        }
+        
+        /* Modals */
+        .modal-overlay {
+            display: none;
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-card {
+            background-color: var(--color-surface-light);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            width: 90%; max-width: 480px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .dark .modal-card { background-color: var(--color-surface-dark); }
+        @keyframes modalPop {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* Stepper Styles */
+        .stepper {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .stepper::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--color-border-subtle);
+            z-index: 0;
+        }
+        .step-item {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            width: 33.33%;
+        }
+        .step-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--color-surface-light);
+            border: 2px solid var(--color-border-subtle);
+            color: var(--color-text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 0.5rem;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+        .step-item.active .step-circle {
+            background: var(--color-primary);
+            border-color: var(--color-primary);
+            color: white;
+            box-shadow: 0 0 0 4px rgba(var(--color-primary-rgb), 0.2);
+        }
+        .step-item.completed .step-circle {
+            background: var(--color-success);
+            border-color: var(--color-success);
+            color: white;
+        }
+        .step-label {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .step-item.active .step-label {
+            color: var(--color-primary);
+        }
+        
+        /* Calculator Widget */
+        .calculator-widget {
+             background: linear-gradient(135deg, var(--color-surface-light) 0%, #f8fafc 100%);
+             border: 1px dashed var(--color-primary);
+             position: relative;
+        }
+        
+        /* Upload Preview Styles */
+        .upload-preview-container {
+            position: relative;
+            min-height: 150px;
+        }
+        
+        .upload-placeholder {
+            border: 2px dashed #dee2e6;
+            border-radius: 0.5rem;
+            padding: 2rem 1rem;
+            text-align: center;
+            background: #f8f9fa;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .upload-placeholder:hover {
+            border-color: var(--color-primary);
+            background: rgba(var(--color-primary-rgb), 0.05);
+        }
+        
+        .upload-preview {
+            border: 2px solid #dee2e6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            background: white;
+            text-align: center;
+        }
+        
+        .upload-preview img {
+            max-height: 200px;
+            object-fit: contain;
+            border: 1px solid #e9ecef;
+        }
+        
+        /* Multi-Step Wizard Styles */
+        .step-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            color: #6c757d;
+        }
+        
+        .step-circle.active {
+            background: var(--color-primary);
+            color: white;
+        }
+        
+        .step-circle.completed {
+            background: #28a745;
+            color: white;
+        }
+        
+        .step-line {
+            height: 2px;
+            background: #e9ecef;
+            margin: 0 10px;
+            position: relative;
+            top: -10px;
+        }
+        
+        .step-line.active {
+            background: var(--color-primary);
+        }
+        
+        .step-label {
+            color: #6c757d;
+            font-weight: 500;
+        }
+        
+        .step-indicator.active .step-label {
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+        
+        .form-step {
+            display: none;
+        }
+        
+        .form-step.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-body-tertiary">
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <div class="d-flex">
+        <?php include 'user_sidebar.php'; ?>
+        
+        <main class="main-content w-100 min-vh-100 d-flex flex-column">
+            <?php include 'client_header.php'; ?>
+            
+            <div class="content-area container-fluid p-4">
+                <div style="max-width: 1100px; margin: 0 auto;">
+                    
+                    <!-- Progress Stepper -->
+                    <div class="stepper">
+                        <div class="step-item active">
+                            <div class="step-circle">1</div>
+                            <div class="step-label">Application</div>
+                        </div>
+                        <div class="step-item">
+                            <div class="step-circle">2</div>
+                            <div class="step-label">Verification</div>
+                        </div>
+                        <div class="step-item">
+                            <div class="step-circle">3</div>
+                            <div class="step-label">Approval</div>
+                        </div>
+                    </div>
+
+                    <!-- Alerts -->
+                    <?php if ($success_message): ?>
+                    <div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+                        <span class="material-symbols-outlined me-2">check_circle</span>
+                        <div><?php echo $success_message; ?></div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <?php if ($error_message): ?>
+                    <div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
+                        <span class="material-symbols-outlined me-2">error</span>
+                        <div><?php echo $error_message; ?></div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($all_active_types)): ?>
+                    <div class="alert alert-info d-flex align-items-start mb-4">
+                        <span class="material-symbols-outlined me-2 mt-1">info</span>
+                        <div>
+                            <strong>Heads up!</strong> You already have active loans or pending applications.
+                            <div class="small mt-1">Currently unavailable: <strong><?php echo implode(', ', array_unique($all_active_types)); ?></strong></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if (!$is_profile_locked): ?>
+                    <form method="POST" enctype="multipart/form-data" id="loanApplicationForm">
+                        <div class="row g-4">
+                            <!-- Left: Loan Details -->
+                            <div class="col-lg-8">
+                                <!-- Loan Products Card -->
+                                <div class="custom-card p-4 mb-4">
+                                    <div class="section-header">
+                                        <span class="material-symbols-outlined text-primary">payments</span>
+                                        <h4 class="m-0">Loan Details</h4>
+                                    </div>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label class="form-label" for="product_id">Select Loan Product <span class="text-danger">*</span></label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><span class="material-symbols-outlined" style="font-size: 1.2rem;">shopping_bag</span></span>
+                                                <select class="form-select" id="product_id" name="product_id" required>
+                                                    <option value="">-- Choose a product --</option>
+                                                    <?php foreach ($products as $product): ?>
+                                                        <?php 
+                                                        $is_disabled = in_array($product['product_type'], $all_active_types);
+                                                        $disabled_attr = $is_disabled ? 'disabled' : '';
+                                                        $disabled_text = $is_disabled ? ' (Already Active)' : '';
+                                                        ?>
+                                                    <option value="<?php echo $product['product_id']; ?>" 
+                                                            <?php echo $disabled_attr; ?>
+                                                            data-min="<?php echo $product['min_amount']; ?>"
+                                                            data-max="<?php echo $product['max_amount']; ?>"
+                                                            data-rate="<?php echo $product['interest_rate']; ?>"
+                                                            data-min-term="<?php echo $product['min_term_months']; ?>"
+                                                            data-max-term="<?php echo $product['max_term_months']; ?>"
+                                                            style="<?php echo $is_disabled ? 'color: #999;' : ''; ?>">
+                                                        <?php echo htmlspecialchars($product['product_name']); ?> 
+                                                        - <?php echo $product['interest_rate']; ?>% Interest<?php echo $disabled_text; ?>
+                                                    </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            <div class="form-text">Interest rates are fixed based on the selected product.</div>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="requested_amount">Amount to Borrow <span class="text-danger">*</span></label>
+                                            <div class="input-group">
+                                                <span class="input-group-text">₱</span>
+                                                <input class="form-control" type="number" id="requested_amount" name="requested_amount" 
+                                                       step="0.01" min="0" required placeholder="0.00">
+                                            </div>
+                                            <small class="text-muted fw-bold" id="amount_range"></small>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="loan_term_months">Repayment Term <span class="text-danger">*</span></label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><span class="material-symbols-outlined" style="font-size: 1.2rem;">calendar_month</span></span>
+                                                <select class="form-select" id="loan_term_months" name="loan_term_months" required>
+                                                    <option value="">-- Select Duration --</option>
+
+                                                    <option value="6">6 Months</option>
+                                                    <option value="9">9 Months</option>
+                                                    <option value="12">12 Months (1 Year)</option>
+                                                    <option value="18">18 Months (1.5 Years)</option>
+                                                    <option value="24">24 Months (2 Years)</option>
+                                                    <option value="36">36 Months (3 Years)</option>
+                                                    <option value="48">48 Months (4 Years)</option>
+                                                    <option value="60">60 Months (5 Years)</option>
+                                                </select>
+                                            </div>
+                                            <small class="text-muted" id="term_range"></small>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <label class="form-label" for="loan_purpose_category">Purpose Category <span class="text-danger">*</span></label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><span class="material-symbols-outlined" style="font-size: 1.2rem;">category</span></span>
+                                                <select class="form-select" id="loan_purpose_category" name="loan_purpose_category" required onchange="toggleRequirements()">
+                                                    <option value="">-- Select Purpose --</option>
+                                                    <option value="Business" <?php echo ($preselected_type == 'Business') ? 'selected' : ''; ?>>Business</option>
+                                                    <option value="Personal" <?php echo ($preselected_type == 'Personal') ? 'selected' : ''; ?>>Personal</option>
+                                                    <option value="Education" <?php echo ($preselected_type == 'Education') ? 'selected' : ''; ?>>Education</option>
+                                                    <option value="Agricultural" <?php echo ($preselected_type == 'Agricultural') ? 'selected' : ''; ?>>Agricultural</option>
+                                                    <option value="Medical" <?php echo ($preselected_type == 'Medical') ? 'selected' : ''; ?>>Medical / Emergency</option>
+                                                    <option value="Housing" <?php echo ($preselected_type == 'Housing') ? 'selected' : ''; ?>>Housing / Renovation</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <label class="form-label" for="loan_purpose">Specific Purpose Description <span class="text-danger">*</span></label>
+                                            <textarea class="form-control" id="loan_purpose" name="loan_purpose" rows="3" 
+                                                      required placeholder="Please describe exactly how you will use the funds..."></textarea>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Dynamic Requirements Sections -->
+                                    <div id="requirements_container" class="mt-4">
+                                        <!-- Business -->
+                                        <div id="req_Business" class="requirement-section p-3 rounded bg-body-tertiary border" style="display: none;">
+                                            <h6 class="fw-bold text-main mb-3"><span class="material-symbols-outlined align-middle me-1 text-warning">verified</span> Business Requirements</h6>
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-12">
+                                                    <label class="form-label small">Business Name <span class="text-danger">*</span></label>
+                                                    <input type="text" name="business_name" class="form-control" placeholder="Registered Business Name">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Nature of Business <span class="text-danger">*</span></label>
+                                                    <input type="text" name="business_nature" class="form-control" placeholder="e.g. Retail, Food Service">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Years in Operation <span class="text-danger">*</span></label>
+                                                    <input type="number" name="business_years" class="form-control" placeholder="Years">
+                                                </div>
+                                            </div>
+                                            <div class="form-group mb-3">
+                                                <label class="form-label small" for="business_permit">Upload Business Permit / Mayor's Permit <span class="text-danger">*</span></label>
+                                                <input type="file" id="business_permit" name="business_permit" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                                <p class="form-text mb-0">Required for business loans to verify legitimacy.</p>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label small" for="business_dti">Upload DTI/SEC Registration (Optional)</label>
+                                                <input type="file" id="business_dti" name="business_dti" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                            </div>
+                                        </div>
+
+                                        <!-- Medical -->
+                                        <div id="req_Medical" class="requirement-section p-3 rounded bg-body-tertiary border" style="display: none;">
+                                            <h6 class="fw-bold text-main mb-3"><span class="material-symbols-outlined align-middle me-1 text-danger">medical_services</span> Medical Requirements</h6>
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Patient Name <span class="text-danger">*</span></label>
+                                                    <input type="text" name="med_patient_name" class="form-control" placeholder="Name of Patient">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Relationship <span class="text-danger">*</span></label>
+                                                    <input type="text" name="med_relationship" class="form-control" placeholder="Relationship to Borrower">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label small">Hospital / Clinic <span class="text-danger">*</span></label>
+                                                    <input type="text" name="med_hospital" class="form-control" placeholder="Name of Medical Institution">
+                                                </div>
+                                            </div>
+                                            <div class="form-group mb-3">
+                                                <label class="form-label small" for="medical_doc">Upload Medical Certificate / Hospital Bill <span class="text-danger">*</span></label>
+                                                <input type="file" id="medical_doc" name="medical_doc" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                                <p class="form-text mb-0">Please provide proof of medical procedure or emergency.</p>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label small" for="medical_abstract">Upload Clinical Abstract (Optional)</label>
+                                                <input type="file" id="medical_abstract" name="medical_abstract" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                            </div>
+                                        </div>
+
+                                        <!-- Education -->
+                                        <div id="req_Education" class="requirement-section p-3 rounded bg-body-tertiary border" style="display: none;">
+                                            <h6 class="fw-bold text-main mb-3"><span class="material-symbols-outlined align-middle me-1 text-info">school</span> Education Requirements</h6>
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Student Name <span class="text-danger">*</span></label>
+                                                    <input type="text" name="edu_student_name" class="form-control" placeholder="Name of Student">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">School <span class="text-danger">*</span></label>
+                                                    <input type="text" name="edu_school" class="form-control" placeholder="Name of School">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label small">Course / Year Level <span class="text-danger">*</span></label>
+                                                    <input type="text" name="edu_course" class="form-control" placeholder="e.g. BSCS - 3rd Year">
+                                                </div>
+                                            </div>
+                                            <div class="form-group mb-3">
+                                                <label class="form-label small" for="school_doc">Upload Enrollment Form / School Assessment <span class="text-danger">*</span></label>
+                                                <input type="file" id="school_doc" name="school_doc" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                                <p class="form-text mb-0">Proof of enrollment or tuition assessment is required.</p>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label small" for="school_id_card">Upload School ID (Optional)</label>
+                                                <input type="file" id="school_id_card" name="school_id_card" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                            </div>
+                                        </div>
+
+                                        <!-- Housing -->
+                                        <div id="req_Housing" class="requirement-section p-3 rounded bg-body-tertiary border" style="display: none;">
+                                            <h6 class="fw-bold text-main mb-3"><span class="material-symbols-outlined align-middle me-1 text-success">home</span> Housing Requirements</h6>
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-12">
+                                                    <label class="form-label small">Project Address <span class="text-danger">*</span></label>
+                                                    <input type="text" name="house_address" class="form-control" placeholder="Address of renovation/construction">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label small">Type of Work <span class="text-danger">*</span></label>
+                                                    <select name="house_work_type" class="form-select">
+                                                        <option value="Renovation">Renovation</option>
+                                                        <option value="Construction">New Construction</option>
+                                                        <option value="Repair">Repair</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label small" for="housing_doc">Upload Bill of Materials / Property Title <span class="text-danger">*</span></label>
+                                                <input type="file" id="housing_doc" name="housing_doc" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                                <p class="form-text mb-0">Please provide a bill of materials or proof of ownership.</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Agricultural -->
+                                        <div id="req_Agricultural" class="requirement-section p-3 rounded bg-body-tertiary border" style="display: none;">
+                                            <h6 class="fw-bold text-main mb-3"><span class="material-symbols-outlined align-middle me-1 text-success">agriculture</span> Agricultural Requirements</h6>
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Farm Location <span class="text-danger">*</span></label>
+                                                    <input type="text" name="agri_location" class="form-control" placeholder="Brgy/Municipality">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small">Land Area <span class="text-danger">*</span></label>
+                                                    <input type="text" name="agri_area" class="form-control" placeholder="e.g. 2 Hectares">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label small">Crops / Livestock <span class="text-danger">*</span></label>
+                                                    <input type="text" name="agri_crops" class="form-control" placeholder="e.g. Rice, Corn, Piggery">
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label small" for="agri_doc">Upload Land Title / Brgy. Certification <span class="text-danger">*</span></label>
+                                                <input type="file" id="agri_doc" name="agri_doc" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                                <p class="form-text mb-0">Proof of land ownership or agricultural activity.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div> <!-- Close col-lg-8 -->
+
+                            <!-- Right: Summary & Submit -->
+                            <div class="col-lg-4">
+                                <?php if ($credit_limit > 0): ?>
+                                <div class="credit-limit-card">
+                                    <div class="cl-label">Available Credit Limit</div>
+                                    <h2 class="cl-amount">₱<?php echo number_format($remaining_credit, 2); ?></h2>
+                                    
+                                    <div class="progress bg-white bg-opacity-25" style="height: 6px;">
+                                        <?php $credit_percentage = $credit_limit > 0 ? ($remaining_credit / $credit_limit) * 100 : 0; ?>
+                                        <div class="progress-bar bg-white" role="progressbar" style="width: <?php echo $credit_percentage; ?>%" aria-valuenow="<?php echo $credit_percentage; ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                    <div class="d-flex justify-content-between mt-2 small text-white text-opacity-75">
+                                        <span>Total: ₱<?php echo number_format($credit_limit, 2); ?></span>
+                                        <span>Used: ₱<?php echo number_format($used_credit, 2); ?></span>
+                                    </div>
+
+                                    <?php if ($used_credit > 0): ?>
+                                    <div class="mt-3 pt-3 border-top border-white border-opacity-25 small text-white text-opacity-75">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span>Active Loans:</span>
+                                            <span>₱<?php echo number_format($used_credit_loans, 2); ?></span>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <span>Pending Apps:</span>
+                                            <span>₱<?php echo number_format($used_credit_apps, 2); ?></span>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
+
+                                <!-- Live Loan Calculator Widget -->
+                                <div class="custom-card p-4 mb-4 calculator-widget">
+                                    <div class="d-flex align-items-center gap-2 mb-3">
+                                        <span class="material-symbols-outlined text-primary">calculate</span>
+                                        <h5 class="fw-bold m-0 text-main">Estimation</h5>
+                                    </div>
+                                    
+                                    <div class="text-center mb-4">
+                                        <small class="text-muted d-block text-uppercase ls-1 fw-bold mb-1">Monthly Payment</small>
+                                        <h2 class="display-6 fw-bold text-primary mb-0" id="calc_monthly_payment">₱0.00</h2>
+                                        <small class="text-muted" id="calc_term_text">for 0 months</small>
+                                    </div>
+                                    
+                                    <div class="bg-surface rounded-3 p-3 border border-dashed">
+                                        <div class="d-flex justify-content-between mb-2 small">
+                                            <span class="text-muted">Principal:</span>
+                                            <span class="fw-bold" id="calc_principal">₱0.00</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-2 small">
+                                            <span class="text-muted">Interest (<span id="calc_rate">0</span>%):</span>
+                                            <span class="fw-bold text-danger" id="calc_interest">₱0.00</span>
+                                        </div>
+                                        <div class="border-top my-2"></div>
+                                        <div class="d-flex justify-content-between small">
+                                            <span class="fw-bold text-main">Total Repayment:</span>
+                                            <span class="fw-bold text-main" id="calc_total">₱0.00</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="custom-card p-4">
+                                    <h5 class="fw-bold mb-3">Ready to Apply?</h5>
+                                    <p class="text-muted small mb-4">By clicking Submit, you agree to our <a href="terms.php" target="_blank" class="text-decoration-none fw-bold">Terms of Service</a> and Privacy Policy. Your application will be reviewed by our team.</p>
+                                    
+                                    <button type="button" id="reviewApplicationBtn" class="btn btn-primary w-100 py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center">
+                                        <span>Review Application</span>
+                                        <span class="material-symbols-outlined ms-2">visibility</span>
+                                    </button>
+                                    <a href="dashboard.php" class="btn btn-link text-muted w-100 mt-2 text-decoration-none">Cancel</a>
+                                </div>
+                                
+                                <!-- Trust Indicators -->
+                                <div class="mt-4 row g-3 text-center">
+                                    <div class="col-4">
+                                        <div class="p-2">
+                                            <span class="material-symbols-outlined text-success mb-1">lock</span>
+                                            <div class="small fw-bold text-muted" style="font-size: 0.7rem;">Secure Data</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="p-2">
+                                            <span class="material-symbols-outlined text-primary mb-1">bolt</span>
+                                            <div class="small fw-bold text-muted" style="font-size: 0.7rem;">Fast Approval</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="p-2">
+                                            <span class="material-symbols-outlined text-info mb-1">support_agent</span>
+                                            <div class="small fw-bold text-muted" style="font-size: 0.7rem;">24/7 Support</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <!-- Loan Application Confirmation Modal -->
+                    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered modal-lg">
+                            <div class="modal-content border-0 shadow-lg" style="border-radius: 1.5rem;">
+                                <div class="modal-header border-0 pb-2" style="background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%); color: white; border-radius: 1.5rem 1.5rem 0 0;">
+                                    <h5 class="modal-title fw-bold d-flex align-items-center" id="confirmationModalLabel">
+                                        <span class="material-symbols-outlined me-2">assignment_turned_in</span>
+                                        Review Your Application
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body p-4">
+                                    <div class="alert alert-info d-flex align-items-start mb-4" role="alert">
+                                        <span class="material-symbols-outlined me-2 mt-1">info</span>
+                                        <div>
+                                            <strong>Please review your application carefully.</strong> Once submitted, your application will be sent to our team for processing.
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Loan Details Summary -->
+                                    <div class="custom-card p-4 mb-3">
+                                        <h6 class="fw-bold text-primary mb-3 d-flex align-items-center">
+                                            <span class="material-symbols-outlined me-2">payments</span>
+                                            Loan Details
+                                        </h6>
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Loan Product:</span>
+                                                    <span class="fw-bold" id="confirm_product">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Purpose Category:</span>
+                                                    <span class="fw-bold" id="confirm_category">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Loan Amount:</span>
+                                                    <span class="fw-bold text-primary" id="confirm_amount">₱0.00</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Repayment Term:</span>
+                                                    <span class="fw-bold" id="confirm_term">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Interest Rate:</span>
+                                                    <span class="fw-bold" id="confirm_rate">0%</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Monthly Payment:</span>
+                                                    <span class="fw-bold text-danger" id="confirm_monthly">₱0.00</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Purpose Description -->
+                                    <div class="custom-card p-4 mb-3">
+                                        <h6 class="fw-bold text-primary mb-3 d-flex align-items-center">
+                                            <span class="material-symbols-outlined me-2">description</span>
+                                            Purpose Description
+                                        </h6>
+                                        <p class="mb-0 text-muted" id="confirm_purpose">-</p>
+                                    </div>
+                                    
+                                    <!-- Total Repayment Summary -->
+                                    <div class="p-4 rounded-3" style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border: 2px dashed var(--color-primary);">
+                                        <div class="row text-center">
+                                            <div class="col-md-4">
+                                                <small class="text-muted d-block mb-1">Principal Amount</small>
+                                                <h5 class="fw-bold mb-0" id="confirm_principal">₱0.00</h5>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <small class="text-muted d-block mb-1">Total Interest</small>
+                                                <h5 class="fw-bold mb-0 text-danger" id="confirm_interest">₱0.00</h5>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <small class="text-muted d-block mb-1">Total Repayment</small>
+                                                <h5 class="fw-bold mb-0 text-primary" id="confirm_total">₱0.00</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Payment Schedule Info -->
+                                    <div class="custom-card p-4 mt-3">
+                                        <h6 class="fw-bold text-primary mb-3 d-flex align-items-center">
+                                            <span class="material-symbols-outlined me-2">calendar_month</span>
+                                            Payment Schedule
+                                        </h6>
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">First Payment Date:</span>
+                                                    <span class="fw-bold" id="confirm_first_payment">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Number of Payments:</span>
+                                                    <span class="fw-bold" id="confirm_num_payments">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Payment Frequency:</span>
+                                                    <span class="fw-bold">Monthly</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between border-bottom pb-2">
+                                                    <span class="text-muted">Final Payment Date:</span>
+                                                    <span class="fw-bold" id="confirm_final_payment">-</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="alert alert-info d-flex align-items-start mt-3 mb-0" role="alert">
+                                            <span class="material-symbols-outlined me-2 mt-1" style="font-size: 1.2rem;">info</span>
+                                            <small>Your first payment will be due one month after loan release. Payments are due on the same day each month.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer border-0 pt-0">
+                                    <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">
+                                        <span class="material-symbols-outlined me-1" style="font-size: 1.2rem;">arrow_back</span>
+                                        Go Back
+                                    </button>
+                                    <button type="button" id="confirmSubmitBtn" class="btn btn-primary px-4 fw-bold">
+                                        <span class="material-symbols-outlined me-1" style="font-size: 1.2rem;">send</span>
+                                        Confirm & Submit
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php else: ?>
+                        <?php if ($verification_status === 'Pending'): ?>
+                        <div class="text-center py-5">
+                            <div class="mb-4">
+                                <div style="width: 80px; height: 80px; background-color: rgba(245, 158, 11, 0.1); color: #f59e0b; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                                    <span class="material-symbols-outlined" style="font-size: 40px;">pending</span>
+                                </div>
+                            </div>
+                            <h2 class="fw-bold text-main mb-3">Documents Under Review</h2>
+                            <p class="text-muted mb-4" style="max-width: 500px; margin: 0 auto;">
+                                Your profile and documents have been submitted and are currently being reviewed by our admin team. You will be notified once your application is approved.
+                            </p>
+                            <div class="d-flex gap-2 justify-content-center">
+                                <a href="dashboard.php" class="btn btn-primary px-4 fw-bold shadow-sm">
+                                    Return to Dashboard
+                                </a>
+                                <button type="button" class="btn btn-outline-secondary px-4 fw-bold" disabled>
+                                    Verification Pending...
+                                </button>
+                            </div>
+                        </div>
+                        <?php else: ?>
+                        <div class="text-center py-5">
+                            <div class="mb-4">
+                                <span class="material-symbols-outlined text-primary" style="font-size: 5rem; opacity: 0.8;">verified_user</span>
+                            </div>
+                            <h2 class="fw-bold text-main mb-3">Verify Now!</h2>
+                            <p class="text-muted mb-4" style="max-width: 500px; margin: 0 auto;">
+                                Please complete your profile verification to unlock loan applications.
+                            </p>
+                            <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" data-bs-toggle="modal" data-bs-target="#applicationLockedModal">
+                                Start Verification
+                            </button>
+                        </div>
+                        
+                        <!-- Application Locked Modal -->
+                        <div class="modal fade" id="applicationLockedModal" tabindex="-1" aria-labelledby="applicationLockedModalLabel">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
+                                    <div class="modal-header border-0 pb-0">
+                                        <h5 class="modal-title fw-bold" id="applicationLockedModalLabel">
+                                            <span class="material-symbols-outlined text-primary align-middle me-2">verified</span>
+                                            Verify Now!
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body p-4">
+                                        <div class="alert alert-warning d-flex align-items-start mb-4" role="alert">
+                                            <span class="material-symbols-outlined me-2 mt-1">info</span>
+                                            <div>
+                                                <?php echo $verification_modal_message ?? 'You need to complete the verification process before applying for a loan.'; ?>
+                                            </div>
+                                        </div>
+                                        
+                                        <h6 class="fw-bold mb-3">To unlock loan applications:</h6>
+                                        <ul class="list-unstyled mb-4">
+                                            <li class="d-flex align-items-start mb-2">
+                                                <span class="material-symbols-outlined text-primary me-2" style="font-size: 1.2rem;">check_circle</span>
+                                                <span>Complete your personal information</span>
+                                            </li>
+                                            <li class="d-flex align-items-start mb-2">
+                                                <span class="material-symbols-outlined text-primary me-2" style="font-size: 1.2rem;">check_circle</span>
+                                                <span>Upload required documents</span>
+                                            </li>
+                                            <li class="d-flex align-items-start mb-2">
+                                                <span class="material-symbols-outlined text-primary me-2" style="font-size: 1.2rem;">check_circle</span>
+                                                <span>Wait for admin verification</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="modal-footer border-0 pt-0">
+                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#verificationModal">
+                                            Complete Your Profile
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Verification Modal -->
+                        <!-- Verification Modal -->
+                        <div class="modal fade" id="verificationModal" tabindex="-1" aria-labelledby="verificationModalLabel">
+                            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                                <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
+                                    <div class="modal-header border-0 pb-0">
+                                        <h5 class="modal-title fw-bold" id="verificationModalLabel">Complete Your Profile</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    
+                                    <!-- Step Indicator -->
+                                    <div class="step-indicator px-4 pt-3 pb-2">
+                                        <div class="d-flex justify-content-between align-items-center position-relative">
+                                            <div class="step-item active" data-step="1">
+                                                <div class="step-circle">1</div>
+                                                <div class="step-label">Personal</div>
+                                            </div>
+                                            <div class="step-line"></div>
+                                            <div class="step-item" data-step="2">
+                                                <div class="step-circle">2</div>
+                                                <div class="step-label">Address</div>
+                                            </div>
+                                            <div class="step-line"></div>
+                                            <div class="step-item" data-step="3">
+                                                <div class="step-circle">3</div>
+                                                <div class="step-label">Co-maker</div>
+                                            </div>
+                                            <div class="step-line"></div>
+                                            <div class="step-item" data-step="4">
+                                                <div class="step-circle">4</div>
+                                                <div class="step-label">Documents</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="modal-body p-4">
+                                        <form method="POST" enctype="multipart/form-data" id="verificationForm">
+                                            <?php if ($verification_status === 'Rejected'): ?>
+                                            <div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
+                                                <span class="material-symbols-outlined me-2">error</span>
+                                                <div>
+                                                    <strong>Verification Rejected:</strong> <?php echo htmlspecialchars($rejection_reason ?? 'Please check your information and try again.'); ?>
+                                                </div>
+                                            </div>
+                                            <?php endif; ?>
+                                            
+                                            <!-- Step 1: Personal Information -->
+                                            <div class="form-step active" data-step="1">
+                                            <!-- Personal Information -->
+                                            <div class="mb-4">
+                                                <h6 class="fw-bold mb-3 d-flex align-items-center">
+                                                    <span class="material-symbols-outlined text-primary me-2">person</span>
+                                                    Personal Information
+                                                </h6>
+                                                
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">First Name <span class="text-danger">*</span></label>
+                                                        <input type="text" name="first_name" class="form-control" value="<?php echo htmlspecialchars($client_data['first_name'] ?? ''); ?>" required>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Middle Name</label>
+                                                        <input type="text" name="middle_name" class="form-control" value="<?php echo htmlspecialchars($client_data['middle_name'] ?? ''); ?>">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Last Name <span class="text-danger">*</span></label>
+                                                        <input type="text" name="last_name" class="form-control" value="<?php echo htmlspecialchars($client_data['last_name'] ?? ''); ?>" required>
+                                                    </div>
+                                                    <div class="col-md-1">
+                                                        <label class="form-label">Suffix</label>
+                                                        <input type="text" name="suffix" class="form-control" value="<?php echo htmlspecialchars($client_data['suffix'] ?? ''); ?>" placeholder="Jr.">
+                                                    </div>
+                                                    
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Date of Birth <span class="text-danger">*</span></label>
+                                                        <input type="date" name="date_of_birth" class="form-control" value="<?php echo htmlspecialchars($client_data['date_of_birth'] ?? ''); ?>" required>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Gender <span class="text-danger">*</span></label>
+                                                        <select name="gender" class="form-select" required>
+                                                            <option value="">Select Gender</option>
+                                                            <option value="Male" <?php echo ($client_data['gender'] ?? '') == 'Male' ? 'selected' : ''; ?>>Male</option>
+                                                            <option value="Female" <?php echo ($client_data['gender'] ?? '') == 'Female' ? 'selected' : ''; ?>>Female</option>
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Civil Status <span class="text-danger">*</span></label>
+                                                        <select name="civil_status" class="form-select" required>
+                                                            <option value="">Select Status</option>
+                                                            <option value="Single" <?php echo ($client_data['civil_status'] ?? '') == 'Single' ? 'selected' : ''; ?>>Single</option>
+                                                            <option value="Married" <?php echo ($client_data['civil_status'] ?? '') == 'Married' ? 'selected' : ''; ?>>Married</option>
+                                                            <option value="Widowed" <?php echo ($client_data['civil_status'] ?? '') == 'Widowed' ? 'selected' : ''; ?>>Widowed</option>
+                                                            <option value="Separated" <?php echo ($client_data['civil_status'] ?? '') == 'Separated' ? 'selected' : ''; ?>>Separated</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Contact Number <span class="text-danger">*</span></label>
+                                                        <div class="input-group">
+                                                            <span class="input-group-text"><span class="material-symbols-outlined" style="font-size: 1.2rem;">phone</span></span>
+                                                            <input type="tel" name="contact_number" class="form-control" value="<?php echo htmlspecialchars($client_data['contact_number'] ?? ''); ?>" required placeholder="09xxxxxxxxx">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Alternate Contact</label>
+                                                        <div class="input-group">
+                                                            <span class="input-group-text"><span class="material-symbols-outlined" style="font-size: 1.2rem;">phone</span></span>
+                                                            <input type="tel" name="alternate_contact" class="form-control" value="<?php echo htmlspecialchars($client_data['alternate_contact'] ?? ''); ?>" placeholder="09xxxxxxxxx">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            </div>
+                                            <!-- End Step 1 -->
+                                            
+                                            <!-- Step 2: Address & Employment -->
+                                            <div class="form-step" data-step="2">
+                                            <!-- Address & Employment -->
+                                            <div class="mb-4">
+                                                <h6 class="fw-bold mb-3 d-flex align-items-center">
+                                                    <span class="material-symbols-outlined text-primary me-2">home</span>
+                                                    Address & Employment Information
+                                                </h6>
+                                                
+                                                <div class="row g-3">
+                                                    <div class="col-12">
+                                                        <label class="form-label fw-bold">Present Address</label>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">House/Unit No. <span class="text-danger">*</span></label>
+                                                        <input type="text" name="present_house_no" class="form-control" value="<?php echo htmlspecialchars($client_data['present_house_no'] ?? ''); ?>" required>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Street <span class="text-danger">*</span></label>
+                                                        <input type="text" name="present_street" class="form-control" value="<?php echo htmlspecialchars($client_data['present_street'] ?? ''); ?>" required>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Province <span class="text-danger">*</span></label>
+                                                        <select name="present_province" id="present_province" class="form-select" required data-current="<?php echo htmlspecialchars($client_data['present_province'] ?? ''); ?>">
+                                                            <option value="">Select Province</option>
+                                                            <?php if(!empty($client_data['present_province'])): ?>
+                                                                <option value="<?php echo htmlspecialchars($client_data['present_province']); ?>" selected><?php echo htmlspecialchars($client_data['present_province']); ?></option>
+                                                            <?php endif; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">City <span class="text-danger">*</span></label>
+                                                        <select name="present_city" id="present_city" class="form-select" required data-current="<?php echo htmlspecialchars($client_data['present_city'] ?? ''); ?>">
+                                                            <option value="">Select City</option>
+                                                            <?php if(!empty($client_data['present_city'])): ?>
+                                                                <option value="<?php echo htmlspecialchars($client_data['present_city']); ?>" selected><?php echo htmlspecialchars($client_data['present_city']); ?></option>
+                                                            <?php endif; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Barangay <span class="text-danger">*</span></label>
+                                                        <select name="present_barangay" id="present_barangay" class="form-select" required data-current="<?php echo htmlspecialchars($client_data['present_barangay'] ?? ''); ?>">
+                                                            <option value="">Select Barangay</option>
+                                                            <?php if(!empty($client_data['present_barangay'])): ?>
+                                                                <option value="<?php echo htmlspecialchars($client_data['present_barangay']); ?>" selected><?php echo htmlspecialchars($client_data['present_barangay']); ?></option>
+                                                            <?php endif; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Postal Code <span class="text-danger">*</span></label>
+                                                        <input type="text" name="present_postal_code" class="form-control" value="<?php echo htmlspecialchars($client_data['present_postal_code'] ?? ''); ?>" required>
+                                                    </div>
+
+                                                    <div class="col-12 mt-4">
+                                                        <label class="form-label fw-bold">Employment Information</label>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Employment Status <span class="text-danger">*</span></label>
+                                                        <select name="employment_status" class="form-select" required>
+                                                            <option value="">Select Status</option>
+                                                            <option value="Employed" <?php echo ($client_data['employment_status'] ?? '') == 'Employed' ? 'selected' : ''; ?>>Employed</option>
+                                                            <option value="Self-Employed" <?php echo ($client_data['employment_status'] ?? '') == 'Self-Employed' ? 'selected' : ''; ?>>Self-Employed</option>
+                                                            <option value="Unemployed" <?php echo ($client_data['employment_status'] ?? '') == 'Unemployed' ? 'selected' : ''; ?>>Unemployed</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Monthly Income <span class="text-danger">*</span></label>
+                                                        <div class="input-group">
+                                                            <span class="input-group-text">₱</span>
+                                                            <input type="number" name="monthly_income" class="form-control" value="<?php echo htmlspecialchars($client_data['monthly_income'] ?? ''); ?>" step="0.01" required>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Employer Name</label>
+                                                        <input type="text" name="employer_name" class="form-control" value="<?php echo htmlspecialchars($client_data['employer_name'] ?? ''); ?>">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Occupation</label>
+                                                        <input type="text" name="occupation" class="form-control" value="<?php echo htmlspecialchars($client_data['occupation'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            </div>
+                                            <!-- End Step 2 -->
+                                            
+                                            <!-- Step 3: Co-maker Information -->
+                                            <div class="form-step" data-step="3">
+                                            <!-- Co-maker Information -->
+                                            <div class="mb-4 border-bottom pb-4">
+                                                <h6 class="fw-bold mb-3 d-flex align-items-center">
+                                                    <span class="material-symbols-outlined text-primary me-2">group</span>
+                                                    Co-maker Information
+                                                </h6>
+                                                
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Co-Maker Name <span class="text-danger">*</span></label>
+                                                        <input type="text" name="comaker_name" class="form-control" value="<?php echo htmlspecialchars($client_data['comaker_name'] ?? ''); ?>" required placeholder="Full Name">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Relationship <span class="text-danger">*</span></label>
+                                                        <select name="comaker_relationship" class="form-select" required>
+                                                            <option value="">Select Relationship</option>
+                                                            <option value="Spouse" <?php echo ($client_data['comaker_relationship'] ?? '') == 'Spouse' ? 'selected' : ''; ?>>Spouse</option>
+                                                            <option value="Parent" <?php echo ($client_data['comaker_relationship'] ?? '') == 'Parent' ? 'selected' : ''; ?>>Parent</option>
+                                                            <option value="Sibling" <?php echo ($client_data['comaker_relationship'] ?? '') == 'Sibling' ? 'selected' : ''; ?>>Sibling</option>
+                                                            <option value="Relative" <?php echo ($client_data['comaker_relationship'] ?? '') == 'Relative' ? 'selected' : ''; ?>>Relative</option>
+                                                            <option value="Colleague" <?php echo ($client_data['comaker_relationship'] ?? '') == 'Colleague' ? 'selected' : ''; ?>>Colleague</option>
+                                                            <option value="Friend" <?php echo ($client_data['comaker_relationship'] ?? '') == 'Friend' ? 'selected' : ''; ?>>Friend</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Contact Number <span class="text-danger">*</span></label>
+                                                        <div class="input-group">
+                                                            <span class="input-group-text"><span class="material-symbols-outlined" style="font-size: 1.2rem;">phone</span></span>
+                                                            <input type="tel" name="comaker_contact" class="form-control" value="<?php echo htmlspecialchars($client_data['comaker_contact'] ?? ''); ?>" required placeholder="09xxxxxxxxx">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Monthly Income</label>
+                                                        <div class="input-group">
+                                                            <span class="input-group-text">₱</span>
+                                                            <input type="number" name="comaker_income" class="form-control" value="<?php echo htmlspecialchars($client_data['comaker_income'] ?? ''); ?>" step="0.01">
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="col-12 mt-3">
+                                                        <label class="form-label fw-bold small text-muted text-uppercase">Co-Maker Address</label>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small">House/Unit No.</label>
+                                                        <input type="text" name="comaker_house_no" class="form-control" value="<?php echo htmlspecialchars($client_data['comaker_house_no'] ?? ''); ?>">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small">Street</label>
+                                                        <input type="text" name="comaker_street" class="form-control" value="<?php echo htmlspecialchars($client_data['comaker_street'] ?? ''); ?>">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small">Province</label>
+                                                        <select name="comaker_province" id="comaker_province" class="form-select" data-current="<?php echo htmlspecialchars($client_data['comaker_province'] ?? ''); ?>">
+                                                            <option value="">Select Province</option>
+                                                            <?php if(!empty($client_data['comaker_province'])): ?>
+                                                                <option value="<?php echo htmlspecialchars($client_data['comaker_province']); ?>" selected><?php echo htmlspecialchars($client_data['comaker_province']); ?></option>
+                                                            <?php endif; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small">City</label>
+                                                        <select name="comaker_city" id="comaker_city" class="form-select" data-current="<?php echo htmlspecialchars($client_data['comaker_city'] ?? ''); ?>">
+                                                            <option value="">Select City</option>
+                                                            <?php if(!empty($client_data['comaker_city'])): ?>
+                                                                <option value="<?php echo htmlspecialchars($client_data['comaker_city']); ?>" selected><?php echo htmlspecialchars($client_data['comaker_city']); ?></option>
+                                                            <?php endif; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small">Barangay</label>
+                                                        <select name="comaker_barangay" id="comaker_barangay" class="form-select" data-current="<?php echo htmlspecialchars($client_data['comaker_barangay'] ?? ''); ?>">
+                                                            <option value="">Select Barangay</option>
+                                                            <?php if(!empty($client_data['comaker_barangay'])): ?>
+                                                                <option value="<?php echo htmlspecialchars($client_data['comaker_barangay']); ?>" selected><?php echo htmlspecialchars($client_data['comaker_barangay']); ?></option>
+                                                            <?php endif; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small">Postal Code</label>
+                                                        <input type="text" name="comaker_postal_code" class="form-control" value="<?php echo htmlspecialchars($client_data['comaker_postal_code'] ?? ''); ?>">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Valid ID Verification (Priority) -->
+                                            <div class="mb-4 border-bottom pb-4">
+                                                 <div class="d-flex align-items-center mb-3">
+                                                    <span class="material-symbols-outlined text-primary me-2">badge</span>
+                                                    <h6 class="fw-bold mb-0">Valid ID Verification</h6>
+                                                </div>
+                                                
+                                                <div class="alert alert-info d-flex align-items-start mb-3" role="alert">
+                                                    <span class="material-symbols-outlined me-2 mt-1" style="font-size: 1.2rem;">info</span>
+                                                    <div class="small">
+                                                        <strong>Note:</strong> Please ensure your ID photos are clear and readable.
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="row g-3">
+                                                    <div class="col-12">
+                                                        <label class="form-label fw-bold">Select ID Type <span class="text-danger">*</span></label>
+                                                        <select name="id_type" id="id_type" class="form-select" required>
+                                                            <option value="">-- Choose ID Type --</option>
+                                                            <option value="Philippine Passport">Philippine Passport</option>
+                                                            <option value="Driver's License">Driver's License</option>
+                                                            <option value="SSS ID">SSS ID</option>
+                                                            <option value="UMID">UMID (Unified Multi-Purpose ID)</option>
+                                                            <option value="PhilHealth ID">PhilHealth ID</option>
+                                                            <option value="TIN ID">TIN ID</option>
+                                                            <option value="Postal ID">Postal ID</option>
+                                                            <option value="Voter's ID">Voter's ID</option>
+                                                            <option value="PRC ID">PRC ID (Professional Regulation Commission)</option>
+                                                            <option value="Senior Citizen ID">Senior Citizen ID</option>
+                                                            <option value="PWD ID">PWD ID</option>
+                                                            <option value="National ID">National ID (PhilSys)</option>
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-bold">ID Front Photo <span class="text-danger">*</span></label>
+                                                        <div class="upload-preview-container">
+                                                            <input type="file" name="valid_id_front" id="valid_id_front" class="form-control mb-2" accept=".jpg,.jpeg,.png" required onchange="previewImage(this, 'preview_front')">
+                                                            <div id="preview_front" class="upload-preview d-none">
+                                                                <img src="" alt="ID Front Preview" class="img-fluid rounded">
+                                                                <button type="button" class="btn btn-sm btn-danger mt-2" onclick="clearPreview('valid_id_front', 'preview_front')">
+                                                                    <span class="material-symbols-outlined" style="font-size: 1rem;">delete</span> Remove
+                                                                </button>
+                                                            </div>
+                                                            <div class="upload-placeholder" id="placeholder_front">
+                                                                <span class="material-symbols-outlined text-muted mb-2" style="font-size: 3rem;">add_photo_alternate</span>
+                                                                <p class="text-muted small mb-0">Click to upload front photo</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-bold">ID Back Photo <span class="text-danger">*</span></label>
+                                                        <div class="upload-preview-container">
+                                                            <input type="file" name="valid_id_back" id="valid_id_back" class="form-control mb-2" accept=".jpg,.jpeg,.png" required onchange="previewImage(this, 'preview_back')">
+                                                            <div id="preview_back" class="upload-preview d-none">
+                                                                <img src="" alt="ID Back Preview" class="img-fluid rounded">
+                                                                <button type="button" class="btn btn-sm btn-danger mt-2" onclick="clearPreview('valid_id_back', 'preview_back')">
+                                                                    <span class="material-symbols-outlined" style="font-size: 1rem;">delete</span> Remove
+                                                                </button>
+                                                            </div>
+                                                            <div class="upload-placeholder" id="placeholder_back">
+                                                                <span class="material-symbols-outlined text-muted mb-2" style="font-size: 3rem;">add_photo_alternate</span>
+                                                                <p class="text-muted small mb-0">Click to upload back photo</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            </div>
+                                            <!-- End Step 3 -->
+                                            
+                                            <!-- Step 4: Document Upload -->
+                                            <div class="form-step" data-step="4">
+                                            <!-- Valid ID Upload -->
+                                            <div class="mb-4">
+                                                <h6 class="fw-bold mb-3 d-flex align-items-center">
+                                                    <span class="material-symbols-outlined text-success me-2">badge</span>
+                                                    Valid ID Upload
+                                                </h6>
+                                                
+                                                <div class="row g-4">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-bold">Proof of Income <span class="text-danger">*</span></label>
+                                                        <div class="input-group">
+                                                            <input type="file" name="proof_of_income" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required> 
+                                                            <span class="input-group-text"><span class="material-symbols-outlined">upload</span></span>
+                                                        </div>
+                                                        <div class="form-text">Payslip, ITR, or Certificate of Employment</div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-bold">Proof of Billing <span class="text-danger">*</span></label>
+                                                        <div class="input-group">
+                                                            <input type="file" name="proof_of_address" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
+                                                            <span class="input-group-text"><span class="material-symbols-outlined">upload</span></span>
+                                                        </div>
+                                                        <div class="form-text">Utility Bill, Barangay Certificate, etc.</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            </div>
+                                            <!-- End Step 4 -->
+                                            
+                                            <!-- Navigation Buttons -->
+                                            <div class="d-flex justify-content-between pt-3 border-top mt-4">
+                                                <button type="button" class="btn btn-light rounded-pill px-4" id="prevStepBtn" style="display: none;">
+                                                    <span class="material-symbols-outlined align-middle me-1" style="font-size: 1.2rem;">arrow_back</span>
+                                                    Previous
+                                                </button>
+                                                <div class="ms-auto d-flex gap-2">
+                                                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="button" class="btn btn-primary rounded-pill px-4" id="nextStepBtn">
+                                                        Next
+                                                        <span class="material-symbols-outlined align-middle ms-1" style="font-size: 1.2rem;">arrow_forward</span>
+                                                    </button>
+                                                    <button type="submit" name="submit_verification" class="btn btn-success rounded-pill px-4 fw-bold" id="submitBtn" style="display: none;">
+                                                        <span class="material-symbols-outlined align-middle me-1">check_circle</span>
+                                                        Submit Profile
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Multi-Step Wizard Styles -->
+                        <style>
+                            /* Step Indicator */
+                            .step-indicator {
+                                background: #f8f9fa;
+                                border-bottom: 1px solid #e9ecef;
+                            }
+                            
+                            .step-item {
+                                text-align: center;
+                                flex: 1;
+                                position: relative;
+                                z-index: 1;
+                            }
+                            
+                            .step-circle {
+                                width: 42px;
+                                height: 42px;
+                                border-radius: 50%;
+                                background: #e9ecef;
+                                color: #6c757d;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-weight: 700;
+                                font-size: 1.1rem;
+                                margin: 0 auto 0.5rem;
+                                transition: all 0.3s ease;
+                                border: 3px solid #e9ecef;
+                            }
+                            
+                            .step-item.active .step-circle {
+                                background: var(--color-primary);
+                                color: white;
+                                border-color: var(--color-primary);
+                                box-shadow: 0 0 0 4px rgba(236, 19, 19, 0.1);
+                                transform: scale(1.1);
+                            }
+                            
+                            .step-item.completed .step-circle {
+                                background: #10b981;
+                                color: white;
+                                border-color: #10b981;
+                            }
+                            
+                            .step-item.completed .step-circle::after {
+                                content: '✓';
+                                position: absolute;
+                                font-size: 1.2rem;
+                            }
+                            
+                            .step-label {
+                                font-size: 0.8rem;
+                                font-weight: 500;
+                                color: #6c757d;
+                                transition: all 0.3s ease;
+                            }
+                            
+                            .step-item.active .step-label {
+                                color: var(--color-primary);
+                                font-weight: 700;
+                            }
+                            
+                            .step-item.completed .step-label {
+                                color: #10b981;
+                                font-weight: 600;
+                            }
+                            
+                            .step-line {
+                                height: 3px;
+                                background: #e9ecef;
+                                flex: 1;
+                                margin: 0 8px;
+                                position: relative;
+                                top: -22px;
+                                z-index: 0;
+                                transition: background 0.3s ease;
+                            }
+                            
+                            .step-item.completed + .step-line {
+                                background: #10b981;
+                            }
+                            
+                            /* Form Steps */
+                            .form-step {
+                                display: none;
+                            }
+                            
+                            .form-step.active {
+                                display: block;
+                                animation: fadeInSlide 0.4s ease-out;
+                            }
+                            
+                            @keyframes fadeInSlide {
+                                from {
+                                    opacity: 0;
+                                    transform: translateX(20px);
+                                }
+                                to {
+                                    opacity: 1;
+                                    transform: translateX(0);
+                                }
+                            }
+                            
+                            /* Responsive adjustments */
+                            @media (max-width: 576px) {
+                                .step-label {
+                                    font-size: 0.7rem;
+                                }
+                                .step-circle {
+                                    width: 36px;
+                                    height: 36px;
+                                    font-size: 0.95rem;
+                                }
+                                .step-line {
+                                    margin: 0 4px;
+                                }
+                            }
+                        </style>
+
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Warning Modal -->
+    <div id="warningModal" class="modal-overlay">
+        <div class="modal-card text-center">
+            <div class="mb-3">
+                <span class="material-symbols-outlined text-warning" style="font-size: 4rem;">warning</span>
+            </div>
+            <h4 class="mb-3 fw-bold">Application Restricted</h4>
+            <p class="text-muted mb-4"><?php echo isset($blocking_alert) ? htmlspecialchars($blocking_alert) : ''; ?></p>
+            <button type="button" class="btn btn-primary w-100 py-2 rounded-pill" onclick="window.location.href='dashboard.php'">Return to Dashboard</button>
+        </div>
+    </div>
+    
+
+    
+    <?php if ($show_approval_modal): ?>
+    <div id="approvalModal" class="modal-overlay show">
+        <div class="modal-card text-center">
+            <div class="mb-3 text-success">
+                <span class="material-symbols-outlined" style="font-size: 4rem;">celebration</span>
+            </div>
+            <h3 class="fw-bold mb-2">Congratulations!</h3>
+            <p class="text-muted mb-4">Your account has been fully approved. You are now eligible to apply for a loan.</p>
+            
+            <?php if ($credit_limit > 0): ?>
+            <div class="p-3 rounded-3 bg-success bg-opacity-10 mb-4 border border-success border-opacity-25">
+                <div class="small text-uppercase text-success fw-bold mb-1">Approved Credit Limit</div>
+                <div class="h3 fw-bold text-success m-0">₱<?php echo number_format($credit_limit, 2); ?></div>
+            </div>
+            <?php endif; ?>
+            
+            <button type="button" class="btn btn-primary w-100 py-2 rounded-pill" onclick="closeApprovalModal()">
+                Start Application
+            </button>
+        </div>
+    </div>
+    <script>
+        function closeApprovalModal() {
+            document.getElementById('approvalModal').classList.remove('show');
+            // Update seen status via AJAX
+            fetch('mark_approval_seen.php', { method: 'POST' });
+        }
+    </script>
+    <?php endif; ?>
+
+    <!-- JS Logic -->
+    <script>
+        // Auto-show Application Locked Modal
+        <?php if ($is_profile_locked && $verification_status !== 'Pending' && $verification_status !== 'Rejected'): ?>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modalEl = document.getElementById('applicationLockedModal');
+            if (modalEl) {
+                try {
+                    // Explicitly ensure aria-hidden is removed when showing to prevent focus blocking errors
+                    modalEl.removeAttribute('aria-hidden');
+                    const applicationLockedModal = new bootstrap.Modal(modalEl, {
+                        backdrop: 'static',
+                        keyboard: false
+                    });
+                    applicationLockedModal.show();
+                } catch (error) {
+                    console.error('Error initializing application locked modal:', error);
+                }
+            }
+        });
+        <?php endif; ?>
+    </script>
+
+    <?php if ($verification_status === 'Rejected' && !$seen_rejection_modal): ?>
+    <div id="rejectionModal" class="modal-overlay show">
+        <div class="modal-card text-center position-relative">
+            <button type="button" class="btn-close position-absolute top-0 end-0 m-3" onclick="dismissRejectionModal()" aria-label="Close"></button>
+            <div class="mb-3 text-danger">
+                <span class="material-symbols-outlined" style="font-size: 4rem;">cancel</span>
+            </div>
+            <h3 class="fw-bold mb-2 text-danger">Verification Rejected</h3>
+            <p class="text-muted mb-4">We found some issues with your document submission.</p>
+            
+            <div class="p-3 rounded-3 bg-danger bg-opacity-10 mb-4 border border-danger border-opacity-25 active">
+                <div class="small text-uppercase text-danger fw-bold mb-1">Reason for Rejection</div>
+                <div class="fw-medium text-dark m-0"><?php echo htmlspecialchars($rejection_reason); ?></div>
+            </div>
+            
+            <button type="button" class="btn btn-primary w-100 py-2 rounded-pill" onclick="closeRejectionModal()">
+                Update Documents
+            </button>
+        </div>
+    </div>
+    <script>
+        function closeRejectionModal() {
+            document.getElementById('rejectionModal').classList.remove('show');
+            // Mark as seen
+            fetch('mark_rejection_seen.php', { method: 'POST' });
+            // Open verification modal
+            const verifModal = new bootstrap.Modal(document.getElementById('verificationModal'));
+            verifModal.show();
+        }
+        function dismissRejectionModal() {
+            document.getElementById('rejectionModal').classList.remove('show');
+            // Mark as seen
+            fetch('mark_rejection_seen.php', { method: 'POST' });
+        }
+    </script>
+    <?php endif; ?>
+
+    <script>
+
+
+        
+        // Check for blocking alert
+        <?php if (isset($blocking_alert)): ?>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('warningModal');
+            if (modal) {
+                modal.classList.add('show');
+                const form = document.querySelector('form');
+                if (form) {
+                    const elements = form.elements;
+                    for (let i = 0; i < elements.length; i++) elements[i].disabled = true;
+                }
+            }
+        });
+        <?php endif; ?>
+        
+        // Check for verification modal
+        <?php if ($show_verification_modal): ?>
+        document.addEventListener('DOMContentLoaded', function() {
+            const verificationModalEl = document.getElementById('verificationModal');
+            if (verificationModalEl) {
+                // const modal = new bootstrap.Modal(verificationModalEl);
+                // modal.show(); // Disabled auto-show per user request. User can trigger it manually.
+                
+                <?php if ($verification_status === 'Pending'): ?>
+                // Pending status logic here if needed related to UI tweaks, 
+                // but modal content is already rendered by PHP based on status.
+                <?php endif; ?>
+                
+                // Disable main form
+                // Disable main form logic removed: PHP conditional rendering handles this.
+                // Previous JS was accidentally disabling the verification form itself.
+            }
+        });
+        <?php endif; ?>
+
+        
+        // Loan Calculator Logic
+        document.addEventListener('DOMContentLoaded', function() {
+            // Use specific selectors to avoid ID collisions
+            const productSelect = document.querySelector('select[name="product_id"]');
+            const amountInput = document.querySelector('input[name="requested_amount"]');
+            const termSelect = document.querySelector('select[name="loan_term_months"]');
+            
+            // Calculator Output Elements
+            const calcMonthly = document.getElementById('calc_monthly_payment');
+            const calcTermText = document.getElementById('calc_term_text');
+            const calcPrincipal = document.getElementById('calc_principal');
+            const calcInterest = document.getElementById('calc_interest');
+            const calcTotal = document.getElementById('calc_total');
+            const calcRate = document.getElementById('calc_rate');
+            
+            function updateCalculator() {
+                try {
+                    if (!amountInput || !termSelect || !productSelect) return;
+
+                    const amount = parseFloat(amountInput.value) || 0;
+                    const term = parseInt(termSelect.value) || 0;
+                    
+                    // Get selected product rate
+                    let rate = 0;
+                    if (productSelect.selectedIndex >= 0) {
+                        const selectedOption = productSelect.options[productSelect.selectedIndex];
+                        const rateAttr = selectedOption.getAttribute('data-rate');
+                        rate = rateAttr ? parseFloat(rateAttr) : 0;
+                        
+                         // Update Badge
+                        if (selectedOption.value) {
+                             const min = parseFloat(selectedOption.getAttribute('data-min'));
+                             const max = parseFloat(selectedOption.getAttribute('data-max'));
+                             const badge = document.getElementById('amount_range');
+                             if(badge) {
+                                 badge.textContent = `Min: ₱${min.toLocaleString()} - Max: ₱${max.toLocaleString()}`;
+                                 
+                                 // Validation: Check if amount is out of range
+                                 // Only validate if user has entered an amount > 0
+                                 if (amount > 0 && (amount < min || amount > max)) {
+                                     badge.classList.remove('text-muted');
+                                     badge.classList.add('text-danger');
+                                 } else {
+                                     badge.classList.remove('text-danger');
+                                     badge.classList.add('text-muted');
+                                 }
+                             }
+                        } else {
+                             const badge = document.getElementById('amount_range');
+                             if(badge) badge.textContent = '';
+                        }
+                    }
+                    
+                    if(calcRate) calcRate.textContent = rate; // Update displayed rate %
+                    
+                    if (amount > 0 && term > 0) {
+                        // Interest = Principal * (Rate/100) * Term
+                        // Assuming Rate is Monthly Interest Rate based on context (e.g., 2% per month)
+                        
+                        const totalInterest = amount * (rate / 100) * term;
+                        const totalAmount = amount + totalInterest;
+                        const monthlyPayment = totalAmount / term;
+                        
+                        if(calcMonthly) calcMonthly.textContent = '₱' + monthlyPayment.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        if(calcTermText) calcTermText.textContent = `for ${term} months`;
+                        if(calcPrincipal) calcPrincipal.textContent = '₱' + amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        if(calcInterest) calcInterest.textContent = '₱' + totalInterest.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        if(calcTotal) calcTotal.textContent = '₱' + totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    } else {
+                        if(calcMonthly) calcMonthly.textContent = '₱0.00';
+                        if(calcTermText) calcTermText.textContent = 'for 0 months';
+                        if(calcPrincipal) calcPrincipal.textContent = '₱0.00';
+                        if(calcInterest) calcInterest.textContent = '₱0.00';
+                        if(calcTotal) calcTotal.textContent = '₱0.00';
+                    }
+                } catch(e) {
+                    console.error("Calculator Error:", e);
+                }
+            }
+            
+            if (productSelect && amountInput && termSelect) {
+                productSelect.addEventListener('change', updateCalculator);
+                amountInput.addEventListener('input', updateCalculator); // Use 'input' for instant updates
+                amountInput.addEventListener('change', updateCalculator); // Fallback
+                termSelect.addEventListener('change', updateCalculator);
+                
+                // Initial run
+                updateCalculator();
+                
+                // Trigger toggleRequirements if pre-selected
+                const preselected = "<?php echo $preselected_type; ?>";
+                if(preselected) {
+                    toggleRequirements();
+                }
+            }
+        });
+
+
+        // Toggle Requirements (Dynamic) & Rate Override
+        function toggleRequirements() {
+            var category = document.getElementById('loan_purpose_category').value;
+            
+            // Hide all requirement sections
+            document.querySelectorAll('.requirement-section').forEach(function(el) {
+                el.style.display = 'none';
+            });
+            // Reset required attributes on hidden file inputs
+            document.querySelectorAll('.requirement-section input[type="file"]').forEach(function(el) {
+                el.required = false;
+            });
+            
+            // Show selected section
+            if (category) {
+                var section = document.getElementById('req_' + category);
+                if (section) {
+                    section.style.display = 'block';
+                    var input = section.querySelector('input[type="file"]');
+                    if (input) input.required = true;
+                }
+            }
+            
+            // Override Interest Rate for Business
+            const rateElem = document.getElementById('summary_rate');
+            const productSelect = document.getElementById('product_id');
+            let baseRate = 0;
+            
+            if (productSelect && productSelect.selectedIndex >= 0 && productSelect.options[productSelect.selectedIndex].value) {
+                baseRate = parseFloat(productSelect.options[productSelect.selectedIndex].dataset.rate);
+            }
+            
+            if (category === 'Business') {
+                if (rateElem) rateElem.textContent = '3.00%';
+                if (baseRate > 0 && baseRate !== 3.00) {
+                     // Maybe add a visual indicator or helper text?
+                }
+            } else {
+                // Restore product base rate
+                if (baseRate > 0 && rateElem) {
+                    rateElem.textContent = baseRate + '%';
+                }
+            }
+            
+            updateSummary(); // Recalculate with new rate
+        }
+
+        // Product Selection / Calculation Logic
+        const productSelectMain = document.getElementById('product_id');
+        if (productSelectMain) {
+            productSelectMain.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                if (!selectedOption.value) return;
+
+                const minAmount = parseFloat(selectedOption.dataset.min);
+                let maxAmount = parseFloat(selectedOption.dataset.max);
+                const minTerm = selectedOption.dataset.minTerm;
+                const maxTerm = selectedOption.dataset.maxTerm;
+                
+                // Update Summary
+                document.getElementById('summary_product').textContent = selectedOption.text.split('-')[0].trim();
+                
+                // Rate Logic with Business Override
+                let finalRate = parseFloat(selectedOption.dataset.rate);
+                const currentPurpose = document.getElementById('loan_purpose_category').value;
+                if (currentPurpose === 'Business') {
+                    finalRate = 3.00;
+                }
+                document.getElementById('summary_rate').textContent = finalRate + '%';
+                updateSummary();
+
+                // Highlight Purpose Selection (UX Request)
+                const purposeSelect = document.getElementById('loan_purpose_category');
+                if(purposeSelect) {
+                    purposeSelect.classList.add('border-primary', 'shadow-sm');
+                    setTimeout(() => purposeSelect.classList.remove('border-primary', 'shadow-sm'), 1500);
+                }
+                
+                // Apply Remaining Credit Cap
+                const remainingCredit = <?php echo floatval($remaining_credit); ?>;
+                let limitSuffix = '';
+                
+                if (remainingCredit > 0 && remainingCredit < maxAmount) {
+                    maxAmount = remainingCredit;
+                    limitSuffix = ' (Capped by Credit Limit)';
+                }
+                
+                const rangeElem = document.getElementById('amount_range');
+                if (rangeElem) {
+                    rangeElem.innerHTML = `<i class="bi bi-info-circle"></i> Valid Range: ₱${minAmount.toLocaleString()} - ₱${maxAmount.toLocaleString()}` + limitSuffix;
+                }
+                
+                const termElem = document.getElementById('term_range');
+                if (termElem) {
+                    termElem.innerText = `Allowed Terms: ${minTerm} - ${maxTerm} months`;
+                }
+                
+                const amountInput = document.getElementById('requested_amount');
+                if (amountInput) {
+                    amountInput.min = minAmount;
+                    amountInput.max = maxAmount;
+                }
+                
+                const termSelect = document.getElementById('loan_term_months');
+                if (termSelect) {
+                    for(let i=0; i<termSelect.options.length; i++) {
+                        let opt = termSelect.options[i];
+                        if(opt.value) {
+                            let val = parseInt(opt.value);
+                            if(val < minTerm || val > maxTerm) {
+                                opt.disabled = true;
+                                opt.style.color = '#ccc';
+                            } else {
+                                opt.disabled = false;
+                                opt.style.color = '';
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Manual amount update trigger summary
+        const requestedAmountEl = document.getElementById('requested_amount');
+        const loanTermEl = document.getElementById('loan_term_months');
+        
+        if (requestedAmountEl) {
+            requestedAmountEl.addEventListener('input', updateSummary);
+        }
+        if (loanTermEl) {
+            loanTermEl.addEventListener('change', updateSummary);
+        }
+        
+        function updateSummary() {
+            const amountEl = document.getElementById('requested_amount');
+            const termEl = document.getElementById('loan_term_months');
+            const rateEl = document.getElementById('summary_rate');
+            const summaryAmountEl = document.getElementById('summary_amount');
+            const summaryTermEl = document.getElementById('summary_term');
+            const summaryMonthlyEl = document.getElementById('summary_monthly');
+            
+            if (!amountEl || !termEl || !rateEl) return;
+            
+            const amount = parseFloat(amountEl.value) || 0;
+            const term = parseInt(termEl.value) || 0;
+            const rate = parseFloat(rateEl.textContent) || 0;
+            
+            if (summaryAmountEl) summaryAmountEl.textContent = '₱' + amount.toLocaleString(undefined, {minimumFractionDigits: 2});
+            if (summaryTermEl) summaryTermEl.textContent = term > 0 ? term + ' Months' : '-';
+            
+            if (amount > 0 && term > 0) {
+                // Approximate monthly amortization
+                // Simple interest used for estimation: (P + (P * r * t)) / t
+                // Assuming rate is monthly
+                const monthlyInterest = amount * (rate / 100);
+                const monthlyPrincipal = amount / term;
+                const monthlyAmort = monthlyInterest + monthlyPrincipal;
+                
+                if (summaryMonthlyEl) summaryMonthlyEl.textContent = '₱' + monthlyAmort.toLocaleString(undefined, {minimumFractionDigits: 2});
+            } else {
+                if (summaryMonthlyEl) summaryMonthlyEl.textContent = '₱0.00';
+            }
+        }
+
+        
+
+        // Mobile toggle logic
+        document.addEventListener('DOMContentLoaded', function() {
+            const menuToggle = document.getElementById('menuToggle');
+            if (menuToggle) {
+                menuToggle.addEventListener('click', function() {
+                    const sidebar = document.querySelector('.sidebar');
+                    if(sidebar) sidebar.classList.toggle('show');
+                    const overlay = document.getElementById('sidebarOverlay');
+                    if(overlay) overlay.classList.toggle('show');
+                });
+            }
+            
+            const overlay = document.getElementById('sidebarOverlay');
+            if (overlay) {
+                overlay.addEventListener('click', function() {
+                    const sidebar = document.querySelector('.sidebar');
+                    if(sidebar) sidebar.classList.remove('show');
+                    this.classList.remove('show');
+                });
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const reviewBtn = document.getElementById('reviewApplicationBtn');
+            const confirmSubmitBtn = document.getElementById('confirmSubmitBtn');
+            const loanForm = document.getElementById('loanApplicationForm');
+            const confirmationModalEl = document.getElementById('confirmationModal');
+            if (!confirmationModalEl) return; // Exit if modal doesn't exist
+            const confirmationModal = new bootstrap.Modal(confirmationModalEl);
+            
+            if (reviewBtn && loanForm) {
+                reviewBtn.addEventListener('click', function() {
+                    // Validate form first
+                    if (!loanForm.checkValidity()) {
+                        loanForm.reportValidity();
+                        return;
+                    }
+                    
+                    // Get form values
+                    const productSelect = document.getElementById('product_id');
+                    const categorySelect = document.getElementById('loan_purpose_category');
+                    const amountInput = document.getElementById('requested_amount');
+                    const termSelect = document.getElementById('loan_term_months');
+                    const purposeTextarea = document.getElementById('loan_purpose');
+                    
+                    const productText = productSelect.options[productSelect.selectedIndex].text.split('-')[0].trim();
+                    const category = categorySelect.value;
+                    const amount = parseFloat(amountInput.value) || 0;
+                    const term = parseInt(termSelect.value) || 0;
+                    const purposeDesc = purposeTextarea.value;
+                    
+                    // Get interest rate (with Business override)
+                    let rate = parseFloat(productSelect.options[productSelect.selectedIndex].dataset.rate) || 0;
+                    if (category === 'Business') {
+                        rate = 3.00;
+                    }
+                    
+                    // Calculate totals
+                    const totalInterest = amount * (rate / 100) * term;
+                    const totalRepayment = amount + totalInterest;
+                    const monthlyPayment = totalRepayment / term;
+                    
+                    // Calculate payment dates (assuming first payment is 1 month after today)
+                    const today = new Date();
+                    const firstPaymentDate = new Date(today);
+                    firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+                    
+                    const finalPaymentDate = new Date(firstPaymentDate);
+                    finalPaymentDate.setMonth(finalPaymentDate.getMonth() + term - 1);
+                    
+                    // Format dates
+                    const formatDate = (date) => {
+                        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                        return date.toLocaleDateString('en-US', options);
+                    };
+                    
+                    // Populate modal
+                    document.getElementById('confirm_product').textContent = productText;
+                    document.getElementById('confirm_category').textContent = category;
+                    document.getElementById('confirm_amount').textContent = '₱' + amount.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById('confirm_term').textContent = term + ' months';
+                    document.getElementById('confirm_rate').textContent = rate + '%';
+                    document.getElementById('confirm_monthly').textContent = '₱' + monthlyPayment.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById('confirm_purpose').textContent = purposeDesc;
+                    document.getElementById('confirm_principal').textContent = '₱' + amount.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById('confirm_interest').textContent = '₱' + totalInterest.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    document.getElementById('confirm_total').textContent = '₱' + totalRepayment.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    
+                    // Populate payment schedule
+                    document.getElementById('confirm_first_payment').textContent = formatDate(firstPaymentDate);
+                    document.getElementById('confirm_num_payments').textContent = term + ' payments';
+                    document.getElementById('confirm_final_payment').textContent = formatDate(finalPaymentDate);
+                    
+                    // Show modal
+                    confirmationModal.show();
+                });
+            }
+            
+            if (confirmSubmitBtn && loanForm) {
+                confirmSubmitBtn.addEventListener('click', function() {
+                    // Prevent double clicks
+                    if (this.disabled) return;
+                    
+                    // Disable button and show loading state
+                    const originalBtnText = this.innerHTML;
+                    this.disabled = true;
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Submitting...';
+                    
+                    const formData = new FormData(loanForm);
+                    formData.append('ajax_submit', '1');
+                    
+                    fetch('apply_loan.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        this.disabled = false;
+                        this.innerHTML = originalBtnText;
+
+                        if (data.success) {
+                            // Hide Confirmation Modal
+                            confirmationModal.hide();
+                            
+                            // Show Success Message
+                            const contentArea = document.querySelector('.content-area > div');
+                            const successAlert = document.createElement('div');
+                            successAlert.className = 'alert alert-success d-flex align-items-center mb-4';
+                            successAlert.role = 'alert';
+                            successAlert.innerHTML = `
+                                <span class="material-symbols-outlined me-2">check_circle</span>
+                                <div>${data.message}</div>
+                            `;
+                            // Insert before the stepper
+                            const stepper = document.querySelector('.stepper');
+                            if(stepper) {
+                                stepper.parentNode.insertBefore(successAlert, stepper.nextSibling); 
+                            } else {
+                                contentArea.insertBefore(successAlert, contentArea.firstChild);
+                            }
+                            
+                            // Scroll to top
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            
+                            // UPDATE CREDIT LIMIT UI
+                            if (data.credit_limit) {
+                                // Update Amount
+                                const clAmount = document.querySelector('.cl-amount');
+                                if (clAmount) clAmount.textContent = '₱' + parseFloat(data.remaining_credit).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                                
+                                // Update Progress Bar
+                                const progressBar = document.querySelector('.progress-bar');
+                                if (progressBar) {
+                                    const percent = (data.remaining_credit / data.credit_limit) * 100;
+                                    progressBar.style.width = percent + '%';
+                                    progressBar.setAttribute('aria-valuenow', percent);
+                                }
+                                
+                                // Update Used/Total Text
+                                // Need to find the specific spans, they don't have IDs.
+                                // Structure: .d-flex.justify-content-between.mt-2 > span (Total, Used)
+                                const clCard = document.querySelector('.credit-limit-card');
+                                if (clCard) {
+                                    const spans = clCard.querySelectorAll('.d-flex.justify-content-between.mt-2.small span');
+                                    if(spans.length >= 2) {
+                                        // spans[0] is Total, spans[1] is Used
+                                        spans[1].textContent = 'Used: ₱' + parseFloat(data.used_credit).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                                    }
+                                    
+                                    // Update Active Loans / Pending details if they exist
+                                    const detailsContainer = clCard.querySelector('.mt-3.pt-3');
+                                    if (detailsContainer) {
+                                        const detailValues = detailsContainer.querySelectorAll('span:nth-child(2)');
+                                        if (detailValues.length >= 2) {
+                                            detailValues[0].textContent = '₱' + parseFloat(data.used_credit_loans).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                                            detailValues[1].textContent = '₱' + parseFloat(data.used_credit_apps).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                                        }
+                                    } else if (data.used_credit > 0) {
+                                         // If details container didn't exist but now we have used credit, we should ideally create it, 
+                                         // but typically it exists if page loaded with used credit.
+                                         // For simplicity, we assume it updates if present, or we can reload page if complex structure change needed.
+                                    }
+                                }
+                            }
+
+                            // Disable active product option in dropdown
+                             // Update dataset for current selection if needed... or just disable the newly submitted type
+                             // data.active_types contains list of unavailable types
+                             
+                             const productSelect = document.getElementById('product_id');
+                             if(productSelect && data.active_types) {
+                                 Array.from(productSelect.options).forEach(opt => {
+                                      // Get product type from text or we need a way to map ID to type...
+                                      // The option text format is "Name - Rate%". "Name" usually maps to Type in this system?
+                                      // Actually, the PHP loop set disabled based on product_type. 
+                                      // We don't have easy access to product_type in JS unless we stored it in data attribute.
+                                      // Looking at PHP: $products[] ... product_type is in array but not explicitly in option data attribs except visually disabled.
+                                      // Wait, line 1032 PHP: in_array($product['product_type']...
+                                      // We should have added data-type to the option for easier JS selection.
+                                      // But we can reload the page after a few seconds or just reset the form.
+                                 });
+                                 
+                                 // Reset form
+                                 loanForm.reset();
+                                 // Close any open requirement sections
+                                 toggleRequirements(); 
+                                 
+                                 // Option: Reload page after delay to refresh everything perfectly?
+                                 // User requested "without refresh page". 
+                                 // So we just leave it.
+                             }
+
+                        } else {
+                            // Show Error
+                            const alertDiv = document.createElement('div');
+                            alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+                            alertDiv.innerHTML = `
+                                <strong>Error!</strong> ${data.message}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            `;
+                            document.querySelector('.modal-body').insertBefore(alertDiv, document.querySelector('.modal-body').firstChild);
+                            // Scroll modal to top
+                            document.querySelector('.modal-body').scrollTop = 0;
+                        }
+                    })
+                    .catch(error => {
+                        this.disabled = false;
+                        this.innerHTML = originalBtnText;
+                        console.error('Error:', error);
+                        alert('An unexpected error occurred. Please try again.');
+                    });
+                });
+            }
+
+        });
+
+        
+        // Image Preview Functions for ID Upload
+        function previewImage(input, previewId) {
+            const file = input.files[0];
+            const previewDiv = document.getElementById(previewId);
+            const placeholderId = previewId.replace('preview_', 'placeholder_');
+            const placeholder = document.getElementById(placeholderId);
+            
+            if (file) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const img = previewDiv.querySelector('img');
+                    img.src = e.target.result;
+                    previewDiv.classList.remove('d-none');
+                    placeholder.classList.add('d-none');
+                }
+                
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        function clearPreview(inputId, previewId) {
+            const input = document.getElementById(inputId);
+            const previewDiv = document.getElementById(previewId);
+            const placeholderId = previewId.replace('preview_', 'placeholder_');
+            const placeholder = document.getElementById(placeholderId);
+            
+            // Clear the file input
+            input.value = '';
+            
+            // Hide preview and show placeholder
+            previewDiv.classList.add('d-none');
+            placeholder.classList.remove('d-none');
+            
+            // Clear the image src
+            const img = previewDiv.querySelector('img');
+            img.src = '';
+        }
+    </script>
+    <script src="../assets/js/address-selector.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Address Selector for Present Address
+            new AddressSelector('present_');
+            new AddressSelector('comaker_');
+
+        });
+    </script>
+    
+    <!-- Credit Limit Increase Congratulations Modal -->
+    <?php if ($show_credit_increase_modal): ?>
+    <div class="modal fade" id="creditIncreaseModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 1.5rem; overflow: hidden;">
+                <!-- Celebration Header with Animation -->
+                <div class="modal-header border-0 text-center" style="background: linear-gradient(135deg, #ec1313 0%, #b30f0f 100%); padding: 2rem;">
+                    <div class="w-100">
+                        <div class="mb-3" style="font-size: 4rem; animation: bounce 1s infinite;">🎉</div>
+                        <h3 class="fw-bold text-white mb-2">Congratulations!</h3>
+                        <p class="text-white mb-0" style="opacity: 0.9;">Your Credit Limit Has Increased</p>
+                    </div>
+                </div>
+                
+                <!-- Modal Body -->
+                <div class="modal-body p-4">
+                    <div class="text-center mb-4">
+                        <div class="d-flex justify-content-center align-items-center gap-3 mb-3 flex-wrap">
+                            <div>
+                                <small class="text-muted d-block mb-1">Previous Limit</small>
+                                <h4 class="mb-0 text-muted" style="text-decoration: line-through;">
+                                    ₱<?php echo number_format($previous_credit_limit, 2); ?>
+                                </h4>
+                            </div>
+                            <span class="material-symbols-outlined text-danger fs-2">arrow_forward</span>
+                            <div>
+                                <small class="text-danger d-block fw-bold mb-1">New Limit</small>
+                                <h2 class="mb-0 text-danger fw-bold">
+                                    ₱<?php echo number_format($current_credit, 2); ?>
+                                </h2>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-danger border-0 mb-0" style="background: linear-gradient(135deg, rgba(236, 19, 19, 0.1) 0%, rgba(236, 19, 19, 0.05) 100%);">
+                            <div class="d-flex align-items-start gap-2">
+                                <span class="material-symbols-outlined text-danger">celebration</span>
+                                <div class="text-start flex-grow-1">
+                                    <strong class="d-block text-danger">You've earned an increase of ₱<?php echo number_format($credit_increase_amount, 2); ?>!</strong>
+                                    <small class="text-secondary">This is a reward for your excellent payment history. Keep up the great work!</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Modal Footer -->
+                <div class="modal-footer border-0 bg-light justify-content-center pb-4">
+                    <button type="button" class="btn btn-danger btn-lg rounded-pill px-5 fw-bold shadow-sm" onclick="acknowledgeCreditIncrease()">
+                        <span class="material-symbols-outlined align-middle me-2" style="font-size: 1.25rem;">check_circle</span>
+                        Got it, Thanks!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+
+    <script>
+    // Show credit increase modal on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const creditModal = new bootstrap.Modal(document.getElementById('creditIncreaseModal'));
+        creditModal.show();
+    });
+
+    // Acknowledge credit increase
+    function acknowledgeCreditIncrease() {
+        fetch('mark_credit_increase_seen.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credit_limit: <?php echo $current_credit; ?> })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('creditIncreaseModal'));
+                modal.hide();
+            } else {
+                console.error('Failed to acknowledge credit increase');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    }
+    </script>
+    <?php endif; ?>
+    
+    <!-- Multi-Step Wizard JavaScript -->
+    <script>
+    // Multi-Step Form Logic
+    let currentStep = 1;
+    const totalSteps = 4;
+    
+    function showStep(step) {
+        // Hide all steps
+        document.querySelectorAll('.form-step').forEach(s => {
+            s.classList.remove('active');
+        });
+        
+        // Reset all step indicators
+        document.querySelectorAll('.step-item').forEach(s => {
+            s.classList.remove('active', 'completed');
+        });
+        
+        // Show current step
+        const currentStepEl = document.querySelector(`.form-step[data-step="${step}"]`);
+        if (currentStepEl) {
+            currentStepEl.classList.add('active');
+        }
+        
+        // Update step indicator
+        const currentIndicator = document.querySelector(`.step-item[data-step="${step}"]`);
+        if (currentIndicator) {
+            currentIndicator.classList.add('active');
+        }
+        
+        // Mark previous steps as completed
+        for (let i = 1; i < step; i++) {
+            const indicator = document.querySelector(`.step-item[data-step="${i}"]`);
+            if (indicator) {
+                indicator.classList.add('completed');
+            }
+        }
+        
+        // Update button visibility
+        const prevBtn = document.getElementById('prevStepBtn');
+        const nextBtn = document.getElementById('nextStepBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        if (prevBtn) prevBtn.style.display = step === 1 ? 'none' : 'inline-block';
+        if (nextBtn) nextBtn.style.display = step === totalSteps ? 'none' : 'inline-block';
+        if (submitBtn) submitBtn.style.display = step === totalSteps ? 'inline-block' : 'none';
+        
+        currentStep = step;
+        
+        // Scroll to top of modal body
+        const modalBody = document.querySelector('#verificationModal .modal-body');
+        if (modalBody) {
+            modalBody.scrollTop = 0;
+        }
+    }
+    
+    function validateStep(step) {
+        const stepElement = document.querySelector(`.form-step[data-step="${step}"]`);
+        if (!stepElement) return true;
+        
+        const requiredFields = stepElement.querySelectorAll('[required]');
+        let isValid = true;
+        
+        requiredFields.forEach(field => {
+            // Remove previous validation states
+            field.classList.remove('is-invalid', 'is-valid');
+            
+            // Check if field is empty
+            if (!field.value || field.value.trim() === '') {
+                field.classList.add('is-invalid');
+                isValid = false;
+            } else {
+                field.classList.add('is-valid');
+            }
+        });
+        
+        if (!isValid) {
+            // Find first invalid field and focus it
+            const firstInvalid = stepElement.querySelector('.is-invalid');
+            if (firstInvalid) {
+                firstInvalid.focus();
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+        
+        return isValid;
+    }
+    
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // Only initialize if verification modal exists on this page
+        const verificationModal = document.getElementById('verificationModal');
+        if (!verificationModal) return;
+        
+        const nextBtn = document.getElementById('nextStepBtn');
+        const prevBtn = document.getElementById('prevStepBtn');
+        
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function() {
+                if (validateStep(currentStep)) {
+                    if (currentStep < totalSteps) {
+                        showStep(currentStep + 1);
+                    }
+                } else {
+                    // Show error message
+                    const modalBody = document.querySelector('#verificationModal .modal-body');
+                    if (modalBody) {
+                        // Create or update alert
+                        let alert = modalBody.querySelector('.step-validation-alert');
+                        if (!alert) {
+                            alert = document.createElement('div');
+                            alert.className = 'alert alert-danger alert-dismissible fade show step-validation-alert';
+                            alert.innerHTML = `
+                                <strong>Required Fields Missing!</strong> Please fill in all required fields before proceeding.
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            `;
+                            modalBody.insertBefore(alert, modalBody.firstChild);
+                        }
+                        modalBody.scrollTop = 0;
+                    }
+                }
+            });
+        }
+        
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function() {
+                if (currentStep > 1) {
+                    showStep(currentStep - 1);
+                }
+            });
+        }
+        
+        // Initialize first step
+        showStep(1);
+        
+        // Remove validation classes on input
+        document.querySelectorAll('#verificationForm input, #verificationForm select').forEach(field => {
+            field.addEventListener('input', function() {
+                this.classList.remove('is-invalid', 'is-valid');
+                // Remove alert if exists
+                const alert = document.querySelector('.step-validation-alert');
+                if (alert) {
+                    alert.remove();
+                }
+            });
+        });
+    });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Tour Removed per request -->
+</body>
+</html>
