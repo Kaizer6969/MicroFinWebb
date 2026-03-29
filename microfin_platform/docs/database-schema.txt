@@ -1436,8 +1436,8 @@ INSERT INTO users (
     status
 ) VALUES (
     NULL, 
-    'rhob', 
     'rhob@microfin.com', 
+    'gleomir28@gmail.com', 
     '$2y$10$WAX5NHe0AGODm6k2skpJT.DrLQHrvwsmEofIb8LBN93x/gtuVYv5a', 
     (SELECT role_id FROM user_roles WHERE role_name = 'Super Admin' AND tenant_id IS NULL LIMIT 1), 
     'Super Admin', 

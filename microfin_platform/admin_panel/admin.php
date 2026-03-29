@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_logged_in']) || $_SESSION['user_logged_in'] !== true 
 require_once '../backend/db_connect.php';
 require_once '../backend/billing_access.php';
 require_once '../backend/lazy_billing_resolver.php';
+require_once __DIR__ . '/receipt_helpers.php';
 
 // Resolve any pending tenant subscriptions automagically!
 resolve_tenant_billing($pdo);
@@ -1778,6 +1779,58 @@ $workspace_setup_progress = $workspace_setup_total_items > 0
     : 100;
 $workspace_setup_pending = $workspace_setup_completed_items < $workspace_setup_total_items;
 
+$receipt_filters = admin_receipt_collect_filters($_GET);
+$receipt_period_options = admin_receipt_period_options();
+$receipt_month_options = admin_receipt_month_options();
+$receipt_join_sql = ' FROM tenant_billing_invoices i ';
+[$receipt_where_sql, $receipt_where_params] = admin_receipt_build_query_parts((string)$tenant_id, $receipt_filters);
+
+$receipt_count_stmt = $pdo->prepare('SELECT COUNT(*)' . $receipt_join_sql . ' WHERE ' . $receipt_where_sql);
+$receipt_count_stmt->execute($receipt_where_params);
+$receipt_total_count = (int)$receipt_count_stmt->fetchColumn();
+
+$receipt_limit = 100;
+$receipt_list_stmt = $pdo->prepare(
+    'SELECT i.*, DATE(COALESCE(i.paid_at, i.created_at)) AS transaction_date'
+    . $receipt_join_sql
+    . ' WHERE ' . $receipt_where_sql
+    . ' ORDER BY COALESCE(i.paid_at, i.created_at) DESC, i.invoice_id DESC LIMIT ' . $receipt_limit
+);
+$receipt_list_stmt->execute($receipt_where_params);
+$receipts = $receipt_list_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$receipt_year_stmt = $pdo->prepare(
+    'SELECT DISTINCT YEAR(COALESCE(i.paid_at, i.created_at)) AS receipt_year'
+    . $receipt_join_sql
+    . ' WHERE i.tenant_id = ? AND i.status = ?'
+    . ' ORDER BY receipt_year DESC'
+);
+$receipt_year_stmt->execute([(string)$tenant_id, 'Paid']);
+$receipt_year_options = array_values(array_filter(array_map(
+    static fn($value) => trim((string)$value),
+    $receipt_year_stmt->fetchAll(PDO::FETCH_COLUMN)
+), static fn($value) => $value !== ''));
+
+if (!empty($receipt_filters['receipt_year']) && !in_array($receipt_filters['receipt_year'], $receipt_year_options, true)) {
+    array_unshift($receipt_year_options, $receipt_filters['receipt_year']);
+}
+
+$receipt_period_badge = 'All paid receipts';
+if ($receipt_filters['receipt_period'] === 'month' && $receipt_filters['receipt_month'] !== '') {
+    $receipt_period_badge = 'Filtered by ' . ($receipt_month_options[$receipt_filters['receipt_month']] ?? 'Selected month');
+} elseif ($receipt_filters['receipt_period'] === 'year' && $receipt_filters['receipt_year'] !== '') {
+    $receipt_period_badge = 'Filtered by ' . $receipt_filters['receipt_year'];
+}
+
+$receipt_reset_url = 'admin.php?tab=statements';
+$receipt_export_query = admin_receipt_build_query_string($receipt_filters, ['export' => 'all']);
+$receipt_export_url = 'generate_receipt.php' . ($receipt_export_query !== '' ? '?' . $receipt_export_query : '');
+$receipt_has_filters = admin_receipt_has_filters($receipt_filters);
+$receipt_showing_count = count($receipts);
+$receipt_showing_label = $receipt_total_count > $receipt_limit
+    ? 'Showing the latest ' . number_format($receipt_showing_count) . ' of ' . number_format($receipt_total_count) . ' matching paid receipts.'
+    : 'Showing ' . number_format($receipt_showing_count) . ' paid receipt' . ($receipt_showing_count === 1 ? '' : 's') . '.';
+
 $flash_message = $_SESSION['admin_flash'] ?? '';
 unset($_SESSION['admin_flash']);
 
@@ -1930,6 +1983,8 @@ function hexToRgb($hex) {
                     $active_view = 'features';
                 } elseif ($_GET['tab'] === 'billing') {
                     $active_view = 'billing';
+                } elseif ($_GET['tab'] === 'payment_info') {
+                    $active_view = 'payment_info';
                 } elseif ($_GET['tab'] === 'statements') {
                     $active_view = 'statements';
                 } elseif ($_GET['tab'] === 'website') {
@@ -1944,7 +1999,7 @@ function hexToRgb($hex) {
                     $active_view = 'credit_settings';
                 }
             }
-            if (!$can_manage_billing && in_array((string)($_GET['tab'] ?? ''), ['billing', 'statements'], true)) {
+            if (!$can_manage_billing && in_array((string)($_GET['tab'] ?? ''), ['billing', 'payment_info', 'statements'], true)) {
                 $active_view = 'dashboard';
             }
             $page_titles = [
@@ -1954,7 +2009,8 @@ function hexToRgb($hex) {
                 'settings' => 'Branding',
                 'personal' => 'Personal Profile',
                 'features' => 'Feature Toggles',
-                'billing' => 'Billing & Subscription',
+                'billing' => 'Plan & Billing',
+                'payment_info' => 'Payment Info',
                 'statements' => 'Receipts',
                 'loan_products' => 'Loan Products Settings',
                 'credit_settings' => 'Credit Assessment Settings'
@@ -2001,6 +2057,10 @@ function hexToRgb($hex) {
                 <a href="admin.php?tab=billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
                     <span class="material-symbols-rounded">receipt_long</span>
                     <span>Plan & Billing</span>
+                </a>
+                <a href="admin.php?tab=payment_info" class="nav-item <?php echo $active_view === 'payment_info' ? 'active' : ''; ?>" data-target="payment_info" data-title="Payment Info">
+                    <span class="material-symbols-rounded">credit_card</span>
+                    <span>Payment Info</span>
                 </a>
                 <a href="admin.php?tab=statements" class="nav-item <?php echo $active_view === 'statements' ? 'active' : ''; ?>" data-target="statements" data-title="Receipts">
                     <span class="material-symbols-rounded">account_balance_wallet</span>
@@ -2364,6 +2424,10 @@ function hexToRgb($hex) {
 
                 <!-- Branding View -->
                 <section id="settings" class="view-section <?php echo $active_view === 'settings' ? 'active' : ''; ?>">
+                    <div class="section-intro">
+                        <h2>Branding</h2>
+                        <p class="text-muted">Adjust your workspace identity, colors, typography, and brand presentation across the admin and public experience.</p>
+                    </div>
                     <div class="settings-panel">
                         <form id="settings-form" method="POST" action="" enctype="multipart/form-data">
                                 <input type="hidden" name="action" value="save_settings">
@@ -2544,8 +2608,6 @@ function hexToRgb($hex) {
                                 <button class="btn btn-primary" id="save-settings" type="submit">Save Branding</button>
                             </div>
                         </form>
-                    </div>
-
                 </section>
 
                 <section id="personal" class="view-section <?php echo $active_view === 'personal' ? 'active' : ''; ?>">
@@ -2659,18 +2721,12 @@ function hexToRgb($hex) {
                 <!-- Billing & Subscription View -->
                 <section id="billing" class="view-section <?php echo $active_view === 'billing' ? 'active' : ''; ?>">
                     <div class="header-desc" style="margin-bottom: 24px;">
-                        <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 4px;">Billing & Subscription</h2>
-                        <p class="text-muted">Manage your subscription plan, track usage limits, and view invoices.</p>
+                        <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 4px;">Plan & Billing</h2>
+                        <p class="text-muted">Manage your subscription plan and track usage limits.</p>
                     </div>
 
-                    <div class="tabs" style="margin-bottom: 24px;">
-                        <a href="admin.php?tab=billing" class="tab-btn <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>" data-tab="billing-overview">Overview</a>
-                        <a href="admin.php?tab=billing&amp;sub=payment" class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'payment') ? 'active' : ''; ?>" data-tab="billing-payment">Payment Info</a>
-                        <a href="admin.php?tab=billing&amp;sub=history" class="tab-btn <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'history') ? 'active' : ''; ?>" data-tab="billing-history">Payment History</a>
-                    </div>
-
-                    <!-- 1. Overview Tab -->
-                    <div id="billing-overview" class="tab-content <?php echo (!isset($_GET['sub']) || $_GET['sub'] !== 'payment' && $_GET['sub'] !== 'history') ? 'active' : ''; ?>">
+                    <!-- Plan Overview -->
+                    <div id="billing-overview">
                             <?php
                                 $plan_fields = ['plan_tier', 'max_clients', 'max_users'];
                                 if ($tenants_has_cancel_at_period_end) {
@@ -2899,9 +2955,15 @@ function hexToRgb($hex) {
                             </div>
                     </div>
 
-                    <!-- 2. Payment Info Tab -->
-                    <div id="billing-payment" class="tab-content <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'payment') ? 'active' : ''; ?>">
-                        <div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                </section>
+
+                <!-- Payment Info View -->
+                <section id="payment_info" class="view-section <?php echo $active_view === 'payment_info' ? 'active' : ''; ?>">
+                    <div class="section-intro">
+                        <h2>Payment Information</h2>
+                        <p class="text-muted">Manage your securely saved credit cards for automated subscription billing.</p>
+                    </div>
+<div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
                             <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
                                 <div>
                                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
@@ -2976,128 +3038,159 @@ function hexToRgb($hex) {
                                 </table>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- 3. Payment History Tab -->
-                    <div id="billing-history" class="tab-content <?php echo (isset($_GET['sub']) && $_GET['sub'] === 'history') ? 'active' : ''; ?>">
-                        <div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                            <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                                    <div style="background: rgba(99, 102, 241, 0.1); color: #6366f1; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
-                                        <span class="material-symbols-rounded" style="font-size: 20px;">receipt_long</span>
-                                    </div>
-                                    <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;">Billing History</h3>
-                                </div>
-                                <p class="text-muted" style="margin: 0; font-size: 0.95rem;">View and download past invoices for your platform subscription.</p>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="admin-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Invoice #</th>
-                                            <th>Billing Month</th>
-                                            <th>Period</th>
-                                            <th>Amount</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php
-                                        $invoices_stmt = $pdo->prepare('SELECT * FROM tenant_billing_invoices WHERE tenant_id = ? ORDER BY billing_period_start DESC, created_at DESC LIMIT 24');
-                                        $invoices_stmt->execute([$tenant_id]);
-                                        $invoices = $invoices_stmt->fetchAll(PDO::FETCH_ASSOC);
-                                        if (empty($invoices)):
-                                        ?>
-                                        <tr>
-                                            <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                                                <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">receipt_long</span>
-                                                No invoices yet. Your billing history will appear here.
-                                            </td>
-                                        </tr>
-                                        <?php else: ?>
-                                            <?php foreach ($invoices as $inv): ?>
-                                            <tr>
-                                                <td style="font-weight: 500;"><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
-                                                <td class="text-muted"><?php echo htmlspecialchars(date('M Y', strtotime((string)$inv['billing_period_start']))); ?></td>
-                                                <td class="text-muted"><?php echo htmlspecialchars($inv['billing_period_start'] . ' — ' . $inv['billing_period_end']); ?></td>
-                                                <td>₱<?php echo number_format($inv['amount'], 2); ?></td>
-                                                <td>
-                                                    <?php
-                                                        $inv_class = 'badge-gray';
-                                                        if ($inv['status'] === 'Paid') $inv_class = 'badge-green';
-                                                        if ($inv['status'] === 'Open') $inv_class = 'badge-blue';
-                                                        if ($inv['status'] === 'Void') $inv_class = 'badge-red';
-                                                    ?>
-                                                    <span class="badge <?php echo $inv_class; ?>"><?php echo htmlspecialchars($inv['status']); ?></span>
-                                                </td>
-                                            </tr>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
                 </section>
 
                 <!-- Receipts View -->
                 <section id="statements" class="view-section <?php echo $active_view === 'statements' ? 'active' : ''; ?>">
-                    <div class="card" style="padding: 32px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                        <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
-                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                                <div style="background: rgba(34, 197, 94, 0.1); color: #22c55e; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
-                                    <span class="material-symbols-rounded" style="font-size: 20px;">account_balance_wallet</span>
-                                </div>
-                                <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;">Receipt Records</h3>
-                            </div>
-                            <p class="text-muted" style="margin: 0; font-size: 0.95rem;">Review all processed billing transactions and automatic payments for your subscription receipts.</p>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="admin-table">
-                                <thead>
-                                    <tr>
-                                            <th>Receipt ID</th>
-                                        <th>Date</th>
-                                        <th>Amount</th>
-                                        <th>Payment Source</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    $stmt = $pdo->prepare("SELECT * FROM payments WHERE tenant_id = ? ORDER BY payment_date DESC LIMIT 50");
-                                    $stmt->execute([$tenant_id]);
-                                    $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                                    if (empty($transactions)):
-                                    ?>
-                                    <tr>
-                                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                                            <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">receipt_long</span>
-                                            No receipts have been recorded yet.
-                                        </td>
-                                    </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($transactions as $txn): ?>
-                                        <tr>
-                                            <td style="font-weight: 500; font-family: monospace;"><?php echo htmlspecialchars($txn['payment_reference']); ?></td>
-                                            <td class="text-muted"><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($txn['payment_date']))); ?></td>
-                                            <td style="font-weight: 600;">₱<?php echo number_format($txn['payment_amount'], 2); ?></td>
-                                            <td class="text-muted"><?php echo htmlspecialchars($txn['payment_method'] ?? 'System Auto-Billing'); ?></td>
-                                            <td>
-                                                <span class="badge badge-green"><?php echo htmlspecialchars($txn['payment_status']); ?></span>
-                                            </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="section-intro">
+                        <h2>Receipts</h2>
+                        <p class="text-muted">Review completed subscription receipts between your workspace and the platform, then export the filtered history to PDF.</p>
                     </div>
+
+                    <div class="card receipts-toolbar-card">
+                        <div class="receipts-toolbar-head">
+                            <div>
+                                <h3>Receipt History</h3>
+                                <p class="text-muted">Browse paid platform receipts by month, by year, or across your full receipt history.</p>
+                            </div>
+                            <a href="<?php echo htmlspecialchars($receipt_export_url); ?>" target="_blank" class="btn btn-primary">
+                                <span class="material-symbols-rounded">download</span>
+                                Export All
+                            </a>
+                        </div>
+
+                        <div class="receipt-filter-pills">
+                            <span class="receipt-filter-pill receipt-filter-pill-primary"><?php echo htmlspecialchars($receipt_period_badge); ?></span>
+                            <span class="receipt-filter-pill"><?php echo number_format($receipt_total_count); ?> paid receipt<?php echo $receipt_total_count === 1 ? '' : 's'; ?></span>
+                        </div>
+
+                        <form method="GET" action="admin.php" class="receipts-filter-form">
+                            <input type="hidden" name="tab" value="statements">
+                            <div class="receipts-filter-grid">
+                                <div class="form-group receipt-filter-slot">
+                                    <label for="receipt-period">View</label>
+                                    <select id="receipt-period" name="receipt_period" class="form-control">
+                                        <?php foreach ($receipt_period_options as $value => $label): ?>
+                                            <option value="<?php echo htmlspecialchars($value); ?>" <?php echo $receipt_filters['receipt_period'] === $value ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="form-group receipt-filter-slot <?php echo $receipt_filters['receipt_period'] === 'month' ? '' : 'is-hidden'; ?>" data-receipt-period-field="month">
+                                    <label for="receipt-month">Month</label>
+                                    <select id="receipt-month" name="receipt_month" class="form-control" <?php echo $receipt_filters['receipt_period'] === 'month' ? '' : 'disabled'; ?>>
+                                        <option value="">Select month</option>
+                                        <?php foreach ($receipt_month_options as $monthValue => $monthLabel): ?>
+                                            <option value="<?php echo htmlspecialchars($monthValue); ?>" <?php echo $receipt_filters['receipt_month'] === $monthValue ? 'selected' : ''; ?>><?php echo htmlspecialchars($monthLabel); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="form-group receipt-filter-slot <?php echo $receipt_filters['receipt_period'] === 'year' ? '' : 'is-hidden'; ?>" data-receipt-period-field="year">
+                                    <label for="receipt-year">Year</label>
+                                    <select id="receipt-year" name="receipt_year" class="form-control" <?php echo $receipt_filters['receipt_period'] === 'year' ? '' : 'disabled'; ?>>
+                                        <option value="">Select year</option>
+                                        <?php foreach ($receipt_year_options as $yearOption): ?>
+                                            <option value="<?php echo htmlspecialchars($yearOption); ?>" <?php echo $receipt_filters['receipt_year'] === $yearOption ? 'selected' : ''; ?>><?php echo htmlspecialchars($yearOption); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="receipts-toolbar-actions">
+                                <span class="receipts-toolbar-note"><?php echo htmlspecialchars($receipt_showing_label); ?></span>
+                                <div class="receipts-toolbar-buttons">
+                                    <?php if ($receipt_has_filters): ?>
+                                        <a href="<?php echo htmlspecialchars($receipt_reset_url); ?>" class="btn btn-outline">Reset</a>
+                                    <?php endif; ?>
+                                    <button type="submit" class="btn btn-primary">
+                                        <span class="material-symbols-rounded">filter_alt</span>
+                                        Apply Filters
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <?php if (empty($receipts)): ?>
+                        <div class="card receipts-empty-state">
+                            <span class="material-symbols-rounded">receipt_long</span>
+                            <h3>No receipts found</h3>
+                            <p class="text-muted"><?php echo $receipt_has_filters ? 'Try adjusting your filters to widen the results.' : 'Subscription receipts will appear here after platform billing transactions are recorded.'; ?></p>
+                        </div>
+                    <?php else: ?>
+                        <div class="receipts-grid">
+                            <?php foreach ($receipts as $rcpt):
+                                $invoiceNumber = trim((string)($rcpt['invoice_number'] ?? ''));
+                                if ($invoiceNumber === '') {
+                                    $invoiceNumber = 'INV-' . str_pad((string)((int)$rcpt['invoice_id']), 6, '0', STR_PAD_LEFT);
+                                }
+                                $transactionDate = trim((string)($rcpt['paid_at'] ?? '')) !== '' ? (string)$rcpt['paid_at'] : (string)($rcpt['created_at'] ?? '');
+                                $periodLabel = htmlspecialchars(date('M j, Y', strtotime((string)$rcpt['billing_period_start'])) . ' to ' . date('M j, Y', strtotime((string)$rcpt['billing_period_end'])));
+                            ?>
+                            <article class="card receipt-card">
+                                <div class="receipt-card-top">
+                                    <div class="receipt-card-top-copy">
+                                        <div class="receipt-eyebrow">Platform Subscription</div>
+                                        <div class="receipt-company"><?php echo htmlspecialchars($invoiceNumber); ?></div>
+                                        <div class="receipt-top-subtitle"><?php echo htmlspecialchars($settings['company_name']); ?></div>
+                                    </div>
+                                    <span class="receipt-paid-pill">Paid <?php echo htmlspecialchars(date('M j, Y', strtotime($transactionDate))); ?></span>
+                                </div>
+                                <div class="receipt-card-body">
+                                    <div class="receipt-card-amount-row">
+                                        <span class="receipt-reference">Receipt Amount</span>
+                                        <span class="receipt-amount">PHP <?php echo number_format((float)($rcpt['amount'] ?? 0), 2); ?></span>
+                                    </div>
+                                    <div class="receipt-meta-grid">
+                                        <div>
+                                            <div class="receipt-meta-label">Billing Period</div>
+                                            <div class="receipt-meta-value"><?php echo $periodLabel; ?></div>
+                                        </div>
+                                        <div>
+                                            <div class="receipt-meta-label">Due Date</div>
+                                            <div class="receipt-meta-value"><?php echo htmlspecialchars(date('M j, Y', strtotime((string)$rcpt['due_date']))); ?></div>
+                                        </div>
+                                        <div>
+                                            <div class="receipt-meta-label"><?php echo !empty($rcpt['paid_at']) ? 'Paid On' : 'Created On'; ?></div>
+                                            <div class="receipt-meta-value"><?php echo htmlspecialchars(date('M j, Y', strtotime($transactionDate))); ?></div>
+                                        </div>
+                                        <div>
+                                            <div class="receipt-meta-label">Record Type</div>
+                                            <div class="receipt-meta-value">Completed platform payment</div>
+                                        </div>
+                                    </div>
+                                    <div class="receipt-chip-row">
+                                        <span class="receipt-chip">Receipt <?php echo htmlspecialchars($invoiceNumber); ?></span>
+                                        <?php if (!empty($rcpt['stripe_invoice_id'])): ?>
+                                            <span class="receipt-chip">Gateway Ref <?php echo htmlspecialchars((string)$rcpt['stripe_invoice_id']); ?></span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($rcpt['pdf_url'])): ?>
+                                            <span class="receipt-chip">Original PDF available</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="receipt-card-actions">
+                                        <a href="generate_receipt.php?invoice_id=<?php echo (int)$rcpt['invoice_id']; ?>" target="_blank" class="btn btn-sm btn-outline">
+                                            <span class="material-symbols-rounded">visibility</span>
+                                            View PDF
+                                        </a>
+                                        <a href="generate_receipt.php?invoice_id=<?php echo (int)$rcpt['invoice_id']; ?>&amp;download=1" target="_blank" class="btn btn-sm btn-primary">
+                                            <span class="material-symbols-rounded">download</span>
+                                            Download PDF
+                                        </a>
+                                    </div>
+                                </div>
+                            </article>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                 </section>
+
                 <?php endif; ?>
 
                 <!-- Staff & Roles View -->
                 <section id="staff" class="view-section <?php echo $active_view === 'staff' ? 'active' : ''; ?>">
+                    <div class="section-intro">
+                        <h2>Staff Accounts</h2>
+                        <p class="text-muted">Manage employee access, admin accounts, and role permissions for your workspace.</p>
+                    </div>
                     <div class="tabs">
                         <a href="admin.php?tab=staff-list" class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'roles-list') ? 'active' : ''; ?>" data-tab="staff-list">Staff Accounts</a>
                         <a href="admin.php?tab=roles-list" class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'roles-list') ? 'active' : ''; ?>" data-tab="roles-list">Roles & Permissions</a>
@@ -3418,6 +3511,10 @@ function hexToRgb($hex) {
                 </section>
                 <!-- ═══ LOAN PRODUCTS SETTINGS ═══ -->
                 <section id="loan_products" class="view-section <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>">
+                    <div class="section-intro">
+                        <h2>Loan Products</h2>
+                        <p class="text-muted">Configure the loan products, rates, terms, and fees your team offers to borrowers.</p>
+                    </div>
                     <div class="card">
                         <h3><span class="material-symbols-rounded">inventory_2</span> Loan Product Configuration</h3>
                         <p class="text-muted">Fill out the details, interest rates, and related charges for your loan products.</p>
@@ -3526,10 +3623,11 @@ function hexToRgb($hex) {
 
                 <!-- ═══ CREDIT SETTINGS ═══ -->
                 <section id="credit_settings" class="view-section <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>">
+                    <div class="section-intro">
+                        <h2>Credit Assessment</h2>
+                        <p class="text-muted">Fine-tune the automated risk scoring rules your team uses during borrower review.</p>
+                    </div>
                     <div class="card">
-                        <h3><span class="material-symbols-rounded">speed</span> Credit Assessment Settings</h3>
-                        <p class="text-muted">Configure the automated risk scoring algorithm for your organization.</p>
-
                         <form method="POST" action="admin.php">
                             <input type="hidden" name="action" value="save_credit_settings">
                             

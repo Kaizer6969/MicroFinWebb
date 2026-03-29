@@ -2132,13 +2132,12 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                         <th>Staff Usage</th>
                                         <th>Client Usage</th>
                                         <th>Active Users</th>
-                                        <th>Billing Management</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if (empty($tenant_subscriptions)): ?>
                                         <tr>
-                                            <td colspan="10" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                            <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">
                                                 No tenant subscription records found.
                                             </td>
                                         </tr>
@@ -2280,12 +2279,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                     <?php else: ?>
                                                         <small class="usage-unlimited">No users yet</small>
                                                     <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <div class="subscription-management-info">
-                                                        <span class="badge badge-outline">Managed by Tenant</span>
-                                                        
-                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>

@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+    if ('scrollRestoration' in window.history) {
+        window.history.scrollRestoration = 'manual';
+    }
+
     const htmlElement = document.documentElement;
 
     const companyNameInput = document.getElementById('company-name');
@@ -27,6 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const existingLogoPathInput = document.getElementById('existing-logo-path');
     const setupAlert = document.querySelector('.dashboard-setup-alert');
     const setupAlertToggle = document.querySelector('[data-setup-alert-toggle]');
+    const loanProductsForm = document.getElementById('loan-products-form');
+    const loanPreviewRoot = document.querySelector('[data-loan-preview]');
+    const loanPreviewAmountInput = document.getElementById('loan-preview-amount');
+    const loanPreviewTermInput = document.getElementById('loan-preview-term');
+    const viewsContainer = document.querySelector('.views-container');
+    const receiptPeriodSelect = document.getElementById('receipt-period');
+    const receiptPeriodFields = Array.from(document.querySelectorAll('[data-receipt-period-field]'));
 
     const sectionDefaults = {
         staff: 'staff-list',
@@ -103,6 +114,64 @@ document.addEventListener('DOMContentLoaded', () => {
             || document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"]`);
     }
 
+    function resetWorkspaceScroll() {
+        if (viewsContainer) {
+            viewsContainer.scrollTop = 0;
+        }
+        if (document.documentElement) {
+            document.documentElement.scrollTop = 0;
+        }
+        if (document.body) {
+            document.body.scrollTop = 0;
+        }
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }
+
+    function isSameAdminPageLink(href) {
+        if (!href) {
+            return true;
+        }
+        if (href.startsWith('#')) {
+            return true;
+        }
+
+        try {
+            const targetUrl = new URL(href, window.location.href);
+            const currentUrl = new URL(window.location.href);
+            return targetUrl.origin === currentUrl.origin
+                && targetUrl.pathname === currentUrl.pathname;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function replaceUrlForSection(targetId, subTabId = '', href = '') {
+        if (!window.history || typeof window.history.replaceState !== 'function') {
+            return;
+        }
+
+        if (isSameAdminPageLink(href) && href && !href.startsWith('#')) {
+            const targetUrl = new URL(href, window.location.href);
+            targetUrl.hash = targetId ? `#${targetId}` : '';
+            window.history.replaceState({}, '', targetUrl);
+            return;
+        }
+
+        const currentUrl = new URL(window.location.href);
+        if (targetId === 'dashboard') {
+            currentUrl.searchParams.delete('tab');
+            currentUrl.searchParams.delete('sub');
+        }
+        if (subTabId && targetId === 'staff') {
+            currentUrl.searchParams.set('tab', subTabId);
+        } else if (targetId && targetId !== 'dashboard') {
+            currentUrl.searchParams.set('tab', targetId);
+            currentUrl.searchParams.delete('sub');
+        }
+        currentUrl.hash = targetId ? `#${targetId}` : '';
+        window.history.replaceState({}, '', currentUrl);
+    }
+
     function activateSection(targetId, options = {}) {
         if (!targetId) {
             return;
@@ -125,10 +194,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         setPageTitleFromNav(navItem, targetId);
+        resetWorkspaceScroll();
 
-        if (window.location.hash.substring(1) !== targetId) {
-            history.replaceState(null, null, `#${targetId}`);
-        }
+        replaceUrlForSection(targetId, requestedSubTabId || effectiveSubTabId);
     }
 
     navItems.forEach(item => {
@@ -138,12 +206,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const subTabId = item.getAttribute('data-subtab');
             const href = item.getAttribute('href') || '';
 
-            if (href !== '' && !href.startsWith('#')) {
+            if (!isSameAdminPageLink(href)) {
                 return;
             }
             
             e.preventDefault();
             activateSection(targetId, { navItem: item, subTabId: subTabId || '' });
+            replaceUrlForSection(targetId, subTabId || '', href);
         });
     });
 
@@ -178,6 +247,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (initialRoute && initialRoute.sectionId) {
         activateSection(initialRoute.sectionId, { subTabId: initialRoute.subTabId || '' });
+    }
+
+    window.addEventListener('pageshow', () => {
+        resetWorkspaceScroll();
+    });
+
+    function syncReceiptPeriodFields() {
+        if (!receiptPeriodSelect || receiptPeriodFields.length === 0) {
+            return;
+        }
+
+        const activePeriod = receiptPeriodSelect.value || 'all';
+        receiptPeriodFields.forEach((field) => {
+            const targetPeriod = field.getAttribute('data-receipt-period-field');
+            const shouldShow = targetPeriod === activePeriod;
+            field.classList.toggle('is-hidden', !shouldShow);
+
+            const inputs = field.querySelectorAll('input, select');
+            inputs.forEach((input) => {
+                input.disabled = !shouldShow;
+            });
+        });
+    }
+
+    if (receiptPeriodSelect) {
+        syncReceiptPeriodFields();
+        receiptPeriodSelect.addEventListener('change', syncReceiptPeriodFields);
     }
 
     if (setupAlert && setupAlertToggle) {
@@ -215,13 +311,17 @@ document.addEventListener('DOMContentLoaded', () => {
     tabBtns.forEach(btn => {
         btn.addEventListener('click', (event) => {
             const href = btn.getAttribute('href') || '';
-            if (href !== '' && !href.startsWith('#')) {
+            if (!isSameAdminPageLink(href)) {
                 return;
             }
             event.preventDefault();
             const tabId = btn.getAttribute('data-tab');
             const sectionEl = btn.closest('.view-section');
             activateTabInSection(sectionEl, tabId);
+            resetWorkspaceScroll();
+            if (sectionEl && sectionEl.id) {
+                replaceUrlForSection(sectionEl.id, tabId, href);
+            }
         });
     });
 
@@ -497,6 +597,139 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function formatLoanPreviewCurrency(value) {
+        const safeValue = Number.isFinite(value) ? value : 0;
+        return new Intl.NumberFormat('en-PH', {
+            style: 'currency',
+            currency: 'PHP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(safeValue);
+    }
+
+    function normalizeLoanPreviewNumber(value, fallback = 0) {
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function normalizeLoanPreviewInteger(value, fallback = 0) {
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function loanPreviewClamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+    }
+
+    function updateLoanProductsPreview() {
+        if (!loanProductsForm || !loanPreviewRoot) {
+            return;
+        }
+
+        const getField = (name) => loanProductsForm.querySelector(`[name="${name}"]`);
+        const setPreviewText = (key, value) => {
+            loanPreviewRoot.querySelectorAll(`[data-loan-preview-bind="${key}"]`).forEach((element) => {
+                element.textContent = value;
+            });
+        };
+
+        const productName = getField('product_name')?.value.trim() || 'Personal Cash Loan';
+        const productType = getField('product_type')?.value || 'Personal Loan';
+        const description = getField('description')?.value.trim() || 'Borrowers will see a short description explaining what this loan is best for.';
+
+        const minAmount = Math.max(0, normalizeLoanPreviewNumber(getField('min_amount')?.value, 0));
+        const maxAmount = Math.max(minAmount, normalizeLoanPreviewNumber(getField('max_amount')?.value, minAmount));
+        const minTerm = Math.max(1, normalizeLoanPreviewInteger(getField('min_term_months')?.value, 1));
+        const maxTerm = Math.max(minTerm, normalizeLoanPreviewInteger(getField('max_term_months')?.value, minTerm));
+
+        const interestRate = Math.max(0, normalizeLoanPreviewNumber(getField('interest_rate')?.value, 0));
+        const interestType = getField('interest_type')?.value || 'Diminishing';
+        const penaltyRate = Math.max(0, normalizeLoanPreviewNumber(getField('penalty_rate')?.value, 0));
+        const penaltyType = (getField('penalty_type')?.value || 'Daily').toLowerCase();
+        const gracePeriodDays = Math.max(0, normalizeLoanPreviewInteger(getField('grace_period_days')?.value, 0));
+
+        const processingFeeRate = Math.max(0, normalizeLoanPreviewNumber(getField('processing_fee_percentage')?.value, 0));
+        const insuranceFeeRate = Math.max(0, normalizeLoanPreviewNumber(getField('insurance_fee_percentage')?.value, 0));
+        const serviceCharge = Math.max(0, normalizeLoanPreviewNumber(getField('service_charge')?.value, 0));
+        const documentaryStamp = Math.max(0, normalizeLoanPreviewNumber(getField('documentary_stamp')?.value, 0));
+
+        const amountSpan = Math.max(0, maxAmount - minAmount);
+        const amountStep = amountSpan >= 1000000 ? 5000 : amountSpan >= 100000 ? 1000 : amountSpan >= 10000 ? 500 : 100;
+        const defaultAmount = amountSpan > 0 ? minAmount + (amountSpan / 2) : minAmount;
+        const defaultTerm = Math.max(minTerm, Math.round((minTerm + maxTerm) / 2));
+
+        if (loanPreviewAmountInput) {
+            loanPreviewAmountInput.min = String(minAmount);
+            loanPreviewAmountInput.max = String(maxAmount);
+            loanPreviewAmountInput.step = String(amountStep);
+            loanPreviewAmountInput.disabled = maxAmount <= minAmount;
+        }
+
+        if (loanPreviewTermInput) {
+            loanPreviewTermInput.min = String(minTerm);
+            loanPreviewTermInput.max = String(maxTerm);
+            loanPreviewTermInput.step = '1';
+            loanPreviewTermInput.disabled = maxTerm <= minTerm;
+        }
+
+        const selectedAmount = loanPreviewAmountInput
+            ? loanPreviewClamp(normalizeLoanPreviewNumber(loanPreviewAmountInput.value, defaultAmount), minAmount, maxAmount)
+            : defaultAmount;
+        const selectedTerm = loanPreviewTermInput
+            ? loanPreviewClamp(normalizeLoanPreviewInteger(loanPreviewTermInput.value, defaultTerm), minTerm, maxTerm)
+            : defaultTerm;
+
+        if (loanPreviewAmountInput) {
+            loanPreviewAmountInput.value = String(selectedAmount);
+        }
+
+        if (loanPreviewTermInput) {
+            loanPreviewTermInput.value = String(selectedTerm);
+        }
+
+        let estimatedInstallment = selectedTerm > 0 ? selectedAmount / selectedTerm : selectedAmount;
+        if (interestType === 'Diminishing') {
+            const monthlyRate = (interestRate / 100) / 12;
+            estimatedInstallment = monthlyRate > 0
+                ? (selectedAmount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -selectedTerm))
+                : (selectedAmount / selectedTerm);
+        } else {
+            const totalInterest = selectedAmount * (interestRate / 100) * (selectedTerm / 12);
+            estimatedInstallment = (selectedAmount + totalInterest) / selectedTerm;
+        }
+
+        const processingFeeValue = selectedAmount * (processingFeeRate / 100);
+        const insuranceFeeValue = selectedAmount * (insuranceFeeRate / 100);
+        const totalUpfrontCharges = processingFeeValue + insuranceFeeValue + serviceCharge + documentaryStamp;
+        const cashRelease = Math.max(0, selectedAmount - totalUpfrontCharges);
+        const totalRepayment = estimatedInstallment * selectedTerm;
+
+        setPreviewText('product-name', productName);
+        setPreviewText('product-type', productType);
+        setPreviewText('description', description);
+        setPreviewText('interest-chip', `${interestRate.toFixed(2)}% ${interestType}`);
+        setPreviewText('grace-chip', gracePeriodDays > 0 ? `${gracePeriodDays} day${gracePeriodDays === 1 ? '' : 's'} grace period` : 'No grace period');
+        setPreviewText('max-amount', formatLoanPreviewCurrency(maxAmount));
+        setPreviewText('term-range', `${minTerm}-${maxTerm} months`);
+        setPreviewText('penalty', penaltyRate > 0 ? `${penaltyRate.toFixed(2)}% ${penaltyType}` : 'No late penalty');
+
+        setPreviewText('selected-amount', formatLoanPreviewCurrency(selectedAmount));
+        setPreviewText('selected-term', `${selectedTerm} month${selectedTerm === 1 ? '' : 's'}`);
+        setPreviewText('min-amount', formatLoanPreviewCurrency(minAmount));
+        setPreviewText('max-amount-range', formatLoanPreviewCurrency(maxAmount));
+        setPreviewText('min-term', `${minTerm} mo`);
+        setPreviewText('max-term', `${maxTerm} mo`);
+
+        setPreviewText('estimated-installment', formatLoanPreviewCurrency(estimatedInstallment));
+        setPreviewText('cash-release', formatLoanPreviewCurrency(cashRelease));
+        setPreviewText('total-repayment', formatLoanPreviewCurrency(totalRepayment));
+        setPreviewText('charges-total', formatLoanPreviewCurrency(totalUpfrontCharges));
+        setPreviewText('processing-fee-value', formatLoanPreviewCurrency(processingFeeValue));
+        setPreviewText('insurance-fee-value', formatLoanPreviewCurrency(insuranceFeeValue));
+        setPreviewText('service-charge-value', formatLoanPreviewCurrency(serviceCharge));
+        setPreviewText('doc-stamp-value', formatLoanPreviewCurrency(documentaryStamp));
+    }
+
     function extractPaletteFromLogo() {
         if (!logoInput?.files || !logoInput.files[0] || logoInput.files[0].type === 'image/svg+xml') {
             return;
@@ -668,6 +901,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateBrandingPreview();
     updateLogoPreview();
+
+    if (loanProductsForm && loanPreviewRoot) {
+        const loanPreviewFields = Array.from(loanProductsForm.querySelectorAll(
+            '[name="product_name"], [name="product_type"], [name="description"], [name="min_amount"], [name="max_amount"], [name="interest_rate"], [name="interest_type"], [name="min_term_months"], [name="max_term_months"], [name="processing_fee_percentage"], [name="service_charge"], [name="documentary_stamp"], [name="insurance_fee_percentage"], [name="penalty_rate"], [name="penalty_type"], [name="grace_period_days"]'
+        ));
+
+        loanPreviewFields.forEach((field) => {
+            field.addEventListener('input', updateLoanProductsPreview);
+            field.addEventListener('change', updateLoanProductsPreview);
+        });
+
+        [loanPreviewAmountInput, loanPreviewTermInput].forEach((field) => {
+            if (!field) {
+                return;
+            }
+            field.addEventListener('input', updateLoanProductsPreview);
+            field.addEventListener('change', updateLoanProductsPreview);
+        });
+
+        updateLoanProductsPreview();
+    }
 
     function syncToggleHiddenFields() {
         const map = [
