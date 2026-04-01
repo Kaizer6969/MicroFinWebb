@@ -286,8 +286,14 @@ try {
                 expires_at DATETIME NOT NULL,
                 INDEX idx_mobile_install_lookup (ip_address, platform_hint, claimed_at, expires_at, created_at),
                 INDEX idx_mobile_install_tenant (tenant_id, created_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+
+        try {
+            $pdo->exec("ALTER TABLE mobile_install_attributions CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        } catch (\PDOException $ignore) {
+            // Safe to ignore on hosts where the table is already aligned or conversion is not needed.
+        }
     } catch (\PDOException $e) {
         error_log('Schema guard warning (mobile_install_attributions): ' . $e->getMessage());
     }

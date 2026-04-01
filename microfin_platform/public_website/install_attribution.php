@@ -272,7 +272,8 @@ function mf_install_resolve_tenant(PDO $pdo, ?string $rawIdentifier): ?array
             COALESCE(tb.card_border_width, '0') AS card_border_width,
             COALESCE(tb.card_shadow, 'none') AS card_shadow
         FROM tenants t
-        LEFT JOIN tenant_branding tb ON tb.tenant_id = t.tenant_id
+        LEFT JOIN tenant_branding tb
+            ON tb.tenant_id COLLATE utf8mb4_unicode_ci = t.tenant_id COLLATE utf8mb4_unicode_ci
         WHERE t.status = 'Active'
           AND (
                 LOWER(t.tenant_id) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
@@ -422,8 +423,10 @@ function mf_install_claim_tenant(PDO $pdo, array $request): ?array
                 COALESCE(tb.card_border_width, '0') AS card_border_width,
                 COALESCE(tb.card_shadow, 'none') AS card_shadow
             FROM mobile_install_attributions a
-            INNER JOIN tenants t ON t.tenant_id = a.tenant_id
-            LEFT JOIN tenant_branding tb ON tb.tenant_id = t.tenant_id
+            INNER JOIN tenants t
+                ON t.tenant_id COLLATE utf8mb4_unicode_ci = a.tenant_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN tenant_branding tb
+                ON tb.tenant_id COLLATE utf8mb4_unicode_ci = t.tenant_id COLLATE utf8mb4_unicode_ci
             WHERE a.tracking_token COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
               AND a.expires_at > UTC_TIMESTAMP()
               AND t.status = 'Active'
@@ -455,8 +458,10 @@ function mf_install_claim_tenant(PDO $pdo, array $request): ?array
             COALESCE(tb.card_border_width, '0') AS card_border_width,
             COALESCE(tb.card_shadow, 'none') AS card_shadow
         FROM mobile_install_attributions a
-        INNER JOIN tenants t ON t.tenant_id = a.tenant_id
-        LEFT JOIN tenant_branding tb ON tb.tenant_id = t.tenant_id
+        INNER JOIN tenants t
+            ON t.tenant_id COLLATE utf8mb4_unicode_ci = a.tenant_id COLLATE utf8mb4_unicode_ci
+        LEFT JOIN tenant_branding tb
+            ON tb.tenant_id COLLATE utf8mb4_unicode_ci = t.tenant_id COLLATE utf8mb4_unicode_ci
         WHERE a.claimed_at IS NULL
           AND a.expires_at > UTC_TIMESTAMP()
           AND a.ip_address COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
