@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import '../utils/api_config.dart';
 
 /// Holds all branding data for a single tenant.
@@ -138,9 +139,97 @@ class TenantBranding {
     }
   }
 
-  static TenantBranding? fromTenantId(String id) {
+  static String currentPlatformHint() {
+    if (kIsWeb) {
+      return 'web';
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android';
+      case TargetPlatform.iOS:
+        return 'ios';
+      case TargetPlatform.macOS:
+        return 'macos';
+      case TargetPlatform.windows:
+        return 'windows';
+      case TargetPlatform.linux:
+        return 'linux';
+      case TargetPlatform.fuchsia:
+        return 'fuchsia';
+    }
+  }
+
+  static String currentDeviceLabel() {
+    if (kIsWeb) {
+      return 'web-browser';
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android-device';
+      case TargetPlatform.iOS:
+        return 'ios-device';
+      case TargetPlatform.macOS:
+        return 'macos-device';
+      case TargetPlatform.windows:
+        return 'windows-device';
+      case TargetPlatform.linux:
+        return 'linux-device';
+      case TargetPlatform.fuchsia:
+        return 'fuchsia-device';
+    }
+  }
+
+  static Future<TenantBranding?> identifyInstall({String tenantHint = ''}) async {
     try {
-      return tenants.firstWhere((t) => t.slug == id);
+      final response = await http
+          .post(
+            Uri.parse(ApiConfig.getUrl('api_identify_install.php')),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-App-Platform': currentPlatformHint(),
+            },
+            body: jsonEncode({
+              'platform': currentPlatformHint(),
+              'device_label': currentDeviceLabel(),
+              if (tenantHint.trim().isNotEmpty) 'tenant_hint': tenantHint.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      final data = json.decode(response.body);
+      if (data is! Map<String, dynamic> || data['success'] != true || data['tenant'] is! Map) {
+        return null;
+      }
+
+      final tenant = TenantBranding.fromJson(Map<String, dynamic>.from(data['tenant'] as Map));
+      final existingIndex = tenants.indexWhere((item) =>
+          item.slug.toLowerCase() == tenant.slug.toLowerCase() ||
+          item.id.toLowerCase() == tenant.id.toLowerCase());
+      if (existingIndex >= 0) {
+        tenants[existingIndex] = tenant;
+      } else {
+        tenants = [...tenants, tenant];
+      }
+
+      return tenant;
+    } catch (e) {
+      debugPrint('Error identifying install tenant: $e');
+      return null;
+    }
+  }
+
+  static TenantBranding? fromTenantId(String id) {
+    final normalized = id.trim().toLowerCase();
+    try {
+      return tenants.firstWhere((t) =>
+          t.slug.toLowerCase() == normalized || t.id.toLowerCase() == normalized);
     } catch (_) {
       return tenants.isNotEmpty ? tenants.first : defaultTenant;
     }

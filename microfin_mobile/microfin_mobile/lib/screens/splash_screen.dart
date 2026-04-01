@@ -82,6 +82,7 @@ class _SplashScreenState extends State<SplashScreen>
   // Step 1: show welcome panel after bank selected
   bool _showWelcomePanel = false;
   bool _tenantsLoaded = false;
+  bool _isIdentifyingTenant = false;
   TenantBranding? _selectedTenant;
 
   @override
@@ -129,15 +130,12 @@ class _SplashScreenState extends State<SplashScreen>
     await _logoController.forward();
     await TenantBranding.loadTenants();
     _tenantsLoaded = true;
-    
-    // Automatically identify tenant if specified
+
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? identifiedTenant;
 
-    // 1. Check if we already locked in a tenant locally from previous sessions
     identifiedTenant = prefs.getString('locked_tenant_id');
-    
-    // 2. If not locked, check build configuration
+
     if (identifiedTenant == null || identifiedTenant.isEmpty) {
       const envTenant = String.fromEnvironment('TENANT_ID');
       if (envTenant.isNotEmpty) {
@@ -145,7 +143,6 @@ class _SplashScreenState extends State<SplashScreen>
       }
     }
 
-    // 3. Fallback to check URL parameters for web links (e.g., ?tenant=fundline)
     if (kIsWeb && (identifiedTenant == null || identifiedTenant.isEmpty)) {
       try {
         final uriTenant = Uri.base.queryParameters['tenant'];
@@ -155,7 +152,20 @@ class _SplashScreenState extends State<SplashScreen>
       } catch (_) {}
     }
 
-    // 4. Save the identified tenant if we found one
+    if ((identifiedTenant == null || identifiedTenant.isEmpty) &&
+        TenantBranding.tenants.length > 1) {
+      if (mounted) {
+        setState(() => _isIdentifyingTenant = true);
+      }
+
+      final detectedTenant = await TenantBranding.identifyInstall();
+      identifiedTenant = detectedTenant?.slug;
+
+      if (mounted) {
+        setState(() => _isIdentifyingTenant = false);
+      }
+    }
+
     if (identifiedTenant != null && identifiedTenant.isNotEmpty) {
       await prefs.setString('locked_tenant_id', identifiedTenant);
     }
@@ -165,10 +175,10 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     if (identifiedTenant != null && identifiedTenant.isNotEmpty) {
-      // Find the specific tenant matching our identifier
       TenantBranding? matchingTenant;
       for (final t in TenantBranding.tenants) {
-        if (t.slug.toLowerCase() == identifiedTenant.toLowerCase()) {
+        final target = identifiedTenant.toLowerCase();
+        if (t.slug.toLowerCase() == target || t.id.toLowerCase() == target) {
           matchingTenant = t;
           break;
         }
@@ -184,7 +194,6 @@ class _SplashScreenState extends State<SplashScreen>
       }
     }
 
-    // If only one tenant available in the system
     if (TenantBranding.tenants.length == 1) {
       _selectedTenant = TenantBranding.tenants.first;
       final mapped = TenantBranding.fromTenantId(_selectedTenant!.slug) ?? _selectedTenant!;
@@ -192,20 +201,9 @@ class _SplashScreenState extends State<SplashScreen>
       setState(() => _showWelcomePanel = true);
       _welcomeController.forward();
     } else {
-      // Multiple tenants but none identified.
-      // In production mode, we should NOT show the picker. Instead, default to the first.
-      if (kReleaseMode && TenantBranding.tenants.isNotEmpty) {
-        _selectedTenant = TenantBranding.tenants.first;
-        final mapped = TenantBranding.fromTenantId(_selectedTenant!.slug) ?? _selectedTenant!;
-        activeTenant.value = mapped;
-        setState(() => _showWelcomePanel = true);
-        _welcomeController.forward();
-      } else {
-        // In debug mode, show the picker as requested for testing.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showTenantPicker(context);
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showTenantPicker(context);
+      });
     }
   }
 
@@ -223,10 +221,13 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  void _onBankSelected(TenantBranding tenant) {
-    Navigator.of(context).pop(); // Close the bottom sheet
+  void _onBankSelected(TenantBranding tenant) async {
+    Navigator.of(context).pop();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('locked_tenant_id', tenant.slug);
     final mapped = TenantBranding.fromTenantId(tenant.slug) ?? tenant;
     activeTenant.value = mapped;
+    if (!mounted) return;
     setState(() {
       _selectedTenant = mapped;
       _showWelcomePanel = true;
@@ -259,15 +260,13 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    // Use selected tenant color if available, else first tenant, else fallback blue
-    final Color primaryColor = _selectedTenant?.themePrimaryColor ??
-        (_tenantsLoaded && TenantBranding.tenants.isNotEmpty
-            ? TenantBranding.tenants.first.themePrimaryColor
-            : const Color(0xFF1A4FD6));
-    final Color secondaryColor = _selectedTenant?.themeSecondaryColor ??
-        (_tenantsLoaded && TenantBranding.tenants.isNotEmpty
-            ? TenantBranding.tenants.first.themeSecondaryColor
-            : const Color(0xFF2563EB));
+    final bool useNeutralBranding = _selectedTenant == null;
+    final Color primaryColor = useNeutralBranding
+        ? const Color(0xFF0F172A)
+        : _selectedTenant!.themePrimaryColor;
+    final Color secondaryColor = useNeutralBranding
+        ? const Color(0xFF334155)
+        : _selectedTenant!.themeSecondaryColor;
 
     return Scaffold(
       body: Stack(
@@ -325,11 +324,28 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
 
-                if (!_showWelcomePanel && !_tenantsLoaded)
-                  // Loading state
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 60),
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                if (!_showWelcomePanel)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 60),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        const SizedBox(height: 14),
+                        Text(
+                          !_tenantsLoaded
+                              ? 'Loading your workspace...'
+                              : _isIdentifyingTenant
+                                  ? 'Identifying your bank...'
+                                  : 'Preparing your app...',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.78),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
 
                 // ── STEP 2: Welcome panel with Get Started ────────────

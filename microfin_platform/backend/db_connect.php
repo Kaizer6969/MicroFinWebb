@@ -264,6 +264,33 @@ try {
         $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_shadow VARCHAR(10) DEFAULT 'sm' COMMENT 'Card shadow: none, sm, md, lg'");
     } catch (\PDOException $e) {
     }
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS mobile_install_attributions (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                tracking_token VARCHAR(64) NOT NULL UNIQUE,
+                tenant_id VARCHAR(50) NOT NULL,
+                tenant_slug VARCHAR(100) NOT NULL,
+                ip_address VARCHAR(45) NOT NULL,
+                user_agent_hash VARCHAR(64) NOT NULL,
+                user_agent TEXT NULL,
+                platform_hint VARCHAR(32) NOT NULL DEFAULT 'unknown',
+                referer_url VARCHAR(500) NULL,
+                claimed_at DATETIME NULL,
+                claimed_ip_address VARCHAR(45) NULL,
+                claimed_platform_hint VARCHAR(32) NULL,
+                claimed_user_agent TEXT NULL,
+                last_seen_at DATETIME NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME NOT NULL,
+                INDEX idx_mobile_install_lookup (ip_address, platform_hint, claimed_at, expires_at, created_at),
+                INDEX idx_mobile_install_tenant (tenant_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    } catch (\PDOException $e) {
+        error_log('Schema guard warning (mobile_install_attributions): ' . $e->getMessage());
+    }
 } catch (\Throwable $e) {
     error_log('Database Connection Failed: ' . $e->getMessage());
     header('Content-Type: application/json');

@@ -206,6 +206,10 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
         $login_href = $is_editor ? "../tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1" : "tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1";
         $apply_href = $is_editor ? "../public_website/demo.php" : "public_website/demo.php";
         $talk_href = $apply_href . '?mode=talk-to-expert';
+        $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
+        $download_href = $is_editor
+            ? "../public_website/index.php/get-app?bank_id=" . urlencode($download_identifier)
+            : "public_website/index.php/get-app?bank_id=" . urlencode($download_identifier);
         ?>
         <a href="<?php echo $login_href; ?>" class="tpl2-btn" contenteditable="false">Client Portal</a>
     </nav>
@@ -288,9 +292,9 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
             <h2 class="fw-bold display-5 mb-3 text-white" contenteditable="true" data-edit="app_promo_title"><?php echo $e($app_promo_title); ?></h2>
             <p class="fs-5 mb-4 opacity-75 mx-auto text-white" style="max-width: 600px;" contenteditable="true" data-edit="app_promo_desc"><?php echo $e($app_promo_desc); ?></p>
             <div class="d-flex gap-3 justify-content-center">
-                <a href="downloads/microfin_<?php echo urlencode($site_slug ?? ''); ?>.apk" 
+                <a href="<?php echo $e($download_href); ?>" 
                    download class="btn btn-light fw-bold px-4 py-3 d-flex align-items-center gap-2 text-decoration-none" 
-                   style="border-radius: var(--radius); color: #000;" contenteditable="false">
+                    style="border-radius: var(--radius); color: #000;" contenteditable="false">
                     <span class="material-symbols-rounded">download</span> Download APK (<?php echo $e($company_name ?? ''); ?>)
                 </a>
             </div>

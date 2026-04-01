@@ -22,7 +22,7 @@ try {
                 tb.card_border_width,
                 tb.card_shadow
               FROM tenants t
-              INNER JOIN tenant_branding tb ON t.tenant_id = tb.tenant_id
+              LEFT JOIN tenant_branding tb ON t.tenant_id = tb.tenant_id
               WHERE t.status = 'Active'";
               
     $stmt = $conn->prepare($query);

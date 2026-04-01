@@ -1,5 +1,25 @@
 <?php
 require_once '../backend/db_connect.php';
+require_once __DIR__ . '/install_attribution.php';
+
+$requestedRoute = mf_install_requested_route();
+if ($requestedRoute === 'get-app') {
+    $tenantIdentifier = trim((string)($_GET['bank_id'] ?? $_GET['tenant'] ?? $_GET['tenant_slug'] ?? $_GET['site'] ?? ''));
+    $tenant = mf_install_resolve_tenant($pdo, $tenantIdentifier);
+
+    if (!is_array($tenant)) {
+        http_response_code(404);
+        header('Content-Type: text/html; charset=UTF-8');
+        echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>App Not Available</title></head><body style="font-family: Inter, Arial, sans-serif; background:#f8fafc; color:#0f172a; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;"><div style="max-width:420px; background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:32px; text-align:center; box-shadow:0 12px 32px rgba(15,23,42,0.08);"><h1 style="margin:0 0 12px; font-size:1.5rem;">App download unavailable</h1><p style="margin:0; color:#475569; line-height:1.6;">We could not find the requested tenant download link. Please return to the bank website and try again.</p></div></body></html>';
+        exit;
+    }
+
+    $download = mf_install_record_download($pdo, $tenant);
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Location: ' . $download['apk_url'], true, 302);
+    exit;
+}
 
 // Fetch active tenants to display in the "Trusted By" section
 $stmt = $pdo->query("SELECT tenant_name FROM tenants WHERE status = 'Active' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 5");

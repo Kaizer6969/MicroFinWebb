@@ -233,7 +233,10 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
         $tid_val = $tenant_id ?? ($data['tenant_id'] ?? '');
         $is_editor = strpos($_SERVER['PHP_SELF'], 'editor') !== false || strpos($_SERVER['PHP_SELF'], 'setup') !== false;
         $login_href = $is_editor ? "../tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1" : "tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1";
-        $apply_href = $is_editor ? "../public_website/demo.php" : "public_website/demo.php";
+        $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
+        $download_href = $is_editor
+            ? "../public_website/index.php/get-app?bank_id=" . urlencode($download_identifier)
+            : "public_website/index.php/get-app?bank_id=" . urlencode($download_identifier);
         ?>
         <a href="<?php echo $login_href; ?>" class="btn btn-brand rounded-pill px-4 shadow-sm" contenteditable="false">Log In</a>
     </div>
@@ -255,7 +258,6 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
                 <p class="fs-5 text-muted mb-5" data-edit="hero_subtitle" contenteditable="true">
                     <?php echo $e($hero_subtitle ?? 'Get flexible loans with fast approval and transparent terms.'); ?>
                 </p>
-                <a href="<?php echo $apply_href; ?>" class="btn btn-brand btn-lg px-5 shadow rounded-pill" contenteditable="false">Apply Now</a>
             </div>
             <div class="col-lg-6 text-center">
                 <div id="hero_img_container" class="position-relative shadow-sm"
@@ -451,10 +453,10 @@ if (is_string($show_download_val))
         <h2 class="headline fw-800 mb-4 display-5 text-white">Get Our Mobile App</h2>
         <div class="mb-5 lh-lg opacity-75 mx-auto text-white" style="max-width:600px;" data-edit="download_description"
             contenteditable="true"><?php echo $e($download_description ?? 'Track your loans easily.'); ?></div>
-        <a href="downloads/microfin_<?php echo urlencode($site_slug ?? ''); ?>.apk" 
-           class="btn btn-outline-light rounded-pill px-5 py-3 fw-bold text-decoration-none" 
-           download contenteditable="false">Download APK (<?php echo $e($company_name ?? ''); ?>)</a>
-    </div>
+        <a href="<?php echo $e($download_href); ?>" 
+            class="btn btn-outline-light rounded-pill px-5 py-3 fw-bold text-decoration-none" 
+            download contenteditable="false">Download APK (<?php echo $e($company_name ?? ''); ?>)</a>
+      </div>
 </section>
 
 <footer class="site-footer py-5" style="background: #0f172a; color: rgba(255,255,255,.6);">
