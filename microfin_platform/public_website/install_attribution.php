@@ -274,7 +274,10 @@ function mf_install_resolve_tenant(PDO $pdo, ?string $rawIdentifier): ?array
         FROM tenants t
         LEFT JOIN tenant_branding tb ON tb.tenant_id = t.tenant_id
         WHERE t.status = 'Active'
-          AND (LOWER(t.tenant_id) = ? OR LOWER(COALESCE(t.tenant_slug, '')) = ?)
+          AND (
+                LOWER(t.tenant_id) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                OR LOWER(COALESCE(t.tenant_slug, '')) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
+          )
         LIMIT 1
     ");
     $stmt->execute([$identifier, $identifier]);
@@ -421,7 +424,7 @@ function mf_install_claim_tenant(PDO $pdo, array $request): ?array
             FROM mobile_install_attributions a
             INNER JOIN tenants t ON t.tenant_id = a.tenant_id
             LEFT JOIN tenant_branding tb ON tb.tenant_id = t.tenant_id
-            WHERE a.tracking_token = ?
+            WHERE a.tracking_token COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
               AND a.expires_at > UTC_TIMESTAMP()
               AND t.status = 'Active'
             LIMIT 1
@@ -456,18 +459,24 @@ function mf_install_claim_tenant(PDO $pdo, array $request): ?array
         LEFT JOIN tenant_branding tb ON tb.tenant_id = t.tenant_id
         WHERE a.claimed_at IS NULL
           AND a.expires_at > UTC_TIMESTAMP()
-          AND a.ip_address = ?
+          AND a.ip_address COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
           AND t.status = 'Active'
     ";
     $params = [$ipAddress];
 
     if ($requestedPlatform !== '' && $requestedPlatform !== 'unknown') {
-        $sql .= " AND (a.platform_hint = ? OR a.platform_hint = 'unknown')";
+        $sql .= " AND (
+            a.platform_hint COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            OR a.platform_hint = 'unknown'
+        )";
         $params[] = $requestedPlatform;
     }
 
     if ($tenantHint !== '') {
-        $sql .= " AND (LOWER(a.tenant_slug) = ? OR LOWER(a.tenant_id) = ?)";
+        $sql .= " AND (
+            LOWER(a.tenant_slug) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            OR LOWER(a.tenant_id) COLLATE utf8mb4_unicode_ci = CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        )";
         $params[] = $tenantHint;
         $params[] = $tenantHint;
     }
