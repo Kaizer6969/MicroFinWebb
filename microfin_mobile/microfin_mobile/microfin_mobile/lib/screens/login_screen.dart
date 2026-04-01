@@ -465,15 +465,9 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(24),
-              child: Image.asset(
-                tenant.logo,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => Center(
-                  child: Text(
-                    tenant.emoji,
-                    style: const TextStyle(fontSize: 40),
-                  ),
-                ),
+              child: _HeaderTenantLogo(
+                logo: tenant.logo,
+                emoji: tenant.emoji,
               ),
             ),
           ),
@@ -528,6 +522,46 @@ class _LoginScreenState extends State<LoginScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _ForgotPasswordModal(),
+    );
+  }
+}
+
+class _HeaderTenantLogo extends StatelessWidget {
+  final String logo;
+  final String emoji;
+
+  const _HeaderTenantLogo({
+    required this.logo,
+    required this.emoji,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (logo.startsWith('http://') || logo.startsWith('https://')) {
+      return Image.network(
+        logo,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => _fallback(),
+      );
+    }
+
+    if (logo.isNotEmpty) {
+      return Image.asset(
+        logo,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => _fallback(),
+      );
+    }
+
+    return _fallback();
+  }
+
+  Widget _fallback() {
+    return Center(
+      child: Text(
+        emoji,
+        style: const TextStyle(fontSize: 40),
+      ),
     );
   }
 }

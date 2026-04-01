@@ -1,35 +1,19 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/tenant_branding.dart';
 import 'screens/splash_screen.dart';
-import 'screens/login_screen.dart';
 
-// Global active tenant — drives all UI theming across the app
+// Global active tenant - drives all UI theming across the app.
 final ValueNotifier<TenantBranding> activeTenant =
-    ValueNotifier(TenantBranding.fundline);
+    ValueNotifier(TenantBranding.defaultTenant);
 
-/// The tenant slug passed via URL (Flutter Web only).
-/// e.g. site.php?site=fundline  →  Flutter app URL?tenant=fundline
-String? _urlTenantSlug;
-
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // ── Web deep-link: read ?tenant= from the browser URL ──────────────────────
-  if (kIsWeb) {
-    final uri = Uri.base;
-    final slug = uri.queryParameters['tenant'];
-    if (slug != null && slug.isNotEmpty) {
-      final found = TenantBranding.fromTenantId(slug.trim().toLowerCase());
-      if (found != null) {
-        activeTenant.value = found;
-        _urlTenantSlug = found.slug;
-      }
-    }
-  }
-
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await _restoreCachedTenant();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -37,6 +21,30 @@ void main() {
     ),
   );
   runApp(const MicroFinApp());
+}
+
+Future<void> _restoreCachedTenant() async {
+  final prefs = await SharedPreferences.getInstance();
+  final rawTenant = prefs.getString('locked_tenant_payload')?.trim() ?? '';
+  if (rawTenant.isEmpty) {
+    return;
+  }
+
+  try {
+    final decoded = jsonDecode(rawTenant);
+    if (decoded is! Map) {
+      return;
+    }
+
+    final cachedTenant = TenantBranding.fromStoredMap(
+      Map<String, dynamic>.from(decoded),
+    );
+    if (cachedTenant != null) {
+      activeTenant.value = cachedTenant;
+    }
+  } catch (_) {
+    // Ignore malformed cached branding and continue with the neutral default.
+  }
 }
 
 class MicroFinApp extends StatelessWidget {
@@ -47,15 +55,18 @@ class MicroFinApp extends StatelessWidget {
     return ValueListenableBuilder<TenantBranding>(
       valueListenable: activeTenant,
       builder: (context, tenant, _) {
+        SystemChrome.setApplicationSwitcherDescription(
+          ApplicationSwitcherDescription(
+            label: tenant.appName,
+            primaryColor: tenant.primaryColor.value,
+          ),
+        );
+
         return MaterialApp(
           title: tenant.appName,
           debugShowCheckedModeBanner: false,
           theme: _buildTheme(tenant),
-          // If a tenant slug was injected via URL, skip the picker and go
-          // straight to LoginScreen with that company already active.
-          home: _urlTenantSlug != null
-              ? const LoginScreen()
-              : const SplashScreen(),
+          home: const SplashScreen(),
         );
       },
     );
@@ -118,4 +129,3 @@ class MicroFinApp extends StatelessWidget {
     );
   }
 }
-
