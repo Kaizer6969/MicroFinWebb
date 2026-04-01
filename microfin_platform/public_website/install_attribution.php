@@ -50,6 +50,36 @@ function mf_install_base_url(): string
     return $scheme . '://' . $host . mf_install_app_base_path();
 }
 
+function mf_install_project_root(): string
+{
+    return dirname(__DIR__, 2);
+}
+
+function mf_install_slugify(string $value): string
+{
+    $value = strtolower(trim($value));
+    $value = preg_replace('/[^a-z0-9_-]+/', '_', $value) ?? '';
+    return trim($value, '_');
+}
+
+function mf_install_download_filename(array $tenant): string
+{
+    $name = trim((string)($tenant['tenant_name'] ?? $tenant['tenant_slug'] ?? $tenant['tenant_id'] ?? 'bank-app'));
+    $name = preg_replace('/[^A-Za-z0-9 _.-]+/', '', $name) ?? 'bank-app';
+    $name = trim($name);
+
+    if ($name === '') {
+        $name = 'bank-app';
+    }
+
+    return $name . '.apk';
+}
+
+function mf_install_generic_apk_path(): string
+{
+    return mf_install_project_root() . DIRECTORY_SEPARATOR . 'microfin_mobile' . DIRECTORY_SEPARATOR . 'microfin_app.apk';
+}
+
 function mf_install_generic_apk_url(): string
 {
     $override = trim((string)(getenv('MF_GENERIC_APK_URL') ?: getenv('MICROFIN_GENERIC_APK_URL') ?: ''));
@@ -58,6 +88,79 @@ function mf_install_generic_apk_url(): string
     }
 
     return mf_install_base_url() . '/microfin_mobile/microfin_app.apk';
+}
+
+function mf_install_tenant_apk_directory(): string
+{
+    $override = trim((string)(getenv('MF_TENANT_APK_DIR') ?: getenv('MICROFIN_TENANT_APK_DIR') ?: ''));
+    if ($override !== '') {
+        return rtrim($override, "\\/");
+    }
+
+    return mf_install_project_root() . DIRECTORY_SEPARATOR . 'microfin_mobile' . DIRECTORY_SEPARATOR . 'tenant_apks';
+}
+
+function mf_install_resolve_apk_asset(array $tenant): array
+{
+    $directory = mf_install_tenant_apk_directory();
+    $candidates = [];
+
+    $tenantSlug = mf_install_slugify((string)($tenant['tenant_slug'] ?? ''));
+    $tenantId = mf_install_slugify((string)($tenant['tenant_id'] ?? ''));
+
+    if ($tenantSlug !== '') {
+        $candidates[] = $directory . DIRECTORY_SEPARATOR . $tenantSlug . '.apk';
+    }
+    if ($tenantId !== '') {
+        $candidates[] = $directory . DIRECTORY_SEPARATOR . $tenantId . '.apk';
+    }
+
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate)) {
+            return [
+                'path' => $candidate,
+                'filename' => mf_install_download_filename($tenant),
+                'variant' => 'tenant',
+            ];
+        }
+    }
+
+    $genericPath = mf_install_generic_apk_path();
+    if (is_file($genericPath)) {
+        return [
+            'path' => $genericPath,
+            'filename' => mf_install_download_filename($tenant),
+            'variant' => 'generic',
+        ];
+    }
+
+    return [
+        'url' => mf_install_generic_apk_url(),
+        'filename' => mf_install_download_filename($tenant),
+        'variant' => 'remote',
+    ];
+}
+
+function mf_install_stream_apk(string $path, string $filename): void
+{
+    if (!is_file($path) || !is_readable($path)) {
+        http_response_code(404);
+        exit;
+    }
+
+    if (function_exists('set_time_limit')) {
+        @set_time_limit(0);
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/vnd.android.package-archive');
+    header('Content-Length: ' . (string)filesize($path));
+    header('Content-Disposition: attachment; filename="' . addslashes($filename) . '"');
+    header('X-Content-Type-Options: nosniff');
+    readfile($path);
 }
 
 function mf_install_json_response(array $payload, int $statusCode = 200): void

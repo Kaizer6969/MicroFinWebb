@@ -8,8 +8,7 @@ class ApiConfig {
   /// 192.168.x.x for Physical Devices on the same Wi-Fi.
   
   static String get baseUrl {
-    // Production URL via Railway
-    return 'https://microfinwebb.up.railway.app/microfin_mobile/api';
+    return 'https://microfinwebb-production.up.railway.app/microfin_mobile/api';
   }
 
   /// Helper to build a full URL for a specific endpoint.
@@ -20,6 +19,24 @@ class ApiConfig {
     // Ensure the endpoint starts with / if not already present
     final path = endpoint.startsWith('/') ? endpoint : '/$endpoint';
     return '$baseUrl$path';
+  }
+
+  static String resolveAssetUrl(String path) {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+
+    const host = 'https://microfinwebb-production.up.railway.app';
+    if (trimmed.startsWith('/')) {
+      return '$host$trimmed';
+    }
+
+    return '$host/$trimmed';
   }
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import '../config/build_config.dart';
 import '../utils/api_config.dart';
 
 /// Holds all branding data for a single tenant.
@@ -78,11 +79,23 @@ class TenantBranding {
   }
 
   factory TenantBranding.fromJson(Map<String, dynamic> json) {
+    final rawId = (json['id'] ?? json['tenant_id'] ?? BuildConfig.tenantId)
+        .toString()
+        .trim();
+    final rawSlug = (json['slug'] ?? json['tenant_slug'] ?? rawId)
+        .toString()
+        .trim();
+    final resolvedAppName = (json['appName'] ??
+            json['tenant_name'] ??
+            (BuildConfig.hasTenantId ? BuildConfig.appName : 'Bank App'))
+        .toString()
+        .trim();
+
     return TenantBranding(
-      id: json['id'] ?? json['slug'] ?? 'default',
-      slug: json['slug'] ?? 'default',
-      appName: json['appName'] ?? 'MicroFin',
-      logoPath: json['logo_path'] ?? '',
+      id: rawId.isEmpty ? 'default' : rawId,
+      slug: rawSlug.isEmpty ? 'default' : rawSlug,
+      appName: resolvedAppName.isEmpty ? 'Bank App' : resolvedAppName,
+      logoPath: ApiConfig.resolveAssetUrl((json['logo_path'] ?? '').toString()),
       fontFamily: json['font_family'] ?? 'Inter',
       themePrimaryColor: _parseColor(json['theme_primary_color'], Color(0xFF1D4ED8)),
       themeSecondaryColor: _parseColor(json['theme_secondary_color'], Color(0xFF1E40AF)),
@@ -98,9 +111,9 @@ class TenantBranding {
 
   /// Default fallback in case the API fails or no tenants are active
   static TenantBranding defaultTenant = TenantBranding(
-    id: 'default',
-    slug: 'default',
-    appName: 'MicroFin',
+    id: BuildConfig.hasTenantId ? BuildConfig.tenantId : 'default',
+    slug: BuildConfig.hasTenantId ? BuildConfig.tenantId : 'default',
+    appName: BuildConfig.appName,
     logoPath: '',
     fontFamily: 'Inter',
     themePrimaryColor: Color(0xFF1D4ED8),
@@ -227,11 +240,15 @@ class TenantBranding {
 
   static TenantBranding? fromTenantId(String id) {
     final normalized = id.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+
     try {
       return tenants.firstWhere((t) =>
           t.slug.toLowerCase() == normalized || t.id.toLowerCase() == normalized);
     } catch (_) {
-      return tenants.isNotEmpty ? tenants.first : defaultTenant;
+      return null;
     }
   }
 }

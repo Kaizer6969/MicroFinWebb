@@ -15,9 +15,16 @@ if ($requestedRoute === 'get-app') {
     }
 
     $download = mf_install_record_download($pdo, $tenant);
+    $apkAsset = mf_install_resolve_apk_asset($tenant);
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
-    header('Location: ' . $download['apk_url'], true, 302);
+
+    if (!empty($apkAsset['path'])) {
+        mf_install_stream_apk((string)$apkAsset['path'], (string)$apkAsset['filename']);
+        exit;
+    }
+
+    header('Location: ' . (string)($apkAsset['url'] ?? $download['apk_url']), true, 302);
     exit;
 }
 

@@ -35,6 +35,13 @@ class MicroFinApp extends StatelessWidget {
     return ValueListenableBuilder<TenantBranding>(
       valueListenable: activeTenant,
       builder: (context, tenant, _) {
+        SystemChrome.setApplicationSwitcherDescription(
+          ApplicationSwitcherDescription(
+            label: tenant.appName,
+            primaryColor: tenant.themePrimaryColor.value,
+          ),
+        );
+
         return MaterialApp(
           title: tenant.appName,
           debugShowCheckedModeBanner: false,

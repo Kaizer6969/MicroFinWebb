@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 import '../main.dart';
+import '../models/tenant_branding.dart';
 import '../theme.dart';
 import '../utils/api_config.dart';
 import 'main_layout.dart';
@@ -302,9 +303,41 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 const SizedBox(height: 28),
 
+                                Row(
+                                  children: [
+                                    _TenantAvatar(tenant: tenant),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            tenant.appName,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.w800,
+                                              color: const Color(0xFF1A1A2E),
+                                              letterSpacing: -0.4,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Secure access to your ${tenant.appName} app',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 28),
+
                                 // "Welcome Back" heading
                                 Text(
-                                  'Welcome Back',
+                                  'Welcome back',
                                   style: GoogleFonts.outfit(
                                     fontSize: 26,
                                     fontWeight: FontWeight.w800,
@@ -314,7 +347,7 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Hello there, sign in to continue!',
+                                  'Sign in to continue with ${tenant.appName}.',
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     color: AppColors.textMuted,
@@ -458,6 +491,57 @@ class _LoginScreenState extends State<LoginScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _ForgotPasswordModal(),
+    );
+  }
+}
+
+class _TenantAvatar extends StatelessWidget {
+  final TenantBranding tenant;
+
+  const _TenantAvatar({required this.tenant});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 58,
+      height: 58,
+      decoration: BoxDecoration(
+        color: tenant.themePrimaryColor.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: tenant.logoPath.trim().isNotEmpty
+            ? Image.network(
+                tenant.logoPath,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _fallback(),
+              )
+            : _fallback(),
+      ),
+    );
+  }
+
+  Widget _fallback() {
+    final label = tenant.appName.trim();
+    final initials = label.isEmpty
+        ? 'BA'
+        : label
+            .split(RegExp(r'\s+'))
+            .where((part) => part.isNotEmpty)
+            .take(2)
+            .map((part) => part[0].toUpperCase())
+            .join();
+
+    return Center(
+      child: Text(
+        initials,
+        style: GoogleFonts.outfit(
+          color: tenant.themePrimaryColor,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }
