@@ -69,7 +69,6 @@ jobs:
           APP_NAME: ${{ steps.vars.outputs.app_name }}
         run: |
           flutter build apk --release \
-            --dart-define=TENANT_ID=bank-app \
             --dart-define=APP_NAME="$APP_NAME"
 
       - name: Replace served APK
