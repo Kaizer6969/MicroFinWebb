@@ -1,12 +1,13 @@
 <?php
-session_start();
+require_once "../backend/session_auth.php";
+mf_start_backend_session();
 require_once "../backend/db_connect.php";
 require_once "../backend/billing_notifications.php";
-
-if (!isset($_SESSION["user_logged_in"]) || $_SESSION["user_logged_in"] !== true) {
-    header("Location: login.php");
-    exit;
-}
+mf_require_tenant_session($pdo, [
+    'response' => 'redirect',
+    'redirect' => 'login.php',
+    'append_tenant_slug' => true,
+]);
 
 function billing_add_30_days(string $dateString): string
 {

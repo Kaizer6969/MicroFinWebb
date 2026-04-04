@@ -1,1 +1,0 @@
-ALTER TABLE clients ADD COLUMN seen_approval_modal BOOLEAN DEFAULT FALSE;

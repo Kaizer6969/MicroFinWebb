@@ -20,18 +20,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $middle_name = $data['middle_name'] ?? '';
     $last_name = $data['last_name'] ?? '';
     $suffix = $data['suffix'] ?? '';
-    $tenant_id = $data['tenant_id'] ?? 'fundline';
+    $tenant_id = trim((string)($data['tenant_id'] ?? ''));
     
-    // Fallback to a valid tenant if default/fundline is passed by Flutter due to load failures
-    if ($tenant_id === 'default' || $tenant_id === 'fundline') {
-        $res = $conn->query("SELECT tenant_id FROM tenants LIMIT 1");
-        if ($res && $res->num_rows > 0) {
-            $tenant_id = $res->fetch_assoc()['tenant_id'];
-        }
-    }
-    
-    if(empty($username) || empty($email) || empty($password) || empty($first_name) || empty($last_name)) {
+    if(empty($username) || empty($email) || empty($password) || empty($first_name) || empty($last_name) || empty($tenant_id)) {
         echo json_encode(['success' => false, 'message' => 'Required fields are missing']);
+        exit;
+    }
+
+    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+    $tenant_stmt->bind_param("s", $tenant_id);
+    $tenant_stmt->execute();
+    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
+    $tenant_stmt->close();
+
+    if (!$tenant_exists) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
         exit;
     }
     $stmt = $conn->prepare("SELECT user_id FROM users WHERE tenant_id = ? AND (username = ? OR email = ?)");
@@ -46,35 +49,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $conn->begin_transaction();
     try {
         $password_hash = password_hash($password, PASSWORD_ARGON2ID);
-        $role_id = 3; 
-        $role_stmt = $conn->prepare("SELECT role_id FROM user_roles WHERE role_name IN ('Client', 'App User', 'User') AND tenant_id = ? LIMIT 1");
+        $role_stmt = $conn->prepare("SELECT role_id FROM user_roles WHERE role_name = 'Client' AND tenant_id = ? LIMIT 1");
         $role_stmt->bind_param("s", $tenant_id);
         $role_stmt->execute();
         $role_res = $role_stmt->get_result();
         
-        if ($role_res->num_rows > 0) {
-            $role_id = $role_res->fetch_assoc()['role_id'];
-        } else {
-            // Fallback: check platform-wide 'Client' role
-            $role_stmt2 = $conn->query("SELECT role_id FROM user_roles WHERE role_name IN ('Client', 'App User', 'User') AND tenant_id IS NULL LIMIT 1");
-            if ($role_stmt2 && $role_stmt2->num_rows > 0) {
-                $role_id = $role_stmt2->fetch_assoc()['role_id'];
-            } else {
-                // Completely missing, create a new 'Client' role for this tenant natively
-                $insert_role = $conn->prepare("INSERT INTO user_roles (tenant_id, role_name, role_description, is_system_role) VALUES (?, 'Client', 'Default mobile app client', 1)");
-                $insert_role->bind_param("s", $tenant_id);
-                $insert_role->execute();
-                $role_id = $conn->insert_id;
-                $insert_role->close();
+        if ($role_res->num_rows === 0) {
+            // Auto-create the Client role for this tenant if it doesn't exist
+            $insert_role_stmt = $conn->prepare("INSERT INTO user_roles (tenant_id, role_name, role_description) VALUES (?, 'Client', 'Default Client Role')");
+            $insert_role_stmt->bind_param("s", $tenant_id);
+            if (!$insert_role_stmt->execute()) {
+                throw new Exception("Failed to auto-create Client role: " . $insert_role_stmt->error);
             }
+            $role_id = $insert_role_stmt->insert_id;
+            $insert_role_stmt->close();
+        } else {
+            $role_id = (int)$role_res->fetch_assoc()['role_id'];
         }
         $role_stmt->close();
 
         $user_type = 'Client'; 
         $verification_token = bin2hex(random_bytes(32));
 
-        $stmt = $conn->prepare("INSERT INTO users (tenant_id, username, email, password_hash, role_id, user_type, status, email_verified, verification_token, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?, 'Active', 1, ?, ?, ?)");
-        $stmt->bind_param("ssssissss", $tenant_id, $username, $email, $password_hash, $role_id, $user_type, $verification_token, $first_name, $last_name);
+        $stmt = $conn->prepare("INSERT INTO users (tenant_id, username, email, password_hash, role_id, user_type, status, email_verified, verification_token) VALUES (?, ?, ?, ?, ?, ?, 'Active', 1, ?)");
+        $stmt->bind_param("ssssiss", $tenant_id, $username, $email, $password_hash, $role_id, $user_type, $verification_token);
         if (!$stmt->execute()) {
             throw new Exception("Failed to insert user: " . $stmt->error);
         }
@@ -82,15 +80,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
 
         $client_code = 'CLT' . date('Y') . '-' . str_pad($user_id, 5, '0', STR_PAD_LEFT);
-        $stmt = $conn->prepare("INSERT INTO clients (user_id, tenant_id, client_code, first_name, last_name, date_of_birth, contact_number, email_address, client_status, registration_date) VALUES (?, ?, ?, ?, ?, '1990-01-01', '', ?, 'Active', CURDATE())");
-        $stmt->bind_param("isssss", $user_id, $tenant_id, $client_code, $first_name, $last_name, $email);
+        
+        $stmt = $conn->prepare("INSERT INTO clients (user_id, tenant_id, client_code, first_name, middle_name, last_name, suffix, date_of_birth, contact_number, email_address, client_status, registration_date) VALUES (?, ?, ?, ?, ?, ?, ?, '1990-01-01', '', ?, 'Active', CURDATE())");
+        $stmt->bind_param("isssssss", $user_id, $tenant_id, $client_code, $first_name, $middle_name, $last_name, $suffix, $email);
         if (!$stmt->execute()) {
             throw new Exception("Failed to insert client: " . $stmt->error);
         }
         $stmt->close();
 
         $conn->commit();
-        echo json_encode(['success' => true, 'message' => 'Registration successful! Welcome to the ' . ucfirst($tenant_id) . ' interface.']);
+        echo json_encode(['success' => true, 'message' => 'Registration successful!']);
     } catch (Exception $e) {
         $conn->rollback();
         echo json_encode(['success' => false, 'message' => $e->getMessage()]);

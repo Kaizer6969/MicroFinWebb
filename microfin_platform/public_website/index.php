@@ -60,7 +60,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <nav class="navbar">
         <div class="container nav-container">
             <div class="logo">
-                <span class="material-symbols-rounded">public</span>
+                <span class="material-symbols-rounded">account_balance</span>
                 <span class="logo-text">MicroFin</span>
             </div>
             
@@ -69,11 +69,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <a href="#pricing">Pricing</a>
                 <a href="#how-it-works">How it Works</a>
                 <a href="#security">Security</a>
-                <!-- Replaced by Private URL approach -->
-                <a href="demo.php" class="nav-btn-link nav-contact-link">Contact Sales</a>
             </div>
             
             <div class="nav-cta">
+                <a href="javascript:void(0)" id="darkModeToggle" class="nav-btn-link material-symbols-rounded" style="font-size: 24px; text-decoration: none; color: var(--text-gray); margin-right: 12px; cursor: pointer;" aria-label="Toggle Dark Mode">dark_mode</a>
                 <a href="../super_admin/login.php" class="btn btn-login">Platform Login</a>
                 <a href="demo.php" class="btn btn-primary">Apply Now</a>
             </div>
@@ -334,7 +333,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         <div class="container footer-grid">
             <div class="footer-brand">
                 <div class="logo">
-                    <span class="material-symbols-rounded">public</span>
+                    <span class="material-symbols-rounded">account_balance</span>
                     <span class="logo-text">MicroFin</span>
                 </div>
                 <p>The developer-first banking platform enabling financial inclusion across the globe.</p>

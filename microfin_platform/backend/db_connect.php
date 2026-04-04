@@ -104,6 +104,18 @@ if ($envPass !== null) {
     $pass = $envPass;
 }
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'db_runtime.php';
+
+$mf_db_runtime = mf_resolve_db_targets();
+$mf_db_targets = $mf_db_runtime['targets'] ?? [];
+$mf_db_mode = (string) ($mf_db_runtime['mode'] ?? 'local');
+
+$host = (string) ($mf_db_targets[0]['host'] ?? 'localhost');
+$port = (int) ($mf_db_targets[0]['port'] ?? 3306);
+$db = (string) ($mf_db_targets[0]['db'] ?? 'microfin_db');
+$user = (string) ($mf_db_targets[0]['user'] ?? 'root');
+$pass = (string) ($mf_db_targets[0]['pass'] ?? '');
+
 $resolvedBrevoApiKey = mf_env_first(['BREVO_API_KEY']) ?? mf_local_config_value('BREVO_API_KEY', 'YOUR_BREVO_API_KEY');
 $resolvedBrevoSenderEmail = mf_env_first(['BREVO_SENDER_EMAIL']) ?? mf_local_config_value('BREVO_SENDER_EMAIL', 'microfin.statements@gmail.com');
 $resolvedBrevoSenderName = mf_env_first(['BREVO_SENDER_NAME']) ?? mf_local_config_value('BREVO_SENDER_NAME', 'MicroFin');
@@ -187,15 +199,45 @@ $options = [
 ];
 
 try {
-    $targetDsn = sprintf(
-        'mysql:host=%s;port=%d;dbname=%s;charset=%s',
-        $host,
-        (int)$port,
-        $db,
-        $charset
-    );
+    $lastConnectionError = null;
+    $connectedTargetIndex = null;
 
-    $pdo = new PDO($targetDsn, $user, $pass, $options);
+    foreach ($mf_db_targets as $index => $candidateTarget) {
+        try {
+            $targetDsn = sprintf(
+                'mysql:host=%s;port=%d;dbname=%s;charset=%s',
+                (string) $candidateTarget['host'],
+                (int) $candidateTarget['port'],
+                (string) $candidateTarget['db'],
+                $charset
+            );
+
+            $pdo = new PDO(
+                $targetDsn,
+                (string) $candidateTarget['user'],
+                (string) $candidateTarget['pass'],
+                $options
+            );
+
+            $host = (string) $candidateTarget['host'];
+            $port = (int) $candidateTarget['port'];
+            $db = (string) $candidateTarget['db'];
+            $user = (string) $candidateTarget['user'];
+            $pass = (string) $candidateTarget['pass'];
+            $connectedTargetIndex = $index;
+            break;
+        } catch (\Throwable $connectionError) {
+            $lastConnectionError = $connectionError;
+        }
+    }
+
+    if (!isset($pdo)) {
+        throw $lastConnectionError ?? new RuntimeException('Unable to establish database connection.');
+    }
+
+    if ($mf_db_mode !== 'railway' && $connectedTargetIndex !== null && $connectedTargetIndex > 0) {
+        error_log('Primary localhost DB connection failed; using alternate local credentials.');
+    }
 
     // Proceed with schema guards and migrations inside the same main try block
 
@@ -296,6 +338,46 @@ try {
         }
     } catch (\PDOException $e) {
         error_log('Schema guard warning (mobile_install_attributions): ' . $e->getMessage());
+    }
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                session_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                tenant_id VARCHAR(50) NULL,
+                session_token VARCHAR(255) NOT NULL,
+                ip_address VARCHAR(45) NULL,
+                user_agent TEXT NULL,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                last_activity_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME NOT NULL,
+                UNIQUE KEY uq_user_sessions_token (session_token),
+                KEY idx_user_sessions_user (user_id),
+                KEY idx_user_sessions_tenant (tenant_id),
+                KEY idx_user_sessions_expires (expires_at),
+                CONSTRAINT fk_user_sessions_user
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                CONSTRAINT fk_user_sessions_tenant
+                    FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $userSessionMigrations = [
+            "ALTER TABLE user_sessions MODIFY COLUMN tenant_id VARCHAR(50) NULL",
+            "ALTER TABLE user_sessions ADD COLUMN user_agent TEXT NULL AFTER ip_address",
+            "ALTER TABLE user_sessions ADD COLUMN last_activity_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP AFTER created_at",
+        ];
+
+        foreach ($userSessionMigrations as $migrationSql) {
+            try {
+                $pdo->exec($migrationSql);
+            } catch (\PDOException $ignore) {
+                // Safe to ignore when a column already exists or the DB flavor normalizes defaults differently.
+            }
+        }
+    } catch (\PDOException $e) {
+        error_log('Schema guard warning (user_sessions): ' . $e->getMessage());
     }
 } catch (\Throwable $e) {
     error_log('Database Connection Failed: ' . $e->getMessage());

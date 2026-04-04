@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once 'session_auth.php';
+mf_start_backend_session();
 require_once 'db_connect.php';
 
 header('Content-Type: application/json');
@@ -26,16 +27,25 @@ if (!in_array($theme, ['light', 'dark'], true)) {
 $user_id = 0;
 $role_context = strtolower(trim((string)($payload['role'] ?? '')));
 
-if ($role_context === 'super_admin' && !empty($_SESSION['super_admin_logged_in']) && !empty($_SESSION['super_admin_id'])) {
-    $user_id = (int)$_SESSION['super_admin_id'];
-} elseif ($role_context === 'tenant' && !empty($_SESSION['user_logged_in']) && !empty($_SESSION['user_id'])) {
-    $user_id = (int)$_SESSION['user_id'];
+if ($role_context === 'super_admin') {
+    if (mf_validate_backend_session($pdo, 'super_admin')) {
+        $user_id = (int) ($_SESSION['super_admin_id'] ?? 0);
+    }
+} elseif ($role_context === 'tenant') {
+    if (mf_validate_backend_session($pdo, 'tenant')) {
+        $user_id = (int) ($_SESSION['user_id'] ?? 0);
+        if ($user_id <= 0 && mf_backend_session_is_impersonation()) {
+            $user_id = (int) ($_SESSION['super_admin_id'] ?? 0);
+        }
+    }
 } else {
-    // Fallback: use whichever authenticated session is currently active.
-    if (!empty($_SESSION['user_logged_in']) && !empty($_SESSION['user_id'])) {
-        $user_id = (int)$_SESSION['user_id'];
-    } elseif (!empty($_SESSION['super_admin_logged_in']) && !empty($_SESSION['super_admin_id'])) {
-        $user_id = (int)$_SESSION['super_admin_id'];
+    if (mf_validate_backend_session($pdo, 'tenant')) {
+        $user_id = (int) ($_SESSION['user_id'] ?? 0);
+        if ($user_id <= 0 && mf_backend_session_is_impersonation()) {
+            $user_id = (int) ($_SESSION['super_admin_id'] ?? 0);
+        }
+    } elseif (mf_validate_backend_session($pdo, 'super_admin')) {
+        $user_id = (int) ($_SESSION['super_admin_id'] ?? 0);
     }
 }
 

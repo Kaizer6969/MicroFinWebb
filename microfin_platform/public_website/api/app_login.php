@@ -10,6 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once '../../backend/db_connect.php';
+require_once '../../backend/login_activity.php';
 
 $raw_data = file_get_contents('php://input');
 $data = json_decode($raw_data, true);
@@ -91,6 +92,8 @@ try {
         echo json_encode(['status' => 'error', 'message' => 'Client profile is not active.']);
         exit;
     }
+
+    mf_update_user_last_login($pdo, (int) $user['user_id']);
 
     $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
     $payload = json_encode([

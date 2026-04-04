@@ -232,7 +232,11 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
         <?php 
         $tid_val = $tenant_id ?? ($data['tenant_id'] ?? '');
         $is_editor = strpos($_SERVER['PHP_SELF'], 'editor') !== false || strpos($_SERVER['PHP_SELF'], 'setup') !== false;
-        $login_href = $is_editor ? "../tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1" : "tenant_login/login.php?tenant=" . urlencode($tid_val) . "&auth=1";
+        $login_query = 'tenant=' . urlencode($tid_val) . '&auth=1';
+        if (!$is_editor) {
+            $login_query .= '&from_site=1';
+        }
+        $login_href = $is_editor ? "../tenant_login/login.php?{$login_query}" : "tenant_login/login.php?{$login_query}";
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
         $download_href = $is_editor
             ? "../public_website/index.php/get-app?bank_id=" . urlencode($download_identifier)

@@ -46,6 +46,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const creditLimitRulesPayload = document.getElementById('credit-limit-rules-payload');
     const creditLimitRulesContainer = document.getElementById('credit-category-rules');
     const creditLimitRulesAddButton = document.getElementById('credit-add-category-rule');
+    const creditScoringForm = document.getElementById('credit-scoring-form');
+    const creditMinimumScoreInput = document.getElementById('credit-minimum-score');
+    const creditAutoRejectBelowInput = document.getElementById('credit-auto-reject-below');
+    const creditRequireCiInput = document.getElementById('credit-require-ci');
+    const creditPresetButtons = Array.from(document.querySelectorAll('[data-credit-preset]'));
+    const creditWeightTotalBadge = document.getElementById('credit-weight-total-badge');
+    const creditWeightTotalValue = document.getElementById('credit-weight-total-value');
+    const creditWeightTotalMessage = document.getElementById('credit-weight-total-message');
+    const creditSummaryMinScore = document.getElementById('credit-summary-min-score');
+    const creditSummaryAutoReject = document.getElementById('credit-summary-auto-reject');
+    const creditSummaryCi = document.getElementById('credit-summary-ci');
+    const creditSummaryWeightStatus = document.getElementById('credit-summary-weight-status');
+    const creditScoringPolicyNote = document.getElementById('credit-scoring-policy-note');
+    const creditOverviewMinScore = document.getElementById('credit-overview-min-score');
+    const creditOverviewApproval = document.getElementById('credit-overview-approval');
+    const creditOverviewBaseLimit = document.getElementById('credit-overview-base-limit');
+    const creditOverviewCi = document.getElementById('credit-overview-ci');
     const creditWorkflowInputs = Array.from(document.querySelectorAll('input[name="credit_approval_mode"]'));
     const creditBaseLimitInput = document.getElementById('credit-base-limit');
     const creditMinCompletedLoansInput = document.getElementById('credit-min-completed-loans');
@@ -65,6 +82,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const creditPreviewLimitOutput = document.getElementById('credit-preview-limit-output');
     const creditPreviewLimitNote = document.getElementById('credit-preview-limit-note');
     const creditPreviewLimitFill = document.getElementById('credit-preview-limit-fill');
+    const creditWeightInputs = {
+        income: document.getElementById('credit-weight-income'),
+        employment: document.getElementById('credit-weight-employment'),
+        creditHistory: document.getElementById('credit-weight-credit-history'),
+        collateral: document.getElementById('credit-weight-collateral'),
+        character: document.getElementById('credit-weight-character'),
+        business: document.getElementById('credit-weight-business'),
+    };
+    const creditWeightDisplays = {
+        income: {
+            value: document.getElementById('credit-weight-display-income'),
+            bar: document.getElementById('credit-weight-bar-income'),
+        },
+        employment: {
+            value: document.getElementById('credit-weight-display-employment'),
+            bar: document.getElementById('credit-weight-bar-employment'),
+        },
+        creditHistory: {
+            value: document.getElementById('credit-weight-display-credit-history'),
+            bar: document.getElementById('credit-weight-bar-credit-history'),
+        },
+        collateral: {
+            value: document.getElementById('credit-weight-display-collateral'),
+            bar: document.getElementById('credit-weight-bar-collateral'),
+        },
+        character: {
+            value: document.getElementById('credit-weight-display-character'),
+            bar: document.getElementById('credit-weight-bar-character'),
+        },
+        business: {
+            value: document.getElementById('credit-weight-display-business'),
+            bar: document.getElementById('credit-weight-bar-business'),
+        },
+    };
 
     const sectionDefaults = {
         staff: 'staff-list',
@@ -322,6 +373,47 @@ document.addEventListener('DOMContentLoaded', () => {
         semi: 'Semi-Automatic',
         manual: 'Fully Manual',
     };
+    const CREDIT_SCORING_PRESETS = {
+        balanced: {
+            minimumScore: 50,
+            autoRejectBelow: 30,
+            requireCi: true,
+            weights: {
+                income: 25,
+                employment: 20,
+                creditHistory: 20,
+                collateral: 10,
+                character: 15,
+                business: 10,
+            },
+        },
+        conservative: {
+            minimumScore: 65,
+            autoRejectBelow: 40,
+            requireCi: true,
+            weights: {
+                income: 18,
+                employment: 15,
+                creditHistory: 25,
+                collateral: 20,
+                character: 12,
+                business: 10,
+            },
+        },
+        growth: {
+            minimumScore: 45,
+            autoRejectBelow: 25,
+            requireCi: false,
+            weights: {
+                income: 30,
+                employment: 18,
+                creditHistory: 15,
+                collateral: 10,
+                character: 12,
+                business: 15,
+            },
+        },
+    };
 
     function formatPeso(value) {
         const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -335,6 +427,121 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function collectCreditScoringState() {
+        const weights = {
+            income: Number.parseInt(creditWeightInputs.income?.value || '0', 10) || 0,
+            employment: Number.parseInt(creditWeightInputs.employment?.value || '0', 10) || 0,
+            creditHistory: Number.parseInt(creditWeightInputs.creditHistory?.value || '0', 10) || 0,
+            collateral: Number.parseInt(creditWeightInputs.collateral?.value || '0', 10) || 0,
+            character: Number.parseInt(creditWeightInputs.character?.value || '0', 10) || 0,
+            business: Number.parseInt(creditWeightInputs.business?.value || '0', 10) || 0,
+        };
+
+        return {
+            minimumScore: Number.parseInt(creditMinimumScoreInput?.value || '0', 10) || 0,
+            autoRejectBelow: Number.parseInt(creditAutoRejectBelowInput?.value || '0', 10) || 0,
+            requireCi: Boolean(creditRequireCiInput?.checked),
+            weights,
+            totalWeight: Object.values(weights).reduce((sum, value) => sum + value, 0),
+        };
+    }
+
+    function applyCreditPreset(presetKey) {
+        const preset = CREDIT_SCORING_PRESETS[presetKey];
+        if (!preset) {
+            return;
+        }
+
+        if (creditMinimumScoreInput) {
+            creditMinimumScoreInput.value = String(preset.minimumScore);
+        }
+        if (creditAutoRejectBelowInput) {
+            creditAutoRejectBelowInput.value = String(preset.autoRejectBelow);
+        }
+        if (creditRequireCiInput) {
+            creditRequireCiInput.checked = Boolean(preset.requireCi);
+        }
+
+        Object.entries(preset.weights).forEach(([key, value]) => {
+            if (creditWeightInputs[key]) {
+                creditWeightInputs[key].value = String(value);
+            }
+        });
+    }
+
+    function refreshCreditScoringSummary() {
+        if (!creditScoringForm) {
+            return;
+        }
+
+        const state = collectCreditScoringState();
+        const totalIsValid = state.totalWeight === 100;
+        const autoRejectIsValid = state.autoRejectBelow <= state.minimumScore;
+        const activePresetKey = Object.entries(CREDIT_SCORING_PRESETS).find(([, preset]) => {
+            return state.minimumScore === preset.minimumScore
+                && state.autoRejectBelow === preset.autoRejectBelow
+                && state.requireCi === preset.requireCi
+                && Object.entries(preset.weights).every(([key, value]) => state.weights[key] === value);
+        })?.[0] || '';
+
+        if (creditWeightTotalValue) {
+            creditWeightTotalValue.textContent = `${state.totalWeight}%`;
+        }
+        if (creditWeightTotalBadge) {
+            creditWeightTotalBadge.classList.toggle('is-valid', totalIsValid && autoRejectIsValid);
+            creditWeightTotalBadge.classList.toggle('is-invalid', !totalIsValid || !autoRejectIsValid);
+        }
+        if (creditWeightTotalMessage) {
+            let helperText = `Weights are balanced at exactly ${state.totalWeight}%.`;
+            if (!totalIsValid) {
+                helperText = `Weights must total exactly 100%. Current total: ${state.totalWeight}%.`;
+            } else if (!autoRejectIsValid) {
+                helperText = 'Auto-reject cannot be higher than the minimum approval score.';
+            } else {
+                helperText = `Borrowers below ${state.autoRejectBelow} are declined automatically, while ${state.minimumScore}+ moves forward for review.`;
+            }
+            creditWeightTotalMessage.textContent = helperText;
+            creditWeightTotalMessage.classList.toggle('is-valid', totalIsValid && autoRejectIsValid);
+            creditWeightTotalMessage.classList.toggle('is-invalid', !totalIsValid || !autoRejectIsValid);
+        }
+
+        if (creditSummaryMinScore) {
+            creditSummaryMinScore.textContent = `${state.minimumScore}/100`;
+        }
+        if (creditSummaryAutoReject) {
+            creditSummaryAutoReject.textContent = `Below ${state.autoRejectBelow}`;
+        }
+        if (creditSummaryCi) {
+            creditSummaryCi.textContent = state.requireCi ? 'Required' : 'Optional';
+        }
+        if (creditSummaryWeightStatus) {
+            creditSummaryWeightStatus.textContent = `${state.totalWeight}% total`;
+        }
+        if (creditScoringPolicyNote) {
+            const ciText = state.requireCi ? 'A credit investigation is required before final approval.' : 'Credit investigation stays optional for the reviewing team.';
+            creditScoringPolicyNote.textContent = `Borrowers must reach ${state.minimumScore}/100 to proceed, while scores below ${state.autoRejectBelow} are declined immediately. ${ciText}`;
+        }
+        if (creditOverviewMinScore) {
+            creditOverviewMinScore.textContent = `${state.minimumScore}/100`;
+        }
+        if (creditOverviewCi) {
+            creditOverviewCi.textContent = state.requireCi ? 'Required' : 'Optional';
+        }
+
+        creditPresetButtons.forEach((button) => {
+            button.classList.toggle('is-active', button.getAttribute('data-credit-preset') === activePresetKey);
+        });
+
+        Object.entries(state.weights).forEach(([key, value]) => {
+            if (creditWeightDisplays[key]?.value) {
+                creditWeightDisplays[key].value.textContent = `${value}%`;
+            }
+            if (creditWeightDisplays[key]?.bar) {
+                creditWeightDisplays[key].bar.style.width = `${Math.max(0, Math.min(100, value))}%`;
+            }
+        });
     }
 
     function parseCreditLimitRulesSeed() {
@@ -590,8 +797,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (creditSummaryWorkflow) {
             creditSummaryWorkflow.textContent = CREDIT_WORKFLOW_LABELS[state.workflow.approval_mode] || 'Semi-Automatic';
         }
+        if (creditOverviewApproval) {
+            creditOverviewApproval.textContent = CREDIT_WORKFLOW_LABELS[state.workflow.approval_mode] || 'Semi-Automatic';
+        }
         if (creditSummaryBaseLimit) {
             creditSummaryBaseLimit.textContent = formatPeso(state.initial_limits.base_limit_default);
+        }
+        if (creditOverviewBaseLimit) {
+            creditOverviewBaseLimit.textContent = formatPeso(state.initial_limits.base_limit_default);
         }
         if (creditSummaryUpgrade) {
             creditSummaryUpgrade.textContent = `${state.upgrade_eligibility.min_completed_loans} completed loans, ${state.upgrade_eligibility.max_allowed_late_payments} late payments max`;
@@ -779,6 +992,29 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshCreditLimitSummary();
     }
 
+    if (creditScoringForm) {
+        [
+            creditMinimumScoreInput,
+            creditAutoRejectBelowInput,
+            creditRequireCiInput,
+            ...Object.values(creditWeightInputs),
+        ].filter(Boolean).forEach((input) => {
+            input.addEventListener('input', refreshCreditScoringSummary);
+            input.addEventListener('change', refreshCreditScoringSummary);
+        });
+
+        creditPresetButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const presetKey = button.getAttribute('data-credit-preset') || '';
+                applyCreditPreset(presetKey);
+                creditPresetButtons.forEach((item) => item.classList.toggle('is-active', item === button));
+                refreshCreditScoringSummary();
+            });
+        });
+
+        refreshCreditScoringSummary();
+    }
+
     if (setupAlert && setupAlertToggle) {
         const storageKey = 'tenantAdminSetupAlertMinimized';
         const setupAlertIcon = setupAlertToggle.querySelector('.material-symbols-rounded');
@@ -828,36 +1064,248 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Role View Swapping Logic
-    const roleListItems = document.querySelectorAll('.role-list-item');
-    const rolePanels = document.querySelectorAll('.role-permissions-panel');
+    // Roles & Permissions Workspace Interactions
+    const roleListItems = Array.from(document.querySelectorAll('.role-list-item'));
+    const rolePanels = Array.from(document.querySelectorAll('.role-permissions-panel'));
+    const roleFilterInput = document.getElementById('role-filter-input');
+    const roleFilterEmpty = document.getElementById('role-filter-empty');
 
-    roleListItems.forEach(item => {
-        item.addEventListener('click', (e) => {
-            e.preventDefault();
-            
-            const roleId = item.getAttribute('data-role-id');
-            if (!roleId) return;
+    const normalizeSearch = (value) => String(value || '').trim().toLowerCase();
 
-            // Update active styling in sidebar
-            roleListItems.forEach(i => i.classList.remove('active'));
-            item.classList.add('active');
+    const updatePermissionSummary = (panel) => {
+        if (!panel) {
+            return;
+        }
 
-            // Hide all panels, show the selected one
-            rolePanels.forEach(panel => {
-                panel.style.display = 'none';
-            });
-            const targetPanel = document.getElementById(`role-panel-${roleId}`);
-            if (targetPanel) {
-                targetPanel.style.display = 'block';
+        const summaryEl = panel.querySelector('.permissions-selection-summary');
+        if (!summaryEl) {
+            return;
+        }
+
+        const checkboxes = Array.from(panel.querySelectorAll('input[name="permissions[]"]'));
+        const selectedCount = checkboxes.filter((cb) => cb.checked).length;
+        const totalCount = checkboxes.length;
+        summaryEl.textContent = `${selectedCount} of ${totalCount} selected`;
+    };
+
+    const updateModuleSelectionCounts = (panel) => {
+        if (!panel) {
+            return;
+        }
+
+        const modules = panel.querySelectorAll('.permission-module');
+        modules.forEach((module) => {
+            const countEl = module.querySelector('.permission-module-visible-count');
+            if (!countEl) {
+                return;
             }
 
-            // Update URL query string without reloading page
+            const selectedCount = Array.from(module.querySelectorAll('input[name="permissions[]"]')).filter((cb) => cb.checked).length;
+            countEl.textContent = String(selectedCount);
+        });
+    };
+
+    const applyPermissionFilter = (panel, rawQuery) => {
+        if (!panel) {
+            return;
+        }
+
+        const query = normalizeSearch(rawQuery);
+        const modules = panel.querySelectorAll('.permission-module');
+        let hasVisibleItems = false;
+
+        modules.forEach((module) => {
+            const toggleItems = module.querySelectorAll('.toggle-item[data-permission-search]');
+            let moduleVisibleCount = 0;
+
+            toggleItems.forEach((item) => {
+                const searchText = normalizeSearch(item.getAttribute('data-permission-search'));
+                const isVisible = query === '' || searchText.includes(query);
+                item.classList.toggle('is-filter-hidden', !isVisible);
+                if (isVisible) {
+                    moduleVisibleCount++;
+                }
+            });
+
+            module.classList.toggle('is-module-hidden', moduleVisibleCount === 0);
+            if (moduleVisibleCount > 0) {
+                hasVisibleItems = true;
+            }
+        });
+
+        const emptyState = panel.querySelector('.permissions-empty-search');
+        if (emptyState) {
+            emptyState.hidden = hasVisibleItems;
+        }
+    };
+
+    const setVisiblePermissionsState = (panel, shouldCheck) => {
+        if (!panel) {
+            return;
+        }
+
+        const checkboxes = panel.querySelectorAll('input[name="permissions[]"]');
+        checkboxes.forEach((checkbox) => {
+            if (checkbox.disabled) {
+                return;
+            }
+
+            const toggleItem = checkbox.closest('.toggle-item');
+            const moduleCard = checkbox.closest('.permission-module');
+            if ((toggleItem && toggleItem.classList.contains('is-filter-hidden')) || (moduleCard && moduleCard.classList.contains('is-module-hidden'))) {
+                return;
+            }
+
+            checkbox.checked = shouldCheck;
+        });
+
+        updatePermissionSummary(panel);
+        updateModuleSelectionCounts(panel);
+    };
+
+    const setModuleVisiblePermissionsState = (moduleCard, shouldCheck) => {
+        if (!moduleCard || moduleCard.classList.contains('is-module-hidden')) {
+            return;
+        }
+
+        const checkboxes = moduleCard.querySelectorAll('input[name="permissions[]"]');
+        checkboxes.forEach((checkbox) => {
+            if (checkbox.disabled) {
+                return;
+            }
+
+            const toggleItem = checkbox.closest('.toggle-item');
+            if (toggleItem && toggleItem.classList.contains('is-filter-hidden')) {
+                return;
+            }
+
+            checkbox.checked = shouldCheck;
+        });
+
+        const panel = moduleCard.closest('.role-permissions-panel');
+        updatePermissionSummary(panel);
+        updateModuleSelectionCounts(panel);
+    };
+
+    const activateRolePanel = (roleId, shouldPushState) => {
+        if (!roleId) {
+            return;
+        }
+
+        roleListItems.forEach((item) => {
+            item.classList.toggle('active', item.getAttribute('data-role-id') === roleId);
+        });
+
+        rolePanels.forEach((panel) => {
+            panel.style.display = 'none';
+        });
+
+        const targetPanel = document.getElementById(`role-panel-${roleId}`);
+        if (targetPanel) {
+            targetPanel.style.display = 'block';
+            const filterInput = targetPanel.querySelector('.permissions-filter-input');
+            applyPermissionFilter(targetPanel, filterInput ? filterInput.value : '');
+            updatePermissionSummary(targetPanel);
+            updateModuleSelectionCounts(targetPanel);
+        }
+
+        if (shouldPushState) {
             const currentUrl = new URL(window.location.href);
             currentUrl.searchParams.set('role_id', roleId);
             window.history.pushState({}, '', currentUrl);
+        }
+    };
+
+    roleListItems.forEach((item) => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const roleId = item.getAttribute('data-role-id');
+            activateRolePanel(roleId, true);
         });
     });
+
+    rolePanels.forEach((panel) => {
+        const filterInput = panel.querySelector('.permissions-filter-input');
+        const bulkButtons = panel.querySelectorAll('.permission-bulk-toggle');
+        const moduleBulkButtons = panel.querySelectorAll('.permission-module-toggle');
+        const checkboxes = panel.querySelectorAll('input[name="permissions[]"]');
+
+        if (filterInput) {
+            filterInput.addEventListener('input', () => {
+                applyPermissionFilter(panel, filterInput.value);
+            });
+        }
+
+        bulkButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.getAttribute('data-bulk');
+                setVisiblePermissionsState(panel, mode === 'all');
+            });
+        });
+
+        moduleBulkButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.getAttribute('data-bulk');
+                const moduleCard = button.closest('.permission-module');
+                setModuleVisiblePermissionsState(moduleCard, mode === 'all');
+            });
+        });
+
+        checkboxes.forEach((checkbox) => {
+            checkbox.addEventListener('change', () => {
+                updatePermissionSummary(panel);
+                updateModuleSelectionCounts(panel);
+            });
+        });
+
+        applyPermissionFilter(panel, filterInput ? filterInput.value : '');
+        updatePermissionSummary(panel);
+        updateModuleSelectionCounts(panel);
+    });
+
+    const applyRoleFilter = (rawQuery) => {
+        const query = normalizeSearch(rawQuery);
+        let visibleCount = 0;
+
+        roleListItems.forEach((item) => {
+            const searchText = normalizeSearch(item.getAttribute('data-role-search'));
+            const isVisible = query === '' || searchText.includes(query);
+            item.style.display = isVisible ? '' : 'none';
+            if (isVisible) {
+                visibleCount++;
+            }
+        });
+
+        if (roleFilterEmpty) {
+            roleFilterEmpty.hidden = visibleCount !== 0;
+        }
+
+        if (visibleCount === 0) {
+            rolePanels.forEach((panel) => {
+                panel.style.display = 'none';
+            });
+            return;
+        }
+
+        const activeVisible = roleListItems.some((item) => item.classList.contains('active') && item.style.display !== 'none');
+        if (!activeVisible) {
+            const firstVisible = roleListItems.find((item) => item.style.display !== 'none');
+            if (firstVisible) {
+                activateRolePanel(firstVisible.getAttribute('data-role-id'), true);
+            }
+        }
+    };
+
+    if (roleFilterInput) {
+        roleFilterInput.addEventListener('input', () => {
+            applyRoleFilter(roleFilterInput.value);
+        });
+    }
+
+    const initiallyActiveRole = roleListItems.find((item) => item.classList.contains('active')) || roleListItems[0];
+    if (initiallyActiveRole) {
+        activateRolePanel(initiallyActiveRole.getAttribute('data-role-id'), false);
+    }
 
     const themeToggleBtn = document.getElementById('theme-toggle');
 
@@ -1484,10 +1932,141 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Role Presets Logic
+    // Role Presets and Create Role Permission Workspace
     const rolePresetSelect = document.getElementById('role-preset');
     const roleNameInput = document.getElementById('create_role_name');
-    const createRolePermissions = document.querySelectorAll('#create-role-permissions-container input[type="checkbox"]');
+    const createRolePermissionsContainer = document.getElementById('create-role-permissions-container');
+    const createRolePermissions = createRolePermissionsContainer
+        ? Array.from(createRolePermissionsContainer.querySelectorAll('input[type="checkbox"]'))
+        : [];
+    const createRoleSearchInput = document.getElementById('create-role-permissions-search');
+    const createRoleSummary = document.getElementById('create-role-selection-summary');
+    const createRoleSelectVisibleBtn = document.getElementById('create-role-select-visible');
+    const createRoleClearVisibleBtn = document.getElementById('create-role-clear-visible');
+    const createRoleModuleToggleBtns = document.querySelectorAll('.create-role-module-toggle');
+    const createRoleEmptyState = document.getElementById('create-role-permissions-empty');
+
+    const updateCreateRoleModuleCounts = () => {
+        if (!createRolePermissionsContainer) {
+            return;
+        }
+
+        const modules = createRolePermissionsContainer.querySelectorAll('.permission-module');
+        modules.forEach((module) => {
+            const countEl = module.querySelector('.permission-module-visible-count');
+            if (!countEl) {
+                return;
+            }
+
+            const selectedCount = Array.from(module.querySelectorAll('input[type="checkbox"]')).filter((cb) => cb.checked).length;
+            countEl.textContent = String(selectedCount);
+        });
+    };
+
+    const updateCreateRoleSummary = () => {
+        const selectedCount = createRolePermissions.filter((cb) => cb.checked).length;
+        const totalCount = createRolePermissions.length;
+
+        if (createRoleSummary) {
+            createRoleSummary.textContent = `${selectedCount} of ${totalCount} selected`;
+        }
+
+        updateCreateRoleModuleCounts();
+    };
+
+    const applyCreateRoleFilter = (rawQuery) => {
+        if (!createRolePermissionsContainer) {
+            return;
+        }
+
+        const query = normalizeSearch(rawQuery);
+        const modules = createRolePermissionsContainer.querySelectorAll('.permission-module');
+        let hasVisibleItems = false;
+
+        modules.forEach((module) => {
+            const items = module.querySelectorAll('.toggle-item[data-permission-search]');
+            let moduleVisibleCount = 0;
+
+            items.forEach((item) => {
+                const searchText = normalizeSearch(item.getAttribute('data-permission-search'));
+                const isVisible = query === '' || searchText.includes(query);
+                item.classList.toggle('is-filter-hidden', !isVisible);
+                if (isVisible) {
+                    moduleVisibleCount++;
+                }
+            });
+
+            module.classList.toggle('is-module-hidden', moduleVisibleCount === 0);
+            if (moduleVisibleCount > 0) {
+                hasVisibleItems = true;
+            }
+        });
+
+        if (createRoleEmptyState) {
+            createRoleEmptyState.hidden = hasVisibleItems;
+        }
+    };
+
+    const setCreateRoleVisibleState = (shouldCheck) => {
+        createRolePermissions.forEach((checkbox) => {
+            const item = checkbox.closest('.toggle-item');
+            const module = checkbox.closest('.permission-module');
+            if ((item && item.classList.contains('is-filter-hidden')) || (module && module.classList.contains('is-module-hidden'))) {
+                return;
+            }
+            checkbox.checked = shouldCheck;
+        });
+
+        updateCreateRoleSummary();
+    };
+
+    if (createRolePermissionsContainer && createRolePermissions.length > 0) {
+        createRolePermissions.forEach((checkbox) => {
+            checkbox.addEventListener('change', updateCreateRoleSummary);
+        });
+
+        if (createRoleSearchInput) {
+            createRoleSearchInput.addEventListener('input', () => {
+                applyCreateRoleFilter(createRoleSearchInput.value);
+            });
+        }
+
+        if (createRoleSelectVisibleBtn) {
+            createRoleSelectVisibleBtn.addEventListener('click', () => {
+                setCreateRoleVisibleState(true);
+            });
+        }
+
+        if (createRoleClearVisibleBtn) {
+            createRoleClearVisibleBtn.addEventListener('click', () => {
+                setCreateRoleVisibleState(false);
+            });
+        }
+
+        createRoleModuleToggleBtns.forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.getAttribute('data-bulk');
+                const moduleCard = button.closest('.permission-module');
+                if (!moduleCard || moduleCard.classList.contains('is-module-hidden')) {
+                    return;
+                }
+
+                const checkboxes = moduleCard.querySelectorAll('input[type="checkbox"]');
+                checkboxes.forEach((checkbox) => {
+                    const item = checkbox.closest('.toggle-item');
+                    if (item && item.classList.contains('is-filter-hidden')) {
+                        return;
+                    }
+                    checkbox.checked = mode === 'all';
+                });
+
+                updateCreateRoleSummary();
+            });
+        });
+
+        applyCreateRoleFilter(createRoleSearchInput ? createRoleSearchInput.value : '');
+        updateCreateRoleSummary();
+    }
 
     if (rolePresetSelect && roleNameInput && createRolePermissions.length > 0) {
         const presets = {
@@ -1507,27 +2086,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
         rolePresetSelect.addEventListener('change', (e) => {
             const val = e.target.value;
-            
+
             if (val === 'custom') {
-                createRolePermissions.forEach(cb => cb.checked = false);
+                createRolePermissions.forEach((cb) => {
+                    cb.checked = false;
+                });
+                updateCreateRoleSummary();
+                return;
+            }
+
+            if (val === 'manager') {
+                const currentName = roleNameInput.value.trim();
+                const isCurrentNameAPreset = Object.values(presets).some((p) => p.name === currentName) || currentName === '';
+                if (isCurrentNameAPreset) {
+                    roleNameInput.value = 'Manager';
+                }
+
+                createRolePermissions.forEach((cb) => {
+                    // Manager gets all visible permissions by default
+                    cb.checked = true;
+                });
+
+                updateCreateRoleSummary();
+                updateCreateRoleModuleCounts();
                 return;
             }
 
             const preset = presets[val];
             if (preset) {
-                // Auto-fill name if it's empty or currently matches another preset
                 const currentName = roleNameInput.value.trim();
-                const isCurrentNameAPreset = Object.values(presets).some(p => p.name === currentName) || currentName === '';
+                const isCurrentNameAPreset = Object.values(presets).some((p) => p.name === currentName) || currentName === '';
                 if (isCurrentNameAPreset) {
                     roleNameInput.value = preset.name;
                 }
 
-                // Check boxes
-                createRolePermissions.forEach(cb => {
+                createRolePermissions.forEach((cb) => {
                     cb.checked = preset.perms.includes(cb.value);
                 });
+
+                updateCreateRoleSummary();
             }
         });
+
+        // Initialize counts on load since all toggles are now checked by default for Manager
+        updateCreateRoleSummary();
+        updateCreateRoleModuleCounts();
     }
 
 });

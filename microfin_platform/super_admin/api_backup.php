@@ -9,13 +9,14 @@
  *   ?action=history          — Returns JSON of backup_logs
  *   ?action=info             — Returns DB size and backup stats
  */
-session_start();
-
-if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_in'] !== true) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized']);
-    exit;
-}
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
+require_once '../backend/db_connect.php';
+mf_require_super_admin_session($pdo, [
+    'response' => 'json',
+    'status' => 401,
+    'message' => 'Unauthorized',
+]);
 
 if (!empty($_SESSION['super_admin_force_password_change'])) {
     http_response_code(403);
@@ -28,9 +29,6 @@ if (!empty($_SESSION['super_admin_onboarding_required'])) {
     echo json_encode(['error' => 'Profile onboarding required']);
     exit;
 }
-
-require_once '../backend/db_connect.php';
-
 $action = $_GET['action'] ?? '';
 
 // Ensure backup_logs table exists

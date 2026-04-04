@@ -1,11 +1,15 @@
 <?php
-session_start();
+require_once "../backend/session_auth.php";
+mf_start_backend_session();
+require_once "../backend/db_connect.php";
+require_once "../backend/login_activity.php";
+require_once "../backend/tenant_identity.php";
 
 $tenant_slug = $_SESSION['tenant_slug'] ?? '';
+$tenant_id = $_SESSION['tenant_id'] ?? '';
 $tenant_key = $_SESSION['tenant_key'] ?? '';
 
 if (!empty($_SESSION['user_id']) && !empty($_SESSION['tenant_id']) && empty($_SESSION['super_admin_logged_in'])) {
-    require_once "../backend/db_connect.php";
     try {
         $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, description) VALUES (?, ?, 'STAFF_LOGOUT', 'user', 'Staff logged out of the system')")->execute([$_SESSION['user_id'], $_SESSION['tenant_id']]);
     } catch (PDOException $e) {
@@ -14,26 +18,17 @@ if (!empty($_SESSION['user_id']) && !empty($_SESSION['tenant_id']) && empty($_SE
     }
 }
 
-$_SESSION = [];
-
-if (ini_get('session.use_cookies')) {
-	$params = session_get_cookie_params();
-	setcookie(
-		session_name(),
-		'',
-		time() - 42000,
-		$params['path'],
-		$params['domain'],
-		$params['secure'],
-		$params['httponly']
-	);
+if (!empty($_SESSION['user_id'])) {
+    mf_update_user_last_login($pdo, (int)$_SESSION['user_id']);
 }
 
-session_destroy();
+mf_destroy_backend_session($pdo);
 
 $redirect = 'login.php';
-if ($tenant_slug !== '') {
+if ($tenant_slug !== '' && $tenant_id !== '' && mf_tenant_public_website_is_ready($pdo, (string)$tenant_id)) {
 	$redirect = '../site.php?site=' . urlencode($tenant_slug);
+} elseif ($tenant_slug !== '') {
+	$redirect = 'login.php?s=' . urlencode($tenant_slug);
 }
 
 header('Location: ' . $redirect);

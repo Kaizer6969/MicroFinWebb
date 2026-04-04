@@ -1,7 +1,11 @@
 <?php
-session_start();
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
+require_once '../backend/db_connect.php';
 
-if (isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
+$allowManualSuperAdminLogin = $_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['auth']) || isset($_GET['switch']);
+
+if (!$allowManualSuperAdminLogin && mf_refresh_backend_session_state($pdo, 'super_admin') && isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
     $destination = !empty($_SESSION['super_admin_force_password_change'])
         ? 'force_change_password.php'
         : (!empty($_SESSION['super_admin_onboarding_required']) ? 'onboarding_profile.php' : 'super_admin.php');
@@ -10,15 +14,25 @@ if (isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_i
 }
 
 $error_msg = '';
+$active_browser_session = mf_get_active_browser_backend_session($pdo);
+$browser_session_block_message = $active_browser_session
+    ? 'This browser already has an active session. Please log out of the current account before signing in again.'
+    : '';
+
+if ($error_msg === '' && $browser_session_block_message !== '') {
+    $error_msg = $browser_session_block_message;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_once '../backend/db_connect.php';
+    require_once '../backend/login_activity.php';
     require_once __DIR__ . '/super_admin_auth.php';
 
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
 
-    if ($email === '' || $password === '') {
+    if ($browser_session_block_message !== '') {
+        $error_msg = $browser_session_block_message;
+    } elseif ($email === '' || $password === '') {
         $error_msg = 'Email and password are required.';
     } else {
         $stmt = $pdo->prepare("
@@ -42,12 +56,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!in_array($status, ['Active', 'Inactive'], true)) {
                 $error_msg = 'This account is not available. Please contact another platform owner.';
             } else {
+                mf_update_user_last_login($pdo, (int) $admin['super_admin_id']);
+
+                unset(
+                    $_SESSION['user_logged_in'],
+                    $_SESSION['user_id'],
+                    $_SESSION['username'],
+                    $_SESSION['tenant_id'],
+                    $_SESSION['tenant_name'],
+                    $_SESSION['tenant_slug'],
+                    $_SESSION['role'],
+                    $_SESSION['user_type'],
+                    $_SESSION['theme']
+                );
+
                 $_SESSION['super_admin_logged_in'] = true;
                 $_SESSION['super_admin_id'] = (int) $admin['super_admin_id'];
                 $_SESSION['super_admin_username'] = $admin['username'];
                 $_SESSION['ui_theme'] = sa_super_admin_theme($admin);
                 $_SESSION['super_admin_force_password_change'] = (bool) ($admin['force_password_change'] ?? false);
                 $_SESSION['super_admin_onboarding_required'] = ($status === 'Inactive' && empty($admin['force_password_change']));
+
+                mf_create_backend_session($pdo, (int) $admin['super_admin_id'], null, 'super_admin');
 
                 $destination = !empty($_SESSION['super_admin_force_password_change'])
                     ? 'force_change_password.php'
@@ -174,6 +204,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: #000000;
         }
 
+        .btn-submit:disabled,
+        .form-input:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+
         /* Loader Overlay */
         .loader-overlay {
             position: fixed;
@@ -225,7 +261,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <p class="subtitle">Platform Owner Login</p>
         </div>
 
-        <form id="login-form" method="POST" action="">
+        <form id="login-form" method="POST" action=""<?php echo $browser_session_block_message !== '' ? ' onsubmit="return false;"' : ''; ?>>
             <?php if ($error_msg !== ''): ?>
             <div style="background-color: #fee2e2; color: #b91c1c; padding: 0.75rem; border-radius: 8px; font-size: 0.875rem; margin-bottom: 1rem; text-align: left;">
                 <?php echo htmlspecialchars($error_msg); ?>
@@ -234,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <div class="form-group">
                 <label class="form-label" for="email">Email Address</label>
-                <input type="email" id="email" name="email" class="form-input" placeholder="superadmin@microfin.com" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" required>
+                <input type="email" id="email" name="email" class="form-input" placeholder="superadmin@microfin.com" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>"<?php echo $browser_session_block_message !== '' ? ' disabled' : ''; ?> required>
             </div>
             
             <div class="form-group">
@@ -246,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <a href="forgot_password.php" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;">Forgot Password?</a>
             </div>
 
-            <button type="submit" class="btn-submit" id="submit-btn">Sign In to Dashboard</button>
+            <button type="submit" class="btn-submit" id="submit-btn"<?php echo $browser_session_block_message !== '' ? ' disabled' : ''; ?>>Sign In to Dashboard</button>
             <div style="margin-top: 1.5rem; text-align: center;">
                 <a href="../public_website/index.php" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
                     <span class="material-symbols-outlined" style="font-size: 1rem;">arrow_back</span>

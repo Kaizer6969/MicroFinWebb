@@ -1,6 +1,8 @@
 <?php
-session_start();
+require_once "../backend/session_auth.php";
+mf_start_backend_session();
 require_once "../backend/db_connect.php";
+require_once "../backend/login_activity.php";
 require_once "../backend/tenant_identity.php";
 
 function mf_extract_site_slug_from_query(array $query)
@@ -35,7 +37,19 @@ function mf_extract_site_slug_from_query(array $query)
     return '';
 }
 
-if (isset($_SESSION["user_logged_in"]) && $_SESSION["user_logged_in"] === true) {
+function mf_query_flag_is_enabled(array $query, string $key): bool
+{
+    if (!isset($query[$key]) || !is_scalar($query[$key])) {
+        return false;
+    }
+
+    $value = strtolower(trim((string)$query[$key]));
+    return in_array($value, ['1', 'true', 'yes', 'on'], true);
+}
+
+$allowManualTenantLogin = $_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['auth']) || isset($_GET['switch']);
+
+if (!$allowManualTenantLogin && mf_refresh_backend_session_state($pdo, 'tenant') && isset($_SESSION["user_logged_in"]) && $_SESSION["user_logged_in"] === true) {
     // Re-check force_password_change in case user closed browser during password reset
     if (!empty($_SESSION['user_id'])) {
         $fpc_stmt = $pdo->prepare('SELECT force_password_change FROM users WHERE user_id = ?');
@@ -58,6 +72,13 @@ $site_slug = trim(urldecode(urldecode($site_slug)));
 $tenant = null;
 $tenant_error = '';
 $login_error = '';
+$tenant_public_website_ready = false;
+$came_from_site = mf_query_flag_is_enabled($_GET, 'from_site');
+$back_to_site_href = '';
+$active_browser_session = mf_get_active_browser_backend_session($pdo);
+$browser_session_block_message = $active_browser_session
+    ? 'This browser already has an active session. Please log out of the current account before signing in again.'
+    : '';
 
 // Check for Super Admin Impersonation (uses ?s=slug&impersonate=1)
 if ($site_slug !== '' && isset($_GET['impersonate']) && $_GET['impersonate'] == '1' && isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
@@ -108,8 +129,14 @@ if (!$tenant) {
 } else {
     // Canonicalize the URL to ?s=<tenant_slug> so subsequent form posts are stable.
     if (!isset($_GET['impersonate']) && strcasecmp($site_slug, (string)$tenant['tenant_slug']) !== 0) {
-        $auth_param = isset($_GET['auth']) ? '&auth=1' : '';
-        header('Location: login.php?s=' . urlencode((string)$tenant['tenant_slug']) . $auth_param);
+        $query_params = ['s' => (string)$tenant['tenant_slug']];
+        if (isset($_GET['auth'])) {
+            $query_params['auth'] = '1';
+        }
+        if ($came_from_site) {
+            $query_params['from_site'] = '1';
+        }
+        header('Location: login.php?' . http_build_query($query_params));
         exit;
     }
 
@@ -127,19 +154,30 @@ if (!$tenant) {
     if ($tenant['status'] !== 'Active') {
         $tenant_error = 'This workspace is currently inactive or suspended. Please contact support.';
         $tenant = null;
+    } else {
+        $tenant_public_website_ready = mf_tenant_public_website_is_ready($pdo, (string)$tenant['tenant_id']);
+        if ($came_from_site) {
+            $back_to_site_href = '../site.php?site=' . urlencode((string)$tenant['tenant_slug']);
+        }
     }
 }
 
-if ($tenant && !empty($tenant['setup_completed']) && !isset($_GET['auth']) && !isset($_GET['impersonate']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+if ($tenant && $tenant_public_website_ready && !empty($tenant['setup_completed']) && !isset($_GET['auth']) && !isset($_GET['impersonate']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: ../site.php?site=" . urlencode($tenant['tenant_slug']));
     exit;
+}
+
+if ($tenant && $login_error === '' && $browser_session_block_message !== '') {
+    $login_error = $browser_session_block_message;
 }
 
 if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
 
-    if ($email === '' || $password === '') {
+    if ($browser_session_block_message !== '') {
+        $login_error = $browser_session_block_message;
+    } elseif ($email === '' || $password === '') {
         $login_error = 'Email and password are required.';
     } else {
         $user_stmt = $pdo->prepare('SELECT u.user_id, u.username, u.password_hash, u.force_password_change, u.role_id, u.user_type, u.status, u.ui_theme, r.role_name, r.is_system_role FROM users u JOIN user_roles r ON u.role_id = r.role_id WHERE u.email = ? AND u.tenant_id = ?');
@@ -151,6 +189,16 @@ if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($user['status'] !== 'Active') {
             $login_error = 'Account is suspended. Please contact your administrator.';
         } else {
+            mf_update_user_last_login($pdo, (int) $user['user_id']);
+
+            unset(
+                $_SESSION['super_admin_logged_in'],
+                $_SESSION['super_admin_id'],
+                $_SESSION['super_admin_username'],
+                $_SESSION['super_admin_force_password_change'],
+                $_SESSION['super_admin_onboarding_required']
+            );
+
             $_SESSION['user_logged_in'] = true;
             $_SESSION['user_id'] = (int) $user['user_id'];
             $_SESSION['username'] = $user['username'];
@@ -161,6 +209,8 @@ if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_type'] = $user['user_type'];
             $_SESSION['theme'] = $tenant['theme_primary_color'] ?: '#0f172a';
             $_SESSION['ui_theme'] = (($user['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
+
+            mf_create_backend_session($pdo, (int) $user['user_id'], (string) $tenant['tenant_id'], 'tenant');
 
             $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, description) VALUES (?, ?, 'STAFF_LOGIN', 'user', 'Staff logged into the system')")->execute([$user['user_id'], $tenant['tenant_id']]);
 
@@ -285,6 +335,33 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
             gap: 16px;
         }
 
+        .top-actions {
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            color: var(--text-main);
+            text-decoration: none;
+            font-size: 0.92rem;
+            font-weight: 600;
+            background: rgba(148, 163, 184, 0.12);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .back-link:hover {
+            transform: translateX(-2px);
+            background: rgba(148, 163, 184, 0.18);
+            border-color: rgba(148, 163, 184, 0.28);
+        }
+
         .brand-logo {
             width: 64px;
             height: 64px;
@@ -364,6 +441,14 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
             transform: translateY(-1px);
         }
 
+        .btn-login:disabled,
+        .form-control:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+            filter: none;
+            transform: none;
+        }
+
         .footer-text {
             text-align: center;
             margin-top: 32px;
@@ -433,6 +518,15 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
         <?php else: ?>
 
         <div id="form-view" class="login-form">
+            <?php if ($back_to_site_href !== ''): ?>
+            <div class="top-actions">
+                <a href="<?php echo htmlspecialchars($back_to_site_href, ENT_QUOTES, 'UTF-8'); ?>" class="back-link">
+                    <span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span>
+                    Back to site
+                </a>
+            </div>
+            <?php endif; ?>
+
             <div class="brand-header">
                 <?php if (!empty($tenant['logo_path'])): ?>
                 <div class="brand-logo" id="logo-icon-container" style="background-image: url('<?php echo htmlspecialchars($tenant['logo_path']); ?>'); background-color: transparent;">
@@ -445,7 +539,7 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
                 <h1 id="company-name"><?php echo htmlspecialchars($tenant['tenant_name']); ?> Workspace</h1>
             </div>
 
-            <form id="login-form" method="POST" action="login.php?s=<?php echo urlencode($site_slug); ?><?php echo isset($_GET['auth']) ? '&auth=1' : ''; ?>">
+            <form id="login-form" method="POST" action="login.php?s=<?php echo urlencode($site_slug); ?><?php echo isset($_GET['auth']) ? '&auth=1' : ''; ?><?php echo $came_from_site ? '&from_site=1' : ''; ?>"<?php echo $browser_session_block_message !== '' ? ' onsubmit="return false;"' : ''; ?>>
                 <?php if ($login_error !== ''): ?>
                 <div style="background-color: #fee2e2; color: #b91c1c; padding: 0.75rem; border-radius: 8px; font-size: 0.875rem; margin-bottom: 1rem; text-align: left;">
                     <?php echo htmlspecialchars($login_error); ?>
@@ -454,7 +548,7 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
 
                 <div class="form-group">
                     <label>Staff Email</label>
-                    <input type="email" name="email" class="form-control" placeholder="employee@company.com" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" required>
+                    <input type="email" name="email" class="form-control" placeholder="employee@company.com" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>"<?php echo $browser_session_block_message !== '' ? ' disabled' : ''; ?> required>
                 </div>
                 <div class="form-group">
                     <div style="display: flex; justify-content: space-between;">
@@ -464,7 +558,7 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
                     <input type="password" name="password" class="form-control" placeholder="••••••••" required>
                 </div>
 
-                <button type="submit" class="btn-login" id="submit-btn">
+                <button type="submit" class="btn-login" id="submit-btn"<?php echo $browser_session_block_message !== '' ? ' disabled' : ''; ?>>
                     Access Dashboard <span class="material-symbols-rounded" style="font-size: 18px;">arrow_forward</span>
                 </button>
             </form>

@@ -1,28 +1,25 @@
 <?php
-session_start();
-
-if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_in'] !== true) {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=UTF-8');
-    echo '403 Forbidden';
-    exit;
-}
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
+require_once __DIR__ . '/../backend/db_connect.php';
+header('Content-Type: text/plain; charset=UTF-8');
+mf_require_super_admin_session($pdo, [
+    'response' => 'die',
+    'status' => 403,
+    'message' => '403 Forbidden',
+]);
 
 if (!empty($_SESSION['super_admin_force_password_change'])) {
     http_response_code(403);
-    header('Content-Type: text/plain; charset=UTF-8');
     echo 'Password change required';
     exit;
 }
 
 if (!empty($_SESSION['super_admin_onboarding_required'])) {
     http_response_code(403);
-    header('Content-Type: text/plain; charset=UTF-8');
     echo 'Profile onboarding required';
     exit;
 }
-
-require_once __DIR__ . '/../backend/db_connect.php';
 
 function mf_statement_pdf_abort($statusCode, $message)
 {

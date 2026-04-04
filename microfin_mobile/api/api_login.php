@@ -23,7 +23,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $stmt = $conn->prepare("SELECT user_id, password_hash, status, first_name, last_name FROM users WHERE (username = ? OR email = ?) AND tenant_id = ?");
+    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+    $tenant_stmt->bind_param("s", $tenant_id);
+    $tenant_stmt->execute();
+    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
+    $tenant_stmt->close();
+
+    if (!$tenant_exists) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
+        exit;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT u.user_id, u.password_hash, u.status, c.client_status
+        FROM users u
+        INNER JOIN clients c
+            ON c.user_id = u.user_id
+           AND c.tenant_id = u.tenant_id
+        WHERE (u.username = ? OR u.email = ?)
+          AND u.tenant_id = ?
+          AND u.user_type = 'Client'
+        LIMIT 1
+    ");
     $stmt->bind_param("sss", $username, $username, $tenant_id);
     $stmt->execute();
     $res = $stmt->get_result();
@@ -32,20 +53,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $res->fetch_assoc();
         if ($user['status'] !== 'Active') {
             echo json_encode(['success' => false, 'message' => 'Account is not active.']);
+        } elseif ($user['client_status'] !== 'Active') {
+            echo json_encode(['success' => false, 'message' => 'Client profile is not active.']);
         } elseif (password_verify($password, $user['password_hash'])) {
             // Password matches
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Login successful!', 
-                'user_id' => $user['user_id'],
-                'first_name' => $user['first_name'],
-                'last_name' => $user['last_name']
-            ]);
+            echo json_encode(['success' => true, 'message' => 'Login successful!', 'user_id' => $user['user_id']]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Invalid username or password.']);
         }
     } else {
-        echo json_encode(['success' => false, 'message' => 'Invalid username or password for this tenant.']);
+        echo json_encode(['success' => false, 'message' => 'Invalid client credentials for this tenant.']);
     }
     
     $stmt->close();

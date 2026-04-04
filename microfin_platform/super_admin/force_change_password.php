@@ -1,12 +1,12 @@
 <?php
-session_start();
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
 require_once '../backend/db_connect.php';
 require_once __DIR__ . '/super_admin_auth.php';
-
-if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+mf_require_super_admin_session($pdo, [
+    'response' => 'redirect',
+    'redirect' => 'login.php',
+]);
 
 $superAdminId = (int) ($_SESSION['super_admin_id'] ?? 0);
 if ($superAdminId <= 0) {
@@ -17,8 +17,7 @@ if ($superAdminId <= 0) {
 $superAdmin = sa_load_super_admin_state($pdo, $superAdminId);
 
 if (!$superAdmin) {
-    session_unset();
-    session_destroy();
+    mf_destroy_backend_session($pdo);
     header('Location: login.php');
     exit;
 }

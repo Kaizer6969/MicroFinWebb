@@ -1,12 +1,12 @@
 <?php
-session_start();
+require_once "../../backend/session_auth.php";
+mf_start_backend_session();
 require_once "../../backend/db_connect.php";
-
-// 1. Authentication Check
-if (!isset($_SESSION["user_logged_in"]) || $_SESSION["user_logged_in"] !== true) {
-    header("Location: ../../tenant_login/login.php");
-    exit;
-}
+mf_require_tenant_session($pdo, [
+    'response' => 'redirect',
+    'redirect' => '../../tenant_login/login.php',
+    'append_tenant_slug' => true,
+]);
 
 // 2. Authorization Check (Only Employees)
 if ($_SESSION['user_type'] !== 'Employee') {

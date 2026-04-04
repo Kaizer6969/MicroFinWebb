@@ -13,6 +13,8 @@ function sa_load_super_admin_state(PDO $pdo, int $userId): ?array
                ui_theme,
                force_password_change,
                status,
+               created_at,
+               last_login,
                first_name,
                last_name,
                middle_name,

@@ -782,6 +782,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
         @media (max-width: 1024px) { .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* Dark Mode Toggle */
+        .dark-mode-toggle {
+            position: fixed;
+            top: 22px;
+            right: 22px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            background: #ffffff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+            color: var(--text-dark);
+            text-decoration: none;
+            transition: all 0.25s ease;
+            z-index: 20;
+            cursor: pointer;
+        }
+        .dark-mode-toggle:hover {
+            color: var(--primary);
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        
+        /* Dark Mode Extensions */
+        body.dark-mode { background: #0B0F1A; color: #f8fafc; }
+        body.dark-mode::before {
+            background: radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.15) 0%, transparent 46%),
+                        radial-gradient(circle at 86% 6%, rgba(139, 92, 246, 0.12) 0%, transparent 42%),
+                        radial-gradient(circle at 70% 88%, rgba(59, 130, 246, 0.08) 0%, transparent 45%);
+        }
+        body.dark-mode .back-btn, body.dark-mode .dark-mode-toggle { background: #121826; border-color: rgba(255, 255, 255, 0.1); color: #f8fafc; }
+        body.dark-mode .back-btn:hover, body.dark-mode .dark-mode-toggle:hover { background: #1a2235; border-color: rgba(255, 255, 255, 0.2); }
+        body.dark-mode .demo-card { background: #121826; border-color: rgba(255, 255, 255, 0.1); }
+        body.dark-mode .demo-card h2, body.dark-mode .demo-card label, body.dark-mode .plan-name { color: #f8fafc; }
+        body.dark-mode .demo-card .subtitle, body.dark-mode .plan-capacity { color: #94a3b8; }
+        body.dark-mode .input-field { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); color: #f8fafc; }
+        body.dark-mode .input-field:focus { border-color: var(--primary); background: #1e293b; }
+        body.dark-mode .location-suggestions, body.dark-mode .location-suggestion-empty { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); }
+        body.dark-mode .location-suggestion { border-bottom-color: rgba(255, 255, 255, 0.1); background: transparent; }
+        body.dark-mode .location-suggestion:hover { background: #1e293b; }
+        body.dark-mode .location-suggestion-title { color: #f8fafc; }
+        body.dark-mode .plan-card-content { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); }
+        body.dark-mode .plan-card-content::after { background: #121826; border-color: rgba(255, 255, 255, 0.2); }
+        body.dark-mode .btn-outline { background: #1a2235; border-color: rgba(255, 255, 255, 0.2); color: #f8fafc; }
+        body.dark-mode .btn-outline:hover { background: #1e293b; border-color: rgba(255, 255, 255, 0.3); }
+        body.dark-mode .location-map-actions { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); }
+        body.dark-mode .location-map-status { color: #cbd5e1; }
+        body.dark-mode .plan-option input:checked + .plan-card-content { background: #1e293b; }
+        body.dark-mode .plan-option.plan-starter input:checked + .plan-card-content { background: rgba(22, 163, 74, 0.1); border-color: #16a34a; }
+        body.dark-mode .plan-option.plan-pro input:checked + .plan-card-content { background: rgba(37, 99, 235, 0.1); border-color: #2563eb; }
+        body.dark-mode .plan-option.plan-enterprise input:checked + .plan-card-content { background: rgba(217, 119, 6, 0.1); border-color: #d97706; }
+        body.dark-mode .plan-option.plan-unlimited input:checked + .plan-card-content { background: rgba(139, 92, 246, 0.1); border-color: #8b5cf6; }
+        body.dark-mode .success-view h3 { color: #f8fafc; }
+        body.dark-mode .otp-group { background: #1a2235; border-color: rgba(255, 255, 255, 0.1); }
     </style>
 </head>
 <body>
@@ -790,13 +848,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <span class="material-symbols-rounded">arrow_back</span>
         Back to Home
     </a>
+    
+    <a href="javascript:void(0)" id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle Dark Mode">
+        <span class="material-symbols-rounded">dark_mode</span>
+    </a>
 
     <div class="demo-wrapper">
         <div class="demo-layout">
             <aside class="demo-intro">
                 <div class="page-brand">
                     <div class="logo">
-                        <span class="material-symbols-rounded">public</span>
+                        <span class="material-symbols-rounded">account_balance</span>
                         <span class="logo-text">MicroFin</span>
                     </div>
                     <p>Cloud core banking for modern MFIs</p>
@@ -1070,6 +1132,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
+        // Dark Mode Initialization
+        const isDarkMode = localStorage.getItem('theme') === 'dark';
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        if (isDarkMode) {
+            document.body.classList.add('dark-mode');
+            if (darkModeToggle) {
+                const toggleIcon = darkModeToggle.querySelector('.material-symbols-rounded');
+                if (toggleIcon) toggleIcon.textContent = 'light_mode';
+            }
+        }
+
+        if (darkModeToggle) {
+            darkModeToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                document.body.classList.toggle('dark-mode');
+                const toggleIcon = darkModeToggle.querySelector('.material-symbols-rounded');
+                if (document.body.classList.contains('dark-mode')) {
+                    localStorage.setItem('theme', 'dark');
+                    if(toggleIcon) toggleIcon.textContent = 'light_mode';
+                } else {
+                    localStorage.setItem('theme', 'light');
+                    if(toggleIcon) toggleIcon.textContent = 'dark_mode';
+                }
+            });
+        }
+
         const demoForm = document.getElementById('demo-form');
         if (!demoForm) return;
 
@@ -1689,6 +1777,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             submitBtn.disabled = true;
             submitBtn.style.opacity = '0.8';
         });
+
+
     });
     </script>
 </body>

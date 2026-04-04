@@ -1,26 +1,25 @@
 <?php
-session_start();
-
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
 require_once '../backend/db_connect.php';
 require_once '../backend/billing_access.php';
 require_once '../backend/lazy_billing_resolver.php';
 require_once '../backend/billing_notifications.php';
+require_once '../backend/login_activity.php';
 require_once __DIR__ . '/super_admin_auth.php';
+mf_require_super_admin_session($pdo, [
+    'response' => 'redirect',
+    'redirect' => 'login.php',
+]);
+
+require_once '../backend/tenant_identity.php';
 
 // Resolve any pending tenant subscriptions automagically!
 resolve_tenant_billing($pdo);
 
-if (!isset($_SESSION['super_admin_logged_in']) || $_SESSION['super_admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
-
-require_once '../backend/tenant_identity.php';
-
 $superAdminState = sa_load_super_admin_state($pdo, (int)($_SESSION['super_admin_id'] ?? 0));
 if (!$superAdminState) {
-    session_unset();
-    session_destroy();
+    mf_destroy_backend_session($pdo);
     header('Location: login.php');
     exit;
 }
@@ -341,6 +340,67 @@ if (isset($_SESSION['sa_error'])) {
     unset($_SESSION['sa_error']);
 }
 
+$settings_tab = trim((string)($_GET['settings_tab'] ?? 'settings-accounts'));
+if (!in_array($settings_tab, ['settings-accounts', 'settings-profile'], true)) {
+    $settings_tab = 'settings-accounts';
+}
+
+$profile_form = [
+    'username' => trim((string)($superAdminState['username'] ?? '')),
+    'email' => trim((string)($superAdminState['email'] ?? '')),
+    'first_name' => trim((string)($superAdminState['first_name'] ?? '')),
+    'last_name' => trim((string)($superAdminState['last_name'] ?? '')),
+    'middle_name' => trim((string)($superAdminState['middle_name'] ?? '')),
+    'suffix' => trim((string)($superAdminState['suffix'] ?? '')),
+    'phone_number' => trim((string)($superAdminState['phone_number'] ?? '')),
+    'date_of_birth' => trim((string)($superAdminState['date_of_birth'] ?? '')),
+];
+
+if (isset($_SESSION['sa_profile_form']) && is_array($_SESSION['sa_profile_form'])) {
+    foreach ($profile_form as $key => $defaultValue) {
+        if (array_key_exists($key, $_SESSION['sa_profile_form'])) {
+            $profile_form[$key] = trim((string)$_SESSION['sa_profile_form'][$key]);
+        }
+    }
+    unset($_SESSION['sa_profile_form']);
+    $settings_tab = 'settings-profile';
+}
+
+$profile_display_parts = array_filter([
+    $profile_form['first_name'],
+    $profile_form['middle_name'],
+    $profile_form['last_name'],
+    $profile_form['suffix'],
+], static fn ($value) => trim((string)$value) !== '');
+$profile_display_name = trim(implode(' ', $profile_display_parts));
+if ($profile_display_name === '') {
+    $profile_display_name = $profile_form['username'] !== '' ? $profile_form['username'] : 'Super Admin';
+}
+
+$profile_initial_parts = [];
+foreach ([$profile_form['first_name'], $profile_form['last_name']] as $namePart) {
+    $cleanNamePart = trim((string)$namePart);
+    if ($cleanNamePart !== '') {
+        $profile_initial_parts[] = strtoupper(substr($cleanNamePart, 0, 1));
+    }
+}
+if (empty($profile_initial_parts)) {
+    $profile_username_seed = trim((string)$profile_form['username']);
+    $profile_initial_parts[] = $profile_username_seed !== ''
+        ? strtoupper(substr($profile_username_seed, 0, 1))
+        : 'S';
+    $profile_initial_parts[] = $profile_username_seed !== '' && strlen($profile_username_seed) > 1
+        ? strtoupper(substr($profile_username_seed, 1, 1))
+        : 'A';
+}
+$profile_initials = implode('', array_slice($profile_initial_parts, 0, 2));
+$profile_username_badge = $profile_form['username'] !== ''
+    ? '@' . ltrim($profile_form['username'], '@')
+    : 'No username set';
+$profile_email_badge = $profile_form['email'] !== ''
+    ? $profile_form['email']
+    : 'No sign-in email set';
+
 $plan_pricing_map = [
     'Starter' => 4999.00,
     'Pro' => 14999.00,
@@ -354,6 +414,12 @@ $plan_limits_map = [
     'Enterprise' => ['clients' => 10000, 'users' => 5000],
     'Unlimited' => ['clients' => -1, 'users' => -1],
 ];
+
+function sa_super_admin_profile_date_is_valid(string $value): bool
+{
+    $date = DateTime::createFromFormat('Y-m-d', $value);
+    return $date instanceof DateTime && $date->format('Y-m-d') === $value;
+}
 
 try {
     $pdo->exec("ALTER TABLE tenants ADD COLUMN request_type ENUM('tenant_application', 'talk_to_expert') NOT NULL DEFAULT 'tenant_application' AFTER status");
@@ -471,7 +537,107 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'provision_tenant') {
+    if ($action === 'update_super_admin_profile') {
+        $superAdminId = (int)($_SESSION['super_admin_id'] ?? 0);
+        $profileFormInput = [
+            'username' => trim((string)($_POST['profile_username'] ?? '')),
+            'email' => trim((string)($_POST['profile_email'] ?? '')),
+            'first_name' => trim((string)($_POST['profile_first_name'] ?? '')),
+            'last_name' => trim((string)($_POST['profile_last_name'] ?? '')),
+            'middle_name' => trim((string)($_POST['profile_middle_name'] ?? '')),
+            'suffix' => trim((string)($_POST['profile_suffix'] ?? '')),
+            'phone_number' => trim((string)($_POST['profile_phone_number'] ?? '')),
+            'date_of_birth' => trim((string)($_POST['profile_date_of_birth'] ?? '')),
+        ];
+
+        $_SESSION['sa_profile_form'] = $profileFormInput;
+
+        $normalizedUsername = strtolower($profileFormInput['username']);
+        $normalizedEmail = strtolower($profileFormInput['email']);
+
+        if ($superAdminId <= 0) {
+            $_SESSION['sa_error'] = 'Unable to determine which super admin profile to update.';
+        } elseif ($normalizedUsername === '') {
+            $_SESSION['sa_error'] = 'Username is required.';
+        } elseif (!preg_match('/^[a-zA-Z0-9._@-]+$/', $normalizedUsername)) {
+            $_SESSION['sa_error'] = 'Username can only contain letters, numbers, dots, underscores, hyphens, or @.';
+        } elseif (strlen($normalizedUsername) > 50) {
+            $_SESSION['sa_error'] = 'Username must be 50 characters or fewer.';
+        } elseif ($normalizedEmail === '' || !filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['sa_error'] = 'Please provide a valid email address.';
+        } elseif ($profileFormInput['first_name'] === '' || $profileFormInput['last_name'] === '' || $profileFormInput['phone_number'] === '' || $profileFormInput['date_of_birth'] === '') {
+            $_SESSION['sa_error'] = 'First name, last name, phone number, and date of birth are required.';
+        } elseif (!sa_super_admin_profile_date_is_valid($profileFormInput['date_of_birth'])) {
+            $_SESSION['sa_error'] = 'Please provide a valid date of birth.';
+        } elseif (sa_platform_username_exists($pdo, $normalizedUsername, $superAdminId)) {
+            $_SESSION['sa_error'] = 'That username is already being used by another platform admin.';
+        } else {
+            $emailCheckStmt = $pdo->prepare("
+                SELECT 1
+                FROM users
+                WHERE tenant_id IS NULL
+                  AND deleted_at IS NULL
+                  AND email = ?
+                  AND user_id <> ?
+                LIMIT 1
+            ");
+            $emailCheckStmt->execute([$normalizedEmail, $superAdminId]);
+
+            if ($emailCheckStmt->fetchColumn()) {
+                $_SESSION['sa_error'] = 'That email address is already being used by another platform admin.';
+            } else {
+                try {
+                    $updateProfileStmt = $pdo->prepare("
+                        UPDATE users
+                        SET username = ?,
+                            email = ?,
+                            first_name = ?,
+                            last_name = ?,
+                            middle_name = ?,
+                            suffix = ?,
+                            phone_number = ?,
+                            date_of_birth = ?
+                        WHERE user_id = ?
+                          AND user_type = 'Super Admin'
+                          AND deleted_at IS NULL
+                    ");
+                    $updateProfileStmt->execute([
+                        $normalizedUsername,
+                        $normalizedEmail,
+                        $profileFormInput['first_name'],
+                        $profileFormInput['last_name'],
+                        $profileFormInput['middle_name'] !== '' ? $profileFormInput['middle_name'] : null,
+                        $profileFormInput['suffix'] !== '' ? $profileFormInput['suffix'] : null,
+                        $profileFormInput['phone_number'],
+                        $profileFormInput['date_of_birth'],
+                        $superAdminId,
+                    ]);
+
+                    $profileLogStmt = $pdo->prepare("
+                        INSERT INTO audit_logs (user_id, action_type, entity_type, description)
+                        VALUES (?, 'SUPER_ADMIN_PROFILE_UPDATED', 'user', ?)
+                    ");
+                    $profileLogStmt->execute([
+                        $superAdminId,
+                        'Updated personal profile details from the Super Admin settings page',
+                    ]);
+
+                    $updatedSuperAdminState = sa_load_super_admin_state($pdo, $superAdminId);
+                    if ($updatedSuperAdminState) {
+                        sa_sync_super_admin_session_from_state($updatedSuperAdminState);
+                    }
+
+                    unset($_SESSION['sa_profile_form']);
+                    $_SESSION['sa_flash'] = 'Personal profile updated successfully.';
+                } catch (Throwable $e) {
+                    $_SESSION['sa_error'] = 'Unable to update your personal profile right now.';
+                }
+            }
+        }
+
+        header('Location: super_admin.php?section=settings&settings_tab=settings-profile');
+        exit;
+    } elseif ($action === 'provision_tenant') {
         if (isset($_POST['tenant_id']) && trim((string) $_POST['tenant_id']) !== '') {
             $_SESSION['sa_error'] = 'Tenant ID is system-generated and cannot be set manually.';
             header('Location: super_admin.php?section=tenants');
@@ -1242,9 +1408,29 @@ $action_types = $action_types_stmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Settings: Registered admin accounts
 $super_admins_stmt = $pdo->query("
-    SELECT user_id, username, email, status, first_name, last_name, created_at, last_login
-    FROM users WHERE user_type = 'Super Admin' AND deleted_at IS NULL
-    ORDER BY created_at DESC
+    SELECT u.user_id,
+           u.username,
+           u.email,
+           u.status,
+           u.first_name,
+           u.last_name,
+           u.created_at,
+           u.last_login,
+           NOW() AS db_now,
+           active_sessions.session_user_id,
+           COALESCE(active_sessions.active_session_count, 0) AS active_session_count
+    FROM users u
+    LEFT JOIN (
+        SELECT s.user_id AS session_user_id,
+               SUM(CASE WHEN s.expires_at > NOW() THEN 1 ELSE 0 END) AS active_session_count
+        FROM user_sessions s
+        INNER JOIN users session_users
+            ON session_users.user_id = s.user_id
+           AND session_users.deleted_at IS NULL
+        GROUP BY s.user_id
+    ) active_sessions ON active_sessions.session_user_id = u.user_id
+    WHERE u.user_type = 'Super Admin' AND u.deleted_at IS NULL
+    ORDER BY u.created_at DESC
 ");
 $super_admins_list = $super_admins_stmt->fetchAll();
 
@@ -1393,7 +1579,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 </a>
                 <a href="#settings" class="nav-item" data-target="settings">
                     <span class="material-symbols-rounded">settings</span>
-                    <span>Settings</span>
+                    <span>Accounts</span>
                 </a>
             </nav>
 
@@ -2658,6 +2844,10 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 <!-- SECTION 7: SETTINGS -->
                 <!-- ============================================================ -->
                 <section id="settings" class="view-section">
+                    <div class="settings-tabs" style="margin-bottom: 16px;">
+                        <button class="settings-tab <?php echo $settings_tab === 'settings-accounts' ? 'active' : ''; ?>" data-settings-target="settings-accounts">Accounts</button>
+                        <button class="settings-tab <?php echo $settings_tab === 'settings-profile' ? 'active' : ''; ?>" data-settings-target="settings-profile">Personal Profile</button>
+                    </div>
                     <?php if (false): ?>
                     <!-- Sub-section: Tenant Limits -->
                     <div id="settings-limits" class="settings-panel active">
@@ -2711,8 +2901,114 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                     </div>
                     <?php endif; ?>
 
+                    <div id="settings-profile" class="settings-panel <?php echo $settings_tab === 'settings-profile' ? 'active' : ''; ?>">
+                        <div class="card">
+                            <div class="card-header-flex mb-4">
+                                <div>
+                                    <h3>Personal Profile</h3>
+                                    <p class="text-muted">Update the details for your currently logged-in platform account.</p>
+                                </div>
+                            </div>
+                            <div class="profile-layout">
+                                <aside class="profile-summary-card">
+                                    <span class="profile-summary-eyebrow">Platform Identity</span>
+                                    <div class="profile-summary-avatar"><?php echo htmlspecialchars($profile_initials, ENT_QUOTES, 'UTF-8'); ?></div>
+                                    <h4><?php echo htmlspecialchars($profile_display_name, ENT_QUOTES, 'UTF-8'); ?></h4>
+                                    <p class="text-muted">These details are used across your super admin account and sign-in experience.</p>
+
+                                    <div class="profile-summary-list">
+                                        <div class="profile-summary-item">
+                                            <span class="material-symbols-rounded">alternate_email</span>
+                                            <div>
+                                                <strong>Username</strong>
+                                                <small><?php echo htmlspecialchars($profile_username_badge, ENT_QUOTES, 'UTF-8'); ?></small>
+                                            </div>
+                                        </div>
+                                        <div class="profile-summary-item">
+                                            <span class="material-symbols-rounded">mail</span>
+                                            <div>
+                                                <strong>Sign-in Email</strong>
+                                                <small><?php echo htmlspecialchars($profile_email_badge, ENT_QUOTES, 'UTF-8'); ?></small>
+                                            </div>
+                                        </div>
+                                        <div class="profile-summary-item">
+                                            <span class="material-symbols-rounded">verified_user</span>
+                                            <div>
+                                                <strong>Role</strong>
+                                                <small>Super Admin</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </aside>
+
+                                <form method="POST" class="profile-form-shell">
+                                    <input type="hidden" name="action" value="update_super_admin_profile">
+
+                                    <div class="profile-form-block">
+                                        <div class="profile-block-heading">
+                                            <h4>Basic Information</h4>
+                                            <p class="text-muted">Keep your name and contact details current.</p>
+                                        </div>
+                                        <div class="profile-form-grid">
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_first_name">First Name</label>
+                                                <input id="profile_first_name" type="text" class="form-control" name="profile_first_name" value="<?php echo htmlspecialchars($profile_form['first_name'], ENT_QUOTES, 'UTF-8'); ?>" autocomplete="given-name" required>
+                                            </div>
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_last_name">Last Name</label>
+                                                <input id="profile_last_name" type="text" class="form-control" name="profile_last_name" value="<?php echo htmlspecialchars($profile_form['last_name'], ENT_QUOTES, 'UTF-8'); ?>" autocomplete="family-name" required>
+                                            </div>
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_middle_name">Middle Name</label>
+                                                <input id="profile_middle_name" type="text" class="form-control" name="profile_middle_name" value="<?php echo htmlspecialchars($profile_form['middle_name'], ENT_QUOTES, 'UTF-8'); ?>" autocomplete="additional-name">
+                                            </div>
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_suffix">Suffix</label>
+                                                <input id="profile_suffix" type="text" class="form-control" name="profile_suffix" value="<?php echo htmlspecialchars($profile_form['suffix'], ENT_QUOTES, 'UTF-8'); ?>" placeholder="Optional" autocomplete="honorific-suffix">
+                                            </div>
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_phone_number">Phone Number</label>
+                                                <input id="profile_phone_number" type="text" class="form-control" name="profile_phone_number" value="<?php echo htmlspecialchars($profile_form['phone_number'], ENT_QUOTES, 'UTF-8'); ?>" autocomplete="tel" required>
+                                            </div>
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_date_of_birth">Date of Birth</label>
+                                                <input id="profile_date_of_birth" type="date" class="form-control" name="profile_date_of_birth" value="<?php echo htmlspecialchars($profile_form['date_of_birth'], ENT_QUOTES, 'UTF-8'); ?>" required>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="profile-form-block">
+                                        <div class="profile-block-heading">
+                                            <h4>Account Access</h4>
+                                            <p class="text-muted">Your username and email are used when signing in.</p>
+                                        </div>
+                                        <div class="profile-form-grid">
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_username">Username</label>
+                                                <input id="profile_username" type="text" class="form-control" name="profile_username" value="<?php echo htmlspecialchars($profile_form['username'], ENT_QUOTES, 'UTF-8'); ?>" autocomplete="username" required>
+                                                <span class="profile-field-note">Letters, numbers, dots, underscores, hyphens, and @ are allowed.</span>
+                                            </div>
+                                            <div class="form-group profile-form-group">
+                                                <label for="profile_email">Email Address</label>
+                                                <input id="profile_email" type="email" class="form-control" name="profile_email" value="<?php echo htmlspecialchars($profile_form['email'], ENT_QUOTES, 'UTF-8'); ?>" autocomplete="email" required>
+                                                <span class="profile-field-note">This is the email address used for your super admin login.</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="profile-form-actions">
+                                        <button type="reset" class="btn btn-outline">Reset Changes</button>
+                                        <button type="submit" class="btn btn-primary">
+                                            <span class="material-symbols-rounded">save</span> Save Profile
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Sub-section: Super Admin Accounts -->
-                    <div id="settings-accounts" class="settings-panel active">
+                    <div id="settings-accounts" class="settings-panel <?php echo $settings_tab === 'settings-accounts' ? 'active' : ''; ?>">
                         <div class="card">
                             <div class="card-header-flex mb-4">
                                 <div>
@@ -2730,8 +3026,8 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <th>ID</th>
                                             <th>Username</th>
                                             <th>Email Address</th>
-                                            <th>Status</th>
-                                            <th>Last Login</th>
+                                            <th>Account Status</th>
+                                            <th>Activity</th>
                                             <th>Registration Date</th>
                                         </tr>
                                     </thead>
@@ -2764,7 +3060,18 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                 ?>
                                                 <span class="badge <?php echo $account_status_badge; ?>"><?php echo htmlspecialchars($account_status); ?></span>
                                             </td>
-                                            <td><?php echo $admin['last_login'] ? date('M d, Y H:i', strtotime($admin['last_login'])) : 'Never'; ?></td>
+                                            <td>
+                                                <?php
+                                                $displayUserId = (int)($admin['user_id'] ?? 0);
+                                                $sessionUserId = (int)($admin['session_user_id'] ?? 0);
+                                                $isActiveNow = $displayUserId > 0
+                                                    && $displayUserId === $sessionUserId
+                                                    && (int)($admin['active_session_count'] ?? 0) > 0;
+                                                $lastLoginLabel = mf_humanize_last_login_words($admin['last_login'] ?? null, $isActiveNow, 'Never', $admin['db_now'] ?? null);
+                                                $lastLoginBadge = $isActiveNow ? 'badge-green' : 'badge-blue';
+                                                ?>
+                                                <span class="badge <?php echo $lastLoginBadge; ?>"><?php echo htmlspecialchars($lastLoginLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                                            </td>
                                             <td><?php echo date('M d, Y', strtotime($admin['created_at'])); ?></td>
                                         </tr>
                                         <?php endforeach; ?>

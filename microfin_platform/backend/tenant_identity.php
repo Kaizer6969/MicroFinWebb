@@ -79,3 +79,36 @@ function mf_generate_tenant_id(PDO $pdo, $length = 10, $maxAttempts = 100)
 
     throw new RuntimeException('Unable to generate a unique tenant ID.');
 }
+
+/**
+ * Public site is only considered ready when it has website content and the
+ * tenant explicitly enabled the public_website_enabled toggle.
+ */
+function mf_tenant_public_website_is_ready(PDO $pdo, $tenantId): bool
+{
+    $tenantId = trim((string)$tenantId);
+    if ($tenantId === '') {
+        return false;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT
+            CASE
+                WHEN COALESCE(toggle_state.is_enabled, 0) = 1
+                 AND NULLIF(TRIM(COALESCE(site_state.layout_template, '')), '') IS NOT NULL
+                THEN 1
+                ELSE 0
+            END AS is_ready
+        FROM tenants t
+        LEFT JOIN tenant_website_content site_state
+            ON site_state.tenant_id = t.tenant_id
+        LEFT JOIN tenant_feature_toggles toggle_state
+            ON toggle_state.tenant_id = t.tenant_id
+           AND toggle_state.toggle_key = 'public_website_enabled'
+        WHERE t.tenant_id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$tenantId]);
+
+    return (bool)$stmt->fetchColumn();
+}

@@ -1,17 +1,9 @@
 <?php
-$conn = new mysqli("centerbeam.proxy.rlwy.net", "root", "zVULvPIbSyHVavTRnPFAkMWGVmvRwInd", "railway", 52624);
+require_once __DIR__ . '/db.php';
 
-$sql = "
-INSERT IGNORE INTO tenants (tenant_id, tenant_name, tenant_slug) VALUES 
-('fundline', 'Fundline', 'fundline'),
-('plaridel', 'PlaridelMFB', 'plaridel'),
-('sacredheart', 'Sacred Heart Coop', 'sacredheart');
-
-INSERT IGNORE INTO user_roles (tenant_id, role_name, role_description) VALUES 
-('fundline', 'Client', 'Client role'),
-('plaridel', 'Client', 'Client role'),
-('sacredheart', 'Client', 'Client role');
-";
+if (!isset($sql) || trim((string) $sql) === '') {
+    exit("No tenant insert SQL was provided.\n");
+}
 
 if ($conn->multi_query($sql)) {
     do {
@@ -19,8 +11,9 @@ if ($conn->multi_query($sql)) {
             $res->free();
         }
     } while ($conn->more_results() && $conn->next_result());
+
     echo "All tenants inserted successfully!\n";
 } else {
     echo "Error inserting tenants: " . $conn->error;
 }
-?>          
+?>

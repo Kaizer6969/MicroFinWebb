@@ -1,8 +1,9 @@
 <?php
-session_start();
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
 require_once '../backend/db_connect.php';
 
-if (isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
+if (mf_refresh_backend_session_state($pdo, 'super_admin') && isset($_SESSION['super_admin_logged_in']) && $_SESSION['super_admin_logged_in'] === true) {
     $destination = !empty($_SESSION['super_admin_force_password_change'])
         ? 'force_change_password.php'
         : (!empty($_SESSION['super_admin_onboarding_required']) ? 'onboarding_profile.php' : 'super_admin.php');

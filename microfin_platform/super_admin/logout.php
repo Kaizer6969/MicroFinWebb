@@ -1,22 +1,15 @@
 <?php
-session_start();
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
+require_once '../backend/db_connect.php';
+require_once '../backend/login_activity.php';
 
-$_SESSION = [];
-
-if (ini_get('session.use_cookies')) {
-	$params = session_get_cookie_params();
-	setcookie(
-		session_name(),
-		'',
-		time() - 42000,
-		$params['path'],
-		$params['domain'],
-		$params['secure'],
-		$params['httponly']
-	);
+$superAdminId = (int)($_SESSION['super_admin_id'] ?? 0);
+if ($superAdminId > 0) {
+    mf_update_user_last_login($pdo, $superAdminId);
 }
 
-session_destroy();
+mf_destroy_backend_session($pdo);
 
 header('Location: login.php');
 exit;

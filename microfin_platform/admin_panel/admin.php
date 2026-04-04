@@ -1,13 +1,14 @@
 <?php
-session_start();
-
-if (!isset($_SESSION['user_logged_in']) || $_SESSION['user_logged_in'] !== true || empty($_SESSION['tenant_id'])) {
-    http_response_code(403);
-    die("<h1>403 Forbidden - Access Denied</h1><p>No valid tenant session could be identified. Please log in using your company's designated login link.</p>");
-}
-
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
 require_once '../backend/db_connect.php';
+mf_require_tenant_session($pdo, [
+    'response' => 'die',
+    'status' => 403,
+    'message' => "<h1>403 Forbidden - Access Denied</h1><p>No valid tenant session could be identified. Please log in using your company's designated login link.</p>",
+]);
 require_once '../backend/billing_access.php';
+require_once '../backend/login_activity.php';
 require_once '../backend/lazy_billing_resolver.php';
 require_once __DIR__ . '/receipt_helpers.php';
 
@@ -1726,7 +1727,7 @@ if ($active_role === null && !empty($role_management_roles)) {
 }
 
 // 1.5 Fetch Staff/Employees
-$staff_select_fields = 'u.user_id, u.role_id, u.email, u.status, e.first_name, e.last_name, r.role_name';
+$staff_select_fields = 'u.user_id, u.role_id, u.email, u.status, u.last_login, e.first_name, e.last_name, r.role_name';
 if ($users_has_can_manage_billing) {
     $staff_select_fields .= ', u.can_manage_billing';
 }
@@ -1815,11 +1816,13 @@ while ($row = $active_stmt->fetch(PDO::FETCH_ASSOC)) {
 
 // 4. Group Permissions for UI Output
 $grouped_permissions = [];
+$visible_permission_codes = [];
 foreach ($all_permissions as $p) {
     $mod = $p['module'];
+    $code = $p['permission_code'] ?? '';
     
     // Explicitly hide the "Roles" module so it cannot be toggled by admins for custom roles
-    if ($mod === 'Roles') {
+    if ($mod === 'Roles' || $code === 'EDIT_BILLING') {
         continue;
     }
     
@@ -1827,6 +1830,26 @@ foreach ($all_permissions as $p) {
         $grouped_permissions[$mod] = [];
     }
     $grouped_permissions[$mod][] = $p;
+    $visible_permission_codes[] = $code;
+}
+
+$visible_permission_codes = array_values(array_unique(array_filter($visible_permission_codes)));
+$visible_permission_lookup = array_fill_keys($visible_permission_codes, true);
+$total_visible_permissions = count($visible_permission_codes);
+$role_permission_totals = [];
+
+foreach ($role_management_roles as $role_meta) {
+    $role_id = (int)($role_meta['role_id'] ?? 0);
+    $active_codes = array_unique($active_codes_by_role[$role_id] ?? []);
+    $visible_active_count = 0;
+
+    foreach ($active_codes as $active_code) {
+        if (isset($visible_permission_lookup[$active_code])) {
+            $visible_active_count++;
+        }
+    }
+
+    $role_permission_totals[$role_id] = $visible_active_count;
 }
 
 $settings = $default_settings;
@@ -1914,6 +1937,12 @@ if ($lp_form_product_type !== '' && !in_array($lp_form_product_type, $loan_produ
 }
 
 // ── Credit Settings Data ──
+// TODO: Keep the current storage as-is for now, but split the Credit Assessment UI later into:
+// 1. Scoring Model
+// 2. Limit Rules
+// 3. Preview / Simulator
+// 4. Presets
+// This should stay UI-only first and avoid introducing new database changes unless truly needed.
 $cs_settings_stmt = $pdo->prepare('SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND (setting_category = ? OR setting_key = ?)');
 $cs_settings_stmt->execute([$tenant_id, 'Credit', 'credit_limit_rules']);
 $cs_rows = $cs_settings_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2014,7 +2043,7 @@ $website_step_description = !$website_content_complete
 $website_step_action = !$website_content_complete
     ? 'Click here to finish website'
     : 'Click here to publish your site';
-$website_step_href = !$website_content_complete ? 'admin.php?tab=website' : 'admin.php?tab=features';
+$website_step_href = 'admin.php?tab=website';
 $workspace_setup_checklist = !$website_published ? [[
     'title' => 'Set up your public website',
     'description' => $website_step_description,
@@ -2239,8 +2268,6 @@ function hexToRgb($hex) {
             if (isset($_GET['tab'])) {
                 if (in_array($_GET['tab'], ['staff-list', 'roles-list'])) {
                     $active_view = 'staff';
-                } elseif ($_GET['tab'] === 'features') {
-                    $active_view = 'features';
                 } elseif ($_GET['tab'] === 'billing') {
                     $active_view = 'billing';
                 } elseif ($_GET['tab'] === 'payment_info') {
@@ -2268,7 +2295,6 @@ function hexToRgb($hex) {
                 'website' => 'Website Editor',
                 'settings' => 'Branding',
                 'personal' => 'Personal Profile',
-                'features' => 'Feature Toggles',
                 'billing' => 'Plan & Billing',
                 'payment_info' => 'Payment Info',
                 'statements' => 'Receipts',
@@ -2297,15 +2323,11 @@ function hexToRgb($hex) {
                 </a>
                 <a href="admin.php?tab=credit_settings" class="nav-item <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Assessment">
                     <span class="material-symbols-rounded">speed</span>
-                    <span>Credit Assessment</span>
+                    <span>Credit Policy</span>
                 </a>
                 <a href="admin.php?tab=website" class="nav-item <?php echo $active_view === 'website' ? 'active' : ''; ?>" data-target="website" data-title="Website Editor">
                     <span class="material-symbols-rounded">language</span>
                     <span>Website</span>
-                </a>
-                <a href="admin.php?tab=features" class="nav-item <?php echo $active_view === 'features' ? 'active' : ''; ?>" data-target="features" data-title="Feature Toggles">
-                    <span class="material-symbols-rounded">toggle_on</span>
-                    <span>Feature Toggles</span>
                 </a>
                 <a href="admin.php?tab=settings" class="nav-item <?php echo $active_view === 'settings' ? 'active' : ''; ?>" data-target="settings" data-title="Branding">
                     <span class="material-symbols-rounded">palette</span>
@@ -3452,6 +3474,7 @@ function hexToRgb($hex) {
                         <h2>Staff Accounts</h2>
                         <p class="text-muted">Manage employee access, admin accounts, and role permissions for your workspace.</p>
                     </div>
+
                     <div class="tabs">
                         <a href="admin.php?tab=staff-list" class="tab-btn <?php echo (!isset($_GET['tab']) || $_GET['tab'] !== 'roles-list') ? 'active' : ''; ?>" data-tab="staff-list">Staff Accounts</a>
                         <a href="admin.php?tab=roles-list" class="tab-btn <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'roles-list') ? 'active' : ''; ?>" data-tab="roles-list">Roles & Permissions</a>
@@ -3519,6 +3542,7 @@ function hexToRgb($hex) {
                                             <th>Name</th>
                                             <th>Email</th>
                                             <th>Role</th>
+                                            <th>Last Login</th>
                                             <th>Status</th>
                                             <th>Actions</th>
                                         </tr>
@@ -3526,7 +3550,7 @@ function hexToRgb($hex) {
                                     <tbody>
                                         <?php if (empty($staff_list)): ?>
                                         <tr>
-                                            <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                            <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
                                                 <span class="material-symbols-rounded" style="font-size: 36px; display: block; margin-bottom: 0.5rem;">person_add</span>
                                                 No staff accounts yet. Click "Add Staff" to invite your first employee.
                                             </td>
@@ -3545,6 +3569,11 @@ function hexToRgb($hex) {
                                                     <td class="text-muted"><?php echo htmlspecialchars($staff['email']); ?></td>
                                                     <td>
                                                         <span class="badge badge-gray"><?php echo htmlspecialchars($staff['role_name']); ?></span>
+                                                    </td>
+                                                    <td class="text-muted">
+                                                        <span title="<?php echo htmlspecialchars(mf_last_login_exact_label($staff['last_login'] ?? null), ENT_QUOTES, 'UTF-8'); ?>">
+                                                            <?php echo htmlspecialchars(mf_humanize_last_login($staff['last_login'] ?? null), ENT_QUOTES, 'UTF-8'); ?>
+                                                        </span>
                                                     </td>
                                                     <td>
                                                         <?php 
@@ -3616,34 +3645,104 @@ function hexToRgb($hex) {
                             <div class="roles-sidebar card">
                                 <div class="card-header-flex">
                                     <h3>Roles</h3>
-                                    <button type="button" class="btn btn-primary btn-sm" id="btn-create-role" onclick="document.getElementById('create-role-modal').style.display='flex'">
+                                    <button type="button" class="btn btn-primary btn-sm" id="btn-create-role" onclick="openCreateRoleModal()" title="Add New Role">
                                         <span class="material-symbols-rounded">add</span>
+                                        Add Role
                                     </button>
                                     <script>
-                                        // Inline fallback: guaranteed to attach even if admin.js fails
-                                        document.getElementById('btn-create-role').addEventListener('click', function() {
-                                            document.getElementById('create-role-modal').style.display = 'flex';
-                                        });
+                                        // Robust fallback for opening/closing the Create Role modal as an overlay popup.
+                                        (function () {
+                                            var trigger = document.getElementById('btn-create-role');
+
+                                            function getModal() {
+                                                return document.getElementById('create-role-modal');
+                                            }
+
+                                            window.openCreateRoleModal = function () {
+                                                var modal = getModal();
+                                                if (!modal) return;
+                                                modal.style.display = 'flex';
+                                                modal.setAttribute('aria-hidden', 'false');
+                                                document.body.style.overflow = 'hidden';
+                                            };
+
+                                            window.closeCreateRoleModal = function () {
+                                                var modal = getModal();
+                                                if (!modal) return;
+                                                modal.style.display = 'none';
+                                                modal.setAttribute('aria-hidden', 'true');
+                                                document.body.style.overflow = '';
+                                            };
+
+                                            if (trigger) {
+                                                trigger.addEventListener('click', function (event) {
+                                                    event.preventDefault();
+                                                    window.openCreateRoleModal();
+                                                });
+                                            }
+
+                                            document.addEventListener('click', function (event) {
+                                                var modal = getModal();
+                                                if (!modal || modal.style.display === 'none') return;
+                                                if (event.target === modal) {
+                                                    window.closeCreateRoleModal();
+                                                }
+                                            });
+
+                                            document.addEventListener('keydown', function (event) {
+                                                if (event.key === 'Escape') {
+                                                    window.closeCreateRoleModal();
+                                                }
+                                            });
+                                        })();
                                     </script>
                                 </div>
-                                <div class="role-list-container">
+                                <div class="roles-sidebar-tools">
+                                    <label class="roles-search-wrap" for="role-filter-input">
+                                        <span class="material-symbols-rounded">search</span>
+                                        <input type="search" id="role-filter-input" class="roles-search-input" placeholder="Search roles by name or purpose">
+                                    </label>
+                                    <div class="roles-sidebar-meta">
+                                        <span><?php echo count($role_management_roles); ?> roles</span>
+                                        <span><?php echo (int)$total_visible_permissions; ?> permissions tracked</span>
+                                    </div>
+                                </div>
+                                <div class="role-list-container" id="role-list-container">
                                     <?php if (empty($role_management_roles)): ?>
                                         <div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.9rem;">No roles found.</div>
                                     <?php else: ?>
                                         <?php foreach ($role_management_roles as $role): ?>
+                                            <?php
+                                                $role_permission_total = (int)($role_permission_totals[(int)$role['role_id']] ?? 0);
+                                                $role_description_preview = trim((string)($role['role_description'] ?? ''));
+                                                $role_search_text = strtolower(trim(($role['role_name'] ?? '') . ' ' . $role_description_preview));
+                                            ?>
                                             <a href="#" 
                                                data-role-id="<?php echo $role['role_id']; ?>"
+                                               data-role-search="<?php echo htmlspecialchars($role_search_text); ?>"
                                                class="role-list-item <?php echo ($active_role_id == $role['role_id']) ? 'active' : ''; ?>" 
                                                style="text-decoration: none; color: inherit;">
-                                                <span><?php echo htmlspecialchars($role['role_name']); ?></span>
-                                                <?php if ((int)$role['is_system_role']): ?>
-                                                    <span class="material-symbols-rounded" title="System Role">shield</span>
-                                                <?php else: ?>
-                                                    <span class="material-symbols-rounded">person</span>
-                                                <?php endif; ?>
+                                                <span class="role-list-main">
+                                                    <span class="role-list-name"><?php echo htmlspecialchars($role['role_name']); ?></span>
+                                                    <span class="role-list-meta"><?php echo $role_permission_total; ?> of <?php echo (int)$total_visible_permissions; ?> permissions</span>
+                                                    <?php if ($role_description_preview !== ''): ?>
+                                                        <span class="role-list-description"><?php echo htmlspecialchars($role_description_preview); ?></span>
+                                                    <?php endif; ?>
+                                                </span>
+                                                <span class="role-list-icon-wrap">
+                                                    <?php if ((int)$role['is_system_role']): ?>
+                                                        <span class="material-symbols-rounded" title="System Role">shield</span>
+                                                    <?php else: ?>
+                                                        <span class="material-symbols-rounded">person</span>
+                                                    <?php endif; ?>
+                                                </span>
                                             </a>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
+                                </div>
+                                <div id="role-filter-empty" class="roles-empty-search" hidden>
+                                    <span class="material-symbols-rounded">search_off</span>
+                                    <p>No matching roles found.</p>
                                 </div>
                             </div>
 
@@ -3659,6 +3758,7 @@ function hexToRgb($hex) {
                                         $is_active_panel = ($role_panel['role_id'] == $active_role_id);
                                         $is_admin_role = ((int)$role_panel['is_system_role'] && $role_panel['role_name'] === 'Admin');
                                         $panel_active_codes = $active_codes_by_role[$role_panel['role_id']] ?? [];
+                                        $panel_selected_permissions = $is_admin_role ? $total_visible_permissions : (int)($role_permission_totals[(int)$role_panel['role_id']] ?? 0);
                                     ?>
                                         <div class="role-permissions-panel" id="role-panel-<?php echo $role_panel['role_id']; ?>" style="display: <?php echo $is_active_panel ? 'block' : 'none'; ?>;">
                                             <div class="roles-content-header">
@@ -3682,13 +3782,27 @@ function hexToRgb($hex) {
                                                 <?php endif; ?>
                                             </div>
                                             
-                                            <p class="text-muted" style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
-                                                Use the toggles below to customize what members with this role can do across the platform. <?php if ($is_admin_role) echo '<br><strong>Note: The Admin role has all permissions enabled by default and they cannot be modified.</strong>'; ?>
+                                            <p class="text-muted" style="margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--border-color);">
+                                                Organize access by module, search quickly, and apply bulk updates safely for this role. <?php if ($is_admin_role) echo '<br><strong>Note: This role keeps all permissions enabled and cannot be edited.</strong>'; ?>
                                             </p>
 
                                             <form method="POST" action="admin.php">
                                                 <input type="hidden" name="action" value="save_permissions">
                                                 <input type="hidden" name="role_id" value="<?php echo $role_panel['role_id']; ?>">
+
+                                                <div class="permissions-toolbar" data-role-id="<?php echo $role_panel['role_id']; ?>">
+                                                    <label class="permissions-search-wrap" for="permission-filter-<?php echo $role_panel['role_id']; ?>">
+                                                        <span class="material-symbols-rounded">search</span>
+                                                        <input
+                                                            type="search"
+                                                            id="permission-filter-<?php echo $role_panel['role_id']; ?>"
+                                                            class="permissions-filter-input"
+                                                            data-role-id="<?php echo $role_panel['role_id']; ?>"
+                                                            placeholder="Search permissions by action, help text, or module"
+                                                        >
+                                                    </label>
+                                                    
+                                                </div>
 
                                                 <div id="permissions-container-<?php echo $role_panel['role_id']; ?>" class="permissions-grid">
                                                     <?php 
@@ -3704,24 +3818,41 @@ function hexToRgb($hex) {
                                                     ];
                                                     foreach ($grouped_permissions as $moduleName => $perms): 
                                                     $icon = $module_icons[$moduleName] ?? 'tune';
+                                                    $module_total_permissions = count($perms);
+                                                    $module_selected_permissions = 0;
+                                                    foreach ($perms as $module_perm) {
+                                                        if ($is_admin_role || in_array($module_perm['permission_code'], $panel_active_codes, true)) {
+                                                            $module_selected_permissions++;
+                                                        }
+                                                    }
                                                     ?>
-                                                        <div class="permission-module">
-                                                            <h4>
-                                                                <span class="material-symbols-rounded"><?php echo $icon; ?></span>
-                                                                <?php echo htmlspecialchars($moduleName); ?>
-                                                            </h4>
+                                                        <div class="permission-module" data-module-name="<?php echo htmlspecialchars(strtolower((string)$moduleName)); ?>">
+                                                            <div class="permission-module-header">
+                                                                <h4>
+                                                                    <span class="material-symbols-rounded"><?php echo $icon; ?></span>
+                                                                    <?php echo htmlspecialchars($moduleName); ?>
+                                                                </h4>
+                                                                <div class="permission-module-actions">
+                                                                    <span class="permission-module-count">
+                                                                        <strong class="permission-module-visible-count"><?php echo (int)$module_selected_permissions; ?></strong>/<?php echo (int)$module_total_permissions; ?>
+                                                                    </span>
+                                                                    <?php if (!$is_admin_role): ?>
+                                                                        <button type="button" class="module-action-btn permission-module-toggle" data-bulk="all">All</button>
+                                                                        <button type="button" class="module-action-btn permission-module-toggle" data-bulk="none">None</button>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            </div>
                                                             <div class="toggle-list">
                                                                 <?php foreach ($perms as $p): 
-                                                                    if ($p['permission_code'] === 'EDIT_BILLING') {
-                                                                        continue;
-                                                                    }
                                                                     $is_checked = $is_admin_role || in_array($p['permission_code'], $panel_active_codes);
                                                                     $permission_help_text = $permission_capability_map[$p['permission_code']] ?? 'Members with this permission can perform the selected action in this module.';
+                                                                    $permission_search_index = strtolower(trim(($p['description'] ?? '') . ' ' . $permission_help_text . ' ' . $moduleName . ' ' . ($p['permission_code'] ?? '')));
                                                                 ?>
-                                                                    <div class="toggle-item">
+                                                                    <div class="toggle-item" data-permission-search="<?php echo htmlspecialchars($permission_search_index); ?>">
                                                                         <div class="toggle-info">
                                                                             <h4 style="margin-bottom: 4px; font-weight: 600;"><?php echo htmlspecialchars($p['description']); ?></h4>
                                                                             <p style="color: var(--text-muted); font-size: 0.85rem;"><?php echo htmlspecialchars($permission_help_text); ?></p>
+                                                                            <span class="permission-code"><?php echo htmlspecialchars(str_replace('_', ' ', (string)$p['permission_code'])); ?></span>
                                                                         </div>
                                                                         <label class="switch">
                                                                             <input type="checkbox" name="permissions[]" value="<?php echo htmlspecialchars($p['permission_code']); ?>" <?php echo $is_checked ? 'checked' : ''; ?> <?php echo $is_admin_role ? 'disabled' : ''; ?>>
@@ -3734,8 +3865,13 @@ function hexToRgb($hex) {
                                                     <?php endforeach; ?>
                                                 </div>
 
+                                                <div class="permissions-empty-search" id="permissions-empty-search-<?php echo $role_panel['role_id']; ?>" hidden>
+                                                    <span class="material-symbols-rounded">search_off</span>
+                                                    <p>No permissions match your search.</p>
+                                                </div>
+
                                                 <?php if (!$is_admin_role): ?>
-                                                <div class="action-bar" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
+                                                <div class="action-bar roles-save-bar" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
                                                     <button type="submit" class="btn btn-primary">Save Changes</button>
                                                 </div>
                                                 <?php endif; ?>
@@ -4080,13 +4216,224 @@ function hexToRgb($hex) {
                 </section>
 
                 <!-- ═══ CREDIT SETTINGS ═══ -->
+                <?php
+                $credit_approval_mode = (string)($credit_limit_rules['workflow']['approval_mode'] ?? 'semi');
+                $credit_approval_label = $credit_approval_mode === 'auto'
+                    ? 'Fully Automatic'
+                    : ($credit_approval_mode === 'manual' ? 'Fully Manual' : 'Semi-Automatic');
+                $credit_base_limit_amount = (float)($credit_limit_rules['initial_limits']['base_limit_default'] ?? 5000);
+                $credit_ci_required = (string)($cs_form['require_ci'] ?? '0') === '1';
+                ?>
                 <section id="credit_settings" class="view-section <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>">
+                    <div class="section-intro credit-policy-intro">
+                        <div>
+                            <h2>Credit Policy Workspace</h2>
+                            <p class="text-muted">Separate how borrowers are scored from how starting limits are assigned, then review both rules in one place before saving.</p>
+                        </div>
+                        <div class="credit-policy-badges">
+                            <span class="receipt-filter-pill receipt-filter-pill-primary">Min score <strong id="credit-overview-min-score"><?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>/100</strong></span>
+                            <span class="receipt-filter-pill">Approval <strong id="credit-overview-approval"><?php echo htmlspecialchars($credit_approval_label); ?></strong></span>
+                            <span class="receipt-filter-pill">Base limit <strong id="credit-overview-base-limit"><?php echo 'PHP ' . number_format($credit_base_limit_amount, 2); ?></strong></span>
+                            <span class="receipt-filter-pill">CI <strong id="credit-overview-ci"><?php echo $credit_ci_required ? 'Required' : 'Optional'; ?></strong></span>
+                        </div>
+                    </div>
                     <div class="credit-settings-stack">
+                        <div class="credit-settings-overview-grid">
+                            <form method="POST" action="admin.php" class="card credit-scoring-card" id="credit-scoring-form">
+                                <input type="hidden" name="action" value="save_credit_settings">
+
+                                <div class="credit-engine-header">
+                                    <div>
+                                        <h3>Scoring Model</h3>
+                                        <p class="text-muted">Define the approval threshold, auto-reject floor, and score distribution used before a borrower reaches the limit engine.</p>
+                                    </div>
+                                    <div class="credit-preset-toolbar">
+                                        <span class="credit-preset-label">Quick presets</span>
+                                        <div class="credit-preset-buttons">
+                                            <button type="button" class="btn btn-sm btn-outline credit-preset-btn is-active" data-credit-preset="balanced">Balanced</button>
+                                            <button type="button" class="btn btn-sm btn-outline credit-preset-btn" data-credit-preset="conservative">Conservative</button>
+                                            <button type="button" class="btn btn-sm btn-outline credit-preset-btn" data-credit-preset="growth">Growth</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="credit-scoring-layout">
+                                    <div class="credit-engine-panel">
+                                        <div class="credit-engine-panel-head">
+                                            <div>
+                                                <h4>Approval Guardrails</h4>
+                                                <p class="text-muted">Set the thresholds that decide who qualifies for review and who gets filtered out immediately.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label for="credit-minimum-score">Minimum Approval Score</label>
+                                                <input type="number" class="form-control" id="credit-minimum-score" name="minimum_credit_score" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>">
+                                            </div>
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label for="credit-auto-reject-below">Auto-Reject Below</label>
+                                                <input type="number" class="form-control" id="credit-auto-reject-below" name="auto_reject_below" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['auto_reject_below']); ?>">
+                                            </div>
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <input type="hidden" name="require_ci" value="0">
+                                                <label class="credit-toggle-row" for="credit-require-ci">
+                                                    <span class="credit-toggle-copy">
+                                                        <strong>Require Credit Investigation</strong>
+                                                        <small>Require CI before final approval when your staff wants an extra validation layer.</small>
+                                                    </span>
+                                                    <input type="checkbox" id="credit-require-ci" name="require_ci" value="1" <?php echo $credit_ci_required ? 'checked' : ''; ?>>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-engine-panel">
+                                        <div class="credit-engine-panel-head credit-weight-panel-head">
+                                            <div>
+                                                <h4>Scoring Weights</h4>
+                                                <p class="text-muted">Weights must total exactly 100% so each borrower score stays predictable and easy to explain.</p>
+                                            </div>
+                                            <div id="credit-weight-total-badge" class="credit-weight-total-badge <?php echo $credit_weight_total === 100 ? 'is-valid' : 'is-invalid'; ?>">
+                                                <span>Total</span>
+                                                <strong id="credit-weight-total-value"><?php echo (int)$credit_weight_total; ?>%</strong>
+                                            </div>
+                                        </div>
+
+                                        <div class="credit-weight-grid">
+                                            <div class="credit-weight-card">
+                                                <label for="credit-weight-income">Income</label>
+                                                <input type="number" class="form-control" id="credit-weight-income" name="income_weight" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['income_weight']); ?>">
+                                                <small>Capacity to repay based on monthly earnings.</small>
+                                            </div>
+                                            <div class="credit-weight-card">
+                                                <label for="credit-weight-employment">Employment</label>
+                                                <input type="number" class="form-control" id="credit-weight-employment" name="employment_weight" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['employment_weight']); ?>">
+                                                <small>Stability of the borrower's work or source of income.</small>
+                                            </div>
+                                            <div class="credit-weight-card">
+                                                <label for="credit-weight-credit-history">Credit History</label>
+                                                <input type="number" class="form-control" id="credit-weight-credit-history" name="credit_history_weight" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['credit_history_weight']); ?>">
+                                                <small>Past repayment behavior and reliability over time.</small>
+                                            </div>
+                                            <div class="credit-weight-card">
+                                                <label for="credit-weight-collateral">Collateral</label>
+                                                <input type="number" class="form-control" id="credit-weight-collateral" name="collateral_weight" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['collateral_weight']); ?>">
+                                                <small>Asset backing available to reduce lending risk.</small>
+                                            </div>
+                                            <div class="credit-weight-card">
+                                                <label for="credit-weight-character">Character</label>
+                                                <input type="number" class="form-control" id="credit-weight-character" name="character_weight" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['character_weight']); ?>">
+                                                <small>Reputation, references, and field validation notes.</small>
+                                            </div>
+                                            <div class="credit-weight-card">
+                                                <label for="credit-weight-business">Business</label>
+                                                <input type="number" class="form-control" id="credit-weight-business" name="business_weight" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['business_weight']); ?>">
+                                                <small>Business performance for enterprise and livelihood borrowers.</small>
+                                            </div>
+                                        </div>
+
+                                        <p id="credit-weight-total-message" class="credit-weight-helper <?php echo $credit_weight_total === 100 ? 'is-valid' : 'is-invalid'; ?>">
+                                            <?php if ($credit_weight_total === 100): ?>
+                                                Weights are balanced at exactly 100%.
+                                            <?php else: ?>
+                                                Weights must total exactly 100%. Current total: <?php echo (int)$credit_weight_total; ?>%.
+                                            <?php endif; ?>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="action-bar" style="margin-top: 24px;">
+                                    <div class="text-muted">Save the scoring model separately from the limit engine.</div>
+                                    <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+                                        <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Scoring Model
+                                    </button>
+                                </div>
+                            </form>
+
+                            <aside class="card credit-scoring-sidebar">
+                                <div class="credit-engine-summary-card-head">
+                                    <div>
+                                        <h4>Scoring Snapshot</h4>
+                                        <p class="text-muted">Review the approval policy in plain language while you tune the borrower score.</p>
+                                    </div>
+                                </div>
+
+                                <div class="credit-engine-summary credit-engine-summary-compact credit-scoring-snapshot">
+                                    <div class="credit-engine-summary-item">
+                                        <span>Minimum Score</span>
+                                        <strong id="credit-summary-min-score"><?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>/100</strong>
+                                    </div>
+                                    <div class="credit-engine-summary-item">
+                                        <span>Auto-Reject</span>
+                                        <strong id="credit-summary-auto-reject">Below <?php echo htmlspecialchars((string)$cs_form['auto_reject_below']); ?></strong>
+                                    </div>
+                                    <div class="credit-engine-summary-item">
+                                        <span>CI Requirement</span>
+                                        <strong id="credit-summary-ci"><?php echo $credit_ci_required ? 'Required' : 'Optional'; ?></strong>
+                                    </div>
+                                    <div class="credit-engine-summary-item">
+                                        <span>Weights</span>
+                                        <strong id="credit-summary-weight-status"><?php echo (int)$credit_weight_total; ?>% total</strong>
+                                    </div>
+                                </div>
+
+                                <div class="credit-scoring-bars">
+                                    <div class="credit-scoring-bar">
+                                        <div class="credit-scoring-bar-top">
+                                            <span>Income</span>
+                                            <strong id="credit-weight-display-income"><?php echo htmlspecialchars((string)$cs_form['income_weight']); ?>%</strong>
+                                        </div>
+                                        <div class="credit-scoring-bar-track"><span id="credit-weight-bar-income" class="credit-scoring-bar-fill" style="width: <?php echo max(0, min(100, (int)$cs_form['income_weight'])); ?>%;"></span></div>
+                                    </div>
+                                    <div class="credit-scoring-bar">
+                                        <div class="credit-scoring-bar-top">
+                                            <span>Employment</span>
+                                            <strong id="credit-weight-display-employment"><?php echo htmlspecialchars((string)$cs_form['employment_weight']); ?>%</strong>
+                                        </div>
+                                        <div class="credit-scoring-bar-track"><span id="credit-weight-bar-employment" class="credit-scoring-bar-fill" style="width: <?php echo max(0, min(100, (int)$cs_form['employment_weight'])); ?>%;"></span></div>
+                                    </div>
+                                    <div class="credit-scoring-bar">
+                                        <div class="credit-scoring-bar-top">
+                                            <span>Credit History</span>
+                                            <strong id="credit-weight-display-credit-history"><?php echo htmlspecialchars((string)$cs_form['credit_history_weight']); ?>%</strong>
+                                        </div>
+                                        <div class="credit-scoring-bar-track"><span id="credit-weight-bar-credit-history" class="credit-scoring-bar-fill" style="width: <?php echo max(0, min(100, (int)$cs_form['credit_history_weight'])); ?>%;"></span></div>
+                                    </div>
+                                    <div class="credit-scoring-bar">
+                                        <div class="credit-scoring-bar-top">
+                                            <span>Collateral</span>
+                                            <strong id="credit-weight-display-collateral"><?php echo htmlspecialchars((string)$cs_form['collateral_weight']); ?>%</strong>
+                                        </div>
+                                        <div class="credit-scoring-bar-track"><span id="credit-weight-bar-collateral" class="credit-scoring-bar-fill" style="width: <?php echo max(0, min(100, (int)$cs_form['collateral_weight'])); ?>%;"></span></div>
+                                    </div>
+                                    <div class="credit-scoring-bar">
+                                        <div class="credit-scoring-bar-top">
+                                            <span>Character</span>
+                                            <strong id="credit-weight-display-character"><?php echo htmlspecialchars((string)$cs_form['character_weight']); ?>%</strong>
+                                        </div>
+                                        <div class="credit-scoring-bar-track"><span id="credit-weight-bar-character" class="credit-scoring-bar-fill" style="width: <?php echo max(0, min(100, (int)$cs_form['character_weight'])); ?>%;"></span></div>
+                                    </div>
+                                    <div class="credit-scoring-bar">
+                                        <div class="credit-scoring-bar-top">
+                                            <span>Business</span>
+                                            <strong id="credit-weight-display-business"><?php echo htmlspecialchars((string)$cs_form['business_weight']); ?>%</strong>
+                                        </div>
+                                        <div class="credit-scoring-bar-track"><span id="credit-weight-bar-business" class="credit-scoring-bar-fill" style="width: <?php echo max(0, min(100, (int)$cs_form['business_weight'])); ?>%;"></span></div>
+                                    </div>
+                                </div>
+
+                                <div class="credit-scoring-note">
+                                    <strong>How this workspace reads</strong>
+                                    <p id="credit-scoring-policy-note">Borrowers must reach the minimum score to proceed, while accounts below the auto-reject floor are declined before limit rules are applied.</p>
+                                </div>
+                            </aside>
+                        </div>
+
                         <div class="card credit-limit-engine-card credit-limit-workspace">
                             <div class="credit-engine-header">
                                 <div>
-                                    <h3>Credit Limit Engine</h3>
-                                    <p class="text-muted">Configure how your workspace sets default borrower limits, upgrade eligibility, and growth rules in one cleaner workspace.</p>
+                                    <h3>Limit Engine &amp; Simulator</h3>
+                                    <p class="text-muted">Configure how approved borrowers get a starting limit, qualify for increases, and grow over time.</p>
                                 </div>
                                 <span class="badge badge-blue">Saved in system settings</span>
                             </div>
@@ -4099,8 +4446,8 @@ function hexToRgb($hex) {
                                 <div class="credit-limit-layout">
                                     <div class="credit-limit-main">
                                         <div class="tabs credit-builder-tabs">
-                                            <a href="admin.php?tab=credit_settings" class="tab-btn active" data-tab="credit-limit-policy">Policy Rules</a>
-                                            <a href="admin.php?tab=credit_settings" class="tab-btn" data-tab="credit-limit-initial">Initial Limits</a>
+                                            <a href="admin.php?tab=credit_settings" class="tab-btn active" data-tab="credit-limit-policy">Upgrade Rules</a>
+                                            <a href="admin.php?tab=credit_settings" class="tab-btn" data-tab="credit-limit-initial">Starting Limits</a>
                                         </div>
 
                                         <div id="credit-limit-policy" class="tab-content active">
@@ -4109,7 +4456,7 @@ function hexToRgb($hex) {
                                                     <div class="credit-engine-panel-head">
                                                         <div>
                                                             <h4>Approval Workflow</h4>
-                                                            <p class="text-muted">Choose how much control the system keeps when assigning or approving a client credit limit.</p>
+                                                            <p class="text-muted">Choose how much control the system keeps once a borrower reaches the limit assignment stage.</p>
                                                         </div>
                                                     </div>
                                                     <div class="credit-workflow-grid">
@@ -4135,7 +4482,7 @@ function hexToRgb($hex) {
                                                     <div class="credit-engine-panel-head">
                                                         <div>
                                                             <h4>Upgrade Eligibility</h4>
-                                                            <p class="text-muted">Set the minimum borrower track record needed before a limit increase is allowed.</p>
+                                                            <p class="text-muted">Set the borrower track record required before a limit increase becomes available.</p>
                                                         </div>
                                                     </div>
                                                     <div class="credit-engine-inline-grid">
@@ -4185,8 +4532,8 @@ function hexToRgb($hex) {
                                             <div class="credit-engine-panel credit-engine-panel-wide">
                                                 <div class="credit-engine-panel-head">
                                                     <div>
-                                                        <h4>Initial Limits</h4>
-                                                        <p class="text-muted">Define the standard starting limit and add custom category rules for borrower groups that need a different starting point.</p>
+                                                        <h4>Starting Limits</h4>
+                                                        <p class="text-muted">Define the standard starting limit and add custom rules for borrower groups that need a different entry point.</p>
                                                     </div>
                                                     <button type="button" class="btn btn-sm btn-outline" id="credit-add-category-rule">
                                                         <span class="material-symbols-rounded">add</span>
@@ -4244,7 +4591,7 @@ function hexToRgb($hex) {
 
                                         <div class="action-bar" style="margin-top: 24px;">
                                             <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
-                                                <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Credit Limit Rules
+                                                <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Limit Engine
                                             </button>
                                         </div>
                                     </div>
@@ -4253,8 +4600,8 @@ function hexToRgb($hex) {
                                         <div class="credit-engine-summary-card credit-limit-preview-card">
                                             <div class="credit-engine-summary-card-head">
                                                 <div>
-                                                    <h4>Live Preview</h4>
-                                                    <p class="text-muted">A smaller summary of the current rules while you edit the engine.</p>
+                                                    <h4>Limit Snapshot</h4>
+                                                    <p class="text-muted">A compact summary of the current limit rules and borrower simulator.</p>
                                                 </div>
                                             </div>
 
@@ -4412,44 +4759,78 @@ function hexToRgb($hex) {
     </div>
 
     <!-- Create Role Modal -->
-    <div id="create-role-modal" class="modal-backdrop" style="display: none;">
-        <div class="modal" style="width: 600px; max-width: 90vw;">
+    <div id="create-role-modal" class="modal-backdrop" aria-hidden="true" style="display: none; position: fixed; top: 0; right: 0; bottom: 0; left: 0; align-items: center; justify-content: center; padding: 24px; background: rgba(15, 23, 42, 0.55); z-index: 9999; overflow-y: auto;">
+        <div class="modal" style="width: 800px; max-width: 90vw;">
             <div class="modal-header">
                 <h2>Create Custom Role</h2>
-                <button type="button" class="icon-btn" onclick="document.getElementById('create-role-modal').style.display='none'"><span class="material-symbols-rounded">close</span></button>
+                <button type="button" class="icon-btn" onclick="closeCreateRoleModal()"><span class="material-symbols-rounded">close</span></button>
             </div>
             <form method="POST" action="admin.php">
                 <input type="hidden" name="action" value="create_role">
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label>Role Name <span style="color:var(--danger-color);">*</span></label>
-                        <input type="text" class="form-control" name="role_name" id="create_role_name" placeholder="e.g. Moderator, Loan Officer" required>
-                        <small class="text-muted">Role names are case-sensitive and must be unique.</small>
-                    </div>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 24px;">
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label>Role Name <span style="color:var(--danger-color);">*</span></label>
+                            <input type="text" class="form-control" name="role_name" id="create_role_name" placeholder="e.g. Manager, Loan Officer" required>
+                            <small class="text-muted">Role names are case-sensitive and must be unique.</small>
+                        </div>
 
-                    <div class="form-group">
-                        <label>Load Preset Defaults</label>
-                        <select id="role-preset" class="form-control" style="margin-bottom: 1rem;">
-                            <option value="custom">Custom (No Preset)</option>
-                            <option value="manager">Manager</option>
-                            <option value="loan_officer">Loan Officer</option>
-                            <option value="teller">Teller</option>
-                        </select>
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label>Load Preset Defaults</label>
+                            <select id="role-preset" class="form-control">
+                                <option value="custom" selected>Custom (No Preset)</option>
+                                <option value="manager">Manager (All Access)</option>
+                                <option value="loan_officer">Loan Officer</option>
+                                <option value="teller">Teller</option>
+                            </select>
+                            <small class="text-muted" style="display: block; margin-top: 4px;">Start from a preset to auto-fill permissions.</small>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label>Initial Permissions</label>
-                        <p class="text-muted" style="margin-bottom: 12px; font-size: 0.9rem;">Toggle the permissions this role should start with.</p>
-                        <div id="create-role-permissions-container" style="max-height: 400px; overflow-y: auto; padding-right: 12px;">
+                        <p class="text-muted" style="margin-bottom: 12px; font-size: 0.9rem;">Start from a preset, then refine using module groups and search.</p>
+                        <div class="create-role-toolbar">
+                            <label class="permissions-search-wrap" for="create-role-permissions-search">
+                                <span class="material-symbols-rounded">search</span>
+                                <input type="search" id="create-role-permissions-search" class="permissions-filter-input" placeholder="Search initial permissions">
+                            </label>
+                            
+                        </div>
+                        <div id="create-role-permissions-container" class="permissions-grid" style="max-height: 480px; overflow-y: auto; padding-right: 12px; align-items: stretch; margin-top: 10px;">
                             <?php foreach ($grouped_permissions as $moduleName => $perms): ?>
-                                <div class="permission-module" style="margin-bottom: 16px;">
-                                    <h4 style="font-size: 0.9rem; margin-bottom: 8px; border-bottom: none;"><?php echo htmlspecialchars($moduleName); ?></h4>
-                                    <div class="toggle-list" style="gap: 8px;">
+                                <div class="permission-module" data-module-name="<?php echo htmlspecialchars(strtolower((string)$moduleName)); ?>">
+                                    <div class="permission-module-header">
+                                        <?php
+                                            $module_icons = [
+                                                'Applications' => 'description',
+                                                'Clients' => 'group',
+                                                'Loans' => 'real_estate_agent',
+                                                'Payments' => 'payments',
+                                                'Reports' => 'analytics',
+                                                'Users' => 'manage_accounts',
+                                            ];
+                                            $icon = $module_icons[$moduleName] ?? 'folder';
+                                        ?>
+                                        <h4>
+                                            <span class="material-symbols-rounded"><?php echo $icon; ?></span>
+                                            <?php echo htmlspecialchars($moduleName); ?>
+                                        </h4>
+                                        <div class="permission-module-actions">
+                                            <span class="permission-module-count"><strong class="permission-module-visible-count">0</strong>/<?php echo count($perms); ?></span>
+                                            <button type="button" class="module-action-btn create-role-module-toggle" data-bulk="all">All</button>
+                                            <button type="button" class="module-action-btn create-role-module-toggle" data-bulk="none">None</button>
+                                        </div>
+                                    </div>
+                                    <div class="toggle-list">
                                         <?php foreach ($perms as $p): ?>
-                                            <?php if ($p['permission_code'] === 'EDIT_BILLING') continue; ?>
-                                            <div class="toggle-item" style="padding: 8px 12px; border-radius: 6px; background: var(--bg-body); border: 1px solid var(--border-color);">
+                                            <?php
+                                                $create_modal_search_text = strtolower(trim(($p['description'] ?? '') . ' ' . ($p['permission_code'] ?? '') . ' ' . $moduleName));
+                                            ?>
+                                            <div class="toggle-item" data-permission-search="<?php echo htmlspecialchars($create_modal_search_text); ?>">
                                                 <div class="toggle-info">
                                                     <h4 style="margin-bottom: 2px; font-weight: 500; font-size: 0.9rem; border-bottom: none;"><?php echo htmlspecialchars($p['description']); ?></h4>
+                                                    <span class="permission-code"><?php echo htmlspecialchars(str_replace('_', ' ', (string)$p['permission_code'])); ?></span>
                                                 </div>
                                                 <label class="switch" style="transform: scale(0.85); transform-origin: right;">
                                                     <input type="checkbox" name="initial_permissions[]" value="<?php echo htmlspecialchars($p['permission_code']); ?>">
@@ -4461,10 +4842,14 @@ function hexToRgb($hex) {
                                 </div>
                             <?php endforeach; ?>
                         </div>
+                        <div class="permissions-empty-search" id="create-role-permissions-empty" hidden>
+                            <span class="material-symbols-rounded">search_off</span>
+                            <p>No matching permissions in this role template.</p>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline" onclick="document.getElementById('create-role-modal').style.display='none'">Cancel</button>
+                    <button type="button" class="btn btn-outline" onclick="closeCreateRoleModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create Role</button>
                 </div>
             </form>

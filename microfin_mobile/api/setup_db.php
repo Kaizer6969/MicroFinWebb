@@ -1,10 +1,7 @@
 <?php
-$conn = new mysqli("centerbeam.proxy.rlwy.net", "root", "zVULvPIbSyHVavTRnPFAkMWGVmvRwInd", "railway", 52624);
+require_once __DIR__ . '/db.php';
 
 $sql = "
-// CREATE DATABASE IF NOT EXISTS microfin_db;
-// USE microfin_db;
-
 CREATE TABLE IF NOT EXISTS tenants (
     tenant_id VARCHAR(50) PRIMARY KEY,
     tenant_name VARCHAR(100) NOT NULL,

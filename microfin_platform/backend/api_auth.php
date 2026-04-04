@@ -2,7 +2,10 @@
 // backend/api_auth.php
 // Handles all authentication and tenant-lookup requests
 
+require_once 'session_auth.php';
+mf_start_backend_session();
 require_once 'db_connect.php';
+require_once 'login_activity.php';
 
 header('Content-Type: application/json');
 
@@ -51,6 +54,10 @@ if ($method === 'POST') {
     
     if (!isset($request['action'])) {
         jsonResponse('error', 'Missing action parameter');
+    }
+
+    if (in_array($request['action'], ['login', 'super_admin_login'], true) && mf_browser_has_active_backend_session($pdo)) {
+        jsonResponse('error', 'This browser already has an active session. Please log out of the current account before signing in again.');
     }
 
     // ==========================================================
@@ -102,9 +109,12 @@ if ($method === 'POST') {
     // Crucial: We MUST enforce the tenant_id in the WHERE clause, 
     // otherwise someone from Plaridel could log into Fundline with the same email.
     $stmt = $pdo->prepare("
-        SELECT u.user_id, u.username, u.password_hash, u.role_id, u.user_type, u.status, r.role_name 
+        SELECT u.user_id, u.username, u.password_hash, u.role_id, u.user_type, u.status, u.ui_theme,
+               r.role_name, t.tenant_name, t.tenant_slug, b.theme_primary_color
         FROM users u
         JOIN user_roles r ON u.role_id = r.role_id
+        JOIN tenants t ON u.tenant_id = t.tenant_id
+        LEFT JOIN tenant_branding b ON b.tenant_id = t.tenant_id
         WHERE u.email = ? AND u.tenant_id = ?
     ");
     $stmt->execute([$email, $tenant_id]);
@@ -122,21 +132,28 @@ if ($method === 'POST') {
     // In your schema, the default passwords were 'password' hashed with bcrypt.
     if (password_verify($password, $user['password_hash'])) {
         
-        // 3. Create Session
-        $sessionToken = bin2hex(random_bytes(32)); // Super secure random 64-character hex string
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+24 hours'));
-        
-        $insertStmt = $pdo->prepare("
-            INSERT INTO user_sessions (user_id, tenant_id, session_token, ip_address, expires_at)
-            VALUES (?, ?, ?, ?, ?)
-        ");
-        $insertStmt->execute([
-            $user['user_id'], 
-            $tenant_id, 
-            $sessionToken, 
-            $_SERVER['REMOTE_ADDR'], 
-            $expiresAt
-        ]);
+        mf_update_user_last_login($pdo, (int) $user['user_id']);
+
+        unset(
+            $_SESSION['super_admin_logged_in'],
+            $_SESSION['super_admin_id'],
+            $_SESSION['super_admin_username'],
+            $_SESSION['super_admin_force_password_change'],
+            $_SESSION['super_admin_onboarding_required']
+        );
+
+        $_SESSION['user_logged_in'] = true;
+        $_SESSION['user_id'] = (int) $user['user_id'];
+        $_SESSION['username'] = $user['username'];
+        $_SESSION['tenant_id'] = $tenant_id;
+        $_SESSION['tenant_name'] = $user['tenant_name'];
+        $_SESSION['tenant_slug'] = $user['tenant_slug'];
+        $_SESSION['role'] = $user['role_name'];
+        $_SESSION['user_type'] = $user['user_type'];
+        $_SESSION['theme'] = $user['theme_primary_color'] ?: '#0f172a';
+        $_SESSION['ui_theme'] = (($user['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
+
+        $sessionToken = mf_create_backend_session($pdo, (int) $user['user_id'], (string) $tenant_id, 'tenant');
         
         // Return Success
         jsonResponse('success', 'Login successful.', [

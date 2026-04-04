@@ -1,12 +1,12 @@
 <?php
-session_start();
-
-if (!isset($_SESSION['user_logged_in']) || $_SESSION['user_logged_in'] !== true || empty($_SESSION['tenant_id'])) {
-    http_response_code(403);
-    exit('Access denied.');
-}
-
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
 require_once '../backend/db_connect.php';
+mf_require_tenant_session($pdo, [
+    'response' => 'die',
+    'status' => 403,
+    'message' => 'Access denied.',
+]);
 require_once '../backend/billing_access.php';
 require_once __DIR__ . '/receipt_helpers.php';
 

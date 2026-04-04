@@ -1,12 +1,13 @@
 <?php
 header('Content-Type: application/json');
-session_start();
+require_once 'session_auth.php';
+mf_start_backend_session();
 require_once 'db_connect.php';
-
-if (!isset($_SESSION['user_logged_in']) || !$_SESSION['user_logged_in']) {
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized.']);
-    exit;
-}
+mf_require_tenant_session($pdo, [
+    'response' => 'json',
+    'status' => 401,
+    'message' => 'Unauthorized.',
+]);
 
 $tenant_id      = (string) ($_SESSION['tenant_id'] ?? '');
 $session_user_id = (int) ($_SESSION['user_id'] ?? 0);

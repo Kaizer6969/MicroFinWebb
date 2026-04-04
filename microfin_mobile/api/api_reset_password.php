@@ -15,40 +15,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $email = $data['email'] ?? '';
     $tenant_id = $data['tenant_id'] ?? '';
-    $reset_code = $data['reset_code'] ?? '';
     $new_password = $data['new_password'] ?? '';
     
-    if(empty($email) || empty($tenant_id) || empty($reset_code) || empty($new_password)) {
+    if(empty($email) || empty($tenant_id) || empty($new_password)) {
         echo json_encode(['success' => false, 'message' => 'Required fields are missing']);
         exit;
     }
 
-    // Verify Code
-    $stmt_check = $conn->prepare("SELECT reset_code FROM password_resets WHERE email = ? AND tenant_id = ? AND reset_code = ? AND expires_at > NOW()");
-    $stmt_check->bind_param("sss", $email, $tenant_id, $reset_code);
-    $stmt_check->execute();
-    if ($stmt_check->get_result()->num_rows === 0) {
-        echo json_encode(['success' => false, 'message' => 'Invalid or expired verification code.']);
+    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+    $tenant_stmt->bind_param("s", $tenant_id);
+    $tenant_stmt->execute();
+    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
+    $tenant_stmt->close();
+
+    if (!$tenant_exists) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
         exit;
     }
-    $stmt_check->close();
 
     $password_hash = password_hash($new_password, PASSWORD_ARGON2ID);
     
-    $stmt = $conn->prepare("UPDATE users SET password_hash = ? WHERE email = ? AND tenant_id = ?");
+    $stmt = $conn->prepare("
+        UPDATE users u
+        INNER JOIN clients c
+            ON c.user_id = u.user_id
+           AND c.tenant_id = u.tenant_id
+        SET u.password_hash = ?
+        WHERE u.email = ?
+          AND u.tenant_id = ?
+          AND u.user_type = 'Client'
+          AND c.client_status = 'Active'
+    ");
     $stmt->bind_param("sss", $password_hash, $email, $tenant_id);
     
     if ($stmt->execute()) {
         if ($stmt->affected_rows === 1) {
-            // Delete reset code after successful reset
-            $stmt_del = $conn->prepare("DELETE FROM password_resets WHERE email = ? AND tenant_id = ?");
-            $stmt_del->bind_param("ss", $email, $tenant_id);
-            $stmt_del->execute();
-            $stmt_del->close();
-
             echo json_encode(['success' => true, 'message' => 'Password reset successful!']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Password update failed. User not found.']);
+            echo json_encode(['success' => false, 'message' => 'Password update failed. Make sure you are registered.']);
         }
     } else {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . $stmt->error]);
@@ -59,4 +63,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid Request']);
 }
 ?>
-

@@ -1,13 +1,13 @@
 <?php
 header('Content-Type: application/json');
-session_start();
-
+require_once 'session_auth.php';
+mf_start_backend_session();
 require_once 'db_connect.php';
-
-if (!isset($_SESSION['user_logged_in']) || !$_SESSION['user_logged_in']) {
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized access.']);
-    exit;
-}
+mf_require_tenant_session($pdo, [
+    'response' => 'json',
+    'status' => 401,
+    'message' => 'Unauthorized access.',
+]);
 
 if (($_SESSION['user_type'] ?? '') !== 'Employee') {
     echo json_encode(['status' => 'error', 'message' => 'Only staff members can perform this action.']);

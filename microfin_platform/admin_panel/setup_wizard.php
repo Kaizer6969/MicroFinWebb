@@ -1,12 +1,12 @@
 <?php
-session_start();
-
-if (!isset($_SESSION['user_logged_in']) || $_SESSION['user_logged_in'] !== true || empty($_SESSION['tenant_id'])) {
-    http_response_code(403);
-    die("<h1>403 Forbidden - Access Denied</h1><p>No valid tenant session could be identified. Please log in using your company's designated login link.</p>");
-}
-
+require_once '../backend/session_auth.php';
+mf_start_backend_session();
 require_once '../backend/db_connect.php';
+mf_require_tenant_session($pdo, [
+    'response' => 'die',
+    'status' => 403,
+    'message' => "<h1>403 Forbidden - Access Denied</h1><p>No valid tenant session could be identified. Please log in using your company's designated login link.</p>",
+]);
 
 $tenant_id = $_SESSION['tenant_id'];
 
