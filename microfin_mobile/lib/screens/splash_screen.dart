@@ -64,6 +64,8 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
+  static const String _buildTenantId = String.fromEnvironment('TENANT_ID');
+
   // Animation controllers
   late AnimationController _logoController;
   late AnimationController _contentController;
@@ -83,6 +85,10 @@ class _SplashScreenState extends State<SplashScreen>
   bool _showWelcomePanel = false;
   bool _tenantsLoaded = false;
   TenantBranding? _selectedTenant;
+  String? _startupErrorTitle;
+  String? _startupErrorMessage;
+
+  bool get _isLockedTenantBuild => _buildTenantId.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -127,20 +133,25 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _startSequence() async {
     await _logoController.forward();
-    await TenantBranding.loadTenants();
+    await TenantBranding.loadTenants(
+      tenantFilter: _isLockedTenantBuild ? _buildTenantId : null,
+    );
     _tenantsLoaded = true;
 
     await Future.delayed(const Duration(milliseconds: 200));
     if (!mounted) return;
 
+    final prefs = await SharedPreferences.getInstance();
+
     // ── DEBUG MODE: always show the tenant picker so you can freely choose ──
-    if (kDebugMode) {
+    if (kDebugMode && !_isLockedTenantBuild) {
       // Clear any previously locked tenant so the picker is always fresh
-      final prefs = await SharedPreferences.getInstance();
       await prefs.remove('locked_tenant_id');
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showTenantPicker(context);
+        if (mounted) {
+          _showTenantPicker(context);
+        }
       });
       return;
     }
