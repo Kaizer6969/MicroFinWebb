@@ -1,4 +1,4 @@
-name: Build Generic APK
+name: Build Generic Internal APK
 
 on:
   workflow_dispatch:
@@ -69,7 +69,8 @@ jobs:
           APP_NAME: ${{ steps.vars.outputs.app_name }}
         run: |
           flutter build apk --release \
-            --dart-define=APP_NAME="$APP_NAME"
+            --dart-define=APP_NAME="$APP_NAME" \
+            --dart-define=FORCE_TENANT_PICKER=true
 
       - name: Replace served APK
         run: |
@@ -78,7 +79,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: microfin_app-apk
+          name: microfin_app-generic-apk
           path: microfin_mobile/microfin_app.apk
           if-no-files-found: error
 
@@ -92,5 +93,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add microfin_mobile/microfin_app.apk
-          git commit -m "chore(apk): rebuild generic microfin_app.apk"
+          git commit -m "chore(apk): rebuild generic internal microfin_app.apk"
           git push
