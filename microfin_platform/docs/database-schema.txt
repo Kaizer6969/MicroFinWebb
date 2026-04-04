@@ -670,7 +670,7 @@ CREATE TABLE IF NOT EXISTS clients (
     same_as_present BOOLEAN DEFAULT FALSE,
 
     -- Employment & Income
-    employment_status ENUM('Employed', 'Self-Employed', 'Unemployed', 'Retired'),
+    employment_status ENUM('Employed', 'Self-Employed', 'Freelancer', 'Contractual', 'Part-Time', 'OFW', 'Student', 'Unemployed', 'Retired'),
     occupation VARCHAR(100),
     employer_name VARCHAR(200),
     employer_address TEXT,

@@ -87,16 +87,17 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
         SELECT c.client_id, c.first_name, c.last_name, c.email_address,
                c.contact_number, c.client_status, c.registration_date,
                c.credit_limit, c.date_of_birth, c.occupation, c.monthly_income,
-               c.present_city, c.present_province,
+               c.present_city, c.present_province, u.user_type,
                COUNT(DISTINCT la.application_id) AS total_applications,
                COUNT(DISTINCT l.loan_id) AS total_loans,
                COALESCE(SUM(CASE WHEN l.loan_status = 'Active' THEN l.remaining_balance END), 0) AS active_balance
         FROM clients c
+        LEFT JOIN users u ON c.user_id = u.user_id
         LEFT JOIN loan_applications la ON la.client_id = c.client_id AND la.tenant_id = c.tenant_id
         LEFT JOIN loans l ON l.client_id = c.client_id AND l.tenant_id = c.tenant_id
         WHERE c.tenant_id = ? AND c.deleted_at IS NULL $where_extra
         GROUP BY c.client_id
-        ORDER BY c.created_at DESC
+        ORDER BY c.registration_date DESC
         LIMIT 200
     ");
     $stmt->execute($params);
@@ -122,7 +123,7 @@ if ($method === 'GET' && $action === 'view') {
     $verification_status_sql = client_effective_verification_sql($pdo, 'c');
 
     $stmt = $pdo->prepare("
-        SELECT c.*, {$verification_status_sql} AS verification_status, u.email AS user_email, u.username, u.status AS user_status, u.last_login
+        SELECT c.*, {$verification_status_sql} AS verification_status, u.email AS user_email, u.username, u.status AS user_status, u.last_login, u.user_type
         FROM clients c
         JOIN users u ON c.user_id = u.user_id
         WHERE c.client_id = ? AND c.tenant_id = ?

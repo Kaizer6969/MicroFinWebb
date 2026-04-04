@@ -1521,6 +1521,27 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="super_admin.css">
+    <style>
+        @media (min-width: 1024px) {
+            body {
+                zoom: 0.9;
+            }
+
+            .app-container {
+                min-height: calc(100vh / 0.9);
+            }
+
+            .sidebar {
+                width: calc(var(--sidebar-width) / 0.9);
+                height: calc(100vh / 0.9);
+            }
+
+            .main-content {
+                margin-left: calc(var(--sidebar-width) / 0.9);
+                min-height: calc(100vh / 0.9);
+            }
+        }
+    </style>
 </head>
 <body>
 

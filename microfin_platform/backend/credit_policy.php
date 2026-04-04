@@ -3,7 +3,17 @@
 if (!function_exists('mf_credit_policy_employment_options')) {
     function mf_credit_policy_employment_options(): array
     {
-        return ['Employed', 'Self-Employed', 'Unemployed', 'Retired'];
+        return [
+            'Employed',
+            'Self-Employed',
+            'Freelancer',
+            'Contractual',
+            'Part-Time',
+            'OFW',
+            'Student',
+            'Unemployed',
+            'Retired',
+        ];
     }
 }
 
@@ -42,11 +52,12 @@ if (!function_exists('mf_credit_policy_defaults')) {
             'eligibility' => [
                 'min_monthly_income' => 0,
                 'allowed_employment_statuses' => ['Employed', 'Self-Employed', 'Retired'],
-                'require_verified_documents' => true,
             ],
             'score_thresholds' => [
-                'review_min_score' => 600,
+                'review_min_score' => 500,
+                'review_max_score' => 799,
                 'approve_min_score' => 800,
+                'new_client_default_score' => 500,
             ],
             'ci_rules' => [
                 'require_ci' => false,
@@ -56,9 +67,9 @@ if (!function_exists('mf_credit_policy_defaults')) {
             ],
             'credit_limit' => [
                 'income_multiplier' => 4,
-                'ci_multiplier_highly_recommended' => 1.10,
-                'ci_multiplier_recommended' => 1.00,
-                'ci_multiplier_conditional' => 0.80,
+                'approve_band_multiplier' => 1.10,
+                'review_band_multiplier' => 1.00,
+                'reject_band_multiplier' => 0.50,
                 'max_credit_limit_cap' => 200000,
                 'round_to_nearest' => 500,
             ],
@@ -123,19 +134,48 @@ if (!function_exists('mf_credit_policy_normalize')) {
         $defaults = mf_credit_policy_defaults();
         $policy = is_array($payload) ? array_replace_recursive($defaults, $payload) : $defaults;
         $scoreCeiling = mf_credit_policy_score_ceiling();
+        $reviewBandCeiling = max(0, $scoreCeiling - 1);
 
-        $reviewMinScore = mf_credit_policy_normalize_score_value(
-            $policy['score_thresholds']['review_min_score'] ?? $defaults['score_thresholds']['review_min_score'],
-            $defaults['score_thresholds']['review_min_score']
-        );
-        $approveMinScore = max(
-            $reviewMinScore,
+        $reviewMinScore = min(
+            $reviewBandCeiling,
             mf_credit_policy_normalize_score_value(
-                $policy['score_thresholds']['approve_min_score'] ?? $defaults['score_thresholds']['approve_min_score'],
-                $defaults['score_thresholds']['approve_min_score']
+                $policy['score_thresholds']['review_min_score'] ?? $defaults['score_thresholds']['review_min_score'],
+                $defaults['score_thresholds']['review_min_score']
             )
         );
-        $approveMinScore = min($scoreCeiling, $approveMinScore);
+        $reviewMaxFallback = ($policy['score_thresholds']['approve_min_score'] ?? $defaults['score_thresholds']['approve_min_score']) - 1;
+        $reviewMaxScore = mf_credit_policy_normalize_score_value(
+            $policy['score_thresholds']['review_max_score'] ?? $reviewMaxFallback,
+            $defaults['score_thresholds']['review_max_score']
+        );
+        $approveMinScore = mf_credit_policy_normalize_score_value(
+            $policy['score_thresholds']['approve_min_score'] ?? ($reviewMaxScore + 1),
+            $defaults['score_thresholds']['approve_min_score']
+        );
+        $reviewMaxScore = min($reviewBandCeiling, max($reviewMinScore, min($reviewMaxScore, $approveMinScore - 1)));
+        $approveMinScore = min($scoreCeiling, max($reviewMaxScore + 1, $approveMinScore));
+
+        $newClientDefaultScore = mf_credit_policy_normalize_score_value(
+            $policy['score_thresholds']['new_client_default_score'] ?? $defaults['score_thresholds']['new_client_default_score'],
+            $defaults['score_thresholds']['new_client_default_score']
+        );
+
+        // Backward-compat: map old CI multiplier keys to new band multiplier keys
+        $creditLimit = $policy['credit_limit'] ?? [];
+        $hasNewBandKeys = isset($creditLimit['approve_band_multiplier'])
+            || isset($creditLimit['review_band_multiplier'])
+            || isset($creditLimit['reject_band_multiplier']);
+        if (!$hasNewBandKeys) {
+            if (isset($creditLimit['ci_multiplier_highly_recommended'])) {
+                $creditLimit['approve_band_multiplier'] = $creditLimit['ci_multiplier_highly_recommended'];
+            }
+            if (isset($creditLimit['ci_multiplier_recommended'])) {
+                $creditLimit['review_band_multiplier'] = $creditLimit['ci_multiplier_recommended'];
+            }
+            if (isset($creditLimit['ci_multiplier_conditional'])) {
+                $creditLimit['reject_band_multiplier'] = $creditLimit['ci_multiplier_conditional'];
+            }
+        }
 
         return [
             'eligibility' => [
@@ -146,11 +186,12 @@ if (!function_exists('mf_credit_policy_normalize')) {
                     $defaults['eligibility']['allowed_employment_statuses'],
                     true
                 ),
-                'require_verified_documents' => mf_credit_policy_truthy($policy['eligibility']['require_verified_documents'] ?? $defaults['eligibility']['require_verified_documents']),
             ],
             'score_thresholds' => [
                 'review_min_score' => $reviewMinScore,
+                'review_max_score' => $reviewMaxScore,
                 'approve_min_score' => $approveMinScore,
+                'new_client_default_score' => $newClientDefaultScore,
             ],
             'ci_rules' => [
                 'require_ci' => mf_credit_policy_truthy($policy['ci_rules']['require_ci'] ?? $defaults['ci_rules']['require_ci']),
@@ -167,12 +208,12 @@ if (!function_exists('mf_credit_policy_normalize')) {
                 ),
             ],
             'credit_limit' => [
-                'income_multiplier' => round(max(0, (float) ($policy['credit_limit']['income_multiplier'] ?? $defaults['credit_limit']['income_multiplier'])), 2),
-                'ci_multiplier_highly_recommended' => round(max(0, (float) ($policy['credit_limit']['ci_multiplier_highly_recommended'] ?? $defaults['credit_limit']['ci_multiplier_highly_recommended'])), 2),
-                'ci_multiplier_recommended' => round(max(0, (float) ($policy['credit_limit']['ci_multiplier_recommended'] ?? $defaults['credit_limit']['ci_multiplier_recommended'])), 2),
-                'ci_multiplier_conditional' => round(max(0, (float) ($policy['credit_limit']['ci_multiplier_conditional'] ?? $defaults['credit_limit']['ci_multiplier_conditional'])), 2),
-                'max_credit_limit_cap' => round(max(0, (float) ($policy['credit_limit']['max_credit_limit_cap'] ?? $defaults['credit_limit']['max_credit_limit_cap'])), 2),
-                'round_to_nearest' => round(max(0, (float) ($policy['credit_limit']['round_to_nearest'] ?? $defaults['credit_limit']['round_to_nearest'])), 2),
+                'income_multiplier' => round(max(0, (float) ($creditLimit['income_multiplier'] ?? $defaults['credit_limit']['income_multiplier'])), 2),
+                'approve_band_multiplier' => round(max(0, (float) ($creditLimit['approve_band_multiplier'] ?? $defaults['credit_limit']['approve_band_multiplier'])), 2),
+                'review_band_multiplier' => round(max(0, (float) ($creditLimit['review_band_multiplier'] ?? $defaults['credit_limit']['review_band_multiplier'])), 2),
+                'reject_band_multiplier' => round(max(0, (float) ($creditLimit['reject_band_multiplier'] ?? $defaults['credit_limit']['reject_band_multiplier'])), 2),
+                'max_credit_limit_cap' => round(max(0, (float) ($creditLimit['max_credit_limit_cap'] ?? $defaults['credit_limit']['max_credit_limit_cap'])), 2),
+                'round_to_nearest' => round(max(0, (float) ($creditLimit['round_to_nearest'] ?? $defaults['credit_limit']['round_to_nearest'])), 2),
             ],
             'product_checks' => [
                 'use_product_minimum_credit_score' => mf_credit_policy_truthy($policy['product_checks']['use_product_minimum_credit_score'] ?? $defaults['product_checks']['use_product_minimum_credit_score']),
@@ -204,6 +245,10 @@ if (!function_exists('mf_credit_policy_from_legacy_settings')) {
 
         $legacy['score_thresholds']['review_min_score'] = (int) ($settings['auto_reject_below_score'] ?? $defaults['score_thresholds']['review_min_score']);
         $legacy['score_thresholds']['approve_min_score'] = (int) ($settings['minimum_credit_score'] ?? $defaults['score_thresholds']['approve_min_score']);
+        $legacy['score_thresholds']['review_max_score'] = max(
+            $legacy['score_thresholds']['review_min_score'],
+            $legacy['score_thresholds']['approve_min_score'] - 1
+        );
         $legacy['ci_rules']['require_ci'] = mf_credit_policy_truthy($settings['require_credit_investigation'] ?? $defaults['ci_rules']['require_ci']);
 
         if (!empty($settings['credit_limit_rules'])) {
@@ -307,22 +352,20 @@ if (!function_exists('mf_credit_policy_fetch_latest_ci')) {
     }
 }
 
-if (!function_exists('mf_credit_policy_ci_factor')) {
-    function mf_credit_policy_ci_factor(array $policy, ?array $ci): float
+if (!function_exists('mf_credit_policy_band_multiplier')) {
+    function mf_credit_policy_band_multiplier(array $policy, float $effectiveScore): float
     {
-        $recommendation = trim((string) ($ci['recommendation'] ?? ''));
+        $approveMin = (float) ($policy['score_thresholds']['approve_min_score'] ?? 800);
+        $reviewMin  = (float) ($policy['score_thresholds']['review_min_score'] ?? 500);
 
-        if ($recommendation === 'Highly Recommended') {
-            return (float) ($policy['credit_limit']['ci_multiplier_highly_recommended'] ?? 1.10);
+        if ($effectiveScore >= $approveMin) {
+            return (float) ($policy['credit_limit']['approve_band_multiplier'] ?? 1.10);
         }
-        if ($recommendation === 'Conditional') {
-            return (float) ($policy['credit_limit']['ci_multiplier_conditional'] ?? 0.80);
-        }
-        if ($recommendation === 'Not Recommended') {
-            return 0.0;
+        if ($effectiveScore >= $reviewMin) {
+            return (float) ($policy['credit_limit']['review_band_multiplier'] ?? 1.00);
         }
 
-        return (float) ($policy['credit_limit']['ci_multiplier_recommended'] ?? 1.00);
+        return (float) ($policy['credit_limit']['reject_band_multiplier'] ?? 0.50);
     }
 }
 
@@ -344,26 +387,20 @@ if (!function_exists('mf_credit_policy_compute_limit_snapshot')) {
     {
         $monthlyIncome = (float) ($client['monthly_income'] ?? 0);
         $scoreCeiling = max(1, mf_credit_policy_score_ceiling());
-        $totalScore = $score !== null && isset($score['total_score'])
-            ? (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0)
-            : null;
-        $scoreFactor = $totalScore !== null ? max(0, min(1, $totalScore / $scoreCeiling)) : null;
-        $ciFactor = mf_credit_policy_ci_factor($policy, $ci);
+        $defaultScore = (float) ($policy['score_thresholds']['new_client_default_score'] ?? 500);
 
-        if ($scoreFactor === null) {
-            return [
-                'can_compute_limit' => false,
-                'computed_limit' => null,
-                'applied_limit' => max(0, (float) ($client['credit_limit'] ?? 0)),
-                'score_factor' => null,
-                'ci_factor' => $ciFactor,
-            ];
-        }
+        $hasScore = $score !== null && isset($score['total_score']);
+        $totalScore = $hasScore
+            ? (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0)
+            : $defaultScore;
+        $effectiveScore = max(0, min($scoreCeiling, $totalScore));
+        $scoreFactor = max(0, min(1, $effectiveScore / $scoreCeiling));
+        $bandMultiplier = mf_credit_policy_band_multiplier($policy, $effectiveScore);
 
         $rawLimit = $monthlyIncome
             * (float) ($policy['credit_limit']['income_multiplier'] ?? 0)
             * $scoreFactor
-            * $ciFactor;
+            * $bandMultiplier;
 
         $cap = (float) ($policy['credit_limit']['max_credit_limit_cap'] ?? 0);
         if ($cap > 0) {
@@ -380,7 +417,9 @@ if (!function_exists('mf_credit_policy_compute_limit_snapshot')) {
             'computed_limit' => $computedLimit,
             'applied_limit' => $computedLimit,
             'score_factor' => $scoreFactor,
-            'ci_factor' => $ciFactor,
+            'band_multiplier' => $bandMultiplier,
+            'effective_score' => $effectiveScore,
+            'used_default_score' => !$hasScore,
         ];
     }
 }
@@ -533,9 +572,12 @@ if (!function_exists('mf_evaluate_application_policy')) {
         $productMinAmount = (float) ($application['min_amount'] ?? 0);
         $productMaxAmount = (float) ($application['max_amount'] ?? 0);
         $productMinimumScore = (float) mf_credit_policy_normalize_score_value($application['minimum_credit_score'] ?? 0);
-        $totalScore = $score !== null
+        $defaultScore = (float) ($policy['score_thresholds']['new_client_default_score'] ?? 500);
+        $hasLatestScore = $score !== null && isset($score['total_score']);
+        $totalScore = $hasLatestScore
             ? (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0)
             : null;
+        $effectiveScore = $totalScore !== null ? $totalScore : $defaultScore;
         $ciRecommendation = trim((string) ($ci['recommendation'] ?? ''));
 
         $rejectReasons = [];
@@ -549,15 +591,9 @@ if (!function_exists('mf_evaluate_application_policy')) {
 
         $allowedEmployment = $policy['eligibility']['allowed_employment_statuses'] ?? [];
         $employmentStatus = trim((string) ($client['employment_status'] ?? ''));
+        $documentStatus = trim((string) ($client['document_verification_status'] ?? ''));
         if (!empty($allowedEmployment) && !in_array($employmentStatus, $allowedEmployment, true)) {
             $rejectReasons[] = 'Employment status is not allowed by the current credit policy.';
-        }
-
-        $documentStatus = trim((string) ($client['document_verification_status'] ?? ''));
-        if (!empty($policy['eligibility']['require_verified_documents'])
-            && !in_array($documentStatus, ['Verified', 'Approved'], true)
-        ) {
-            $reviewReasons[] = 'Client documents are not yet verified.';
         }
 
         if (!empty($policy['product_checks']['use_product_min_amount']) && $requestedAmount < $productMinAmount) {
@@ -567,18 +603,14 @@ if (!function_exists('mf_evaluate_application_policy')) {
             $rejectReasons[] = 'Requested amount exceeds the selected product maximum.';
         }
 
-        if ($totalScore === null) {
-            $reviewReasons[] = 'Credit score has not been computed yet.';
-        } else {
-            if ($totalScore < (float) ($policy['score_thresholds']['review_min_score'] ?? 0)) {
-                $rejectReasons[] = 'Credit score is below the rejection threshold.';
-            } elseif ($totalScore < (float) ($policy['score_thresholds']['approve_min_score'] ?? 0)) {
-                $reviewReasons[] = 'Credit score requires manual review.';
-            }
+        if ($effectiveScore < (float) ($policy['score_thresholds']['review_min_score'] ?? 0)) {
+            $rejectReasons[] = 'Credit score is below the rejection threshold.';
+        } elseif ($effectiveScore < (float) ($policy['score_thresholds']['approve_min_score'] ?? 0)) {
+            $reviewReasons[] = 'Credit score requires manual review.';
+        }
 
-            if (!empty($policy['product_checks']['use_product_minimum_credit_score']) && $totalScore < $productMinimumScore) {
-                $rejectReasons[] = 'Credit score is below the product minimum credit score.';
-            }
+        if (!empty($policy['product_checks']['use_product_minimum_credit_score']) && $effectiveScore < $productMinimumScore) {
+            $rejectReasons[] = 'Credit score is below the product minimum credit score.';
         }
 
         $ciRequired = !empty($policy['ci_rules']['require_ci']);
@@ -659,6 +691,8 @@ if (!function_exists('mf_evaluate_application_policy')) {
             'score' => [
                 'score_id' => $score !== null ? (int) ($score['score_id'] ?? 0) : null,
                 'total_score' => $totalScore,
+                'effective_score' => $effectiveScore,
+                'used_default_score' => !$hasLatestScore,
                 'credit_rating' => $score['credit_rating'] ?? null,
             ],
             'ci' => [

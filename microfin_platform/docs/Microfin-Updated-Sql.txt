@@ -226,7 +226,7 @@ CREATE TABLE `clients` (
   `permanent_province` VARCHAR(100) DEFAULT NULL COLLATE utf8mb4_unicode_ci,
   `permanent_postal_code` VARCHAR(10) DEFAULT NULL COLLATE utf8mb4_unicode_ci,
   `same_as_present` TINYINT(1) DEFAULT 0,
-  `employment_status` ENUM('Employed','Self-Employed','Unemployed','Retired') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `employment_status` ENUM('Employed','Self-Employed','Freelancer','Contractual','Part-Time','OFW','Student','Unemployed','Retired') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `occupation` VARCHAR(100) DEFAULT NULL COLLATE utf8mb4_unicode_ci,
   `employer_name` VARCHAR(200) DEFAULT NULL COLLATE utf8mb4_unicode_ci,
   `employer_address` TEXT COLLATE utf8mb4_unicode_ci,

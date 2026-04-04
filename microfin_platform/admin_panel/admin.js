@@ -32,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const setupAlert = document.querySelector('.dashboard-setup-alert');
     const setupAlertToggle = document.querySelector('[data-setup-alert-toggle]');
     const loanProductsForm = document.getElementById('loan-products-form');
+    const loanProductsModalPanel = document.getElementById('loan-products-form-panel');
+    const loanProductsModalShell = loanProductsModalPanel ? loanProductsModalPanel.querySelector('[data-loan-products-modal]') : null;
     const loanPreviewRoot = document.querySelector('[data-loan-preview]');
     const loanPreviewAmountInput = document.getElementById('loan-preview-amount');
     const loanPreviewTermInput = document.getElementById('loan-preview-term');
@@ -79,9 +81,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const creditPreviewCategoryInput = document.getElementById('credit-preview-category');
     const creditPreviewIncomeInput = document.getElementById('credit-preview-income');
     const creditPreviewIncomeDisplay = document.getElementById('credit-preview-income-display');
+    const creditPreviewCompletedLoansInput = document.getElementById('credit-preview-completed-loans');
+    const creditPreviewLatePaymentsInput = document.getElementById('credit-preview-late-payments');
     const creditPreviewLimitOutput = document.getElementById('credit-preview-limit-output');
     const creditPreviewLimitNote = document.getElementById('credit-preview-limit-note');
     const creditPreviewLimitFill = document.getElementById('credit-preview-limit-fill');
+    const creditPreviewUpgradeStatus = document.getElementById('credit-preview-upgrade-status');
+    const creditPreviewUpgradeNote = document.getElementById('credit-preview-upgrade-note');
+    const creditPreviewNextLimitOutput = document.getElementById('credit-preview-next-limit-output');
+    const creditPreviewNextLimitNote = document.getElementById('credit-preview-next-limit-note');
     const creditWeightInputs = {
         income: document.getElementById('credit-weight-income'),
         employment: document.getElementById('credit-weight-employment'),
@@ -141,6 +149,72 @@ document.addEventListener('DOMContentLoaded', () => {
         payment: 'billing-payment',
         history: 'billing-history',
     };
+
+    if (loanProductsModalPanel && loanProductsModalShell) {
+        const focusableSelector = [
+            'a[href]',
+            'button:not([disabled])',
+            'input:not([disabled]):not([type="hidden"])',
+            'select:not([disabled])',
+            'textarea:not([disabled])',
+            '[tabindex]:not([tabindex="-1"])',
+        ].join(', ');
+
+        const inertTargets = [
+            document.querySelector('.sidebar'),
+            document.querySelector('.top-header'),
+            document.querySelector('.section-intro'),
+            document.querySelector('.loan-products-tabs'),
+            document.getElementById('existing-loan-products'),
+        ].filter((element) => element && !loanProductsModalPanel.contains(element));
+
+        inertTargets.forEach((element) => {
+            element.setAttribute('inert', '');
+            element.setAttribute('aria-hidden', 'true');
+        });
+
+        const getFocusableElements = () => Array.from(loanProductsModalShell.querySelectorAll(focusableSelector))
+            .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+
+        window.requestAnimationFrame(() => {
+            const focusableElements = getFocusableElements();
+            if (focusableElements.length > 0) {
+                focusableElements[0].focus();
+            } else {
+                loanProductsModalShell.focus();
+            }
+        });
+
+        loanProductsModalPanel.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                window.location.href = 'admin.php?tab=loan_products';
+                return;
+            }
+
+            if (event.key !== 'Tab') {
+                return;
+            }
+
+            const focusableElements = getFocusableElements();
+            if (focusableElements.length === 0) {
+                event.preventDefault();
+                loanProductsModalShell.focus();
+                return;
+            }
+
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+            const activeElement = document.activeElement;
+
+            if (event.shiftKey && activeElement === firstElement) {
+                event.preventDefault();
+                lastElement.focus();
+            } else if (!event.shiftKey && activeElement === lastElement) {
+                event.preventDefault();
+                firstElement.focus();
+            }
+        });
+    }
 
     function setPageTitleFromNav(item, fallbackTargetId) {
         if (!pageTitle) return;
@@ -775,6 +849,55 @@ document.addEventListener('DOMContentLoaded', () => {
         if (creditPreviewLimitFill) {
             creditPreviewLimitFill.style.width = `${fillWidth}%`;
         }
+
+        const completedLoans = Number.parseInt(creditPreviewCompletedLoansInput?.value || '0', 10) || 0;
+        const latePayments = Number.parseInt(creditPreviewLatePaymentsInput?.value || '0', 10) || 0;
+        const minCompletedLoans = state.upgrade_eligibility.min_completed_loans;
+        const maxLatePayments = state.upgrade_eligibility.max_allowed_late_payments;
+        const meetsCompletedLoanRule = completedLoans >= minCompletedLoans;
+        const meetsLatePaymentRule = latePayments <= maxLatePayments;
+        const upgradeEligible = meetsCompletedLoanRule && meetsLatePaymentRule;
+
+        let projectedNextLimit = amount;
+        if (state.increase_rules.increase_type === 'percentage') {
+            projectedNextLimit = amount + (amount * (state.increase_rules.increase_value / 100));
+        } else {
+            projectedNextLimit = amount + state.increase_rules.increase_value;
+        }
+        if (state.increase_rules.absolute_max_limit > 0) {
+            projectedNextLimit = Math.min(projectedNextLimit, state.increase_rules.absolute_max_limit);
+        }
+
+        if (creditPreviewUpgradeStatus) {
+            creditPreviewUpgradeStatus.textContent = upgradeEligible ? 'Eligible for upgrade' : 'Not yet eligible';
+        }
+
+        if (creditPreviewUpgradeNote) {
+            const blockers = [];
+            if (!meetsCompletedLoanRule) {
+                blockers.push(`Needs ${minCompletedLoans - completedLoans} more completed loan${minCompletedLoans - completedLoans === 1 ? '' : 's'}.`);
+            }
+            if (!meetsLatePaymentRule) {
+                blockers.push(`Late payments must stay at ${maxLatePayments} or fewer.`);
+            }
+            creditPreviewUpgradeNote.textContent = upgradeEligible
+                ? 'This borrower currently meets the upgrade history rules.'
+                : blockers.join(' ');
+        }
+
+        if (creditPreviewNextLimitOutput) {
+            creditPreviewNextLimitOutput.textContent = formatPeso(projectedNextLimit);
+        }
+
+        if (creditPreviewNextLimitNote) {
+            if (amount <= 0) {
+                creditPreviewNextLimitNote.textContent = 'Set a usable starting limit first before projecting the next upgrade.';
+            } else if (upgradeEligible) {
+                creditPreviewNextLimitNote.textContent = 'Uses the simulated starting limit as the current limit, then applies the current increase rule.';
+            } else {
+                creditPreviewNextLimitNote.textContent = 'Shows the next possible limit once the borrower satisfies the current upgrade rules.';
+            }
+        }
     }
 
     function refreshCreditLimitSummary() {
@@ -981,6 +1104,8 @@ document.addEventListener('DOMContentLoaded', () => {
         [
             creditPreviewCategoryInput,
             creditPreviewIncomeInput,
+            creditPreviewCompletedLoansInput,
+            creditPreviewLatePaymentsInput,
         ].filter(Boolean).forEach((input) => {
             input.addEventListener('input', refreshCreditLimitSummary);
             input.addEventListener('change', refreshCreditLimitSummary);
@@ -1554,6 +1679,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Intl.NumberFormat('en-PH', {
             style: 'currency',
             currency: 'PHP',
+            currencyDisplay: 'narrowSymbol',
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         }).format(safeValue);

@@ -473,6 +473,9 @@ tbody tr:hover { background: var(--brand-light); }
 .btn-danger:hover { background: #fca5a5; }
 .btn-success { background: #dcfce7; color: #166534; }
 .btn-success:hover { background: #bbf7d0; }
+.table-icon-btn { width: 34px; height: 34px; padding: 0; justify-content: center; }
+.status-stack { display: flex; flex-direction: column; gap: 4px; }
+.status-note { font-size: .72rem; color: var(--muted); line-height: 1.35; }
 
 /* ── Filter Tabs ── */
 .filter-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -618,6 +621,36 @@ tbody tr:hover { background: var(--brand-light); }
 .kpi-label { font-size: .72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
 .kpi-val { font-size: 1.5rem; font-weight: 700; color: var(--text); }
 
+/* ── Read-only detail views ── */
+.detail-sections { display: flex; flex-direction: column; gap: 18px; }
+.detail-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--body-bg);
+    padding: 16px 18px;
+}
+.detail-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.detail-section-header .ms { color: var(--brand); font-size: 18px; }
+.detail-section-title {
+    font-size: .74rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--brand);
+}
+.detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
+.detail-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.detail-item-full { grid-column: 1 / -1; }
+.detail-label { font-size: .72rem; color: var(--muted); }
+.detail-value { font-size: .85rem; font-weight: 500; color: var(--text); line-height: 1.45; word-break: break-word; }
+.detail-value.is-empty { color: var(--muted); font-style: italic; font-weight: 400; }
+.detail-table { overflow-x: auto; }
+
 /* ── Two-col layout for reports breakdown ── */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
@@ -626,7 +659,7 @@ tbody tr:hover { background: var(--brand-light); }
     .sidebar { transform: translateX(-100%); }
     .sidebar.open { transform: translateX(0); }
     .main-wrap { margin-left: 0; }
-    .form-grid, .form-grid-3, .two-col { grid-template-columns: 1fr; }
+    .form-grid, .form-grid-3, .two-col, .detail-grid { grid-template-columns: 1fr; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
 }
 </style>
@@ -654,35 +687,38 @@ tbody tr:hover { background: var(--brand-light); }
     <nav style="flex:1; padding: 8px 10px;">
         <div class="nav-section">
             <div class="nav-label">Workspace</div>
-            <a class="nav-item active" data-target="home" href="#home">
+            <a class="nav-item active" data-target="home" data-title="Home" data-subtitle="Dashboard" href="#home">
                 <span class="material-symbols-rounded ms">home</span> Home
             </a>
 
             <?php if (has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')): ?>
-            <a class="nav-item" data-target="clients" href="#clients">
+            <a class="nav-item" data-target="clients" data-title="Client Management" data-subtitle="Profiles" href="#clients">
                 <span class="material-symbols-rounded ms">group</span> Client Management
             </a>
             <?php endif; ?>
 
             <?php if (has_permission('VIEW_APPLICATIONS') || has_permission('MANAGE_APPLICATIONS')): ?>
-            <a class="nav-item" data-target="applications" href="#applications">
+            <a class="nav-item" data-target="applications" data-title="Applications" data-subtitle="Monitoring" href="#applications">
                 <span class="material-symbols-rounded ms">description</span>
                 Applications
-                <?php if (count($pending_applications) > 0): ?>
-                    <span class="nav-badge"><?php echo count($pending_applications); ?></span>
-                <?php endif; ?>
+                <span class="nav-badge" id="navPendingAppsBadge" style="<?php echo count($pending_applications) > 0 ? '' : 'display:none;'; ?>"><?php echo count($pending_applications); ?></span>
             </a>
             <?php endif; ?>
 
             <?php if (has_permission('VIEW_LOANS') || has_permission('CREATE_LOANS')): ?>
-            <a class="nav-item" data-target="loans" href="#loans">
+            <a class="nav-item" data-target="loans" data-title="Loans Management" data-subtitle="Servicing" href="#loans">
                 <span class="material-symbols-rounded ms">real_estate_agent</span> Loans Management
             </a>
             <?php endif; ?>
 
             <?php if (has_permission('PROCESS_PAYMENTS')): ?>
-            <a class="nav-item" data-target="payments" href="#payments">
-                <span class="material-symbols-rounded ms">payments</span> Payments
+            <a class="nav-item" data-target="payments" data-title="Receipts & Transactions" data-subtitle="Collections" href="#payments">
+                <span class="material-symbols-rounded ms">receipt_long</span> Receipts & Transactions
+            </a>
+            <?php endif; ?>
+            <?php if (has_permission('VIEW_USERS')): ?>
+            <a class="nav-item" data-target="users" data-title="Team Directory" data-subtitle="Staff" href="#users">
+                <span class="material-symbols-rounded ms">badge</span> Team Directory
             </a>
             <?php endif; ?>
         </div>
@@ -690,20 +726,11 @@ tbody tr:hover { background: var(--brand-light); }
         <div class="nav-section" style="margin-top:8px;">
             <div class="nav-label">Insights</div>
             <?php if (has_permission('VIEW_REPORTS')): ?>
-            <a class="nav-item" data-target="reports" href="#reports">
+            <a class="nav-item" data-target="reports" data-title="Reports & Analytics" data-subtitle="Insights" href="#reports">
                 <span class="material-symbols-rounded ms">bar_chart</span> Reports & Analytics
             </a>
             <?php endif; ?>
         </div>
-
-        <?php if (has_permission('VIEW_USERS') || has_permission('CREATE_USERS')): ?>
-        <div class="nav-section" style="margin-top:8px;">
-            <div class="nav-label">Admin</div>
-            <a class="nav-item" data-target="users" href="#users">
-                <span class="material-symbols-rounded ms">manage_accounts</span> User Management
-            </a>
-        </div>
-        <?php endif; ?>
     </nav>
 
     <div class="sidebar-footer">
@@ -785,10 +812,10 @@ tbody tr:hover { background: var(--brand-light); }
             <?php endif; ?>
             <?php if (has_permission('VIEW_CLIENTS')): ?>
             <div class="stat-card">
-                <div class="stat-icon"><span class="material-symbols-rounded ms">group</span></div>
-                <div class="stat-label">Total Clients</div>
-                <div class="stat-value" id="statTotalClients"><?php echo count($all_clients); ?></div>
-                <div class="stat-sub">Registered borrowers</div>
+                <div class="stat-icon"><span class="material-symbols-rounded ms">verified_user</span></div>
+                <div class="stat-label">Active Clients</div>
+                <div class="stat-value" id="statActiveClients">0</div>
+                <div class="stat-sub">Ready for servicing</div>
             </div>
             <?php endif; ?>
         </div>
@@ -835,8 +862,8 @@ tbody tr:hover { background: var(--brand-light); }
                     </button>
                     <?php endif; ?>
                     <?php if (has_permission('PROCESS_PAYMENTS')): ?>
-                    <button class="btn btn-outline" onclick="openModal('paymentModal');loadPaymentLoans();" style="justify-content:flex-start;width:100%;">
-                        <span class="material-symbols-rounded ms">add_card</span> Post a Payment
+                    <button class="btn btn-outline" onclick="navTo('payments');loadPayments();" style="justify-content:flex-start;width:100%;">
+                        <span class="material-symbols-rounded ms">receipt_long</span> View Receipts & Transactions
                     </button>
                     <?php endif; ?>
                     <?php if (has_permission('VIEW_LOANS')): ?>
@@ -949,8 +976,8 @@ tbody tr:hover { background: var(--brand-light); }
                 <span class="material-symbols-rounded ms" style="font-size:22px;">description</span>
             </div>
             <div>
-                <h1>Loan Applications</h1>
-                <p>Review, process, and advance applications through the pipeline.</p>
+                <h1>Applications</h1>
+                <p>Monitor application progress with clearer borrower-facing status groups.</p>
             </div>
             <div class="page-header-actions">
                 <button class="btn btn-outline" onclick="loadApps(document.querySelector('#appFilterTabs .filter-tab.active')?.dataset?.status||'all')">
@@ -961,10 +988,8 @@ tbody tr:hover { background: var(--brand-light); }
         <div class="filter-tabs" id="appFilterTabs">
             <button class="filter-tab active" data-status="all" onclick="loadApps('all',this)">All</button>
             <button class="filter-tab" data-status="Draft" onclick="loadApps('Draft',this)">Draft</button>
-            <button class="filter-tab" data-status="Submitted" onclick="loadApps('Submitted',this)">Submitted</button>
             <button class="filter-tab" data-status="Under Review" onclick="loadApps('Under Review',this)">Under Review</button>
-            <button class="filter-tab" data-status="Document Verification" onclick="loadApps('Document Verification',this)">Doc Verify</button>
-            <button class="filter-tab" data-status="For Approval" onclick="loadApps('For Approval',this)">For Approval</button>
+            <button class="filter-tab" data-status="Reviewed" onclick="loadApps('Reviewed',this)">Reviewed</button>
             <button class="filter-tab" data-status="Approved" onclick="loadApps('Approved',this)">Approved</button>
             <button class="filter-tab" data-status="Rejected" onclick="loadApps('Rejected',this)">Rejected</button>
         </div>
@@ -1016,26 +1041,65 @@ tbody tr:hover { background: var(--brand-light); }
     <section id="payments" class="view">
         <div class="page-header">
             <div class="page-icon" style="background:rgba(16,185,129,.1);color:#10b981;">
-                <span class="material-symbols-rounded ms" style="font-size:22px;">payments</span>
+                <span class="material-symbols-rounded ms" style="font-size:22px;">receipt_long</span>
             </div>
             <div>
-                <h1>Payments & Transactions</h1>
+                <h1>Receipts & Transactions</h1>
                 <p>Today's collections: <strong id="todayTotal" style="color:var(--brand);">₱0.00</strong></p>
             </div>
-            <div class="page-header-actions">
-                <button class="btn-primary" onclick="openModal('paymentModal');loadPaymentLoans();">
-                    <span class="material-symbols-rounded ms">add</span> Post Payment
-                </button>
+        </div>
+        <div class="stats-grid" style="margin-bottom:16px;">
+            <div class="stat-card">
+                <div class="stat-icon"><span class="material-symbols-rounded ms">payments</span></div>
+                <div class="stat-label">Today's Collections</div>
+                <div class="stat-value brand" id="receiptTodayTotal">â€”</div>
+                <div class="stat-sub">Sum of posted receipts today</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><span class="material-symbols-rounded ms">receipt</span></div>
+                <div class="stat-label">Today's Transactions</div>
+                <div class="stat-value" id="receiptTodayCount">0</div>
+                <div class="stat-sub">Transactions posted today</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><span class="material-symbols-rounded ms">history</span></div>
+                <div class="stat-label">Latest Posting</div>
+                <div class="stat-value" id="receiptLatestPosted">â€”</div>
+                <div class="stat-sub">Most recent transaction date</div>
             </div>
         </div>
         <div class="card">
             <div class="table-wrap">
                 <table>
                     <thead><tr>
-                        <th>Reference</th><th>Client</th><th>Loan #</th>
+                        <th>Receipt #</th><th>Transaction Ref</th><th>Client</th><th>Loan #</th>
                         <th>Amount</th><th>Method</th><th>Date</th><th>Status</th>
                     </tr></thead>
-                    <tbody id="paymentsTbody"><tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+                    <tbody id="paymentsTbody"><tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if (has_permission('VIEW_USERS')): ?>
+    <section id="users" class="view">
+        <div class="page-header">
+            <div class="page-icon" style="background:rgba(245,158,11,.12);color:#f59e0b;">
+                <span class="material-symbols-rounded ms" style="font-size:22px;">badge</span>
+            </div>
+            <div>
+                <h1>Team Directory</h1>
+                <p>View staff accounts assigned to this tenant. Account creation and edits stay in the Admin panel.</p>
+            </div>
+        </div>
+        <div class="card">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Staff Member</th><th>Email</th><th>Department</th><th>Role</th><th>Status</th>
+                    </tr></thead>
+                    <tbody id="usersTbody"><tr class="loading-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -1061,25 +1125,6 @@ tbody tr:hover { background: var(--brand-light); }
     <?php endif; ?>
 
     <!-- ── USERS ── -->
-    <?php if (has_permission('VIEW_USERS') || has_permission('CREATE_USERS')): ?>
-    <section id="users" class="view">
-        <div class="page-header">
-            <div class="page-icon" style="background:rgba(34,197,94,.1);color:#22c55e;">
-                <span class="material-symbols-rounded ms" style="font-size:22px;">manage_accounts</span>
-            </div>
-            <div><h1>User Management</h1><p>Employees and system users in your organization.</p></div>
-        </div>
-        <div class="card">
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>Name</th><th>Email</th><th>Department</th><th>Position</th><th>Status</th></tr></thead>
-                    <tbody id="usersTbody"><tr class="loading-row"><td colspan="5"><span class="spinner"></span></td></tr></tbody>
-                </table>
-            </div>
-        </div>
-    </section>
-    <?php endif; ?>
-
     </div><!-- /content -->
 </div><!-- /main-wrap -->
 
@@ -1160,11 +1205,6 @@ tbody tr:hover { background: var(--brand-light); }
         <div class="modal-body" id="loanDetailBody"><div style="text-align:center;padding:32px;"><span class="spinner"></span></div></div>
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeModal('loanDetailModal')">Close</button>
-            <?php if (has_permission('PROCESS_PAYMENTS')): ?>
-            <button class="btn btn-brand" id="payFromLoanBtn" onclick="openPaymentFromLoan()" style="display:none;">
-                <span class="material-symbols-rounded ms">add_card</span> Post Payment
-            </button>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -1349,6 +1389,72 @@ function debounce(fn, ms) { return () => { clearTimeout(_debounceTimer); _deboun
 function fmt(n) { return '₱' + parseFloat(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtDate(d) { if (!d) return '—'; const dt = new Date(d); return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'2-digit'}); }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[char]);
+}
+function isBlank(value) { return value === null || value === undefined || String(value).trim() === ''; }
+function formatTextValue(value, emptyLabel='Not provided') {
+    if (isBlank(value)) return `<span class="detail-value is-empty">${escapeHtml(emptyLabel)}</span>`;
+    return escapeHtml(value);
+}
+function formatMoneyValue(value, emptyLabel='Not provided') {
+    const amount = parseFloat(value);
+    if (!Number.isFinite(amount) || amount <= 0) return `<span class="detail-value is-empty">${escapeHtml(emptyLabel)}</span>`;
+    return fmt(amount);
+}
+function formatDateValue(value, emptyLabel='Not provided') {
+    if (isBlank(value) || value === '1990-01-01') return `<span class="detail-value is-empty">${escapeHtml(emptyLabel)}</span>`;
+    return escapeHtml(fmtDate(value));
+}
+function renderDetailItem(label, valueHtml, full=false) {
+    return `<div class="detail-item${full ? ' detail-item-full' : ''}"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${valueHtml}</div></div>`;
+}
+function joinAddress(parts) {
+    return parts.map(part => String(part ?? '').trim()).filter(Boolean).join(', ');
+}
+function sourceBadge(userType) {
+    return userType === 'Client'
+        ? '<span class="badge badge-blue">Mobile App</span>'
+        : '<span class="badge badge-gray">Walk-in / Staff</span>';
+}
+function applicationMonitorState(status='') {
+    const map = {
+        'Draft': 'Draft',
+        'Submitted': 'Under Review',
+        'Pending Review': 'Under Review',
+        'Under Review': 'Under Review',
+        'Document Verification': 'Under Review',
+        'Credit Investigation': 'Under Review',
+        'For Approval': 'Reviewed',
+        'Reviewed': 'Reviewed',
+        'Approved': 'Approved',
+        'Rejected': 'Rejected',
+        'Cancelled': 'Rejected',
+        'Withdrawn': 'Rejected'
+    };
+    return map[status] || status || 'Under Review';
+}
+function applicationMonitorBadge(status='') {
+    const monitor = applicationMonitorState(status);
+    const stageNote = monitor !== status && !isBlank(status)
+        ? `<div class="status-note">Current stage: ${escapeHtml(status)}</div>`
+        : '';
+    return `<div class="status-stack">${badge(monitor)}${stageNote}</div>`;
+}
+function matchesApplicationFilter(rawStatus, filter='all') {
+    if (!filter || filter === 'all') return true;
+    return applicationMonitorState(rawStatus) === filter;
+}
+function getActiveAppFilter() {
+    return document.querySelector('#appFilterTabs .filter-tab.active')?.dataset?.status || 'all';
+}
+
 function badge(s) {
     const map = {
         'Active':                 'badge-green',
@@ -1407,14 +1513,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const tid = item.dataset.target;
             const tv  = document.getElementById(tid);
             if (tv) tv.classList.add('active');
-            title.innerHTML = item.querySelector('span:last-child').textContent.trim() + ' <span>' + tid.charAt(0).toUpperCase() + tid.slice(1) + '</span>';
+            const titleText = item.dataset.title || item.textContent.trim();
+            const subtitleText = item.dataset.subtitle || tid.charAt(0).toUpperCase() + tid.slice(1);
+            title.innerHTML = `${escapeHtml(titleText)} <span>${escapeHtml(subtitleText)}</span>`;
             history.pushState(null,'',`#${tid}`);
             // Lazy load on first visit
             if (tid === 'applications') loadApps('all');
             if (tid === 'loans')    loadLoans('all');
-            if (tid === 'payments') { loadPayments(); loadPaymentLoans(); }
-            if (tid === 'reports')  loadReports('month');
+            if (tid === 'payments') loadPayments();
             if (tid === 'users')    loadUsers();
+            if (tid === 'reports')  loadReports('month');
         });
     });
 
@@ -1436,6 +1544,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().slice(0,10);
     document.getElementById('payDate') && (document.getElementById('payDate').value = today);
     document.getElementById('releaseDate') && (document.getElementById('releaseDate').value = today);
+    const legacyPaymentsHint = document.getElementById('todayTotal');
+    if (legacyPaymentsHint && legacyPaymentsHint.parentElement) {
+        legacyPaymentsHint.parentElement.textContent = 'Review posted receipts, transaction references, and collection activity.';
+    }
 
     // Doc upload sync
     document.querySelectorAll('.document-upload-input').forEach(inp => {
@@ -1463,11 +1575,20 @@ async function loadDashboardStats() {
         const d = await r.json();
         if (d.status !== 'success') return;
         const s = d.data;
+        if (s.pending_applications !== undefined) {
+            setText('statPendingApps', s.pending_applications);
+            const pendingBadge = document.getElementById('navPendingAppsBadge');
+            if (pendingBadge) {
+                pendingBadge.textContent = s.pending_applications;
+                pendingBadge.style.display = s.pending_applications > 0 ? 'inline-flex' : 'none';
+            }
+        }
+        if (s.active_clients     !== undefined) setText('statActiveClients', s.active_clients);
         if (s.active_loans       !== undefined) setText('statActiveLoans', s.active_loans);
         if (s.overdue_loans      !== undefined) setText('statOverdueLoans', s.overdue_loans);
         if (s.todays_collections !== undefined) {
             setText('statTodayCollections', fmt(s.todays_collections));
-            setText('todayTotal', fmt(s.todays_collections));
+            setText('receiptTodayTotal', fmt(s.todays_collections));
         }
     } catch(_) {}
 }
@@ -1475,27 +1596,29 @@ function setText(id, val) { const el = document.getElementById(id); if (el) el.t
 
 // ── App Filter (live API) ─────────────────────────────────────
 async function loadApps(status='all', btn=null) {
-    if (btn) {
-        document.querySelectorAll('#appFilterTabs .filter-tab').forEach(t => t.classList.remove('active'));
-        btn.classList.add('active');
+    const filterTabs = Array.from(document.querySelectorAll('#appFilterTabs .filter-tab'));
+    const activeBtn = btn || filterTabs.find(tab => tab.dataset.status === status);
+    if (activeBtn) {
+        filterTabs.forEach(tab => tab.classList.remove('active'));
+        activeBtn.classList.add('active');
     }
     const tbody = document.getElementById('appsTbody');
     tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
-    const url = API.applications + '?action=list' + (status && status !== 'all' ? '&status=' + encodeURIComponent(status) : '');
-    const r = await fetch(url);
+    const r = await fetch(API.applications + '?action=list');
     const d = await r.json();
-    if (!d.data || !d.data.length) {
+    const rows = (d.data || []).filter(application => matchesApplicationFilter(application.application_status, status));
+    if (!rows.length) {
         tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No applications found for this filter.</td></tr>';
         return;
     }
-    tbody.innerHTML = d.data.map(a => `<tr>
-        <td class="td-mono td-bold">${a.application_number}</td>
-        <td class="td-bold">${a.first_name} ${a.last_name}</td>
-        <td class="td-muted">${a.product_name}</td>
+    tbody.innerHTML = rows.map(a => `<tr>
+        <td class="td-mono td-bold">${escapeHtml(a.application_number)}</td>
+        <td class="td-bold">${escapeHtml(a.first_name)} ${escapeHtml(a.last_name)}</td>
+        <td class="td-muted">${escapeHtml(a.product_name)}</td>
         <td class="td-bold" style="color:var(--brand);">${fmt(a.requested_amount)}</td>
         <td class="td-muted">${fmtDate(a.submitted_date || a.created_at)}</td>
-        <td>${badge(a.application_status)}</td>
-        <td><button class="btn btn-sm btn-outline" onclick="viewApplication(${a.application_id})">Review</button></td>
+        <td>${applicationMonitorBadge(a.application_status)}</td>
+        <td><button class="icon-btn table-icon-btn" onclick="viewApplication(${a.application_id})" title="Open application" aria-label="Open application"><span class="material-symbols-rounded ms">visibility</span></button></td>
     </tr>`).join('');
 }
 
@@ -1548,8 +1671,6 @@ async function viewApplication(id) {
     } else if (s === 'For Approval') {
         footer.innerHTML += `<button class="btn btn-success" onclick="appAction(${a.application_id},'approve',true)"><span class="material-symbols-rounded ms">check_circle</span> Approve</button>
                              <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
-    } else if (s === 'Approved') {
-        footer.innerHTML += `<button class="btn btn-brand" onclick="openLoanRelease(${a.application_id},${a.approved_amount||a.requested_amount})"><span class="material-symbols-rounded ms">rocket_launch</span> Release Loan</button>`;
     } else if (s === 'Draft') {
         footer.innerHTML += `<button class="btn btn-brand" onclick="appAction(${a.application_id},'submit')">Submit Application</button>`;
     }
@@ -1566,7 +1687,7 @@ async function appAction(id, action, needsAmount=false) {
     alert(d.message);
     if (d.status === 'success') {
         closeModal('appReviewModal');
-        loadApps('all');
+        loadApps(getActiveAppFilter());
         loadDashboardStats();
     }
 }
@@ -1586,7 +1707,7 @@ async function viewApplication(id) {
 
     const a = d.data;
     const policy = a.application_data && a.application_data.credit_policy ? a.application_data.credit_policy : null;
-    const showApprovedAmountInput = ['Under Review', 'For Approval', 'Approved', 'Pending Review'].includes(a.application_status);
+    const showApprovedAmountInput = ['Under Review', 'For Approval', 'Pending Review'].includes(a.application_status);
     const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({
         '&': '&amp;',
         '<': '&lt;',
@@ -1597,7 +1718,7 @@ async function viewApplication(id) {
     const latestScore = a.latest_credit_score !== null && a.latest_credit_score !== undefined && a.latest_credit_score !== ''
         ? `${safe(a.latest_credit_score)}${a.latest_credit_rating ? ` (${safe(a.latest_credit_rating)})` : ''}`
         : 'Not available';
-    const ciSummary = a.latest_ci_recommendation || a.latest_ci_status || 'Not available';
+    const investigationSummary = a.latest_ci_recommendation || a.latest_ci_status || 'Not available';
     const approvedAmountValue = a.approved_amount || (policy && policy.approved_amount) || a.requested_amount || '';
     const policyReasons = policy && Array.isArray(policy.reasons) && policy.reasons.length
         ? `<ul style="margin:8px 0 0 18px;padding:0;">${policy.reasons.map(reason => `<li style="margin-bottom:4px;">${safe(reason)}</li>`).join('')}</ul>`
@@ -1607,7 +1728,8 @@ async function viewApplication(id) {
     document.getElementById('appModalBody').innerHTML = `
         <div class="form-grid" style="margin-bottom:18px;">
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Client</p><p style="font-weight:600;">${safe(a.first_name)} ${safe(a.last_name)}</p></div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Status</p>${badge(a.application_status)}</div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Monitoring Status</p>${applicationMonitorBadge(a.application_status)}</div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Current Stage</p><p>${safe(a.application_status)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Product</p><p>${safe(a.product_name)} (${safe(a.product_type)})</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Requested Amount</p><p style="font-weight:700;color:var(--brand);font-size:1.05rem;">${fmt(a.requested_amount)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Term</p><p>${safe(a.loan_term_months)} months</p></div>
@@ -1616,7 +1738,7 @@ async function viewApplication(id) {
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Submitted</p><p>${fmtDate(a.submitted_date || a.created_at)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Credit Limit</p><p>${fmt(a.credit_limit || 0)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Latest Score</p><p>${latestScore}</p></div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">CI Recommendation</p><p>${safe(ciSummary)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Investigation Result</p><p>${safe(investigationSummary)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Document Status</p><p>${safe(a.document_verification_status || 'Unverified')}</p></div>
             ${a.loan_purpose ? `<div style="grid-column:1/-1;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Loan Purpose</p><p>${safe(a.loan_purpose)}</p></div>` : ''}
         </div>
@@ -1653,18 +1775,16 @@ async function viewApplication(id) {
                              <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
     } else if (s === 'Document Verification') {
         footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
-                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'credit_inv')">Credit Investigation</button>
+                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'credit_inv')">Investigation</button>
                              <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
     } else if (s === 'Credit Investigation') {
         footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
-                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'for_approval')">For Approval</button>
+                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'for_approval')">Mark Reviewed</button>
                              <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
     } else if (s === 'For Approval') {
         footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
                              <button class="btn btn-success" onclick="appAction(${a.application_id},'approve',true)"><span class="material-symbols-rounded ms">check_circle</span> Approve</button>
                              <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
-    } else if (s === 'Approved') {
-        footer.innerHTML += `<button class="btn btn-brand" onclick="openLoanRelease(${a.application_id},${a.approved_amount || a.requested_amount})"><span class="material-symbols-rounded ms">rocket_launch</span> Release Loan</button>`;
     } else if (s === 'Draft') {
         footer.innerHTML += `<button class="btn btn-brand" onclick="appAction(${a.application_id},'submit')">Submit Application</button>`;
     }
@@ -1697,7 +1817,7 @@ async function appAction(id, action, needsAmount=false) {
     alert(d.message);
     if (d.status === 'success') {
         closeModal('appReviewModal');
-        loadApps('all');
+        loadApps(getActiveAppFilter());
         loadDashboardStats();
     }
 }
@@ -1738,9 +1858,6 @@ async function viewLoan(id) {
     if (ld.status !== 'success') { document.getElementById('loanDetailBody').innerHTML = `<p style="color:#ef4444;">${ld.message}</p>`; return; }
     const l = ld.data;
     document.getElementById('loanDetailTitle').textContent = l.loan_number;
-    const payBtn = document.getElementById('payFromLoanBtn');
-    if (payBtn) payBtn.style.display = ['Active','Overdue'].includes(l.loan_status) ? 'inline-flex' : 'none';
-
     const sched = (sd.data||[]).map(s => `<tr>
         <td style="text-align:center;">#${s.payment_number}</td>
         <td>${fmtDate(s.due_date)}</td>
@@ -1805,12 +1922,12 @@ async function submitLoanRelease() {
 async function loadClients(search='') {
     const tbody = document.getElementById('clientsTbody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr>';
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
     const r = await fetch(API.clients + '?action=list' + (search ? '&search='+encodeURIComponent(search) : ''));
     const d = await r.json();
-    if (!d.data || !d.data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No clients found.</td></tr>'; return; }
+    if (!d.data || !d.data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found.</td></tr>'; return; }
     tbody.innerHTML = d.data.map(c => `<tr>
-        <td class="td-bold">${c.first_name} ${c.last_name}</td>
+        <td class="td-bold">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</td>
         <td class="td-muted">${c.email_address && c.email_address.trim() ? c.email_address : '—'}</td>
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? c.contact_number : '—'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
@@ -1889,6 +2006,212 @@ async function viewClient(id) {
         </tr></thead><tbody>${loansHtml}</tbody></table></div>`;
 }
 
+async function loadClients(search='') {
+    const tbody = document.getElementById('clientsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
+    const r = await fetch(API.clients + '?action=list' + (search ? '&search=' + encodeURIComponent(search) : ''));
+    const d = await r.json();
+    if (!d.data || !d.data.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.data.map(c => `<tr>
+        <td class="td-bold">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</td>
+        <td class="td-muted">${c.email_address && c.email_address.trim() ? escapeHtml(c.email_address) : 'â€”'}</td>
+        <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : 'â€”'}</td>
+        <td class="td-muted">${fmtDate(c.registration_date)}</td>
+        <td>${sourceBadge(c.user_type)}</td>
+        <td>${badge(c.client_status)}</td>
+        <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
+    </tr>`).join('');
+}
+
+async function viewClient(id) {
+    openModal('clientDetailModal');
+    document.getElementById('clientDetailBody').innerHTML = '<div style="text-align:center;padding:32px;"><span class="spinner"></span></div>';
+    const r = await fetch(API.clients + `?action=view&client_id=${id}`);
+    const d = await r.json();
+    if (d.status !== 'success') {
+        document.getElementById('clientDetailBody').innerHTML = `<p style="color:#ef4444;">${escapeHtml(d.message)}</p>`;
+        return;
+    }
+
+    const c = d.data;
+    const fullName = [c.first_name, c.middle_name, c.last_name, c.suffix].map(part => String(part ?? '').trim()).filter(Boolean).join(' ');
+    const presentAddress = joinAddress([c.present_street, c.present_barangay, c.present_city, c.present_province, c.present_postal_code]);
+    const permanentAddress = joinAddress([c.permanent_street, c.permanent_barangay, c.permanent_city, c.permanent_province, c.permanent_postal_code]);
+    const coMakerAddress = joinAddress([c.comaker_house_no, c.comaker_street, c.comaker_barangay, c.comaker_city, c.comaker_province, c.comaker_postal_code]);
+    const verificationBadge = badge(c.verification_status || c.document_verification_status || 'Pending');
+    const accountEmail = !isBlank(c.email_address) ? escapeHtml(c.email_address) : formatTextValue(c.user_email);
+
+    document.getElementById('clientDetailTitle').textContent = fullName || `${c.first_name || ''} ${c.last_name || ''}`.trim();
+
+    const footer = document.getElementById('clientDetailFooter');
+    if (footer) {
+        let footerHtml = `<button class="btn btn-outline" onclick="closeModal('clientDetailModal')">Close</button>`;
+        if (c.verification_status !== 'Approved') {
+            footerHtml += `<button class="btn btn-success" onclick="verifyClientFully(${c.client_id})"><span class="material-symbols-rounded ms">verified</span> Verify Client</button>`;
+        }
+        footer.innerHTML = footerHtml;
+    }
+
+    const applicationsHtml = (c.applications || []).length ? c.applications.map(app => `<tr>
+        <td class="td-mono td-bold">${escapeHtml(app.application_number)}</td>
+        <td>${escapeHtml(app.product_name)}</td>
+        <td>${fmt(app.requested_amount)}</td>
+        <td class="td-muted">${fmtDate(app.submitted_date || app.created_at)}</td>
+        <td>${applicationMonitorBadge(app.application_status)}</td>
+    </tr>`).join('') : '<tr class="empty-row"><td colspan="5">No applications found.</td></tr>';
+
+    const docsHtml = (c.documents || []).length ? c.documents.map(doc => `<tr>
+        <td class="td-bold">${escapeHtml(doc.document_name)} ${doc.is_required ? '<span class="badge badge-amber" style="font-size:.65rem;padding:2px 6px;">Req</span>' : ''}</td>
+        <td>${doc.file_path ? `<a href="../../../${doc.file_path}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>` : '<span class="td-muted">Not uploaded</span>'}</td>
+        <td class="td-muted">${fmtDate(doc.upload_date)}</td>
+        <td>${badge(doc.verification_status || 'Pending')}</td>
+        <td>${doc.file_path && doc.verification_status !== 'Verified' ? `<button class="btn btn-sm" style="background:#dcfce7;color:#166534;border:none;" onclick="verifyDoc(${doc.client_document_id}, 'Verified', ${c.client_id})">Verify</button> <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:none;" onclick="verifyDoc(${doc.client_document_id}, 'Rejected', ${c.client_id})">Reject</button>` : 'â€”'}</td>
+    </tr>`).join('') : '<tr class="empty-row"><td colspan="5">No documents submitted.</td></tr>';
+
+    const loansHtml = (c.loans || []).length ? c.loans.map(loan => `<tr>
+        <td class="td-mono">${escapeHtml(loan.loan_number)}</td>
+        <td>${escapeHtml(loan.product_name)}</td>
+        <td>${fmt(loan.principal_amount)}</td>
+        <td style="color:var(--brand);font-weight:600;">${fmt(loan.remaining_balance)}</td>
+        <td>${fmtDate(loan.next_payment_due)}</td>
+        <td>${badge(loan.loan_status)}</td>
+    </tr>`).join('') : '<tr class="empty-row"><td colspan="6">No loans found.</td></tr>';
+
+    document.getElementById('clientDetailBody').innerHTML = `
+        <div class="detail-sections">
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">badge</span>
+                    <div class="detail-section-title">Personal Information</div>
+                </div>
+                <div class="detail-grid">
+                    ${renderDetailItem('Full Name', formatTextValue(fullName))}
+                    ${renderDetailItem('Email Address', accountEmail)}
+                    ${renderDetailItem('Phone Number', formatTextValue(c.contact_number))}
+                    ${renderDetailItem('Date of Birth', formatDateValue(c.date_of_birth))}
+                    ${renderDetailItem('Gender', formatTextValue(c.gender))}
+                    ${renderDetailItem('Civil Status', formatTextValue(c.civil_status))}
+                    ${renderDetailItem('Nationality', formatTextValue(c.nationality))}
+                    ${renderDetailItem('Source', sourceBadge(c.user_type))}
+                    ${renderDetailItem('Client Status', badge(c.client_status))}
+                    ${renderDetailItem('Verification Status', verificationBadge)}
+                    ${renderDetailItem('Registered', formatDateValue(c.registration_date))}
+                    ${renderDetailItem('Last Login', formatDateValue(c.last_login, 'Never logged in'))}
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">work</span>
+                    <div class="detail-section-title">Employment & Financial Profile</div>
+                </div>
+                <div class="detail-grid">
+                    ${renderDetailItem('Employment Status', formatTextValue(c.employment_status))}
+                    ${renderDetailItem('Occupation', formatTextValue(c.occupation))}
+                    ${renderDetailItem('Employer Name', formatTextValue(c.employer_name))}
+                    ${renderDetailItem('Monthly Income', formatMoneyValue(c.monthly_income))}
+                    ${renderDetailItem('Credit Limit', formatMoneyValue(c.credit_limit))}
+                    ${renderDetailItem('Last Seen Credit Limit', formatMoneyValue(c.last_seen_credit_limit))}
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">home_pin</span>
+                    <div class="detail-section-title">Address Details</div>
+                </div>
+                <div class="detail-grid">
+                    ${renderDetailItem('Present Address', formatTextValue(presentAddress), true)}
+                    ${renderDetailItem('Permanent Address', formatTextValue(permanentAddress), true)}
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">groups</span>
+                    <div class="detail-section-title">Co-Maker Information</div>
+                </div>
+                <div class="detail-grid">
+                    ${renderDetailItem('Co-Maker Name', formatTextValue(c.comaker_name))}
+                    ${renderDetailItem('Relationship', formatTextValue(c.comaker_relationship))}
+                    ${renderDetailItem('Contact Number', formatTextValue(c.comaker_contact))}
+                    ${renderDetailItem('Monthly Income', formatMoneyValue(c.comaker_income))}
+                    ${renderDetailItem('Address', formatTextValue(coMakerAddress), true)}
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">description</span>
+                    <div class="detail-section-title">Application History</div>
+                </div>
+                <div class="detail-table">
+                    <table>
+                        <thead><tr style="background:var(--body-bg);">
+                            <th>App #</th><th>Product</th><th>Requested</th><th>Submitted</th><th>Status</th>
+                        </tr></thead>
+                        <tbody>${applicationsHtml}</tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">folder_open</span>
+                    <div class="detail-section-title">Submitted Documents</div>
+                </div>
+                <div class="detail-table">
+                    <table>
+                        <thead><tr style="background:var(--body-bg);">
+                            <th>Document Requirement</th><th>File</th><th>Uploaded</th><th>Status</th><th>Action</th>
+                        </tr></thead>
+                        <tbody>${docsHtml}</tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">account_balance_wallet</span>
+                    <div class="detail-section-title">Loan History</div>
+                </div>
+                <div class="detail-table">
+                    <table>
+                        <thead><tr style="background:var(--body-bg);">
+                            <th>Loan #</th><th>Product</th><th>Principal</th><th>Balance</th><th>Next Due</th><th>Status</th>
+                        </tr></thead>
+                        <tbody>${loansHtml}</tbody>
+                    </table>
+                </div>
+            </section>
+        </div>`;
+}
+
+async function loadClients(search='') {
+    const tbody = document.getElementById('clientsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
+    const r = await fetch(API.clients + '?action=list' + (search ? '&search=' + encodeURIComponent(search) : ''));
+    const d = await r.json();
+    if (!d.data || !d.data.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.data.map(c => `<tr>
+        <td class="td-bold">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</td>
+        <td class="td-muted">${c.email_address && c.email_address.trim() ? escapeHtml(c.email_address) : '-'}</td>
+        <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : '-'}</td>
+        <td class="td-muted">${fmtDate(c.registration_date)}</td>
+        <td>${sourceBadge(c.user_type)}</td>
+        <td>${badge(c.client_status)}</td>
+        <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
+    </tr>`).join('');
+}
+
 async function verifyDoc(doc_id, status, client_id) {
     if (!confirm(`Are you sure you want to mark this document as ${status}?`)) return;
     try {
@@ -1955,17 +2278,51 @@ async function verifyClientFully(client_id) {
 async function loadPayments() {
     const tbody = document.getElementById('paymentsTbody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>';
     const r = await fetch(API.payments + '?action=list');
     const d = await r.json();
-    if (d.todays_total !== undefined) setText('todayTotal', fmt(d.todays_total));
-    if (!d.data || !d.data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No payment records found.</td></tr>'; return; }
-    tbody.innerHTML = d.data.map(p => `<tr>
-        <td class="td-mono td-bold">${p.payment_reference}</td>
-        <td>${p.first_name} ${p.last_name}</td>
-        <td class="td-mono td-muted">${p.loan_number}</td>
+    const rows = d.data || [];
+    if (d.todays_total !== undefined) setText('receiptTodayTotal', fmt(d.todays_total));
+    const todayString = new Date().toISOString().slice(0, 10);
+    const todaysCount = rows.filter(p => String(p.payment_date || '').slice(0, 10) === todayString && p.payment_status !== 'Cancelled').length;
+    setText('receiptTodayCount', todaysCount);
+    setText('receiptLatestPosted', rows.length ? fmtDate(rows[0].payment_date || rows[0].created_at) : 'â€”');
+    if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No transaction records found.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(p => `<tr>
+        <td class="td-mono td-bold">${escapeHtml(p.official_receipt_number || p.payment_reference || '-')}</td>
+        <td class="td-mono td-muted">${escapeHtml(p.payment_reference_number || p.payment_reference || '-')}</td>
+        <td>${escapeHtml(p.first_name)} ${escapeHtml(p.last_name)}</td>
+        <td class="td-mono td-muted">${escapeHtml(p.loan_number)}</td>
         <td class="td-bold" style="color:#10b981;">${fmt(p.payment_amount)}</td>
-        <td class="td-muted">${p.payment_method}</td>
+        <td class="td-muted">${escapeHtml(p.payment_method)}</td>
+        <td class="td-muted">${fmtDate(p.payment_date)}</td>
+        <td>${badge(p.payment_status)}</td>
+    </tr>`).join('');
+}
+
+async function loadPayments() {
+    const tbody = document.getElementById('paymentsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>';
+    const r = await fetch(API.payments + '?action=list');
+    const d = await r.json();
+    const rows = d.data || [];
+    if (d.todays_total !== undefined) setText('receiptTodayTotal', fmt(d.todays_total));
+    const todayString = new Date().toISOString().slice(0, 10);
+    const todaysCount = rows.filter(p => String(p.payment_date || '').slice(0, 10) === todayString && p.payment_status !== 'Cancelled').length;
+    setText('receiptTodayCount', todaysCount);
+    setText('receiptLatestPosted', rows.length ? fmtDate(rows[0].payment_date || rows[0].created_at) : '-');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No transaction records found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(p => `<tr>
+        <td class="td-mono td-bold">${escapeHtml(p.official_receipt_number || p.payment_reference || '-')}</td>
+        <td class="td-mono td-muted">${escapeHtml(p.payment_reference_number || p.payment_reference || '-')}</td>
+        <td>${escapeHtml(p.first_name)} ${escapeHtml(p.last_name)}</td>
+        <td class="td-mono td-muted">${escapeHtml(p.loan_number)}</td>
+        <td class="td-bold" style="color:#10b981;">${fmt(p.payment_amount)}</td>
+        <td class="td-muted">${escapeHtml(p.payment_method)}</td>
         <td class="td-muted">${fmtDate(p.payment_date)}</td>
         <td>${badge(p.payment_status)}</td>
     </tr>`).join('');
@@ -2063,10 +2420,15 @@ async function loadUsers() {
     const r = await fetch('../../backend/api_auth.php?action=list_users');
     const d = await r.json();
     if (d.status !== 'success') {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="5">User management is handled through the Admin panel.</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="5">The team directory is unavailable right now.</td></tr>';
         return;
     }
-    tbody.innerHTML = d.data.map(u => `<tr>
+    const rows = d.data || [];
+    if (!rows.length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No staff accounts are available for this tenant.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(u => `<tr>
         <td class="td-bold">${u.first_name||''} ${u.last_name||''} <span style="font-size:.78rem;color:var(--muted);">(${u.username})</span></td>
         <td class="td-muted">${u.email||'—'}</td>
         <td class="td-muted">${u.department||'—'}</td>
