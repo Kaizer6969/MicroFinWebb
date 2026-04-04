@@ -309,7 +309,7 @@ try {
         $latestCi = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, (int) $client['client_id']);
 
         $limitState = mf_credit_policy_compute_limit_snapshot($policy, $client, $latestScore, $latestCi);
-        $computedLimit = (float) $limitState['credit_limit'];
+        $computedLimit = (float) ($limitState['computed_limit'] ?? 0);
     } catch (Throwable $pe) {
         error_log("Failed to compute dynamic credit limit: " . $pe->getMessage());
     }
