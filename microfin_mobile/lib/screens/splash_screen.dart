@@ -160,7 +160,11 @@ class _SplashScreenState extends State<SplashScreen>
     String? identifiedTenant;
 
     // 1. Check if we already locked in a tenant locally from a previous session
-    identifiedTenant = prefs.getString('locked_tenant_id');
+    if (_isLockedTenantBuild) {
+      identifiedTenant = _buildTenantId.trim();
+    } else {
+      identifiedTenant = prefs.getString('locked_tenant_id');
+    }
 
     // 2. If not locked, check build-time configuration (--dart-define=TENANT_ID=xxx)
     if (identifiedTenant == null || identifiedTenant.isEmpty) {
