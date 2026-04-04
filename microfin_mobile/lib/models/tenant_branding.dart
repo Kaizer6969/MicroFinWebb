@@ -136,6 +136,7 @@ class TenantBranding {
   static Future<void> loadTenants({String? tenantFilter}) async {
     lastLoadSucceeded = false;
     lastLoadError = null;
+    tenants = [];
 
     try {
       final normalizedFilter = tenantFilter?.trim() ?? '';
@@ -187,9 +188,7 @@ class TenantBranding {
       debugPrint('Error loading tenants: $e');
       lastLoadSucceeded = false;
       lastLoadError = 'Unable to load tenant information right now.';
-      if (tenants.isEmpty) {
-        tenants = [defaultTenant];
-      }
+      tenants = [defaultTenant];
     }
   }
 

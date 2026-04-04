@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../main.dart';
 import '../models/tenant_branding.dart';
 import '../theme.dart';
-import '../widgets/microfin_logo.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
