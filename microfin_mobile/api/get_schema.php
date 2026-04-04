@@ -1,6 +1,6 @@
 <?php
 require_once 'db.php';
-$res = $conn->query("DESCRIBE loan_applications");
+$res = $conn->query("DESCRIBE application_documents");
 $rows = [];
 while ($row = $res->fetch_assoc()) {
     $rows[] = $row;

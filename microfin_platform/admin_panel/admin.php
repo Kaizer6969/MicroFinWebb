@@ -6145,22 +6145,22 @@ function hexToRgb($hex) {
                                     <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-income-multiplier">Income Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 1.5)); ?>">
+                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['income_multiplier']) ? '1.5' : htmlspecialchars((string)$credit_policy['credit_limit']['income_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Base multiplier applied to monthly income before the classification multiplier, cap, and rounding.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-approve-band-multiplier">Good / High Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-approve-band-multiplier" name="cp_approve_band_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['approve_band_multiplier'] ?? 1.10)); ?>">
+                                            <input type="number" class="form-control" id="cp-approve-band-multiplier" name="cp_approve_band_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['approve_band_multiplier']) ? '1.10' : htmlspecialchars((string)$credit_policy['credit_limit']['approve_band_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Applied when the score classification is <code>Good Credit Score</code> or <code>High Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-review-band-multiplier">Standard Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-review-band-multiplier" name="cp_review_band_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['review_band_multiplier'] ?? 1.00)); ?>">
+                                            <input type="number" class="form-control" id="cp-review-band-multiplier" name="cp_review_band_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['review_band_multiplier']) ? '1.00' : htmlspecialchars((string)$credit_policy['credit_limit']['review_band_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Applied when the score classification is <code>Standard Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-reject-band-multiplier">At-Risk / Fair Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-reject-band-multiplier" name="cp_reject_band_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['reject_band_multiplier'] ?? 0.50)); ?>">
+                                            <input type="number" class="form-control" id="cp-reject-band-multiplier" name="cp_reject_band_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['reject_band_multiplier']) ? '0.50' : htmlspecialchars((string)$credit_policy['credit_limit']['reject_band_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Applied when the score classification is <code>Fair Credit Score</code> or <code>At-Risk Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">

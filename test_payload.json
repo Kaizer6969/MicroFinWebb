@@ -1,0 +1,11 @@
+{
+  "user_id": 14,
+  "tenant_id": "B90FVN9PT5",
+  "product_id": 1,
+  "amount": 10000.0,
+  "term": 9,
+  "purpose_category": "Personal",
+  "purpose": "Test",
+  "app_data": "{}",
+  "documents": []
+}
