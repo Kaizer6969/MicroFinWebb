@@ -32,7 +32,7 @@ $conn->begin_transaction();
 
 try {
     // 1. Get client info and verify status
-    $stmt = $conn->prepare("SELECT client_id, verification_status, document_verification_status, credit_limit, comaker_name, comaker_relationship, comaker_contact, comaker_income, comaker_house_no, comaker_street, comaker_barangay, comaker_city, comaker_province, comaker_postal_code FROM clients WHERE user_id = ? AND tenant_id = ?");
+    $stmt = $conn->prepare("SELECT client_id, document_verification_status, credit_limit, comaker_name, comaker_relationship, comaker_contact, comaker_income, comaker_house_no, comaker_street, comaker_barangay, comaker_city, comaker_province, comaker_postal_code FROM clients WHERE user_id = ? AND tenant_id = ?");
     $stmt->bind_param("is", $user_id, $tenant_id);
     $stmt->execute();
     $res = $stmt->get_result();
@@ -45,8 +45,8 @@ try {
     $client_id = $client['client_id'];
     
     // Check the admin-controlled verification_status (set when admin clicks "Verify Client")
-    if ($client['verification_status'] !== 'Approved') {
-        throw new Exception("Your profile must be Approved before applying for a loan.");
+    if ($client['document_verification_status'] !== 'Approved' && $client['document_verification_status'] !== 'Verified') {
+        throw new Exception("Your profile must be Approved or Verified before applying for a loan.");
     }
 
     $credit_limit = floatval($client['credit_limit']);
