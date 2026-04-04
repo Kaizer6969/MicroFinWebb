@@ -1311,30 +1311,41 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       ),
                                     ],
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.1),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 2),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      if (_verificationStatus != 'Approved' && _verificationStatus != 'Verified') {
+                                        AppDialogs.showVerificationRequired(context, primary, status: _verificationStatus);
+                                      } else {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => const LoanApplicationScreen()),
+                                        );
+                                        _fetchDashboard();
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.1),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Text(
+                                        'Apply',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: primary,
                                         ),
-                                      ],
-                                    ),
-
-                                    // ✅ After
-                                    child: Text(
-                                      'Apply',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w800,
-                                        color: primary,
                                       ),
                                     ),
                                   ),
