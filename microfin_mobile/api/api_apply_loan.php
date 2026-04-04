@@ -45,7 +45,7 @@ if ($count > 0) {
 */
 
 // Fetch Product Interest Rate
-$stmt = $conn->prepare("SELECT interest_rate FROM products WHERE product_id = ? AND tenant_id = ?");
+$stmt = $conn->prepare("SELECT interest_rate FROM loan_products WHERE product_id = ? AND tenant_id = ?");
 $stmt->bind_param("is", $productId, $tenantId);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -73,19 +73,14 @@ try {
 
     // Insert Documents if any exist
     if (!empty($documents) && is_array($documents)) {
-        // Assume there is an application_documents table, or client_documents
-        // Just as a safeguard, we will try inserting into client_documents if applying loans inserts there.
-        // If there's no suitable table, we ignore this for now to prevent fatal errors.
-        // For now, let's assume client_documents exists.
-        $stmtDoc = $conn->prepare("INSERT INTO client_documents (client_id, tenant_id, document_type_id, file_name, file_path, uploaded_at) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmtDoc = $conn->prepare("INSERT INTO application_documents (application_id, tenant_id, document_type_id, file_name, file_path) VALUES (?, ?, ?, ?, ?)");
         
         if ($stmtDoc) {
             foreach ($documents as $doc) {
                 $docTypeId = $doc['document_type_id'];
                 $fileName = $doc['file_name'];
                 $filePath = $doc['file_path'];
-                $stmtDoc->bind_param("isisss", $userId, $tenantId, $docTypeId, $fileName, $filePath, $today);
-                // Ignore errors gracefully for docs
+                $stmtDoc->bind_param("isiss", $appId, $tenantId, $docTypeId, $fileName, $filePath);
                 @$stmtDoc->execute();
             }
             $stmtDoc->close();
