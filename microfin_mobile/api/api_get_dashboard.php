@@ -304,10 +304,10 @@ try {
         $stmt->execute([$tenantId]);
         $policyBlob = json_decode($stmt->fetchColumn() ?: '{}', true) ?: [];
         $policy = mf_credit_policy_normalize($policyBlob);
-        
-        $latestScore = mf_credit_policy_fetch_latest_score($pdo, $tenantId, (int)$client['client_id']);
-        $latestCi = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, (int)$client['client_id']);
-        
+
+        $latestScore = mf_credit_policy_fetch_latest_score($pdo, $tenantId, (int) $client['client_id']);
+        $latestCi = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, (int) $client['client_id']);
+
         $limitState = mf_credit_policy_compute_limit_snapshot($policy, $client, $latestScore, $latestCi);
         $computedLimit = (float) $limitState['credit_limit'];
     } catch (Throwable $pe) {
