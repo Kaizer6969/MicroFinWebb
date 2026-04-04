@@ -144,6 +144,51 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  Map<String, dynamic> _decodeApiBody(
+    String rawBody, {
+    String fallbackMessage = 'The server returned an invalid response.',
+  }) {
+    final body = rawBody.trim();
+    if (body.isEmpty) {
+      return {'success': false, 'message': fallbackMessage};
+    }
+
+    if (body.startsWith('<!doctype html') ||
+        body.startsWith('<html') ||
+        body.startsWith('<HTML')) {
+      return {'success': false, 'message': fallbackMessage};
+    }
+
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {
+    }
+
+    return {'success': false, 'message': fallbackMessage};
+  }
+
+  Future<Map<String, dynamic>> _readStreamedJson(
+    http.StreamedResponse response, {
+    required String fallbackMessage,
+  }) async {
+    final body = await response.stream.bytesToString();
+    final data = _decodeApiBody(body, fallbackMessage: fallbackMessage);
+    if (response.statusCode >= 400 && data['success'] != true) {
+      return {
+        'success': false,
+        'message':
+            data['message'] ?? '$fallbackMessage (HTTP ${response.statusCode})',
+      };
+    }
+    return data;
+  }
+
   void _goNext() {
     if (_currentStep < _totalSteps - 1) {
       HapticFeedback.lightImpact();
@@ -227,7 +272,10 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
       upReq.fields['tenant_id'] = activeTenant.value.id;
       upReq.files.add(http.MultipartFile.fromBytes('file', bytes, filename: file.name));
       final upRes  = await upReq.send();
-      final upJson = jsonDecode(await upRes.stream.bytesToString());
+      final upJson = await _readStreamedJson(
+        upRes,
+        fallbackMessage: 'Unable to upload the selected ID image.',
+      );
       if (upJson['success'] != true) { _showSnack(upJson['message'] ?? 'Upload failed'); return; }
 
       setState(() { _idPath = upJson['file_path']; _isUploadingId = false; _isVerifyingId = true; });
@@ -236,7 +284,10 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
       var vReq = http.MultipartRequest('POST', Uri.parse(ApiConfig.getUrl('api_verify_id_idnorm.php')));
       vReq.files.add(http.MultipartFile.fromBytes('front_image', bytes, filename: file.name));
       final vRes  = await vReq.send();
-      final vJson = jsonDecode(await vRes.stream.bytesToString());
+      final vJson = await _readStreamedJson(
+        vRes,
+        fallbackMessage: 'Unable to scan the ID details right now.',
+      );
 
       if (vJson['success'] == true) {
         setState(() {
@@ -338,7 +389,10 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   Future<void> _fetchDocTypes() async {
     try {
       final resp = await http.get(Uri.parse(ApiConfig.getUrl('api_get_doc_types.php')));
-      final data = jsonDecode(resp.body);
+      final data = _decodeApiBody(
+        resp.body,
+        fallbackMessage: 'Unable to load document requirements.',
+      );
       if (data['success'] == true) {
         setState(() {
           _docTypes = (data['document_types'] as List).where((doc) {
@@ -381,7 +435,10 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
       }
 
       final res  = await req.send();
-      final json = jsonDecode(await res.stream.bytesToString());
+      final json = await _readStreamedJson(
+        res,
+        fallbackMessage: 'Unable to upload the selected document.',
+      );
       if (json['success'] == true) {
         setState(() => _selectedDocs[docTypeId] = json['file_path']);
         _showSnack('File uploaded successfully');
@@ -458,7 +515,10 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           ],
         }),
       );
-      final json = jsonDecode(resp.body);
+      final json = _decodeApiBody(
+        resp.body,
+        fallbackMessage: 'Unable to submit the verification form right now.',
+      );
       if (json['success'] == true) {
         if (mounted) { _showSnack('Profile submitted successfully!'); Navigator.of(context).pop(); }
       } else {
