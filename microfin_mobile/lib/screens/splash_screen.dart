@@ -34,10 +34,7 @@ class _WelcomeOrbPainter extends CustomPainter {
       final r = orb.radius * size.width;
 
       paint.shader = RadialGradient(
-        colors: [
-          Colors.white.withOpacity(0.18),
-          Colors.white.withOpacity(0.0),
-        ],
+        colors: [Colors.white.withOpacity(0.18), Colors.white.withOpacity(0.0)],
       ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: r));
       canvas.drawCircle(Offset(cx, cy), r, paint);
     }
@@ -49,7 +46,12 @@ class _WelcomeOrbPainter extends CustomPainter {
 
 class _OrbData {
   final double cx, cy, radius, phase;
-  const _OrbData({required this.cx, required this.cy, required this.radius, required this.phase});
+  const _OrbData({
+    required this.cx,
+    required this.cy,
+    required this.radius,
+    required this.phase,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,25 +110,45 @@ class _SplashScreenState extends State<SplashScreen>
     )..repeat();
 
     _fadeLogo = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _logoController, curve: const Interval(0.0, 0.7, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _logoController,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
+      ),
     );
     _scaleLogo = Tween<double>(begin: 0.65, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: const Interval(0.0, 0.8, curve: Curves.easeOutBack)),
+      CurvedAnimation(
+        parent: _logoController,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeOutBack),
+      ),
     );
 
     // Welcome panel animations
     _fadeWelcome = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _welcomeController, curve: const Interval(0.0, 0.6, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _welcomeController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+      ),
     );
-    _slideWelcome = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
-      CurvedAnimation(parent: _welcomeController, curve: const Interval(0.0, 0.7, curve: Curves.easeOutCubic)),
-    );
+    _slideWelcome =
+        Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _welcomeController,
+            curve: const Interval(0.0, 0.7, curve: Curves.easeOutCubic),
+          ),
+        );
     _fadeButtons = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _welcomeController, curve: const Interval(0.3, 1.0, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _welcomeController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
+      ),
     );
-    _slideButtons = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
-      CurvedAnimation(parent: _welcomeController, curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic)),
-    );
+    _slideButtons =
+        Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _welcomeController,
+            curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _startSequence();
   }
@@ -207,7 +229,7 @@ class _SplashScreenState extends State<SplashScreen>
         _selectedTenant = matchingTenant;
         activeTenant.value =
             TenantBranding.fromTenantId(_selectedTenant!.slug) ??
-                _selectedTenant!;
+            _selectedTenant!;
         setState(() {
           _startupErrorTitle = null;
           _startupErrorMessage = null;
@@ -226,7 +248,7 @@ class _SplashScreenState extends State<SplashScreen>
         message: TenantBranding.lastLoadSucceeded
             ? 'This app is locked to "${identifiedTenant ?? _buildTenantId}", but that tenant was not found or is inactive.'
             : (TenantBranding.lastLoadError ??
-                'Unable to validate the locked tenant right now.'),
+                  'Unable to validate the locked tenant right now.'),
       );
       return;
     }
@@ -239,7 +261,7 @@ class _SplashScreenState extends State<SplashScreen>
       _selectedTenant = TenantBranding.tenants.first;
       activeTenant.value =
           TenantBranding.fromTenantId(_selectedTenant!.slug) ??
-              _selectedTenant!;
+          _selectedTenant!;
       setState(() {
         _startupErrorTitle = null;
         _startupErrorMessage = null;
@@ -256,10 +278,7 @@ class _SplashScreenState extends State<SplashScreen>
     });
   }
 
-  void _showStartupError({
-    required String title,
-    required String message,
-  }) {
+  void _showStartupError({required String title, required String message}) {
     if (!mounted) return;
     setState(() {
       _startupErrorTitle = title;
@@ -332,11 +351,13 @@ class _SplashScreenState extends State<SplashScreen>
     final size = MediaQuery.of(context).size;
 
     // Use selected tenant color if available, else first tenant, else fallback blue
-    final Color primaryColor = _selectedTenant?.themePrimaryColor ??
+    final Color primaryColor =
+        _selectedTenant?.themePrimaryColor ??
         (_tenantsLoaded && TenantBranding.tenants.isNotEmpty
             ? TenantBranding.tenants.first.themePrimaryColor
             : const Color(0xFF1A4FD6));
-    final Color secondaryColor = _selectedTenant?.themeSecondaryColor ??
+    final Color secondaryColor =
+        _selectedTenant?.themeSecondaryColor ??
         (_tenantsLoaded && TenantBranding.tenants.isNotEmpty
             ? TenantBranding.tenants.first.themeSecondaryColor
             : const Color(0xFF2563EB));
@@ -387,7 +408,9 @@ class _SplashScreenState extends State<SplashScreen>
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                _FinanceIllustration(primaryColor: primaryColor),
+                                _FinanceIllustration(
+                                  primaryColor: primaryColor,
+                                ),
                               ],
                             ),
                           ),
@@ -403,7 +426,10 @@ class _SplashScreenState extends State<SplashScreen>
                   // Loading state
                   const Padding(
                     padding: EdgeInsets.only(bottom: 60),
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
                   ),
 
                 // ── STEP 2: Welcome panel with Get Started ────────────
@@ -635,7 +661,10 @@ class _FinanceIllustration extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 1,
+                ),
               ),
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -645,30 +674,74 @@ class _FinanceIllustration extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      _Bar(height: 40, color: Colors.greenAccent.withOpacity(0.8)),
+                      _Bar(
+                        height: 40,
+                        color: Colors.greenAccent.withOpacity(0.8),
+                      ),
                       const SizedBox(width: 6),
-                      _Bar(height: 60, color: Colors.cyanAccent.withOpacity(0.8)),
+                      _Bar(
+                        height: 60,
+                        color: Colors.cyanAccent.withOpacity(0.8),
+                      ),
                       const SizedBox(width: 6),
                       _Bar(height: 35, color: Colors.white.withOpacity(0.6)),
                       const SizedBox(width: 6),
-                      _Bar(height: 55, color: Colors.cyanAccent.withOpacity(0.8)),
+                      _Bar(
+                        height: 55,
+                        color: Colors.cyanAccent.withOpacity(0.8),
+                      ),
                       const SizedBox(width: 6),
-                      _Bar(height: 45, color: Colors.greenAccent.withOpacity(0.8)),
+                      _Bar(
+                        height: 45,
+                        color: Colors.greenAccent.withOpacity(0.8),
+                      ),
                     ],
                   ),
                   const Spacer(),
                   // Card chip rows
-                  Row(children: [
-                    Container(width: 40, height: 8, decoration: BoxDecoration(color: Colors.white.withOpacity(0.6), borderRadius: BorderRadius.circular(4))),
-                    const SizedBox(width: 8),
-                    Container(width: 60, height: 8, decoration: BoxDecoration(color: Colors.white.withOpacity(0.3), borderRadius: BorderRadius.circular(4))),
-                  ]),
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 60,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 6),
-                  Row(children: [
-                    Container(width: 30, height: 8, decoration: BoxDecoration(color: Colors.white.withOpacity(0.3), borderRadius: BorderRadius.circular(4))),
-                    const SizedBox(width: 8),
-                    Container(width: 50, height: 8, decoration: BoxDecoration(color: Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(4))),
-                  ]),
+                  Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 50,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -684,7 +757,13 @@ class _FinanceIllustration extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.orange.withOpacity(0.9),
-                boxShadow: [BoxShadow(color: Colors.orange.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: const Center(
                 child: Text('🎯', style: TextStyle(fontSize: 26)),
@@ -711,12 +790,7 @@ class _FinanceIllustration extends StatelessWidget {
           ),
 
           // Stick figure person (right side)
-          Positioned(
-            right: 0,
-            top: 10,
-            bottom: 0,
-            child: _PersonFigure(),
-          ),
+          Positioned(right: 0, top: 10, bottom: 0, child: _PersonFigure()),
         ],
       ),
     );
@@ -769,7 +843,11 @@ class _PersonPainter extends CustomPainter {
 
     // Head
     canvas.drawCircle(Offset(cx, 30), 16, fillPaint);
-    canvas.drawCircle(Offset(cx, 30), 16, paint..color = Colors.white.withOpacity(0.15));
+    canvas.drawCircle(
+      Offset(cx, 30),
+      16,
+      paint..color = Colors.white.withOpacity(0.15),
+    );
 
     paint.color = Colors.white;
 
@@ -826,7 +904,10 @@ class _WelcomeButtonState extends State<_WelcomeButton> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) { setState(() => _pressed = false); widget.onTap(); },
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.96 : 1.0,
@@ -841,7 +922,13 @@ class _WelcomeButtonState extends State<_WelcomeButton> {
                 ? null
                 : Border.all(color: Colors.white, width: 1.8),
             boxShadow: widget.filled
-                ? [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 20, offset: const Offset(0, 6))]
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
                 : null,
           ),
           child: Row(
@@ -858,7 +945,11 @@ class _WelcomeButtonState extends State<_WelcomeButton> {
               ),
               if (widget.icon != null) ...[
                 const SizedBox(width: 8),
-                Icon(widget.icon, size: 20, color: widget.filled ? widget.primaryColor : Colors.white),
+                Icon(
+                  widget.icon,
+                  size: 20,
+                  color: widget.filled ? widget.primaryColor : Colors.white,
+                ),
               ],
             ],
           ),
@@ -915,7 +1006,12 @@ class _TenantPickerSheet extends StatelessWidget {
                 ),
                 child: const Text(
                   'SELECT',
-                  style: TextStyle(color: Color(0xFF3B82F6), fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  style: TextStyle(
+                    color: Color(0xFF3B82F6),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -978,9 +1074,10 @@ class _TenantCardState extends State<_TenantCard>
       duration: const Duration(milliseconds: 120),
       vsync: this,
     );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _pressController, curve: Curves.easeOut),
-    );
+    _scaleAnim = Tween<double>(
+      begin: 1.0,
+      end: 0.96,
+    ).animate(CurvedAnimation(parent: _pressController, curve: Curves.easeOut));
   }
 
   @override
@@ -1032,7 +1129,9 @@ class _TenantCardState extends State<_TenantCard>
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Center(child: Text('🏦', style: TextStyle(fontSize: 26))),
+                child: const Center(
+                  child: Text('🏦', style: TextStyle(fontSize: 26)),
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1079,7 +1178,11 @@ class _TenantCardState extends State<_TenantCard>
                     ),
                   ],
                 ),
-                child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                child: const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
             ],
           ),

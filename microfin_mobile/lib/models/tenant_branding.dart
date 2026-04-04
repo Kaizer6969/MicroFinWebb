@@ -174,9 +174,8 @@ class TenantBranding {
           lastLoadError = null;
         } else {
           lastLoadSucceeded = false;
-          lastLoadError =
-              (data['message'] ?? 'Unable to load tenant branding.')
-                  .toString();
+          lastLoadError = (data['message'] ?? 'Unable to load tenant branding.')
+              .toString();
           tenants = [defaultTenant];
         }
       } else {
