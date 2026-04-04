@@ -1,0 +1,103 @@
+name: Build Tenant APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_slug:
+        description: Tenant slug to lock into the APK
+        required: true
+      app_name:
+        description: Android app label shown to users
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tenant-apk-${{ github.ref }}-${{ github.event.inputs.tenant_slug }}
+  cancel-in-progress: true
+
+jobs:
+  build-tenant-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve build variables
+        id: vars
+        run: |
+          TENANT_SLUG="${{ github.event.inputs.tenant_slug }}"
+          TENANT_SLUG="$(printf '%s' "$TENANT_SLUG" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/_/g' | sed 's/^_\\+//; s/_\\+$//')"
+          if [ -z "$TENANT_SLUG" ]; then
+            echo "Tenant slug cannot be empty after normalization."
+            exit 1
+          fi
+
+          APP_NAME="${{ github.event.inputs.app_name }}"
+          if [ -z "$APP_NAME" ]; then
+            echo "App name is required."
+            exit 1
+          fi
+
+          echo "tenant_slug=$TENANT_SLUG" >> "$GITHUB_OUTPUT"
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        working-directory: microfin_mobile
+        run: flutter pub get
+
+      - name: Build tenant release APK
+        working-directory: microfin_mobile
+        env:
+          APP_NAME: ${{ steps.vars.outputs.app_name }}
+          TENANT_SLUG: ${{ steps.vars.outputs.tenant_slug }}
+        run: |
+          flutter build apk --release \
+            --dart-define=APP_NAME="$APP_NAME" \
+            --dart-define=TENANT_ID="$TENANT_SLUG"
+
+      - name: Store tenant APK
+        env:
+          TENANT_SLUG: ${{ steps.vars.outputs.tenant_slug }}
+        run: |
+          mkdir -p microfin_mobile/tenant_apks
+          cp microfin_mobile/build/app/outputs/flutter-apk/app-release.apk "microfin_mobile/tenant_apks/${TENANT_SLUG}.apk"
+
+      - name: Upload tenant APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tenant-apk-${{ steps.vars.outputs.tenant_slug }}
+          path: microfin_mobile/tenant_apks/${{ steps.vars.outputs.tenant_slug }}.apk
+          if-no-files-found: error
+
+      - name: Commit tenant APK
+        env:
+          TENANT_SLUG: ${{ steps.vars.outputs.tenant_slug }}
+        run: |
+          if git diff --quiet -- "microfin_mobile/tenant_apks/${TENANT_SLUG}.apk"; then
+            echo "Tenant APK is already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "microfin_mobile/tenant_apks/${TENANT_SLUG}.apk"
+          git commit -m "chore(apk): build tenant APK for ${TENANT_SLUG}"
+          git push
