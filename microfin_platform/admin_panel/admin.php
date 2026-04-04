@@ -1709,7 +1709,9 @@ $roles_stmt = $pdo->prepare('SELECT * FROM user_roles WHERE tenant_id = ? ORDER 
 $roles_stmt->execute([$tenant_id]);
 $roles = $roles_stmt->fetchAll(PDO::FETCH_ASSOC);
 $staff_assignable_roles = array_values(array_filter($roles, function ($role) {
-    return strcasecmp((string)($role['role_name'] ?? ''), 'Admin') !== 0;
+    $role_name = (string)($role['role_name'] ?? '');
+    return strcasecmp($role_name, 'Admin') !== 0
+        && strcasecmp($role_name, 'Client') !== 0;
 }));
 $role_management_roles = $staff_assignable_roles;
 
@@ -4887,7 +4889,7 @@ function hexToRgb($hex) {
                         <label>Role <span style="color:var(--danger-color);">*</span></label>
                         <select name="role_id" id="edit-staff-role-id" class="form-control" required>
                             <option value="">Select a role...</option>
-                            <?php foreach ($roles as $r): ?>
+                            <?php foreach ($staff_assignable_roles as $r): ?>
                                 <option value="<?php echo $r['role_id']; ?>"><?php echo htmlspecialchars($r['role_name']); ?></option>
                             <?php endforeach; ?>
                         </select>

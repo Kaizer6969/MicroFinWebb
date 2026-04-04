@@ -29,6 +29,7 @@ LEFT JOIN tenant_branding tb ON tb.tenant_id = t.tenant_id
 WHERE t.deleted_at IS NULL
   AND t.tenant_id IS NOT NULL
   AND TRIM(t.tenant_id) <> ''
+  AND LOWER(COALESCE(t.status, '')) = 'active'
 ORDER BY t.tenant_name ASC
 ";
 
