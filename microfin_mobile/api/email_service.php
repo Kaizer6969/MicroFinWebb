@@ -70,42 +70,9 @@ function microfin_verify_verification_code(?string $storedToken, string $code): 
     return password_verify($code, (string) $payload['hash']);
 }
 
-function microfin_ensure_email_log_table(mysqli $conn): void
-{
-    static $tableReady = false;
-
-    if ($tableReady) {
-        return;
-    }
-
-    $sql = "
-        CREATE TABLE IF NOT EXISTS email_delivery_logs (
-            email_log_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-            tenant_id VARCHAR(50) NULL,
-            user_id INT NULL,
-            email_type VARCHAR(50) NOT NULL,
-            recipient_email VARCHAR(255) NOT NULL,
-            recipient_name VARCHAR(255) NULL,
-            subject VARCHAR(255) NOT NULL,
-            provider VARCHAR(50) NOT NULL DEFAULT 'brevo',
-            provider_message_id VARCHAR(255) NULL,
-            status ENUM('sent', 'failed') NOT NULL,
-            error_message TEXT NULL,
-            request_payload LONGTEXT NULL,
-            response_payload LONGTEXT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ";
-
-    $conn->query($sql);
-    $tableReady = true;
-}
-
 function microfin_log_email_attempt(mysqli $conn, array $details): void
 {
     try {
-        microfin_ensure_email_log_table($conn);
-
         $stmt = $conn->prepare("
             INSERT INTO email_delivery_logs (
                 tenant_id,

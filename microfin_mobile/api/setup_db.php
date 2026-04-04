@@ -52,6 +52,23 @@ CREATE TABLE IF NOT EXISTS clients (
     FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
 );
 
+CREATE TABLE IF NOT EXISTS email_delivery_logs (
+    email_log_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    tenant_id VARCHAR(50) NULL,
+    user_id INT NULL,
+    email_type VARCHAR(50) NOT NULL,
+    recipient_email VARCHAR(255) NOT NULL,
+    recipient_name VARCHAR(255) NULL,
+    subject VARCHAR(255) NOT NULL,
+    provider VARCHAR(50) NOT NULL DEFAULT 'brevo',
+    provider_message_id VARCHAR(255) NULL,
+    status ENUM('sent', 'failed') NOT NULL,
+    error_message TEXT NULL,
+    request_payload LONGTEXT NULL,
+    response_payload LONGTEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 INSERT IGNORE INTO tenants (tenant_id, tenant_name, tenant_slug) VALUES ('fundline', 'Fundline', 'fundline');
 INSERT IGNORE INTO user_roles (role_id, tenant_id, role_name) VALUES (3, 'fundline', 'Client');
 ";
