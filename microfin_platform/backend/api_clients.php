@@ -116,9 +116,14 @@ if ($method === 'GET' && $action === 'credit_accounts') {
 
     $search = trim((string) ($_GET['search'] ?? ''));
     $filter = strtolower(trim((string) ($_GET['filter'] ?? 'all')));
+    $score_filter = strtolower(trim((string) ($_GET['score_filter'] ?? 'all')));
     $allowedFilters = ['all', 'eligible', 'not_yet_eligible', 'no_active_limit', 'at_max_limit'];
     if (!in_array($filter, $allowedFilters, true)) {
         $filter = 'all';
+    }
+    $allowedScoreFilters = ['all', 'high_credit', 'good_credit', 'standard_credit', 'fair_credit'];
+    if (!in_array($score_filter, $allowedScoreFilters, true)) {
+        $score_filter = 'all';
     }
 
     $params = [$tenant_id];
@@ -163,6 +168,22 @@ if ($method === 'GET' && $action === 'credit_accounts') {
         return (string) ($upgrade['status'] ?? '') === $selectedFilter;
     };
 
+    $matchesScoreFilter = static function (array $limitSnapshot, string $selectedScoreFilter): bool {
+        if ($selectedScoreFilter === 'all') {
+            return true;
+        }
+
+        $label = strtolower(trim((string) ($limitSnapshot['recommendation_label'] ?? '')));
+        $labelMap = [
+            'high_credit' => 'high credit score',
+            'good_credit' => 'good credit score',
+            'standard_credit' => 'standard credit score',
+            'fair_credit' => 'fair credit score',
+        ];
+
+        return $label !== '' && $label === ($labelMap[$selectedScoreFilter] ?? '');
+    };
+
     $rows = [];
     foreach ($clients as $client) {
         $client_id = (int) ($client['client_id'] ?? 0);
@@ -178,13 +199,18 @@ if ($method === 'GET' && $action === 'credit_accounts') {
         $ci = mf_credit_policy_fetch_latest_ci($pdo, $tenant_id, $client_id);
         $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
         $upgrade = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
+        $limit_snapshot = mf_credit_policy_compute_limit_snapshot($credit_policy, $client, $score, $ci);
 
         if (!$matchesFilter($upgrade, $filter)) {
             continue;
         }
 
+        if (!$matchesScoreFilter($limit_snapshot, $score_filter)) {
+            continue;
+        }
+
         $client['credit_upgrade'] = $upgrade;
-        $client['limit_snapshot'] = mf_credit_policy_compute_limit_snapshot($credit_policy, $client, $score, $ci);
+        $client['limit_snapshot'] = $limit_snapshot;
         $client['latest_score'] = $score ?: null;
         $rows[] = $client;
     }

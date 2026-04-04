@@ -986,7 +986,7 @@ tbody tr:hover { background: var(--brand-light); }
                 <p>Review borrower credit limits, score profile, and upgrade readiness before staff confirms any increase.</p>
             </div>
             <div class="page-header-actions">
-                <button class="btn btn-outline" onclick="loadCreditAccounts(getCreditAccountFilter(), document.querySelector('#creditAccountsFilterTabs .filter-tab.active'))">
+                <button class="btn btn-outline" onclick="loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter())">
                     <span class="material-symbols-rounded ms">refresh</span> Refresh
                 </button>
             </div>
@@ -998,11 +998,18 @@ tbody tr:hover { background: var(--brand-light); }
             </div>
         </div>
         <div class="filter-tabs" id="creditAccountsFilterTabs">
-            <button class="filter-tab active" data-status="all" onclick="loadCreditAccounts('all',this)">All Accounts</button>
-            <button class="filter-tab" data-status="eligible" onclick="loadCreditAccounts('eligible',this)">Eligible</button>
-            <button class="filter-tab" data-status="not_yet_eligible" onclick="loadCreditAccounts('not_yet_eligible',this)">Not Yet Eligible</button>
-            <button class="filter-tab" data-status="no_active_limit" onclick="loadCreditAccounts('no_active_limit',this)">No Active Limit</button>
-            <button class="filter-tab" data-status="at_max_limit" onclick="loadCreditAccounts('at_max_limit',this)">At Maximum</button>
+            <button class="filter-tab active" data-status="all" onclick="loadCreditAccounts('all', getCreditAccountScoreFilter(), this)">All Accounts</button>
+            <button class="filter-tab" data-status="eligible" onclick="loadCreditAccounts('eligible', getCreditAccountScoreFilter(), this)">Eligible</button>
+            <button class="filter-tab" data-status="not_yet_eligible" onclick="loadCreditAccounts('not_yet_eligible', getCreditAccountScoreFilter(), this)">Not Yet Eligible</button>
+            <button class="filter-tab" data-status="no_active_limit" onclick="loadCreditAccounts('no_active_limit', getCreditAccountScoreFilter(), this)">No Active Limit</button>
+            <button class="filter-tab" data-status="at_max_limit" onclick="loadCreditAccounts('at_max_limit', getCreditAccountScoreFilter(), this)">At Maximum</button>
+        </div>
+        <div class="filter-tabs" id="creditAccountsScoreFilterTabs">
+            <button class="filter-tab active" data-score-filter="all" onclick="loadCreditAccounts(getCreditAccountFilter(), 'all', this)">All Scores</button>
+            <button class="filter-tab" data-score-filter="high_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'high_credit', this)">High Credit</button>
+            <button class="filter-tab" data-score-filter="good_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'good_credit', this)">Good Credit</button>
+            <button class="filter-tab" data-score-filter="standard_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'standard_credit', this)">Standard Credit</button>
+            <button class="filter-tab" data-score-filter="fair_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'fair_credit', this)">Fair Credit</button>
         </div>
         <div class="card">
             <div class="table-wrap">
@@ -1532,6 +1539,10 @@ function getCreditAccountFilter() {
     return document.querySelector('#creditAccountsFilterTabs .filter-tab.active')?.dataset?.status || 'all';
 }
 
+function getCreditAccountScoreFilter() {
+    return document.querySelector('#creditAccountsScoreFilterTabs .filter-tab.active')?.dataset?.scoreFilter || 'all';
+}
+
 function badge(s) {
     const map = {
         'Active':                 'badge-green',
@@ -1636,7 +1647,7 @@ function renderCreditAccountRuleProgress(upgrade) {
 
 function onCreditAccountSearchInput() {
     const input = document.getElementById('creditAccountSearch');
-    debounce(() => loadCreditAccounts(getCreditAccountFilter(), null, input?.value || ''), 350)();
+    debounce(() => loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter(), null, input?.value || ''), 350)();
 }
 
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
@@ -1673,7 +1684,7 @@ document.addEventListener('DOMContentLoaded', () => {
             title.innerHTML = `${escapeHtml(titleText)} <span>${escapeHtml(subtitleText)}</span>`;
             history.pushState(null,'',`#${tid}`);
             // Lazy load on first visit
-            if (tid === 'credit-accounts') loadCreditAccounts(getCreditAccountFilter());
+            if (tid === 'credit-accounts') loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter());
             if (tid === 'applications') loadApps('all');
             if (tid === 'loans')    loadLoans('all');
             if (tid === 'payments') loadPayments();
@@ -2136,7 +2147,7 @@ async function submitLoanRelease() {
 // NOTE: api_clients.php?action=list must also use ORDER BY registration_date DESC
 // (not created_at — clients table has no created_at column).
 // Also JOIN users ON c.user_id = u.user_id and SELECT u.user_type so the Source badge works.
-async function loadCreditAccounts(filter='all', btn=null, search=null) {
+async function loadCreditAccounts(filter='all', scoreFilter='all', btn=null, search=null) {
     const tbody = document.getElementById('creditAccountsTbody');
     if (!tbody) return;
 
@@ -2154,6 +2165,7 @@ async function loadCreditAccounts(filter='all', btn=null, search=null) {
     const url = API.clients
         + '?action=credit_accounts'
         + '&filter=' + encodeURIComponent(filter || 'all')
+        + '&score_filter=' + encodeURIComponent(scoreFilter || 'all')
         + (query ? '&search=' + encodeURIComponent(query) : '');
 
     try {
@@ -2167,7 +2179,7 @@ async function loadCreditAccounts(filter='all', btn=null, search=null) {
 
         const rows = result.data || [];
         if (!rows.length) {
-            tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No credit accounts matched this filter.</td></tr>';
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No credit accounts matched these filters.</td></tr>';
             return;
         }
 

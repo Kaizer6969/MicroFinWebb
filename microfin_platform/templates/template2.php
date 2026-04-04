@@ -208,14 +208,12 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
             $login_query .= '&from_site=1';
         }
         $login_href = $is_editor ? "../tenant_login/login.php?{$login_query}" : "tenant_login/login.php?{$login_query}";
-        $apply_href = $is_editor ? "../public_website/demo.php" : "public_website/demo.php";
-        $talk_href = $apply_href . '?mode=talk-to-expert';
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
         $download_href = $is_editor
             ? "../public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier)
             : "public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier);
         ?>
-        <a href="<?php echo $login_href; ?>" class="tpl2-btn" contenteditable="false">Client Portal</a>
+        <a href="<?php echo $login_href; ?>" class="tpl2-btn" contenteditable="false">Staff Portal</a>
     </nav>
 
     <section id="sec_hero" class="tpl2-hero editable-section">
@@ -232,10 +230,6 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
                 <?php echo $e($hero_subtitle); ?>
             </p>
             
-            <div class="d-flex gap-3">
-                <a href="<?php echo $apply_href; ?>" class="tpl2-btn" contenteditable="false">Apply Now</a>
-                <a href="<?php echo $talk_href; ?>" class="btn btn-outline-secondary fw-bold px-4 py-2" style="border-radius: var(--radius); color: var(--text-dark); border-color: var(--border-clr);" contenteditable="false">Talk to Sales</a>
-            </div>
         </div>
         
         <div class="tpl2-hero-image-wrap" id="hero_img_container">
