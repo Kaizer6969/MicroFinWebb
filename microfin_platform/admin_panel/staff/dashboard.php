@@ -874,6 +874,7 @@ tbody tr:hover { background: var(--brand-light); }
             </div>
         </div>
         <!-- ══ TEMPORARY DEBUG PANEL — remove after fixing ══ -->
+        <?php if (false): ?>
         <div style="background:#1e293b;color:#7dd3fc;font-family:monospace;font-size:.8rem;padding:14px 18px;border-radius:8px;margin-bottom:16px;border:1px solid #334155;">
             <strong style="color:#f8fafc;">🔍 Client Fetch Debug</strong><br><br>
             Tenant ID in session: <strong style="color:#fbbf24;"><?php echo htmlspecialchars((string)$_client_debug['tenant_id']); ?></strong><br>
@@ -897,6 +898,7 @@ tbody tr:hover { background: var(--brand-light); }
         </div>
         <!-- ══ END DEBUG PANEL ══ -->
 
+        <?php endif; ?>
         <div class="search-bar">
             <div class="search-input-wrap">
                 <span class="material-symbols-rounded ms">search</span>
