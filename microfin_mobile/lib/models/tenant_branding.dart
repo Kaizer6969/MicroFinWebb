@@ -40,6 +40,8 @@ class TenantBranding {
 
   // Dynamic tenants list
   static List<TenantBranding> tenants = [];
+  static bool lastLoadSucceeded = false;
+  static String? lastLoadError;
 
   /// Parse hex color (e.g., "#dc2626") to Flutter Color object.
   static Color _parseColor(String? hexColor, Color fallback) {
@@ -131,9 +133,21 @@ class TenantBranding {
   );
 
   /// Fetch dynamic tenants from API
-  static Future<void> loadTenants() async {
+  static Future<void> loadTenants({String? tenantFilter}) async {
+    lastLoadSucceeded = false;
+    lastLoadError = null;
+
     try {
-      final url = Uri.parse(ApiConfig.getUrl('api_active_tenants.php'));
+      final normalizedFilter = tenantFilter?.trim() ?? '';
+      final baseUri = Uri.parse(ApiConfig.getUrl('api_active_tenants.php'));
+      final url = normalizedFilter.isEmpty
+          ? baseUri
+          : baseUri.replace(
+              queryParameters: {
+                ...baseUri.queryParameters,
+                'tenant': normalizedFilter,
+              },
+            );
       final response = await http.get(url).timeout(Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -156,10 +170,24 @@ class TenantBranding {
           if (tenants.isEmpty) {
             tenants = [defaultTenant];
           }
+          lastLoadSucceeded = true;
+          lastLoadError = null;
+        } else {
+          lastLoadSucceeded = false;
+          lastLoadError =
+              (data['message'] ?? 'Unable to load tenant branding.')
+                  .toString();
+          tenants = [defaultTenant];
         }
+      } else {
+        lastLoadSucceeded = false;
+        lastLoadError = 'Tenant server returned ${response.statusCode}.';
+        tenants = [defaultTenant];
       }
     } catch (e) {
       debugPrint('Error loading tenants: $e');
+      lastLoadSucceeded = false;
+      lastLoadError = 'Unable to load tenant information right now.';
       if (tenants.isEmpty) {
         tenants = [defaultTenant];
       }

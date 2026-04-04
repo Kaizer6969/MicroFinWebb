@@ -15,6 +15,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
+$tenantFilter = trim((string) ($_GET['tenant'] ?? ''));
+
 $sql = "
 SELECT
     t.tenant_id,
@@ -30,10 +32,37 @@ WHERE t.deleted_at IS NULL
   AND t.tenant_id IS NOT NULL
   AND TRIM(t.tenant_id) <> ''
   AND LOWER(COALESCE(t.status, '')) = 'active'
+";
+
+if ($tenantFilter !== '') {
+    $sql .= "
+  AND (
+        LOWER(t.tenant_id) = LOWER(?)
+        OR LOWER(COALESCE(t.tenant_slug, '')) = LOWER(?)
+  )
+";
+}
+
+$sql .= "
 ORDER BY t.tenant_name ASC
 ";
 
-$result = $conn->query($sql);
+if ($tenantFilter !== '') {
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to prepare tenant query: ' . $conn->error
+        ]);
+        exit;
+    }
+
+    $stmt->bind_param('ss', $tenantFilter, $tenantFilter);
+    $stmt->execute();
+    $result = $stmt->get_result();
+} else {
+    $result = $conn->query($sql);
+}
 
 if (!$result) {
     echo json_encode([
@@ -46,6 +75,10 @@ if (!$result) {
 $tenants = [];
 while ($row = $result->fetch_assoc()) {
     $tenants[] = $row;
+}
+
+if (isset($stmt) && $stmt instanceof mysqli_stmt) {
+    $stmt->close();
 }
 
 echo json_encode([
