@@ -157,7 +157,6 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     // ── PRODUCTION / RELEASE MODE ────────────────────────────────────────────
-    SharedPreferences prefs = await SharedPreferences.getInstance();
     String? identifiedTenant;
 
     // 1. Check if we already locked in a tenant locally from a previous session
