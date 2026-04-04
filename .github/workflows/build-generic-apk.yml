@@ -11,7 +11,13 @@ on:
     branches:
       - main
     paths:
-      - microfin_mobile/microfin_mobile/**
+      - microfin_mobile/android/**
+      - microfin_mobile/images/**
+      - microfin_mobile/lib/**
+      - microfin_mobile/pubspec.yaml
+      - microfin_mobile/pubspec.lock
+      - microfin_mobile/analysis_options.yaml
+      - microfin_mobile/.metadata
       - .github/workflows/build-generic-apk.yml
 
 permissions:
@@ -54,11 +60,11 @@ jobs:
           echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
-        working-directory: microfin_mobile/microfin_mobile
+        working-directory: microfin_mobile
         run: flutter pub get
 
       - name: Build release APK
-        working-directory: microfin_mobile/microfin_mobile
+        working-directory: microfin_mobile
         env:
           APP_NAME: ${{ steps.vars.outputs.app_name }}
         run: |
@@ -68,7 +74,7 @@ jobs:
 
       - name: Replace served APK
         run: |
-          cp microfin_mobile/microfin_mobile/build/app/outputs/flutter-apk/app-release.apk microfin_mobile/microfin_app.apk
+          cp microfin_mobile/build/app/outputs/flutter-apk/app-release.apk microfin_mobile/microfin_app.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
