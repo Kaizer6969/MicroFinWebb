@@ -299,7 +299,7 @@ try {
             $dbConfig['password'],
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
         );
-        require_once __DIR__ . '/../../backend/credit_policy.php';
+        require_once __DIR__ . '/../../microfin_platform/backend/credit_policy.php';
         $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'credit_policy_settings'");
         $stmt->execute([$tenantId]);
         $policyBlob = json_decode($stmt->fetchColumn() ?: '{}', true) ?: [];

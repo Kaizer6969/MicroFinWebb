@@ -2672,6 +2672,35 @@ function hexToRgb($hex) {
             gap: 14px;
         }
 
+        .credit-policy-threshold-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .credit-policy-threshold-card {
+            display: grid;
+            gap: 10px;
+            padding: 16px 18px;
+            border: 1px solid rgba(var(--primary-rgb), 0.14);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04), rgba(var(--primary-rgb), 0.015));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+            min-width: 0;
+        }
+
+        .credit-policy-threshold-card .form-group {
+            min-width: 0;
+        }
+
+        .credit-policy-threshold-support-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+            gap: 16px;
+            align-items: start;
+            margin-top: 16px;
+        }
+
         .credit-policy-form-card .credit-toggle-row {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
@@ -3264,7 +3293,9 @@ function hexToRgb($hex) {
             .credit-policy-overview-grid,
             .credit-policy-output-grid,
             .credit-policy-simulator-grid,
-            .credit-policy-simulator-metrics {
+            .credit-policy-simulator-metrics,
+            .credit-policy-threshold-grid,
+            .credit-policy-threshold-support-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -5912,56 +5943,70 @@ function hexToRgb($hex) {
                                         </div>
                                     </div>
 
-                                    <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-not-recommended-score">Fair Credit Score From</label>
-                                            <input type="number" class="form-control" id="cp-not-recommended-score" name="cp_not_recommended_min_score" min="0" max="<?php echo max(0, (int)$credit_policy_score_ceiling - 3); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['not_recommended_min_score'] ?? 200)); ?>">
-                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Fair Credit Score</code>. Anything below this remains <code>At-Risk Credit Score</code>.</p>
+                                    <div class="credit-policy-threshold-support-grid" style="margin-top: 0; margin-bottom: 16px;">
+                                        <div class="credit-policy-note-card">
+                                            <strong>New Client Fallback</strong>
+                                            <p class="credit-policy-field-hint" style="margin: 0;">Use this starting score when a borrower does not yet have a recorded credit score.</p>
+                                            <p class="credit-policy-field-hint" id="credit-policy-default-score-band-hint" style="font-weight: 500; margin: 0;"></p>
                                         </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-conditional-score">Standard Credit Score From</label>
-                                            <input type="number" class="form-control" id="cp-conditional-score" name="cp_conditional_min_score" min="1" max="<?php echo max(1, (int)$credit_policy_score_ceiling - 2); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['conditional_min_score'] ?? 400)); ?>">
-                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Standard Credit Score</code>.</p>
-                                        </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-recommended-score">Good Credit Score From</label>
-                                            <input type="number" class="form-control" id="cp-recommended-score" name="cp_recommended_min_score" min="2" max="<?php echo max(2, (int)$credit_policy_score_ceiling - 1); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['recommended_min_score'] ?? 600)); ?>">
-                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Good Credit Score</code>.</p>
-                                        </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-highly-recommended-score">High Credit Score From</label>
-                                            <input type="number" class="form-control" id="cp-highly-recommended-score" name="cp_highly_recommended_min_score" min="3" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['highly_recommended_min_score'] ?? 800)); ?>">
-                                            <p class="credit-policy-field-hint">Scores at or above this are classified as <code>High Credit Score</code>. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
-                                            <p class="credit-policy-field-hint is-warning" id="credit-policy-threshold-warning" hidden>Each score band must start higher than the band before it.</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="credit-policy-note-card" style="margin-top: 16px;">
-                                        <strong>Score Classification</strong>
-                                        <ul>
-                                            <li><span id="credit-policy-threshold-copy-at-risk">Below <?php echo (int)$credit_policy_not_recommended_from; ?></span> = At-Risk Credit Score.</li>
-                                            <li><span id="credit-policy-threshold-copy-not-recommended"><?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?></span> = Fair Credit Score.</li>
-                                            <li><span id="credit-policy-threshold-copy-conditional"><?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?></span> = Standard Credit Score.</li>
-                                            <li><span id="credit-policy-threshold-copy-recommended"><?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?></span> = Good Credit Score.</li>
-                                            <li><span id="credit-policy-threshold-copy-highly-recommended"><?php echo (int)$credit_policy_highly_recommended_from; ?> and above</span> = High Credit Score.</li>
-                                        </ul>
-                                        <p class="credit-policy-field-hint" id="credit-policy-threshold-routing-copy" style="margin-bottom: 0; margin-top: 10px;">Decision routing: Below <?php echo (int)$credit_policy_conditional_from; ?> = Reject, <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> = Manual Review, <?php echo (int)$credit_policy_recommended_from; ?> and above = Approval Candidate.</p>
-                                    </div>
-                                </div>
-
-                                    <div class="credit-policy-choice-block" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color, #e5e7eb);">
-                                        <div class="credit-policy-subhead">
-                                            <strong>New client fallback</strong>
-                                        </div>
-                                        <div class="credit-engine-inline-grid credit-engine-inline-grid-tight" style="max-width: 320px;">
+                                        <div class="credit-policy-threshold-card">
                                             <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                                 <label for="cp-new-client-default-score">Default Credit Score</label>
                                                 <input type="number" class="form-control" id="cp-new-client-default-score" name="cp_new_client_default_score" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['new_client_default_score'] ?? 500)); ?>">
-                                                <p class="credit-policy-field-hint">Used when a borrower does not yet have a recorded credit score. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
-                                                <p class="credit-policy-field-hint" id="credit-policy-default-score-band-hint" style="font-weight: 500;"></p>
+                                                <p class="credit-policy-field-hint">Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
                                             </div>
                                         </div>
                                     </div>
+
+                                    <div class="credit-policy-threshold-grid">
+                                        <div class="credit-policy-threshold-card">
+                                            <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                <label for="cp-not-recommended-score">Fair Credit Score From</label>
+                                                <input type="number" class="form-control" id="cp-not-recommended-score" name="cp_not_recommended_min_score" min="0" max="<?php echo max(0, (int)$credit_policy_score_ceiling - 3); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['not_recommended_min_score'] ?? 200)); ?>">
+                                                <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Fair Credit Score</code>. Anything below this remains <code>At-Risk Credit Score</code>.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-threshold-card">
+                                            <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                <label for="cp-conditional-score">Standard Credit Score From</label>
+                                                <input type="number" class="form-control" id="cp-conditional-score" name="cp_conditional_min_score" min="1" max="<?php echo max(1, (int)$credit_policy_score_ceiling - 2); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['conditional_min_score'] ?? 400)); ?>">
+                                                <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Standard Credit Score</code>.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-threshold-card">
+                                            <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                <label for="cp-recommended-score">Good Credit Score From</label>
+                                                <input type="number" class="form-control" id="cp-recommended-score" name="cp_recommended_min_score" min="2" max="<?php echo max(2, (int)$credit_policy_score_ceiling - 1); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['recommended_min_score'] ?? 600)); ?>">
+                                                <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Good Credit Score</code>.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-threshold-card">
+                                            <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                <label for="cp-highly-recommended-score">High Credit Score From</label>
+                                                <input type="number" class="form-control" id="cp-highly-recommended-score" name="cp_highly_recommended_min_score" min="3" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['highly_recommended_min_score'] ?? 800)); ?>">
+                                                <p class="credit-policy-field-hint">Scores at or above this are classified as <code>High Credit Score</code>. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
+                                                <p class="credit-policy-field-hint is-warning" id="credit-policy-threshold-warning" hidden>Each score band must start higher than the band before it.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-policy-threshold-support-grid">
+                                        <div class="credit-policy-note-card">
+                                            <strong>Score Classification</strong>
+                                            <ul>
+                                                <li><span id="credit-policy-threshold-copy-at-risk">Below <?php echo (int)$credit_policy_not_recommended_from; ?></span> = At-Risk Credit Score.</li>
+                                                <li><span id="credit-policy-threshold-copy-not-recommended"><?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?></span> = Fair Credit Score.</li>
+                                                <li><span id="credit-policy-threshold-copy-conditional"><?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?></span> = Standard Credit Score.</li>
+                                                <li><span id="credit-policy-threshold-copy-recommended"><?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?></span> = Good Credit Score.</li>
+                                                <li><span id="credit-policy-threshold-copy-highly-recommended"><?php echo (int)$credit_policy_highly_recommended_from; ?> and above</span> = High Credit Score.</li>
+                                            </ul>
+                                        </div>
+                                        <div class="credit-policy-note-card">
+                                            <strong>Decision Routing</strong>
+                                            <p class="credit-policy-field-hint" id="credit-policy-threshold-routing-copy" style="margin: 0;">Decision routing: Below <?php echo (int)$credit_policy_conditional_from; ?> = Reject, <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> = Manual Review, <?php echo (int)$credit_policy_recommended_from; ?> and above = Approval Candidate.</p>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 </div>
 
