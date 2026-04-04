@@ -1825,6 +1825,7 @@ unset($staff_row);
 // 2. Fetch Global Permissions
 try {
     $pdo->prepare("INSERT INTO permissions (permission_code, module, description) VALUES ('EDIT_BILLING', 'System', 'Can edit billing and subscription settings') ON DUPLICATE KEY UPDATE module = VALUES(module), description = VALUES(description)")->execute();
+    $pdo->prepare("INSERT INTO permissions (permission_code, module, description) VALUES ('VIEW_CREDIT_ACCOUNTS', 'Credit Accounts', 'Can view borrower credit accounts, limit recommendations, and upgrade eligibility') ON DUPLICATE KEY UPDATE module = VALUES(module), description = VALUES(description)")->execute();
 } catch (Exception $e) {
     // Permission seed is best-effort and should not block the page.
 }
@@ -1845,6 +1846,7 @@ $permission_description_map = [
     'VIEW_REPORTS' => 'View and generate business reports',
     'VIEW_APPLICATIONS' => 'View submitted applications',
     'MANAGE_APPLICATIONS' => 'Review and manage application workflow',
+    'VIEW_CREDIT_ACCOUNTS' => 'View credit account monitoring and upgrade eligibility',
     'EDIT_BILLING' => 'Edit subscription plan, billing, and payment settings'
 ];
 
@@ -1861,6 +1863,7 @@ $permission_capability_map = [
     'VIEW_REPORTS' => 'Members can access and generate business and financial reports.',
     'VIEW_APPLICATIONS' => 'Members can view incoming and existing application entries.',
     'MANAGE_APPLICATIONS' => 'Members can move applications through review and processing workflows.',
+    'VIEW_CREDIT_ACCOUNTS' => 'Members can open the credit accounts workspace and review borrower credit-limit eligibility and upgrade recommendations.',
     'EDIT_BILLING' => 'Members can change subscription plan settings, billing options, and payment settings.'
 ];
 
@@ -6145,22 +6148,22 @@ function hexToRgb($hex) {
                                     <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-income-multiplier">Income Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['income_multiplier']) ? '1.5' : htmlspecialchars((string)$credit_policy['credit_limit']['income_multiplier']); ?>">
+                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['income_multiplier'] ?? 0) <= 0) ? '1.5' : htmlspecialchars((string)$credit_policy['credit_limit']['income_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Base multiplier applied to monthly income before the classification multiplier, cap, and rounding.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-approve-band-multiplier">Good / High Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-approve-band-multiplier" name="cp_approve_band_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['approve_band_multiplier']) ? '1.10' : htmlspecialchars((string)$credit_policy['credit_limit']['approve_band_multiplier']); ?>">
+                                            <input type="number" class="form-control" id="cp-approve-band-multiplier" name="cp_approve_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['approve_band_multiplier'] ?? 0) <= 0) ? '1.10' : htmlspecialchars((string)$credit_policy['credit_limit']['approve_band_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Applied when the score classification is <code>Good Credit Score</code> or <code>High Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-review-band-multiplier">Standard Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-review-band-multiplier" name="cp_review_band_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['review_band_multiplier']) ? '1.00' : htmlspecialchars((string)$credit_policy['credit_limit']['review_band_multiplier']); ?>">
+                                            <input type="number" class="form-control" id="cp-review-band-multiplier" name="cp_review_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['review_band_multiplier'] ?? 0) <= 0) ? '1.00' : htmlspecialchars((string)$credit_policy['credit_limit']['review_band_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Applied when the score classification is <code>Standard Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-reject-band-multiplier">At-Risk / Fair Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-reject-band-multiplier" name="cp_reject_band_multiplier" min="0" step="0.01" value="<?php echo empty($credit_policy['credit_limit']['reject_band_multiplier']) ? '0.50' : htmlspecialchars((string)$credit_policy['credit_limit']['reject_band_multiplier']); ?>">
+                                            <input type="number" class="form-control" id="cp-reject-band-multiplier" name="cp_reject_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['reject_band_multiplier'] ?? 0) <= 0) ? '0.50' : htmlspecialchars((string)$credit_policy['credit_limit']['reject_band_multiplier']); ?>">
                                             <p class="credit-policy-field-hint">Applied when the score classification is <code>Fair Credit Score</code> or <code>At-Risk Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">

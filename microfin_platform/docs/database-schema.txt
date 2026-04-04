@@ -343,7 +343,8 @@ INSERT INTO permissions (permission_code, module, description) VALUES
 ('PROCESS_PAYMENTS', 'Payments', 'Can receive and post loan payments'),
 ('VIEW_REPORTS', 'Reports', 'Can generate and view financial reports'),
 ('VIEW_APPLICATIONS', 'Applications', 'Can view Pending loan applications'),
-('MANAGE_APPLICATIONS', 'Applications', 'Can approve, reject, or process Pending loan applications');
+('MANAGE_APPLICATIONS', 'Applications', 'Can approve, reject, or process Pending loan applications'),
+('VIEW_CREDIT_ACCOUNTS', 'Credit Accounts', 'Can view borrower credit accounts, limit recommendations, and upgrade eligibility');
 
 
 -- ============================================================

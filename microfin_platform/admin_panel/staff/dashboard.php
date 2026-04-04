@@ -697,10 +697,16 @@ tbody tr:hover { background: var(--brand-light); }
             </a>
             <?php endif; ?>
 
+            <?php if (has_permission('VIEW_CREDIT_ACCOUNTS') || has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')): ?>
+            <a class="nav-item" data-target="credit-accounts" data-title="Credit Accounts Management" data-subtitle="Limits & Growth" href="#credit-accounts">
+                <span class="material-symbols-rounded ms">credit_card</span> Credit Accounts Management
+            </a>
+            <?php endif; ?>
+
             <?php if (has_permission('VIEW_APPLICATIONS') || has_permission('MANAGE_APPLICATIONS')): ?>
-            <a class="nav-item" data-target="applications" data-title="Applications" data-subtitle="Monitoring" href="#applications">
+            <a class="nav-item" data-target="applications" data-title="Loan Applications" data-subtitle="Pipeline" href="#applications">
                 <span class="material-symbols-rounded ms">description</span>
-                Applications
+                Loan Applications
                 <span class="nav-badge" id="navPendingAppsBadge" style="<?php echo count($pending_applications) > 0 ? '' : 'display:none;'; ?>"><?php echo count($pending_applications); ?></span>
             </a>
             <?php endif; ?>
@@ -969,6 +975,54 @@ tbody tr:hover { background: var(--brand-light); }
     <?php endif; ?>
 
     <!-- ── APPLICATIONS ── -->
+    <?php if (has_permission('VIEW_CREDIT_ACCOUNTS') || has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')): ?>
+    <section id="credit-accounts" class="view">
+        <div class="page-header">
+            <div class="page-icon" style="background:rgba(236,72,153,.12);color:#ec4899;">
+                <span class="material-symbols-rounded ms" style="font-size:22px;">credit_card</span>
+            </div>
+            <div>
+                <h1>Credit Accounts Management</h1>
+                <p>Review borrower credit limits, score profile, and upgrade readiness before staff confirms any increase.</p>
+            </div>
+            <div class="page-header-actions">
+                <button class="btn btn-outline" onclick="loadCreditAccounts(getCreditAccountFilter(), document.querySelector('#creditAccountsFilterTabs .filter-tab.active'))">
+                    <span class="material-symbols-rounded ms">refresh</span> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="search-bar">
+            <div class="search-input-wrap">
+                <span class="material-symbols-rounded ms">search</span>
+                <input type="text" id="creditAccountSearch" placeholder="Search by name, email, phone…" oninput="onCreditAccountSearchInput()">
+            </div>
+        </div>
+        <div class="filter-tabs" id="creditAccountsFilterTabs">
+            <button class="filter-tab active" data-status="all" onclick="loadCreditAccounts('all',this)">All Accounts</button>
+            <button class="filter-tab" data-status="eligible" onclick="loadCreditAccounts('eligible',this)">Eligible</button>
+            <button class="filter-tab" data-status="not_yet_eligible" onclick="loadCreditAccounts('not_yet_eligible',this)">Not Yet Eligible</button>
+            <button class="filter-tab" data-status="no_active_limit" onclick="loadCreditAccounts('no_active_limit',this)">No Active Limit</button>
+            <button class="filter-tab" data-status="at_max_limit" onclick="loadCreditAccounts('at_max_limit',this)">At Maximum</button>
+        </div>
+        <div class="card">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Borrower</th>
+                        <th>Score Profile</th>
+                        <th>Current Limit</th>
+                        <th>Potential Upgraded Limit</th>
+                        <th>Upgrade Status</th>
+                        <th>Rule Progress</th>
+                        <th>Action</th>
+                    </tr></thead>
+                    <tbody id="creditAccountsTbody"><tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
+
     <?php if (has_permission('VIEW_APPLICATIONS') || has_permission('MANAGE_APPLICATIONS')): ?>
     <section id="applications" class="view">
         <div class="page-header">
@@ -976,7 +1030,7 @@ tbody tr:hover { background: var(--brand-light); }
                 <span class="material-symbols-rounded ms" style="font-size:22px;">description</span>
             </div>
             <div>
-                <h1>Applications</h1>
+                <h1>Loan Applications</h1>
                 <p>Monitor application progress with clearer borrower-facing status groups.</p>
             </div>
             <div class="page-header-actions">
@@ -1455,6 +1509,10 @@ function getActiveAppFilter() {
     return document.querySelector('#appFilterTabs .filter-tab.active')?.dataset?.status || 'all';
 }
 
+function getCreditAccountFilter() {
+    return document.querySelector('#creditAccountsFilterTabs .filter-tab.active')?.dataset?.status || 'all';
+}
+
 function badge(s) {
     const map = {
         'Active':                 'badge-green',
@@ -1502,6 +1560,66 @@ function formatUpgradeLimit(value, emptyLabel='—') {
     return fmt(amount);
 }
 
+function scoreCategoryBadge(snapshot) {
+    const group = String(snapshot?.recommendation_group || '');
+    const label = String(snapshot?.recommendation_label || 'No score profile');
+    let cls = 'badge-gray';
+    if (group === 'approve') cls = 'badge-green';
+    else if (group === 'review') cls = 'badge-blue';
+    else if (group === 'reject') cls = 'badge-red';
+    return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
+}
+
+function renderCreditAccountBorrower(account) {
+    const fullName = `${escapeHtml(account.first_name || '')} ${escapeHtml(account.last_name || '')}`.trim();
+    const email = account.email_address && account.email_address.trim() ? escapeHtml(account.email_address) : 'No email';
+    const phone = account.contact_number && account.contact_number.trim() ? escapeHtml(account.contact_number) : 'No phone';
+    return `
+        <div style="display:flex;flex-direction:column;gap:6px;">
+            <div class="td-bold">${fullName || 'Unknown Borrower'}</div>
+            <div class="td-muted" style="font-size:.78rem;">${email} · ${phone}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                ${sourceBadge(account.user_type)}
+                ${badge(account.client_status || 'Inactive')}
+            </div>
+        </div>`;
+}
+
+function renderCreditAccountScore(account) {
+    const snapshot = account?.limit_snapshot || {};
+    const effectiveScore = parseFloat(snapshot?.effective_score);
+    const hasEffectiveScore = Number.isFinite(effectiveScore);
+    let subLabel = 'No recorded credit score yet.';
+    if (snapshot?.used_default_score) {
+        subLabel = `Using tenant default score${hasEffectiveScore ? ` of ${Math.round(effectiveScore).toLocaleString('en-PH')}` : ''}.`;
+    } else if (hasEffectiveScore) {
+        subLabel = `Latest recorded score: ${Math.round(effectiveScore).toLocaleString('en-PH')}.`;
+    }
+
+    return `
+        <div style="display:flex;flex-direction:column;gap:6px;">
+            ${scoreCategoryBadge(snapshot)}
+            <div class="td-muted" style="font-size:.78rem;">${escapeHtml(subLabel)}</div>
+        </div>`;
+}
+
+function renderCreditAccountRuleProgress(upgrade) {
+    const completedLoans = parseInt(upgrade?.completed_loans || 0, 10);
+    const minCompletedLoans = parseInt(upgrade?.min_completed_loans || 0, 10);
+    const latePayments = parseInt(upgrade?.late_payments || 0, 10);
+    const maxLatePayments = parseInt(upgrade?.max_allowed_late_payments || 0, 10);
+    return `
+        <div style="display:flex;flex-direction:column;gap:6px;">
+            <div class="td-muted" style="font-size:.78rem;">Completed loans: <strong style="color:var(--text);">${completedLoans}</strong> / ${minCompletedLoans}</div>
+            <div class="td-muted" style="font-size:.78rem;">Late payments: <strong style="color:var(--text);">${latePayments}</strong> / ${maxLatePayments}</div>
+        </div>`;
+}
+
+function onCreditAccountSearchInput() {
+    const input = document.getElementById('creditAccountSearch');
+    debounce(() => loadCreditAccounts(getCreditAccountFilter(), null, input?.value || ''), 350)();
+}
+
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
@@ -1536,6 +1654,7 @@ document.addEventListener('DOMContentLoaded', () => {
             title.innerHTML = `${escapeHtml(titleText)} <span>${escapeHtml(subtitleText)}</span>`;
             history.pushState(null,'',`#${tid}`);
             // Lazy load on first visit
+            if (tid === 'credit-accounts') loadCreditAccounts(getCreditAccountFilter());
             if (tid === 'applications') loadApps('all');
             if (tid === 'loans')    loadLoans('all');
             if (tid === 'payments') loadPayments();
@@ -1954,6 +2073,71 @@ async function submitLoanRelease() {
 // NOTE: api_clients.php?action=list must also use ORDER BY registration_date DESC
 // (not created_at — clients table has no created_at column).
 // Also JOIN users ON c.user_id = u.user_id and SELECT u.user_type so the Source badge works.
+async function loadCreditAccounts(filter='all', btn=null, search=null) {
+    const tbody = document.getElementById('creditAccountsTbody');
+    if (!tbody) return;
+
+    if (btn && btn.closest('.filter-tabs')) {
+        btn.closest('.filter-tabs').querySelectorAll('.filter-tab').forEach(tab => tab.classList.remove('active'));
+        btn.classList.add('active');
+    }
+
+    const query = typeof search === 'string'
+        ? search
+        : (document.getElementById('creditAccountSearch')?.value || '');
+
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
+
+    const url = API.clients
+        + '?action=credit_accounts'
+        + '&filter=' + encodeURIComponent(filter || 'all')
+        + (query ? '&search=' + encodeURIComponent(query) : '');
+
+    try {
+        const response = await fetch(url);
+        const result = await response.json();
+
+        if (result.status !== 'success') {
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${escapeHtml(result.message || 'The credit accounts list is unavailable right now.')}</td></tr>`;
+            return;
+        }
+
+        const rows = result.data || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No credit accounts matched this filter.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(account => {
+            const upgrade = account.credit_upgrade || {};
+            const note = escapeHtml(upgrade.status_note || upgrade.next_limit_note || 'No upgrade note available.');
+            const currentLimit = parseFloat(upgrade.current_limit || 0);
+            return `<tr>
+                <td>${renderCreditAccountBorrower(account)}</td>
+                <td>${renderCreditAccountScore(account)}</td>
+                <td>${currentLimit > 0 ? formatUpgradeLimit(currentLimit) : '<span class="detail-value is-empty">No active limit</span>'}</td>
+                <td>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <div style="font-weight:600;">${formatUpgradeLimit(upgrade.potential_upgraded_limit, 'Not available yet')}</div>
+                        <div class="td-muted" style="font-size:.78rem;">${escapeHtml(upgrade.next_limit_note || 'Shows the next recommended limit after review.')}</div>
+                    </div>
+                </td>
+                <td>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        ${upgradeStatusBadge(upgrade)}
+                        <div class="td-muted" style="font-size:.78rem;">${note}</div>
+                    </div>
+                </td>
+                <td>${renderCreditAccountRuleProgress(upgrade)}</td>
+                <td><button class="btn btn-sm btn-outline" onclick="viewClient(${account.client_id})">View Profile</button></td>
+            </tr>`;
+        }).join('');
+    } catch (error) {
+        console.error(error);
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Could not load credit accounts right now.</td></tr>';
+    }
+}
+
 async function loadClients(search='') {
     const tbody = document.getElementById('clientsTbody');
     if (!tbody) return;

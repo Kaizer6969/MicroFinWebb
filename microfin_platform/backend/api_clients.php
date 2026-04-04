@@ -108,8 +108,106 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
 }
 
 // ─── GET: view single client with loans ───────────────────────────────────────
+if ($method === 'GET' && $action === 'credit_accounts') {
+    if (!has_perm('VIEW_CREDIT_ACCOUNTS') && !has_perm('VIEW_CLIENTS') && !has_perm('CREATE_CLIENTS')) {
+        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
+        exit;
+    }
+
+    $search = trim((string) ($_GET['search'] ?? ''));
+    $filter = strtolower(trim((string) ($_GET['filter'] ?? 'all')));
+    $allowedFilters = ['all', 'eligible', 'not_yet_eligible', 'no_active_limit', 'at_max_limit'];
+    if (!in_array($filter, $allowedFilters, true)) {
+        $filter = 'all';
+    }
+
+    $params = [$tenant_id];
+    $where_extra = '';
+    if ($search !== '') {
+        $q = '%' . $search . '%';
+        $where_extra = ' AND (c.first_name LIKE ? OR c.last_name LIKE ? OR c.email_address LIKE ? OR c.contact_number LIKE ?)';
+        $params[] = $q;
+        $params[] = $q;
+        $params[] = $q;
+        $params[] = $q;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT c.client_id, c.first_name, c.last_name, c.email_address,
+               c.contact_number, c.client_status, c.registration_date,
+               c.credit_limit, c.last_seen_credit_limit, c.monthly_income,
+               c.occupation, c.employment_status, u.user_type
+        FROM clients c
+        LEFT JOIN users u ON c.user_id = u.user_id
+        WHERE c.tenant_id = ? AND c.deleted_at IS NULL $where_extra
+        ORDER BY c.registration_date DESC
+        LIMIT 200
+    ");
+    $stmt->execute($params);
+    $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
+    $credit_policy = mf_get_tenant_credit_policy($pdo, $tenant_id);
+    $statusOrder = [
+        'eligible' => 0,
+        'not_yet_eligible' => 1,
+        'no_active_limit' => 2,
+        'at_max_limit' => 3,
+    ];
+
+    $matchesFilter = static function (array $upgrade, string $selectedFilter): bool {
+        if ($selectedFilter === 'all') {
+            return true;
+        }
+
+        return (string) ($upgrade['status'] ?? '') === $selectedFilter;
+    };
+
+    $rows = [];
+    foreach ($clients as $client) {
+        $client_id = (int) ($client['client_id'] ?? 0);
+        if ($client_id <= 0) {
+            continue;
+        }
+
+        $score = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
+        if ($score) {
+            $score['total_score'] = (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0);
+        }
+
+        $ci = mf_credit_policy_fetch_latest_ci($pdo, $tenant_id, $client_id);
+        $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
+        $upgrade = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
+
+        if (!$matchesFilter($upgrade, $filter)) {
+            continue;
+        }
+
+        $client['credit_upgrade'] = $upgrade;
+        $client['limit_snapshot'] = mf_credit_policy_compute_limit_snapshot($credit_policy, $client, $score, $ci);
+        $client['latest_score'] = $score ?: null;
+        $rows[] = $client;
+    }
+
+    usort($rows, static function (array $a, array $b) use ($statusOrder): int {
+        $aStatus = (string) ($a['credit_upgrade']['status'] ?? '');
+        $bStatus = (string) ($b['credit_upgrade']['status'] ?? '');
+        $aRank = $statusOrder[$aStatus] ?? 99;
+        $bRank = $statusOrder[$bStatus] ?? 99;
+
+        if ($aRank !== $bRank) {
+            return $aRank <=> $bRank;
+        }
+
+        return strcmp((string) ($b['registration_date'] ?? ''), (string) ($a['registration_date'] ?? ''));
+    });
+
+    echo json_encode(['status' => 'success', 'data' => $rows]);
+    exit;
+}
+
 if ($method === 'GET' && $action === 'view') {
-    if (!has_perm('VIEW_CLIENTS') && !has_perm('CREATE_CLIENTS')) {
+    if (!has_perm('VIEW_CLIENTS') && !has_perm('CREATE_CLIENTS') && !has_perm('VIEW_CREDIT_ACCOUNTS')) {
         echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
         exit;
     }
