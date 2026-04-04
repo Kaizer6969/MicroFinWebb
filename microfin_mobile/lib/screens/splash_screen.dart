@@ -219,12 +219,66 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     // 6. Single tenant or release fallback → auto-select first
-    if (TenantBranding.tenants.isNotEmpty) {
-      _selectedTenant = TenantBranding.tenants.first;
-      activeTenant.value = TenantBranding.fromTenantId(_selectedTenant!.slug) ?? _selectedTenant!;
-      setState(() => _showWelcomePanel = true);
-      _welcomeController.forward();
+    if (_isLockedTenantBuild) {
+      await prefs.remove('locked_tenant_id');
+      _showStartupError(
+        title: 'Tenant Lock Failed',
+        message: TenantBranding.lastLoadSucceeded
+            ? 'This app is locked to "${identifiedTenant ?? _buildTenantId}", but that tenant was not found or is inactive.'
+            : (TenantBranding.lastLoadError ??
+                'Unable to validate the locked tenant right now.'),
+      );
+      return;
     }
+
+    await prefs.remove('locked_tenant_id');
+
+    if (TenantBranding.lastLoadSucceeded &&
+        TenantBranding.tenants.length == 1 &&
+        TenantBranding.tenants.first.id != TenantBranding.defaultTenant.id) {
+      _selectedTenant = TenantBranding.tenants.first;
+      activeTenant.value =
+          TenantBranding.fromTenantId(_selectedTenant!.slug) ??
+              _selectedTenant!;
+      setState(() {
+        _startupErrorTitle = null;
+        _startupErrorMessage = null;
+        _showWelcomePanel = true;
+      });
+      _welcomeController.forward(from: 0);
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _showTenantPicker(context);
+      }
+    });
+  }
+
+  void _showStartupError({
+    required String title,
+    required String message,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _startupErrorTitle = title;
+      _startupErrorMessage = message;
+      _showWelcomePanel = false;
+    });
+  }
+
+  Future<void> _retryStartup() async {
+    if (!mounted) return;
+    _welcomeController.reset();
+    setState(() {
+      _startupErrorTitle = null;
+      _startupErrorMessage = null;
+      _selectedTenant = null;
+      _showWelcomePanel = false;
+      _tenantsLoaded = false;
+    });
+    _startSequence();
   }
 
   void _showTenantPicker(BuildContext context) {
