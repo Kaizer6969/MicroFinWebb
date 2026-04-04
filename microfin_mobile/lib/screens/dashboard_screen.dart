@@ -1132,9 +1132,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             },
             itemBuilder: (context, index) {
               final product = _featuredProducts[index];
-              final String name = product['name'] ?? 'Product';
-              final double amount = (product['max'] as num?)?.toDouble() ?? 0.0;
-              final double rate = (product['rate'] as num?)?.toDouble() ?? 0.0;
+              final String name = product['product_name'] ?? 'Product';
+              final double amount = double.tryParse(product['max_amount']?.toString() ?? '0') ?? 0.0;
+              final double rate = double.tryParse(product['interest_rate']?.toString() ?? '0') ?? 0.0;
 
               return AnimatedBuilder(
                 animation: _pageController,

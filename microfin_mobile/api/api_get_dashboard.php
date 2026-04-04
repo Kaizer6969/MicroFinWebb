@@ -143,6 +143,7 @@ try {
         'c.present_province',
         'c.credit_limit',
         'c.document_verification_status',
+        'c.monthly_income',
         'u.username',
         'u.first_name AS user_first_name',
         'u.last_name AS user_last_name'
@@ -290,6 +291,29 @@ try {
         && trim((string) ($client['present_city'] ?? '')) !== ''
         && trim((string) ($client['present_province'] ?? '')) !== '';
 
+    $computedLimit = (float) ($client['credit_limit'] ?? 0);
+    try {
+        $pdo = new PDO(
+            "mysql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};charset=utf8mb4",
+            $dbConfig['username'],
+            $dbConfig['password'],
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+        require_once __DIR__ . '/../../backend/credit_policy.php';
+        $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'credit_policy_settings'");
+        $stmt->execute([$tenantId]);
+        $policyBlob = json_decode($stmt->fetchColumn() ?: '{}', true) ?: [];
+        $policy = mf_credit_policy_normalize($policyBlob);
+        
+        $latestScore = mf_credit_policy_fetch_latest_score($pdo, $tenantId, (int)$client['client_id']);
+        $latestCi = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, (int)$client['client_id']);
+        
+        $limitState = mf_credit_policy_compute_limit_snapshot($policy, $client, $latestScore, $latestCi);
+        $computedLimit = (float) $limitState['credit_limit'];
+    } catch (Throwable $pe) {
+        error_log("Failed to compute dynamic credit limit: " . $pe->getMessage());
+    }
+
     echo json_encode([
         'success' => true,
         'user_name' => $userName,
@@ -297,7 +321,7 @@ try {
         'is_profile_complete' => $hasBasicProfile,
         'verification_status' => $verificationStatus,
         'document_verification_status' => $client['document_verification_status'] ?? 'Unverified',
-        'credit_limit' => (float) ($client['credit_limit'] ?? 0),
+        'credit_limit' => $computedLimit,
         'active_loan' => $activeLoan,
         'notifications' => $notifications,
         'featured_products' => $featuredProducts,
