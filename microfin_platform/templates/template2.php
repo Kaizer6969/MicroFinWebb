@@ -212,8 +212,8 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
         $talk_href = $apply_href . '?mode=talk-to-expert';
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
         $download_href = $is_editor
-            ? "../public_website/index.php/get-app?bank_id=" . urlencode($download_identifier)
-            : "public_website/index.php/get-app?bank_id=" . urlencode($download_identifier);
+            ? "../public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier)
+            : "public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier);
         ?>
         <a href="<?php echo $login_href; ?>" class="tpl2-btn" contenteditable="false">Client Portal</a>
     </nav>

@@ -239,8 +239,8 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
         $login_href = $is_editor ? "../tenant_login/login.php?{$login_query}" : "tenant_login/login.php?{$login_query}";
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
         $download_href = $is_editor
-            ? "../public_website/index.php/get-app?bank_id=" . urlencode($download_identifier)
-            : "public_website/index.php/get-app?bank_id=" . urlencode($download_identifier);
+            ? "../public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier)
+            : "public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier);
         ?>
         <a href="<?php echo $login_href; ?>" class="btn btn-brand rounded-pill px-4 shadow-sm" contenteditable="false">Log In</a>
     </div>
