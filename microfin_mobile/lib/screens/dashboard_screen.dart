@@ -59,7 +59,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
 
     _sliderTimer = Timer.periodic(const Duration(seconds: 4), (Timer timer) {
-      if (_featuredProducts.isNotEmpty && _pageController.hasClients) {
+      if (_featuredProducts.isNotEmpty && _pageController.hasClients && _pageController.positions.length == 1) {
         if (_currentPage < _featuredProducts.length - 1) {
           _currentPage++;
         } else {
@@ -230,10 +230,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 ],
                               ),
                               const SizedBox(height: 32),
-                              if (_featuredProducts.isNotEmpty) ...[
-                                _buildFeaturedProductsSlider(primary),
-                                const SizedBox(height: 32),
-                              ],
                               _buildRecentActivityTitle(),
                               const SizedBox(height: 16),
                               _buildRecentActivityList(primary),
