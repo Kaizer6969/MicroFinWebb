@@ -520,6 +520,18 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
         fallbackMessage: 'Unable to submit the verification form right now.',
       );
       if (json['success'] == true) {
+        final current = currentUser.value;
+        final nextStatus = json['verification_status'] ??
+            json['document_verification_status'] ??
+            'Pending';
+
+        if (current != null) {
+          currentUser.value = {
+            ...current,
+            'verification_status': nextStatus,
+          };
+        }
+
         if (mounted) { _showSnack('Profile submitted successfully!'); Navigator.of(context).pop(); }
       } else {
         _showSnack(json['message'] ?? 'Submission failed.');

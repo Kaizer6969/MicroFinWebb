@@ -470,6 +470,7 @@ try {
     microfin_json_response([
         'success' => true,
         'message' => 'Verification profile submitted successfully.',
+        'verification_status' => 'Pending',
         'document_verification_status' => 'Pending',
         'client_id' => (int) $client['client_id'],
     ]);

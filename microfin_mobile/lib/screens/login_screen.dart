@@ -133,6 +133,8 @@ class _LoginScreenState extends State<LoginScreen>
           'username': _emailController.text,
           'first_name': data['first_name'],
           'last_name': data['last_name'],
+          'verification_status': data['verification_status'] ?? 'Unverified',
+          'credit_limit': data['credit_limit'] ?? 0,
         };
         if (mounted) {
           Navigator.of(context).pushReplacement(PageRouteBuilder(

@@ -10,6 +10,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once 'db.php';
 
+function microfin_login_normalize_status(?string $status, ?string $documentStatus): string
+{
+    $status = trim((string) ($status ?? ''));
+    if (in_array($status, ['Approved', 'Verified', 'Pending', 'Rejected', 'Unverified'], true)) {
+        return $status;
+    }
+
+    $documentStatus = trim((string) ($documentStatus ?? ''));
+    return match ($documentStatus) {
+        'Approved', 'Verified', 'Rejected' => $documentStatus,
+        default => 'Unverified',
+    };
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents("php://input"), true);
     
@@ -34,8 +48,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    $verificationColumnExists = false;
+    if ($columnStmt = $conn->prepare("
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+          AND COLUMN_NAME = 'verification_status'
+        LIMIT 1
+    ")) {
+        $columnStmt->execute();
+        $verificationColumnExists = $columnStmt->get_result()->num_rows === 1;
+        $columnStmt->close();
+    }
+
+    $selectColumns = [
+        'u.user_id',
+        'u.password_hash',
+        'u.status',
+        'u.first_name AS user_first_name',
+        'u.last_name AS user_last_name',
+        'c.client_status',
+        'c.first_name AS client_first_name',
+        'c.last_name AS client_last_name',
+        'c.document_verification_status',
+        'c.credit_limit'
+    ];
+    if ($verificationColumnExists) {
+        $selectColumns[] = 'c.verification_status';
+    }
+
     $stmt = $conn->prepare("
-        SELECT u.user_id, u.password_hash, u.status, c.client_status
+        SELECT " . implode(', ', $selectColumns) . "
         FROM users u
         INNER JOIN clients c
             ON c.user_id = u.user_id
@@ -56,8 +100,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($user['client_status'] !== 'Active') {
             echo json_encode(['success' => false, 'message' => 'Client profile is not active.']);
         } elseif (password_verify($password, $user['password_hash'])) {
-            // Password matches
-            echo json_encode(['success' => true, 'message' => 'Login successful!', 'user_id' => $user['user_id']]);
+            $firstName = $user['user_first_name'] ?? $user['client_first_name'] ?? '';
+            $lastName = $user['user_last_name'] ?? $user['client_last_name'] ?? '';
+            $verificationStatus = microfin_login_normalize_status(
+                $user['verification_status'] ?? null,
+                $user['document_verification_status'] ?? null
+            );
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Login successful!',
+                'user_id' => $user['user_id'],
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'verification_status' => $verificationStatus,
+                'credit_limit' => (float) ($user['credit_limit'] ?? 0),
+            ]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Invalid username or password.']);
         }
