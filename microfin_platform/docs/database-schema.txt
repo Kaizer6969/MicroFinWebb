@@ -825,7 +825,7 @@ CREATE TABLE IF NOT EXISTS loan_products (
     penalty_rate DECIMAL(5, 2) DEFAULT 0,
     penalty_type ENUM('Daily', 'Monthly', 'Flat') DEFAULT 'Daily',
     grace_period_days INT DEFAULT 0,
-    minimum_credit_score INT DEFAULT 50,
+    minimum_credit_score INT DEFAULT 500,
     required_documents TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

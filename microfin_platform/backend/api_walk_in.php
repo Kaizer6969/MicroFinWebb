@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
+require_once 'credit_policy.php';
 mf_require_tenant_session($pdo, [
     'response' => 'json',
     'status' => 401,
@@ -468,6 +469,20 @@ try {
     ]);
 
     $new_application_id = (int) $pdo->lastInsertId();
+    $final_application_status = $status_for_save;
+
+    if ($status_for_save === 'Submitted') {
+        $emp_stmt = $pdo->prepare('SELECT employee_id FROM employees WHERE user_id = ? AND tenant_id = ? LIMIT 1');
+        $emp_stmt->execute([$session_user_id, $tenant_id]);
+        $employee_id = $emp_stmt->fetchColumn();
+        $employee_id = $employee_id !== false ? (int) $employee_id : null;
+
+        $policy_result = mf_apply_application_policy($pdo, $tenant_id, $new_application_id, [
+            'employee_id' => $employee_id,
+            'session_user_id' => $session_user_id,
+        ]);
+        $final_application_status = (string) ($policy_result['new_status'] ?? $status_for_save);
+    }
 
     $audit_stmt = $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, ?, 'loan_application', ?, ?)");
     $audit_action = $status_for_save === 'Submitted' ? 'WALK_IN_SUBMITTED' : 'WALK_IN_DRAFT';
@@ -484,16 +499,26 @@ try {
 
     $pdo->commit();
 
-    $message = $status_for_save === 'Submitted'
-        ? 'Client registered and loan application submitted. The client can now log in with email and password.'
-        : 'Client registered and loan application saved as Draft for follow-up documents.';
+    if ($status_for_save === 'Submitted') {
+        if ($final_application_status === 'Approved') {
+            $message = 'Client registered and application auto-approved by credit policy.';
+        } elseif ($final_application_status === 'Rejected') {
+            $message = 'Client registered and application was rejected by credit policy.';
+        } elseif ($final_application_status === 'Pending Review') {
+            $message = 'Client registered and application was sent to Pending Review by credit policy.';
+        } else {
+            $message = 'Client registered and loan application submitted. The client can now log in with email and password.';
+        }
+    } else {
+        $message = 'Client registered and loan application saved as Draft for follow-up documents.';
+    }
 
     echo json_encode([
         'status' => 'success',
         'message' => $message,
         'client_id' => $new_client_id,
         'application_id' => $new_application_id,
-        'application_status' => $status_for_save,
+        'application_status' => $final_application_status,
         'application_number' => $application_number,
         'uploaded_document_count' => count($uploaded_documents)
     ]);

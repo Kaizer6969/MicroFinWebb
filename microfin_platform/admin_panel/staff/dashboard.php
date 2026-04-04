@@ -1572,6 +1572,136 @@ async function appAction(id, action, needsAmount=false) {
 }
 
 // ── Loans ────────────────────────────────────────────────────
+// Credit policy modal override
+async function viewApplication(id) {
+    openModal('appReviewModal');
+    document.getElementById('appModalBody').innerHTML = '<div style="text-align:center;padding:32px;"><span class="spinner"></span></div>';
+    document.getElementById('appModalFooter').innerHTML = '<button class="btn btn-outline" onclick="closeModal(\'appReviewModal\')">Close</button>';
+    const r = await fetch(API.applications + `?action=view&id=${id}`);
+    const d = await r.json();
+    if (d.status !== 'success') {
+        document.getElementById('appModalBody').innerHTML = `<p style="color:#ef4444;">${d.message}</p>`;
+        return;
+    }
+
+    const a = d.data;
+    const policy = a.application_data && a.application_data.credit_policy ? a.application_data.credit_policy : null;
+    const showApprovedAmountInput = ['Under Review', 'For Approval', 'Approved', 'Pending Review'].includes(a.application_status);
+    const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[char]);
+    const latestScore = a.latest_credit_score !== null && a.latest_credit_score !== undefined && a.latest_credit_score !== ''
+        ? `${safe(a.latest_credit_score)}${a.latest_credit_rating ? ` (${safe(a.latest_credit_rating)})` : ''}`
+        : 'Not available';
+    const ciSummary = a.latest_ci_recommendation || a.latest_ci_status || 'Not available';
+    const approvedAmountValue = a.approved_amount || (policy && policy.approved_amount) || a.requested_amount || '';
+    const policyReasons = policy && Array.isArray(policy.reasons) && policy.reasons.length
+        ? `<ul style="margin:8px 0 0 18px;padding:0;">${policy.reasons.map(reason => `<li style="margin-bottom:4px;">${safe(reason)}</li>`).join('')}</ul>`
+        : '<p style="font-size:.82rem;color:var(--muted);margin:8px 0 0;">No policy reasons recorded yet.</p>';
+
+    document.getElementById('appModalTitle').textContent = 'App: ' + a.application_number;
+    document.getElementById('appModalBody').innerHTML = `
+        <div class="form-grid" style="margin-bottom:18px;">
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Client</p><p style="font-weight:600;">${safe(a.first_name)} ${safe(a.last_name)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Status</p>${badge(a.application_status)}</div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Product</p><p>${safe(a.product_name)} (${safe(a.product_type)})</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Requested Amount</p><p style="font-weight:700;color:var(--brand);font-size:1.05rem;">${fmt(a.requested_amount)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Term</p><p>${safe(a.loan_term_months)} months</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Interest Rate</p><p>${safe(a.interest_rate)}% / month</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Contact</p><p>${safe(a.contact_number || '-')}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Submitted</p><p>${fmtDate(a.submitted_date || a.created_at)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Credit Limit</p><p>${fmt(a.credit_limit || 0)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Latest Score</p><p>${latestScore}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">CI Recommendation</p><p>${safe(ciSummary)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Document Status</p><p>${safe(a.document_verification_status || 'Unverified')}</p></div>
+            ${a.loan_purpose ? `<div style="grid-column:1/-1;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Loan Purpose</p><p>${safe(a.loan_purpose)}</p></div>` : ''}
+        </div>
+        ${policy ? `
+            <div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Policy Decision</p><p style="font-weight:700;text-transform:capitalize;">${safe(policy.decision || 'n/a')}</p></div>
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Computed Limit</p><p style="font-weight:600;">${fmt(policy.computed_credit_limit || 0)}</p></div>
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Suggested Amount</p><p style="font-weight:600;">${fmt(policy.approved_amount || 0)}</p></div>
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Evaluated At</p><p>${fmtDate(policy.evaluated_at)}</p></div>
+                </div>
+                <p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Policy Reasons</p>
+                ${policyReasons}
+            </div>
+        ` : ''}
+        ${a.approval_notes ? `<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:#166534;margin-bottom:4px;">Approval Notes</p><p style="font-size:.85rem;color:#14532d;">${safe(a.approval_notes)}</p></div>` : ''}
+        ${a.review_notes ? `<div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:4px;">Review Notes</p><p style="font-size:.85rem;">${safe(a.review_notes)}</p></div>` : ''}
+        ${a.rejection_reason ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:#991b1b;margin-bottom:4px;">Rejection Reason</p><p style="font-size:.85rem;color:#7f1d1d;">${safe(a.rejection_reason)}</p></div>` : ''}
+        ${showApprovedAmountInput ? `<div class="form-group" style="margin-bottom:14px;"><label>Approved Amount (PHP)</label><input type="number" id="approvedAmountInput" value="${approvedAmountValue}" min="0" step="0.01" style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;"></div>` : ''}
+        <div class="form-group"><label>Notes / Reason</label><textarea id="appActionNotes" placeholder="Add notes or reason for action..." style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;min-height:70px;resize:vertical;outline:none;"></textarea></div>`;
+
+    const footer = document.getElementById('appModalFooter');
+    footer.innerHTML = '<button class="btn btn-outline" onclick="closeModal(\'appReviewModal\')">Close</button>';
+    const s = a.application_status;
+
+    if (s === 'Submitted' || s === 'Pending Review') {
+        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
+                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'start_review')">Start Review</button>
+                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
+    } else if (s === 'Under Review') {
+        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
+                             <button class="btn btn-outline" onclick="appAction(${a.application_id},'verify_docs')"><span class="material-symbols-rounded ms">verified</span> Verify Docs</button>
+                             <button class="btn btn-success" onclick="appAction(${a.application_id},'approve',true)"><span class="material-symbols-rounded ms">check_circle</span> Approve</button>
+                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
+    } else if (s === 'Document Verification') {
+        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
+                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'credit_inv')">Credit Investigation</button>
+                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
+    } else if (s === 'Credit Investigation') {
+        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
+                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'for_approval')">For Approval</button>
+                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
+    } else if (s === 'For Approval') {
+        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
+                             <button class="btn btn-success" onclick="appAction(${a.application_id},'approve',true)"><span class="material-symbols-rounded ms">check_circle</span> Approve</button>
+                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
+    } else if (s === 'Approved') {
+        footer.innerHTML += `<button class="btn btn-brand" onclick="openLoanRelease(${a.application_id},${a.approved_amount || a.requested_amount})"><span class="material-symbols-rounded ms">rocket_launch</span> Release Loan</button>`;
+    } else if (s === 'Draft') {
+        footer.innerHTML += `<button class="btn btn-brand" onclick="appAction(${a.application_id},'submit')">Submit Application</button>`;
+    }
+}
+
+async function appAction(id, action, needsAmount=false) {
+    const notes = (document.getElementById('appActionNotes') || {}).value || '';
+    const approved = needsAmount ? parseFloat((document.getElementById('approvedAmountInput') || {}).value || 0) : null;
+
+    if (action === 'reject' && !notes.trim()) {
+        alert('Please enter a rejection reason.');
+        return;
+    }
+    if (needsAmount && !(approved > 0)) {
+        alert('Please enter an approved amount.');
+        return;
+    }
+
+    const payload = { application_id: id, action, notes };
+    if (needsAmount) {
+        payload.approved_amount = approved;
+    }
+
+    const r = await fetch(API.applications, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    alert(d.message);
+    if (d.status === 'success') {
+        closeModal('appReviewModal');
+        loadApps('all');
+        loadDashboardStats();
+    }
+}
+
 async function loadLoans(status='all', btn=null) {
     if (btn) {
         btn.closest('.filter-tabs').querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));

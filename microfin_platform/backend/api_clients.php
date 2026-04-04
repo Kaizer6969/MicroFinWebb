@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
+require_once 'credit_policy.php';
 mf_require_tenant_session($pdo, [
     'response' => 'json',
     'status' => 401,
@@ -252,21 +253,13 @@ if ($method === 'POST' && $action === 'verify_document') {
             WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
         ")->execute([$doc_id]);
 
-        $overall_update_sql = "
-            UPDATE clients c
-            SET credit_limit = (
-                CASE
-                    WHEN document_verification_status IN ('Verified', 'Approved') THEN 50000.00
-                    ELSE credit_limit
-                END
-            ),
-            updated_at = NOW()
-            WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
-        ";
+        $target_client_stmt = $pdo->prepare("SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1");
+        $target_client_stmt->execute([$doc_id]);
+        $target_client_id = (int) $target_client_stmt->fetchColumn();
 
         if (client_table_has_column($pdo, 'verification_status')) {
-            $overall_update_sql = "
-                UPDATE clients c
+            $pdo->prepare("
+                UPDATE clients
                 SET verification_status = (
                     CASE
                         WHEN document_verification_status IN ('Verified', 'Approved') THEN 'Approved'
@@ -274,18 +267,14 @@ if ($method === 'POST' && $action === 'verify_document') {
                         ELSE 'Pending'
                     END
                 ),
-                credit_limit = (
-                    CASE
-                        WHEN document_verification_status IN ('Verified', 'Approved') THEN 50000.00
-                        ELSE credit_limit
-                    END
-                ),
                 updated_at = NOW()
-                WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
-            ";
+                WHERE client_id = ? AND tenant_id = ?
+            ")->execute([$target_client_id, $tenant_id]);
         }
 
-        $pdo->prepare($overall_update_sql)->execute([$doc_id]);
+        if ($target_client_id > 0) {
+            mf_sync_client_credit_profile($pdo, $tenant_id, $target_client_id);
+        }
 
         $pdo->commit();
         echo json_encode(['status' => 'success', 'message' => "Document marked as $status."]);
@@ -332,7 +321,6 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
         $client_verify_sql = "
             UPDATE clients
             SET document_verification_status = 'Approved',
-                credit_limit = 50000.00,
                 updated_at = NOW()
             WHERE client_id = ? AND tenant_id = ?
         ";
@@ -342,13 +330,13 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
                 UPDATE clients
                 SET document_verification_status = 'Approved',
                     verification_status = 'Approved',
-                    credit_limit = 50000.00,
                     updated_at = NOW()
                 WHERE client_id = ? AND tenant_id = ?
             ";
         }
 
         $pdo->prepare($client_verify_sql)->execute([$client_id, $tenant_id]);
+        mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
 
         $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CLIENT_VERIFIED', 'client', ?, 'Admin manually verified client overall status')")
             ->execute([$session_user_id, $tenant_id, $client_id]);

@@ -373,10 +373,11 @@ document.addEventListener('DOMContentLoaded', () => {
         semi: 'Semi-Automatic',
         manual: 'Fully Manual',
     };
+    const CREDIT_SCORE_CEILING = 1000;
     const CREDIT_SCORING_PRESETS = {
         balanced: {
-            minimumScore: 50,
-            autoRejectBelow: 30,
+            minimumScore: 500,
+            autoRejectBelow: 300,
             requireCi: true,
             weights: {
                 income: 25,
@@ -388,8 +389,8 @@ document.addEventListener('DOMContentLoaded', () => {
             },
         },
         conservative: {
-            minimumScore: 65,
-            autoRejectBelow: 40,
+            minimumScore: 650,
+            autoRejectBelow: 400,
             requireCi: true,
             weights: {
                 income: 18,
@@ -401,8 +402,8 @@ document.addEventListener('DOMContentLoaded', () => {
             },
         },
         growth: {
-            minimumScore: 45,
-            autoRejectBelow: 25,
+            minimumScore: 450,
+            autoRejectBelow: 250,
             requireCi: false,
             weights: {
                 income: 30,
@@ -508,7 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (creditSummaryMinScore) {
-            creditSummaryMinScore.textContent = `${state.minimumScore}/100`;
+            creditSummaryMinScore.textContent = `${state.minimumScore}/${CREDIT_SCORE_CEILING}`;
         }
         if (creditSummaryAutoReject) {
             creditSummaryAutoReject.textContent = `Below ${state.autoRejectBelow}`;
@@ -521,10 +522,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (creditScoringPolicyNote) {
             const ciText = state.requireCi ? 'A credit investigation is required before final approval.' : 'Credit investigation stays optional for the reviewing team.';
-            creditScoringPolicyNote.textContent = `Borrowers must reach ${state.minimumScore}/100 to proceed, while scores below ${state.autoRejectBelow} are declined immediately. ${ciText}`;
+            creditScoringPolicyNote.textContent = `Borrowers must reach ${state.minimumScore}/${CREDIT_SCORE_CEILING} to proceed, while scores below ${state.autoRejectBelow} are declined immediately. ${ciText}`;
         }
         if (creditOverviewMinScore) {
-            creditOverviewMinScore.textContent = `${state.minimumScore}/100`;
+            creditOverviewMinScore.textContent = `${state.minimumScore}/${CREDIT_SCORE_CEILING}`;
         }
         if (creditOverviewCi) {
             creditOverviewCi.textContent = state.requireCi ? 'Required' : 'Optional';

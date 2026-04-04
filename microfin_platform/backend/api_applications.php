@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
+require_once 'credit_policy.php';
 mf_require_tenant_session($pdo, [
     'response' => 'json',
     'status' => 401,
@@ -90,12 +91,47 @@ if ($method === 'GET' && $action === 'view') {
             c.first_name, c.last_name, c.contact_number, c.email_address,
             c.date_of_birth, c.civil_status, c.occupation, c.employer_name,
             c.monthly_income, c.present_street, c.present_barangay, c.present_city,
-            c.present_province, c.credit_limit, c.client_status,
+            c.present_province, c.credit_limit, c.client_status, c.employment_status, c.document_verification_status,
             lp.product_name, lp.product_type, lp.min_amount, lp.max_amount,
             lp.interest_rate AS product_interest_rate, lp.interest_type,
             lp.min_term_months, lp.max_term_months, lp.processing_fee_percentage,
             lp.service_charge, lp.documentary_stamp, lp.insurance_fee_percentage,
-            lp.penalty_rate, lp.grace_period_days
+            lp.penalty_rate, lp.grace_period_days,
+            (
+                SELECT cs.total_score
+                FROM credit_scores cs
+                WHERE cs.client_id = la.client_id AND cs.tenant_id = la.tenant_id
+                ORDER BY cs.computation_date DESC, cs.score_id DESC
+                LIMIT 1
+            ) AS latest_credit_score,
+            (
+                SELECT cs.credit_rating
+                FROM credit_scores cs
+                WHERE cs.client_id = la.client_id AND cs.tenant_id = la.tenant_id
+                ORDER BY cs.computation_date DESC, cs.score_id DESC
+                LIMIT 1
+            ) AS latest_credit_rating,
+            (
+                SELECT cs.max_loan_amount
+                FROM credit_scores cs
+                WHERE cs.client_id = la.client_id AND cs.tenant_id = la.tenant_id
+                ORDER BY cs.computation_date DESC, cs.score_id DESC
+                LIMIT 1
+            ) AS latest_max_loan_amount,
+            (
+                SELECT ci.recommendation
+                FROM credit_investigations ci
+                WHERE ci.client_id = la.client_id AND ci.tenant_id = la.tenant_id AND ci.status = 'Completed'
+                ORDER BY COALESCE(ci.completed_at, ci.investigation_date, ci.created_at) DESC, ci.ci_id DESC
+                LIMIT 1
+            ) AS latest_ci_recommendation,
+            (
+                SELECT ci.status
+                FROM credit_investigations ci
+                WHERE ci.client_id = la.client_id AND ci.tenant_id = la.tenant_id
+                ORDER BY COALESCE(ci.completed_at, ci.investigation_date, ci.created_at) DESC, ci.ci_id DESC
+                LIMIT 1
+            ) AS latest_ci_status
         FROM loan_applications la
         JOIN clients c ON la.client_id = c.client_id
         JOIN loan_products lp ON la.product_id = lp.product_id
@@ -143,7 +179,7 @@ if ($method === 'POST') {
     }
 
     // Fetch current app
-    $cur_stmt = $pdo->prepare('SELECT application_status, client_id, product_id FROM loan_applications WHERE application_id = ? AND tenant_id = ? LIMIT 1');
+    $cur_stmt = $pdo->prepare('SELECT application_status, client_id, product_id, requested_amount, approved_amount FROM loan_applications WHERE application_id = ? AND tenant_id = ? LIMIT 1');
     $cur_stmt->execute([$application_id, $tenant_id]);
     $current = $cur_stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -159,6 +195,31 @@ if ($method === 'POST') {
     $employee_id = $employee_id !== false ? (int) $employee_id : null;
 
     $now = date('Y-m-d H:i:s');
+    $cur_status = $current['application_status'];
+
+    if ($new_action === 'evaluate_policy') {
+        if (in_array($cur_status, ['Approved', 'Rejected', 'Cancelled', 'Withdrawn'], true)) {
+            echo json_encode(['status' => 'error', 'message' => "Cannot run credit policy on application with status '$cur_status'."]);
+            exit;
+        }
+
+        try {
+            $pdo->beginTransaction();
+            $policyResult = mf_apply_application_policy($pdo, $tenant_id, $application_id, [
+                'employee_id' => $employee_id,
+                'session_user_id' => $session_user_id,
+            ]);
+            $pdo->commit();
+
+            echo json_encode($policyResult);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        }
+        exit;
+    }
 
     $allowed_transitions = [
         'submit'          => ['Draft'          => 'Submitted'],
@@ -176,7 +237,6 @@ if ($method === 'POST') {
         exit;
     }
 
-    $cur_status = $current['application_status'];
     if (!isset($allowed_transitions[$new_action][$cur_status])) {
         echo json_encode(['status' => 'error', 'message' => "Cannot perform '$new_action' on application with status '$cur_status'."]);
         exit;
@@ -186,8 +246,20 @@ if ($method === 'POST') {
 
     try {
         $pdo->beginTransaction();
+        $responseMessage = "Application status updated to '$new_status'.";
+        $skipDefaultAudit = false;
 
         if ($new_action === 'approve') {
+            $finalApprovedAmount = $approved_amount !== null && $approved_amount > 0
+                ? $approved_amount
+                : ((float) ($current['approved_amount'] ?? 0) > 0
+                    ? (float) $current['approved_amount']
+                    : (float) ($current['requested_amount'] ?? 0));
+
+            if ($finalApprovedAmount <= 0) {
+                throw new Exception('Approved amount is required.');
+            }
+
             $pdo->prepare("
                 UPDATE loan_applications
                 SET application_status = ?, approved_amount = ?, approved_by = ?,
@@ -195,7 +267,7 @@ if ($method === 'POST') {
                 WHERE application_id = ? AND tenant_id = ?
             ")->execute([
                 $new_status,
-                $approved_amount ?? 0,
+                $finalApprovedAmount,
                 $employee_id,
                 $now, $notes, $now,
                 $application_id, $tenant_id
@@ -238,14 +310,25 @@ if ($method === 'POST') {
                 SET application_status = ?, updated_at = ? $extra_date
                 WHERE application_id = ? AND tenant_id = ?
             ")->execute([$new_status, $now, $application_id, $tenant_id]);
+
+            if ($new_action === 'submit') {
+                $policyResult = mf_apply_application_policy($pdo, $tenant_id, $application_id, [
+                    'employee_id' => $employee_id,
+                    'session_user_id' => $session_user_id,
+                ]);
+                $new_status = $policyResult['new_status'] ?? $new_status;
+                $responseMessage = $policyResult['message'] ?? $responseMessage;
+                $skipDefaultAudit = true;
+            }
         }
 
-        // Audit log
-        $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, ?, 'loan_application', ?, ?)")
-            ->execute([$session_user_id, $tenant_id, 'APP_STATUS_' . strtoupper($new_action), $application_id, "Status changed from '$cur_status' to '$new_status'. Notes: $notes"]);
+        if (!$skipDefaultAudit) {
+            $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, ?, 'loan_application', ?, ?)")
+                ->execute([$session_user_id, $tenant_id, 'APP_STATUS_' . strtoupper($new_action), $application_id, "Status changed from '$cur_status' to '$new_status'. Notes: $notes"]);
+        }
 
         $pdo->commit();
-        echo json_encode(['status' => 'success', 'message' => "Application status updated to '$new_status'.", 'new_status' => $new_status]);
+        echo json_encode(['status' => 'success', 'message' => $responseMessage, 'new_status' => $new_status]);
 
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();

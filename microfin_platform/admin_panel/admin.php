@@ -2,6 +2,7 @@
 require_once '../backend/session_auth.php';
 mf_start_backend_session();
 require_once '../backend/db_connect.php';
+require_once '../backend/credit_policy.php';
 require_once '../backend/mobile_app_build.php';
 mf_require_tenant_session($pdo, [
     'response' => 'die',
@@ -1202,8 +1203,9 @@ function build_credit_limit_rules_from_post(array $source): array
 // POST Handler — Save Credit Assessment Settings
 // ==========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_credit_settings') {
+    $creditScoreCeiling = mf_credit_policy_score_ceiling();
     $form = [
-        'minimum_credit_score' => trim($_POST['minimum_credit_score'] ?? '50'),
+        'minimum_credit_score' => trim($_POST['minimum_credit_score'] ?? '500'),
         'income_weight' => trim($_POST['income_weight'] ?? '25'),
         'employment_weight' => trim($_POST['employment_weight'] ?? '20'),
         'credit_history_weight' => trim($_POST['credit_history_weight'] ?? '20'),
@@ -1211,7 +1213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'character_weight' => trim($_POST['character_weight'] ?? '15'),
         'business_weight' => trim($_POST['business_weight'] ?? '10'),
         'require_ci' => trim($_POST['require_ci'] ?? '0'),
-        'auto_reject_below' => trim($_POST['auto_reject_below'] ?? '30'),
+        'auto_reject_below' => trim($_POST['auto_reject_below'] ?? '300'),
     ];
 
     $total_weight = (int)$form['income_weight'] + (int)$form['employment_weight']
@@ -1220,8 +1222,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     if ($total_weight !== 100) {
         $_SESSION['admin_error'] = "Scoring weights must total exactly 100%. Currently: {$total_weight}%.";
-    } elseif ((int)$form['minimum_credit_score'] < 0 || (int)$form['minimum_credit_score'] > 100) {
-        $_SESSION['admin_error'] = 'Minimum credit score must be between 0 and 100.';
+    } elseif ((int)$form['minimum_credit_score'] < 0 || (int)$form['minimum_credit_score'] > $creditScoreCeiling) {
+        $_SESSION['admin_error'] = 'Minimum credit score must be between 0 and ' . number_format($creditScoreCeiling) . '.';
     } elseif ((int)$form['auto_reject_below'] < 0 || (int)$form['auto_reject_below'] > (int)$form['minimum_credit_score']) {
         $_SESSION['admin_error'] = 'Auto-reject score must be between 0 and the minimum credit score.';
     } else {
@@ -1270,6 +1272,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
 
         $_SESSION['admin_flash'] = 'Credit limit rules saved successfully.';
+    }
+
+    header('Location: admin.php?tab=credit_settings');
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_credit_policy') {
+    $policy_input = [
+        'eligibility' => [
+            'min_monthly_income' => $_POST['cp_min_monthly_income'] ?? 0,
+            'allowed_employment_statuses' => $_POST['cp_allowed_employment_statuses'] ?? [],
+            'require_verified_documents' => $_POST['cp_require_verified_documents'] ?? 0,
+        ],
+        'score_thresholds' => [
+            'review_min_score' => $_POST['cp_review_min_score'] ?? 0,
+            'approve_min_score' => $_POST['cp_approve_min_score'] ?? 0,
+        ],
+        'ci_rules' => [
+            'require_ci' => $_POST['cp_require_ci'] ?? 0,
+            'ci_required_above_amount' => $_POST['cp_ci_required_above_amount'] ?? 0,
+            'auto_approve_ci_values' => $_POST['cp_auto_approve_ci_values'] ?? [],
+            'review_ci_values' => $_POST['cp_review_ci_values'] ?? [],
+        ],
+        'credit_limit' => [
+            'income_multiplier' => $_POST['cp_income_multiplier'] ?? 0,
+            'ci_multiplier_highly_recommended' => $_POST['cp_ci_multiplier_highly_recommended'] ?? 0,
+            'ci_multiplier_recommended' => $_POST['cp_ci_multiplier_recommended'] ?? 0,
+            'ci_multiplier_conditional' => $_POST['cp_ci_multiplier_conditional'] ?? 0,
+            'max_credit_limit_cap' => $_POST['cp_max_credit_limit_cap'] ?? 0,
+            'round_to_nearest' => $_POST['cp_round_to_nearest'] ?? 0,
+        ],
+        'product_checks' => [
+            'use_product_minimum_credit_score' => $_POST['cp_use_product_minimum_credit_score'] ?? 0,
+            'use_product_min_amount' => $_POST['cp_use_product_min_amount'] ?? 0,
+            'use_product_max_amount' => $_POST['cp_use_product_max_amount'] ?? 0,
+        ],
+    ];
+
+    $normalized_policy = mf_credit_policy_normalize($policy_input);
+    $encoded_policy = json_encode($normalized_policy, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    if ($encoded_policy === false) {
+        $_SESSION['admin_error'] = 'Unable to save credit policy right now.';
+    } else {
+        $upsert = $pdo->prepare(
+            'INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) '
+            . 'VALUES (?, ?, ?, ?, ?) '
+            . 'ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP'
+        );
+        $upsert->execute([$tenant_id, 'credit_policy', $encoded_policy, 'Credit', 'JSON']);
+
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'CREDIT_POLICY_UPDATED', 'system_settings', 'Credit policy settings updated', ?)");
+        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
+
+        $_SESSION['admin_flash'] = 'Credit policy saved successfully.';
     }
 
     header('Location: admin.php?tab=credit_settings');
@@ -1958,39 +2015,34 @@ if ($lp_form_product_type !== '' && !in_array($lp_form_product_type, $loan_produ
 // 3. Preview / Simulator
 // 4. Presets
 // This should stay UI-only first and avoid introducing new database changes unless truly needed.
-$cs_settings_stmt = $pdo->prepare('SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND (setting_category = ? OR setting_key = ?)');
-$cs_settings_stmt->execute([$tenant_id, 'Credit', 'credit_limit_rules']);
-$cs_rows = $cs_settings_stmt->fetchAll(PDO::FETCH_ASSOC);
-$cs_stored = [];
-foreach ($cs_rows as $row) {
-    $cs_stored[$row['setting_key']] = $row['setting_value'];
-}
-$cs_form = [
-    'minimum_credit_score' => $cs_stored['minimum_credit_score'] ?? '50',
-    'income_weight' => $cs_stored['credit_weight_income'] ?? '25',
-    'employment_weight' => $cs_stored['credit_weight_employment'] ?? '20',
-    'credit_history_weight' => $cs_stored['credit_weight_credit_history'] ?? '20',
-    'collateral_weight' => $cs_stored['credit_weight_collateral'] ?? '10',
-    'character_weight' => $cs_stored['credit_weight_character'] ?? '15',
-    'business_weight' => $cs_stored['credit_weight_business'] ?? '10',
-    'require_ci' => $cs_stored['require_credit_investigation'] ?? '0',
-    'auto_reject_below' => $cs_stored['auto_reject_below_score'] ?? '30',
-];
-$credit_weight_total = (int)$cs_form['income_weight']
-    + (int)$cs_form['employment_weight']
-    + (int)$cs_form['credit_history_weight']
-    + (int)$cs_form['collateral_weight']
-    + (int)$cs_form['character_weight']
-    + (int)$cs_form['business_weight'];
-$credit_limit_rules = credit_limit_rule_defaults();
-if (!empty($cs_stored['credit_limit_rules'])) {
-    $decoded_credit_limit_rules = json_decode((string)$cs_stored['credit_limit_rules'], true);
-    if (is_array($decoded_credit_limit_rules)) {
-        $credit_limit_rules = normalize_credit_limit_rules($decoded_credit_limit_rules);
-    }
-}
-$credit_limit_rules_json = json_encode($credit_limit_rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-$credit_limit_rules_json = $credit_limit_rules_json === false ? '{}' : $credit_limit_rules_json;
+$credit_policy = mf_get_tenant_credit_policy($pdo, $tenant_id);
+$credit_policy_defaults = mf_credit_policy_defaults();
+$credit_policy_score_ceiling = mf_credit_policy_score_ceiling();
+$credit_policy_employment_options = mf_credit_policy_employment_options();
+$credit_policy_ci_options = mf_credit_policy_ci_recommendation_options();
+$credit_policy_reject_below = (int)($credit_policy['score_thresholds']['review_min_score'] ?? 0);
+$credit_policy_review_band_end = max($credit_policy_reject_below, (int)($credit_policy['score_thresholds']['approve_min_score'] ?? 0) - 1);
+$credit_policy_approve_from = (int)($credit_policy['score_thresholds']['approve_min_score'] ?? 0);
+$credit_policy_auto_ci_values = (array)($credit_policy['ci_rules']['auto_approve_ci_values'] ?? []);
+$credit_policy_review_ci_values = (array)($credit_policy['ci_rules']['review_ci_values'] ?? []);
+$credit_policy_allowed_employment_values = (array)($credit_policy['eligibility']['allowed_employment_statuses'] ?? []);
+$credit_policy_allowed_employment_count = count($credit_policy_allowed_employment_values);
+$credit_policy_auto_ci_count = count($credit_policy_auto_ci_values);
+$credit_policy_review_ci_count = count($credit_policy_review_ci_values);
+$credit_policy_product_checks_enabled = (int)!empty($credit_policy['product_checks']['use_product_minimum_credit_score'])
+    + (int)!empty($credit_policy['product_checks']['use_product_min_amount'])
+    + (int)!empty($credit_policy['product_checks']['use_product_max_amount']);
+$credit_policy_ci_required_above_amount = (float)($credit_policy['ci_rules']['ci_required_above_amount'] ?? 0);
+$credit_policy_ci_mode_label = !empty($credit_policy['ci_rules']['require_ci'])
+    ? 'Always required'
+    : ($credit_policy_ci_required_above_amount > 0
+        ? 'Required above PHP ' . number_format($credit_policy_ci_required_above_amount, 0)
+        : 'Optional');
+$credit_policy_defaults_json = htmlspecialchars(
+    (string)json_encode($credit_policy_defaults, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ENT_QUOTES,
+    'UTF-8'
+);
 
 // ── Website Editor Data ──
 $ws_stmt = $pdo->prepare('SELECT * FROM tenant_website_content WHERE tenant_id = ?');
@@ -2258,6 +2310,706 @@ function hexToRgb($hex) {
         .we-save-bar { margin-top: 24px; padding: 16px 0; display: flex; justify-content: flex-end; gap: 10px; }
         .we-save-bar .btn { display: inline-flex; align-items: center; gap: 6px; }
 
+        .credit-policy-shell {
+            display: grid;
+            gap: 24px;
+        }
+
+        .credit-policy-hero {
+            padding: 24px 28px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            border-radius: 20px;
+            background:
+                radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.16), transparent 32%),
+                linear-gradient(180deg, rgba(var(--primary-rgb), 0.06), rgba(var(--primary-rgb), 0.01)),
+                var(--bg-card);
+        }
+
+        .credit-policy-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: rgba(var(--primary-rgb), 0.1);
+            color: var(--primary-color);
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .credit-policy-toolbar {
+            display: grid;
+            gap: 14px;
+            justify-items: end;
+        }
+
+        .credit-policy-badges {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .credit-policy-badges .receipt-filter-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 12px;
+            border: 1px solid rgba(var(--primary-rgb), 0.14);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.82);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        html[data-theme="dark"] .credit-policy-badges .receipt-filter-pill {
+            background: rgba(15, 23, 42, 0.84);
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
+        }
+
+        .credit-policy-primary-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .credit-policy-primary-actions .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .credit-policy-form-card {
+            position: relative;
+            padding: 24px;
+            border: 1px solid rgba(var(--primary-rgb), 0.14);
+            border-radius: 24px;
+            background:
+                radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.08), transparent 30%),
+                linear-gradient(180deg, rgba(var(--primary-rgb), 0.04), rgba(var(--primary-rgb), 0.01)),
+                var(--bg-card);
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
+        }
+
+        html[data-theme="dark"] .credit-policy-form-card {
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.28);
+        }
+
+        .credit-policy-glance-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .credit-policy-glance-card {
+            display: grid;
+            gap: 8px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            border: 1px solid rgba(var(--primary-rgb), 0.16);
+            background:
+                linear-gradient(180deg, rgba(var(--primary-rgb), 0.08), rgba(var(--primary-rgb), 0.02)),
+                var(--bg-card);
+        }
+
+        .credit-policy-glance-card span {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .credit-policy-glance-card strong {
+            color: var(--text-main);
+            font-size: 1rem;
+            line-height: 1.35;
+        }
+
+        .credit-policy-glance-card small {
+            color: var(--text-muted);
+            font-size: 0.79rem;
+            line-height: 1.45;
+        }
+
+        .credit-policy-tab-nav {
+            position: sticky;
+            top: 14px;
+            z-index: 4;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 22px;
+            padding: 14px;
+            border: 1px solid rgba(var(--primary-rgb), 0.16);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+        }
+
+        html[data-theme="dark"] .credit-policy-tab-nav {
+            background: rgba(17, 24, 39, 0.92);
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+        }
+
+        .credit-policy-tab-btn {
+            position: relative;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            flex: 1 1 150px;
+            min-width: 0;
+            padding: 14px 16px 16px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            border-radius: 16px;
+            background: var(--bg-card);
+            color: var(--text-main);
+            font-size: 0.84rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+        }
+
+        .credit-policy-tab-btn small {
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .credit-policy-tab-btn .material-symbols-rounded {
+            font-size: 18px;
+        }
+
+        .credit-policy-tab-btn::after {
+            content: '';
+            position: absolute;
+            left: 16px;
+            right: 16px;
+            bottom: 9px;
+            height: 3px;
+            border-radius: 999px;
+            background: transparent;
+            transition: background 0.18s ease;
+        }
+
+        .credit-policy-tab-btn:hover,
+        .credit-policy-tab-btn.is-active {
+            border-color: rgba(var(--primary-rgb), 0.32);
+            background: rgba(var(--primary-rgb), 0.1);
+            color: var(--primary-color);
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+        }
+
+        .credit-policy-tab-btn:hover small,
+        .credit-policy-tab-btn.is-active small {
+            color: inherit;
+        }
+
+        .credit-policy-tab-btn.is-active::after {
+            background: currentColor;
+        }
+
+        .credit-policy-tab-panels {
+            display: grid;
+            gap: 18px;
+        }
+
+        .credit-policy-tab-panel[hidden] {
+            display: none !important;
+        }
+
+        .credit-policy-engine-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(var(--primary-rgb), 0.12);
+        }
+
+        .credit-policy-panel {
+            padding: 22px;
+            border: 1px solid rgba(var(--primary-rgb), 0.12);
+            border-radius: 22px;
+            background:
+                linear-gradient(180deg, rgba(var(--primary-rgb), 0.03), transparent 28%),
+                var(--bg-card);
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
+            scroll-margin-top: 110px;
+        }
+
+        .credit-policy-panel-headline {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 18px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(var(--primary-rgb), 0.1);
+        }
+
+        .credit-policy-head-main {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+        }
+
+        .credit-policy-head-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            background: rgba(var(--primary-rgb), 0.12);
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+
+        .credit-policy-head-icon .material-symbols-rounded {
+            font-size: 21px;
+        }
+
+        .credit-policy-panel-title {
+            display: grid;
+            gap: 4px;
+        }
+
+        .credit-policy-section-step {
+            display: inline-block;
+            margin-bottom: 4px;
+            color: var(--primary-color);
+            font-size: 0.76rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .credit-policy-section-meta {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .credit-policy-mini-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .credit-policy-field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .credit-policy-form-card .form-control {
+            min-height: 46px;
+            border-radius: 12px;
+        }
+
+        .credit-policy-field-hint {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.79rem;
+            line-height: 1.5;
+        }
+
+        .credit-policy-form-card .credit-engine-inline-grid,
+        .credit-policy-form-card .credit-engine-inline-grid-tight {
+            gap: 14px;
+        }
+
+        .credit-policy-form-card .credit-toggle-row {
+            min-height: 100%;
+            padding: 14px 15px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            border-radius: 16px;
+            background: var(--bg-card);
+            transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .credit-policy-form-card .credit-toggle-row:hover {
+            border-color: rgba(var(--primary-rgb), 0.28);
+            background: rgba(var(--primary-rgb), 0.04);
+        }
+
+        .credit-policy-note-card {
+            display: grid;
+            gap: 10px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            border: 1px solid rgba(var(--primary-rgb), 0.2);
+            background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.08), rgba(var(--primary-rgb), 0.03));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        }
+
+        .credit-policy-note-card strong {
+            color: var(--text-main);
+            font-size: 0.93rem;
+        }
+
+        .credit-policy-note-card ul {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+            display: grid;
+            gap: 6px;
+        }
+
+        .credit-policy-overview-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .credit-policy-choice-block {
+            display: grid;
+            gap: 10px;
+            margin-top: 18px;
+            padding-top: 14px;
+            border-top: 1px dashed rgba(var(--primary-rgb), 0.16);
+        }
+
+        .credit-policy-subhead {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .credit-policy-subhead strong {
+            color: var(--text-main);
+            font-size: 0.92rem;
+        }
+
+        .credit-policy-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .credit-policy-stat {
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            background: var(--bg-card);
+        }
+
+        .credit-policy-stat span {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .credit-policy-stat strong {
+            color: var(--text-main);
+            font-size: 1rem;
+            line-height: 1.45;
+        }
+
+        .credit-policy-action-bar {
+            position: sticky;
+            bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-top: 24px;
+            padding: 16px 18px;
+            border: 1px solid rgba(var(--primary-rgb), 0.2);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(14px);
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+        }
+
+        html[data-theme="dark"] .credit-policy-action-bar {
+            background: rgba(17, 24, 39, 0.95);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        .credit-policy-action-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .credit-policy-action-copy strong {
+            color: var(--text-main);
+            font-size: 0.95rem;
+        }
+
+        .credit-policy-action-copy span {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
+        .credit-policy-sticky-card {
+            position: sticky;
+            top: 20px;
+            display: grid;
+            gap: 16px;
+            padding: 18px;
+            border: 1px solid rgba(var(--primary-rgb), 0.14);
+            border-radius: 24px;
+            background:
+                radial-gradient(circle at top left, rgba(var(--primary-rgb), 0.08), transparent 34%),
+                linear-gradient(180deg, rgba(var(--primary-rgb), 0.04), rgba(var(--primary-rgb), 0.01)),
+                var(--bg-card);
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
+        }
+
+        html[data-theme="dark"] .credit-policy-sticky-card {
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.28);
+        }
+
+        .credit-policy-preview-hero {
+            display: grid;
+            gap: 8px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            border: 1px solid rgba(var(--primary-rgb), 0.18);
+            background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.12), rgba(var(--primary-rgb), 0.04));
+        }
+
+        .credit-policy-preview-label {
+            color: var(--primary-color);
+            font-size: 0.74rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .credit-policy-preview-hero strong {
+            color: var(--text-main);
+            font-size: 1.04rem;
+            line-height: 1.4;
+        }
+
+        .credit-policy-preview-hero p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.83rem;
+            line-height: 1.55;
+        }
+
+        .credit-policy-output-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .credit-policy-output-card {
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            background: var(--bg-card);
+        }
+
+        .credit-policy-output-card span {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .credit-policy-output-card strong {
+            color: var(--text-main);
+            font-size: 0.98rem;
+            line-height: 1.4;
+        }
+
+        .credit-policy-output-card.is-approve {
+            border-color: rgba(34, 197, 94, 0.3);
+            background: rgba(34, 197, 94, 0.08);
+        }
+
+        .credit-policy-output-card.is-approve strong {
+            color: #15803d;
+        }
+
+        .credit-policy-output-card.is-review {
+            border-color: rgba(245, 158, 11, 0.34);
+            background: rgba(245, 158, 11, 0.08);
+        }
+
+        .credit-policy-output-card.is-review strong {
+            color: #b45309;
+        }
+
+        .credit-policy-output-card.is-reject {
+            border-color: rgba(239, 68, 68, 0.28);
+            background: rgba(239, 68, 68, 0.08);
+        }
+
+        .credit-policy-output-card.is-reject strong {
+            color: #b91c1c;
+        }
+
+        .credit-policy-note {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            background: var(--bg-card);
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+
+        .credit-policy-note.is-warning {
+            border-color: rgba(245, 158, 11, 0.35);
+            background: rgba(245, 158, 11, 0.08);
+            color: #b45309;
+        }
+
+        .credit-policy-note.is-good {
+            border-color: rgba(34, 197, 94, 0.28);
+            background: rgba(34, 197, 94, 0.08);
+            color: #15803d;
+        }
+
+        .credit-policy-simulator-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .credit-policy-simulator-grid .form-group {
+            margin-bottom: 0;
+        }
+
+        .credit-policy-table-map {
+            display: grid;
+            gap: 10px;
+        }
+
+        .credit-policy-table-row {
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            background: var(--bg-card);
+        }
+
+        .credit-policy-table-row strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--text-main);
+            font-size: 0.87rem;
+        }
+
+        .credit-policy-table-row span {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
+        .credit-policy-employment-list {
+            margin-top: 16px;
+        }
+
+        .credit-policy-employment-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .credit-policy-employment-row-copy {
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .credit-policy-employment-row input[type="checkbox"] {
+            flex: 0 0 auto;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary-color);
+        }
+
+        @media (max-width: 1100px) {
+            .credit-policy-glance-grid,
+            .credit-policy-mini-grid,
+            .credit-policy-overview-grid,
+            .credit-policy-output-grid,
+            .credit-policy-simulator-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .credit-policy-toolbar {
+                justify-items: start;
+            }
+
+            .credit-policy-primary-actions {
+                justify-content: flex-start;
+            }
+
+            .credit-policy-action-bar {
+                position: static;
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .credit-policy-employment-row {
+                align-items: center;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .credit-policy-hero,
+            .credit-policy-form-card {
+                padding: 18px;
+            }
+
+            .credit-policy-engine-header,
+            .credit-policy-tab-nav {
+                flex-direction: column;
+                align-items: stretch;
+                top: 0;
+                overflow-x: auto;
+                padding: 10px;
+            }
+
+            .credit-policy-tab-btn {
+                white-space: normal;
+            }
+
+            .credit-policy-head-main,
+            .credit-policy-panel-headline,
+            .credit-policy-subhead {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .credit-policy-stat-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media (max-width: 768px) {
             .we-template-picker { grid-template-columns: 1fr; }
             .we-form-row { grid-template-columns: 1fr; }
@@ -2314,7 +3066,7 @@ function hexToRgb($hex) {
                 'payment_info' => 'Payment Info',
                 'statements' => 'Receipts',
                 'loan_products' => 'Loan Products Settings',
-                'credit_settings' => 'Credit Assessment Settings'
+                'credit_settings' => 'Credit Policy'
             ];
             $page_title = $page_titles[$active_view] ?? 'Dashboard';
             ?>
@@ -2336,7 +3088,7 @@ function hexToRgb($hex) {
                     <span class="material-symbols-rounded">payments</span>
                     <span>Loan Products</span>
                 </a>
-                <a href="admin.php?tab=credit_settings" class="nav-item <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Assessment">
+                <a href="admin.php?tab=credit_settings" class="nav-item <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Policy">
                     <span class="material-symbols-rounded">speed</span>
                     <span>Credit Policy</span>
                 </a>
@@ -2564,8 +3316,8 @@ function hexToRgb($hex) {
                                 <a href="admin.php?tab=credit_settings" class="dashboard-action-card">
                                     <span class="material-symbols-rounded">speed</span>
                                     <div>
-                                        <strong>Credit Settings</strong>
-                                        <small>Refine approval thresholds and weights.</small>
+                                        <strong>Credit Policy</strong>
+                                        <small>Control approval rules, investigation checks, and limit estimates.</small>
                                     </div>
                                 </a>
                                 <a href="admin.php?tab=website" class="dashboard-action-card">
@@ -4230,6 +4982,7 @@ function hexToRgb($hex) {
                     </div>
                 </section>
 
+                <?php if (false): ?>
                 <!-- ═══ CREDIT SETTINGS ═══ -->
                 <?php
                 $credit_approval_mode = (string)($credit_limit_rules['workflow']['approval_mode'] ?? 'semi');
@@ -4246,7 +4999,7 @@ function hexToRgb($hex) {
                             <p class="text-muted">Separate how borrowers are scored from how starting limits are assigned, then review both rules in one place before saving.</p>
                         </div>
                         <div class="credit-policy-badges">
-                            <span class="receipt-filter-pill receipt-filter-pill-primary">Min score <strong id="credit-overview-min-score"><?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>/100</strong></span>
+                            <span class="receipt-filter-pill receipt-filter-pill-primary">Min score <strong id="credit-overview-min-score"><?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>/<?php echo (int)$credit_policy_score_ceiling; ?></strong></span>
                             <span class="receipt-filter-pill">Approval <strong id="credit-overview-approval"><?php echo htmlspecialchars($credit_approval_label); ?></strong></span>
                             <span class="receipt-filter-pill">Base limit <strong id="credit-overview-base-limit"><?php echo 'PHP ' . number_format($credit_base_limit_amount, 2); ?></strong></span>
                             <span class="receipt-filter-pill">CI <strong id="credit-overview-ci"><?php echo $credit_ci_required ? 'Required' : 'Optional'; ?></strong></span>
@@ -4283,11 +5036,11 @@ function hexToRgb($hex) {
                                         <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
                                             <div class="form-group" style="margin-bottom: 0;">
                                                 <label for="credit-minimum-score">Minimum Approval Score</label>
-                                                <input type="number" class="form-control" id="credit-minimum-score" name="minimum_credit_score" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>">
+                                                <input type="number" class="form-control" id="credit-minimum-score" name="minimum_credit_score" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>">
                                             </div>
                                             <div class="form-group" style="margin-bottom: 0;">
                                                 <label for="credit-auto-reject-below">Auto-Reject Below</label>
-                                                <input type="number" class="form-control" id="credit-auto-reject-below" name="auto_reject_below" min="0" max="100" step="1" value="<?php echo htmlspecialchars((string)$cs_form['auto_reject_below']); ?>">
+                                                <input type="number" class="form-control" id="credit-auto-reject-below" name="auto_reject_below" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)$cs_form['auto_reject_below']); ?>">
                                             </div>
                                             <div class="form-group" style="margin-bottom: 0;">
                                                 <input type="hidden" name="require_ci" value="0">
@@ -4376,7 +5129,7 @@ function hexToRgb($hex) {
                                 <div class="credit-engine-summary credit-engine-summary-compact credit-scoring-snapshot">
                                     <div class="credit-engine-summary-item">
                                         <span>Minimum Score</span>
-                                        <strong id="credit-summary-min-score"><?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>/100</strong>
+                                        <strong id="credit-summary-min-score"><?php echo htmlspecialchars((string)$cs_form['minimum_credit_score']); ?>/<?php echo (int)$credit_policy_score_ceiling; ?></strong>
                                     </div>
                                     <div class="credit-engine-summary-item">
                                         <span>Auto-Reject</span>
@@ -4665,6 +5418,608 @@ function hexToRgb($hex) {
                                 </div>
                             </form>
                         </div>
+                    </div>
+                </section>
+                <?php endif; ?>
+
+                <section id="credit_settings" class="view-section <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>">
+                    <div class="credit-policy-shell">
+                    <div class="section-intro credit-policy-intro credit-policy-hero">
+                        <div>
+                            <span class="credit-policy-kicker">
+                                <span class="material-symbols-rounded" style="font-size: 16px;">tune</span>
+                                Credit Policy Engine
+                            </span>
+                            <h2>Credit Policy</h2>
+                            <p class="text-muted">Configure borrower checks, score bands, investigation rules, product checks, and automatic limit estimates for your app.</p>
+                        </div>
+                        <div class="credit-policy-toolbar">
+                            <div class="credit-policy-badges">
+                                <span class="receipt-filter-pill receipt-filter-pill-primary">Reject <strong id="credit-policy-badge-reject">Below <?php echo (int)$credit_policy_reject_below; ?></strong></span>
+                                <span class="receipt-filter-pill">Review <strong id="credit-policy-badge-review"><?php echo (int)$credit_policy_reject_below; ?>-<?php echo (int)$credit_policy_review_band_end; ?></strong></span>
+                                <span class="receipt-filter-pill">Approve <strong id="credit-policy-badge-approve"><?php echo (int)$credit_policy_approve_from; ?>+</strong></span>
+                                <span class="receipt-filter-pill">CI <strong id="credit-policy-badge-ci-mode"><?php echo htmlspecialchars($credit_policy_ci_mode_label); ?></strong></span>
+                                <span class="receipt-filter-pill">Checks <strong id="credit-policy-badge-product-count"><?php echo (int)$credit_policy_product_checks_enabled; ?> product checks</strong></span>
+                            </div>
+                            <div class="credit-policy-primary-actions">
+                                <button type="button" class="btn btn-outline" id="credit-policy-reset-trigger-top">
+                                    <span class="material-symbols-rounded">restart_alt</span>
+                                    Reset to Defaults
+                                </button>
+                                <a href="#credit-policy-simulator" class="btn btn-outline">
+                                    <span class="material-symbols-rounded">calculate</span>
+                                    Quick Simulator
+                                </a>
+                                <button type="submit" form="credit-policy-form" class="btn btn-primary">
+                                    <span class="material-symbols-rounded">save</span>
+                                    Save Credit Policy
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="credit-settings-overview-grid">
+                        <form method="POST" action="admin.php" class="card credit-scoring-card credit-policy-form-card" id="credit-policy-form" data-credit-policy-defaults="<?php echo $credit_policy_defaults_json; ?>">
+                            <input type="hidden" name="action" value="save_credit_policy">
+
+                            <div class="credit-engine-header credit-policy-engine-header">
+                                <div>
+                                    <h3>Policy Builder</h3>
+                                    <p class="text-muted">Open one tab at a time to edit each rule group: eligibility, score rules, CI rules, credit limit, and product checks.</p>
+                                </div>
+                                <span class="badge badge-blue">Saved Policy</span>
+                            </div>
+
+                            <div class="credit-policy-glance-grid">
+                                <div class="credit-policy-glance-card">
+                                    <span>Decision band</span>
+                                    <strong id="credit-policy-glance-band">Reject below <?php echo (int)$credit_policy_reject_below; ?>, approve from <?php echo (int)$credit_policy_approve_from; ?></strong>
+                                    <small id="credit-policy-glance-band-note">Scores between them stay in review.</small>
+                                </div>
+                                <div class="credit-policy-glance-card">
+                                    <span>Investigation mode</span>
+                                    <strong id="credit-policy-glance-ci"><?php echo htmlspecialchars($credit_policy_ci_mode_label); ?></strong>
+                                    <small id="credit-policy-glance-ci-note"><?php echo (int)$credit_policy_auto_ci_count; ?> investigation outcomes can move straight to approval.</small>
+                                </div>
+                                <div class="credit-policy-glance-card">
+                                    <span>Maximum offer</span>
+                                    <strong id="credit-policy-glance-cap"><?php echo 'PHP ' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?></strong>
+                                    <small id="credit-policy-glance-cap-note"><?php echo 'Rounded to nearest PHP ' . number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?></small>
+                                </div>
+                            </div>
+
+                            <div class="credit-policy-tab-nav" id="credit-policy-tab-nav">
+                                <button type="button" class="credit-policy-tab-btn is-active" data-credit-policy-tab="overview">
+                                    <span class="material-symbols-rounded">dashboard</span>
+                                    Overview
+                                    <small>Start here</small>
+                                </button>
+                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="eligibility">
+                                    <span class="material-symbols-rounded">verified_user</span>
+                                    Eligibility
+                                    <small>Who can qualify</small>
+                                </button>
+                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="score">
+                                    <span class="material-symbols-rounded">finance_score</span>
+                                    Score Rules
+                                    <small>Reject, review, approve</small>
+                                </button>
+                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="ci">
+                                    <span class="material-symbols-rounded">fact_check</span>
+                                    CI Rules
+                                    <small>Investigation checks</small>
+                                </button>
+                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="limit">
+                                    <span class="material-symbols-rounded">payments</span>
+                                    Credit Limit
+                                    <small>Estimated offer</small>
+                                </button>
+                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="product">
+                                    <span class="material-symbols-rounded">inventory_2</span>
+                                    Product Checks
+                                    <small>Loan product limits</small>
+                                </button>
+                            </div>
+
+                            <div class="credit-policy-tab-panels">
+                                <div class="credit-policy-tab-panel is-active" data-credit-policy-tab-panel="overview">
+                                    <div class="credit-engine-panel credit-policy-panel">
+                                        <div class="credit-engine-panel-head credit-policy-panel-headline">
+                                            <div class="credit-policy-head-main">
+                                                <div class="credit-policy-head-icon"><span class="material-symbols-rounded">dashboard</span></div>
+                                                <div class="credit-policy-panel-title">
+                                                    <span class="credit-policy-section-step">Overview</span>
+                                                    <h4>Set one rule group at a time</h4>
+                                                    <p class="text-muted">Use the tabs above to edit one topic per screen. The summary and simulator on the right stay live while you work.</p>
+                                                </div>
+                                            </div>
+                                            <div class="credit-policy-section-meta">
+                                                <span class="badge badge-blue">Preview stays visible</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="credit-policy-overview-grid">
+                                            <div class="credit-policy-note-card">
+                                                <strong>Recommended setup order</strong>
+                                                <ul>
+                                                    <li>Start with Eligibility to define who is allowed to move forward.</li>
+                                                    <li>Set Score Rules so reject, review, and approve bands are clear.</li>
+                                                    <li>Use CI Rules for larger or riskier applications that need manual verification.</li>
+                                                    <li>Finish with Credit Limit and Product Checks to shape the final offer.</li>
+                                                </ul>
+                                            </div>
+                                            <div class="credit-policy-note-card">
+                                                <strong>What happens when you save</strong>
+                                                <ul>
+                                                    <li>The policy checks borrower details, score results, investigation results, and product rules together.</li>
+                                                    <li>Credit offers stay automatic, so staff do not type the limit by hand.</li>
+                                                    <li>Applications are pushed toward Approve, Reject, or Pending Review.</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <div class="credit-policy-note-card" style="margin-top: 16px;">
+                                            <strong>What this policy affects</strong>
+                                            <div class="credit-summary-categories">
+                                                <div class="credit-summary-category"><b>Borrower profile</b><br>Income, status, documents, and employment checks</div>
+                                                <div class="credit-summary-category"><b>Credit score</b><br>Reject, review, and approval bands</div>
+                                                <div class="credit-summary-category"><b>Investigation result</b><br>How investigation recommendations affect the decision</div>
+                                                <div class="credit-summary-category"><b>Loan product</b><br>Amount and score guardrails</div>
+                                                <div class="credit-summary-category"><b>Application outcome</b><br>Decision and suggested offer</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="eligibility" hidden>
+                                    <div class="credit-engine-panel credit-engine-panel-span-2 credit-policy-panel" id="credit-policy-eligibility">
+                                    <div class="credit-engine-panel-head credit-policy-panel-headline">
+                                        <div class="credit-policy-head-main">
+                                            <div class="credit-policy-head-icon"><span class="material-symbols-rounded">verified_user</span></div>
+                                            <div class="credit-policy-panel-title">
+                                                <span class="credit-policy-section-step">Section 1</span>
+                                                <h4>Eligibility Rules</h4>
+                                                <p class="text-muted">Use these checks to decide who can move forward before scoring and offer sizing.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-section-meta">
+                                            <span class="badge badge-gray">Borrower checks</span>
+                                            <span class="badge badge-blue" id="credit-policy-employment-count-badge"><?php echo (int)$credit_policy_allowed_employment_count; ?> statuses enabled</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-policy-mini-grid">
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-min-monthly-income">Minimum Monthly Income</label>
+                                            <div class="credit-input-with-prefix">
+                                                <span class="credit-input-prefix">PHP</span>
+                                                <input type="number" class="form-control" id="cp-min-monthly-income" name="cp_min_monthly_income" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['eligibility']['min_monthly_income'] ?? 0)); ?>">
+                                            </div>
+                                            <p class="credit-policy-field-hint">Applications below this amount are filtered out before the offer is estimated.</p>
+                                        </div>
+                                        <div class="credit-policy-note-card">
+                                            <strong>What this section controls</strong>
+                                            <ul>
+                                                <li>Uses borrower income, employment, and document status.</li>
+                                                <li>Stops obviously ineligible borrowers before score or product checks run.</li>
+                                                <li>Works best when at least one employment status stays enabled.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-policy-choice-block">
+                                        <div class="credit-policy-subhead">
+                                            <strong>Allowed employment statuses</strong>
+                                            <span class="text-muted" id="credit-policy-employment-count-text"><?php echo (int)$credit_policy_allowed_employment_count; ?> selected</span>
+                                        </div>
+                                        <p class="credit-policy-field-hint">Check the employment statuses that are allowed to proceed.</p>
+                                    </div>
+
+                                    <div class="credit-policy-table-map credit-policy-employment-list">
+                                        <?php foreach ($credit_policy_employment_options as $employment_option): ?>
+                                            <label class="credit-policy-table-row credit-policy-employment-row">
+                                                <div class="credit-policy-employment-row-copy">
+                                                    <strong><?php echo htmlspecialchars($employment_option); ?></strong>
+                                                    <span>Allow this employment status to proceed.</span>
+                                                </div>
+                                                <input type="checkbox" name="cp_allowed_employment_statuses[]" value="<?php echo htmlspecialchars($employment_option); ?>" <?php echo in_array($employment_option, $credit_policy_allowed_employment_values, true) ? 'checked' : ''; ?>>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+
+                                    <div class="credit-engine-inline-grid" style="margin-top: 16px;">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <input type="hidden" name="cp_require_verified_documents" value="0">
+                                            <label class="credit-toggle-row" for="cp-require-verified-documents">
+                                                <span class="credit-toggle-copy">
+                                                    <strong>Require Verified Documents</strong>
+                                                    <small>Route to review when client documents are still unverified.</small>
+                                                </span>
+                                                <input type="checkbox" id="cp-require-verified-documents" name="cp_require_verified_documents" value="1" <?php echo !empty($credit_policy['eligibility']['require_verified_documents']) ? 'checked' : ''; ?>>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                    </div>
+
+                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="score" hidden>
+                                <div class="credit-engine-panel credit-policy-panel" id="credit-policy-thresholds">
+                                    <div class="credit-engine-panel-head credit-policy-panel-headline">
+                                        <div class="credit-policy-head-main">
+                                            <div class="credit-policy-head-icon"><span class="material-symbols-rounded">finance_score</span></div>
+                                            <div class="credit-policy-panel-title">
+                                                <span class="credit-policy-section-step">Section 2</span>
+                                                <h4>Score Thresholds</h4>
+                                                <p class="text-muted">Set the score ranges that lead to reject, review, or approval.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-section-meta">
+                                            <span class="badge badge-gray">Decision bands</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-engine-inline-grid">
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-review-min-score">Reject Below Score</label>
+                                            <input type="number" class="form-control" id="cp-review-min-score" name="cp_review_min_score" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['review_min_score'] ?? 0)); ?>">
+                                            <p class="credit-policy-field-hint">Scores below this line go straight to reject.</p>
+                                        </div>
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-approve-min-score">Approve From Score</label>
+                                            <input type="number" class="form-control" id="cp-approve-min-score" name="cp_approve_min_score" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['approve_min_score'] ?? 0)); ?>">
+                                            <p class="credit-policy-field-hint">Scores at or above this can auto-approve if the other checks also pass.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-policy-note-card" style="margin-top: 16px;">
+                                        <strong>Band logic</strong>
+                                        <ul>
+                                            <li><span id="credit-policy-threshold-copy-reject">Below <?php echo (int)$credit_policy_reject_below; ?></span> = reject.</li>
+                                            <li><span id="credit-policy-threshold-copy-review"><?php echo (int)$credit_policy_reject_below; ?>-<?php echo (int)$credit_policy_review_band_end; ?></span> = manual review.</li>
+                                            <li><span id="credit-policy-threshold-copy-approve"><?php echo (int)$credit_policy_approve_from; ?> and above</span> = approval candidate.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                </div>
+
+                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="ci" hidden>
+                                <div class="credit-engine-panel credit-engine-panel-span-2 credit-policy-panel" id="credit-policy-ci">
+                                    <div class="credit-engine-panel-head credit-policy-panel-headline">
+                                        <div class="credit-policy-head-main">
+                                            <div class="credit-policy-head-icon"><span class="material-symbols-rounded">fact_check</span></div>
+                                            <div class="credit-policy-panel-title">
+                                                <span class="credit-policy-section-step">Section 3</span>
+                                                <h4>Credit Investigation Rules</h4>
+                                                <p class="text-muted">Decide when a completed investigation should affect the application decision.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-section-meta">
+                                            <span class="badge badge-gray">Investigation settings</span>
+                                            <span class="badge badge-blue" id="credit-policy-ci-count-badge"><?php echo (int)$credit_policy_auto_ci_count; ?> approve / <?php echo (int)$credit_policy_review_ci_count; ?> review</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-engine-inline-grid">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <input type="hidden" name="cp_require_ci" value="0">
+                                            <label class="credit-toggle-row" for="cp-require-ci">
+                                                <span class="credit-toggle-copy">
+                                                    <strong>Always Require CI</strong>
+                                                    <small>Keep applications in review until a completed CI exists.</small>
+                                                </span>
+                                                <input type="checkbox" id="cp-require-ci" name="cp_require_ci" value="1" <?php echo !empty($credit_policy['ci_rules']['require_ci']) ? 'checked' : ''; ?>>
+                                            </label>
+                                        </div>
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-ci-required-above-amount">Require CI Above Amount</label>
+                                            <div class="credit-input-with-prefix">
+                                                <span class="credit-input-prefix">PHP</span>
+                                                <input type="number" class="form-control" id="cp-ci-required-above-amount" name="cp_ci_required_above_amount" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['ci_rules']['ci_required_above_amount'] ?? 0)); ?>">
+                                            </div>
+                                            <p class="credit-policy-field-hint">Use this when small requests can move faster but larger requests must wait for CI.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-engine-inline-grid" style="margin-top: 16px;">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <div class="credit-policy-subhead">
+                                                <strong>Auto-Approve CI Values</strong>
+                                                <span class="text-muted" id="credit-policy-auto-ci-count-text"><?php echo (int)$credit_policy_auto_ci_count; ?> selected</span>
+                                            </div>
+                                            <p class="credit-policy-field-hint" style="margin-bottom: 10px;">These recommendations can move toward approval if the score band and eligibility checks also pass.</p>
+                                            <div class="credit-weight-grid">
+                                                <?php foreach ($credit_policy_ci_options as $ci_option): ?>
+                                                    <label class="credit-toggle-row" style="align-items:center;">
+                                                        <span class="credit-toggle-copy">
+                                                            <strong><?php echo htmlspecialchars($ci_option); ?></strong>
+                                                            <small>Accept this CI recommendation for auto-approval checks.</small>
+                                                        </span>
+                                                        <input type="checkbox" name="cp_auto_approve_ci_values[]" value="<?php echo htmlspecialchars($ci_option); ?>" <?php echo in_array($ci_option, $credit_policy_auto_ci_values, true) ? 'checked' : ''; ?>>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <div class="credit-policy-subhead">
+                                                <strong>Review CI Values</strong>
+                                                <span class="text-muted" id="credit-policy-review-ci-count-text"><?php echo (int)$credit_policy_review_ci_count; ?> selected</span>
+                                            </div>
+                                            <p class="credit-policy-field-hint" style="margin-bottom: 10px;">These recommendations should move the application to <code>Pending Review</code>.</p>
+                                            <div class="credit-weight-grid">
+                                                <?php foreach ($credit_policy_ci_options as $ci_option): ?>
+                                                    <label class="credit-toggle-row" style="align-items:center;">
+                                                        <span class="credit-toggle-copy">
+                                                            <strong><?php echo htmlspecialchars($ci_option); ?></strong>
+                                                            <small>Move this CI recommendation to Pending Review.</small>
+                                                        </span>
+                                                        <input type="checkbox" name="cp_review_ci_values[]" value="<?php echo htmlspecialchars($ci_option); ?>" <?php echo in_array($ci_option, $credit_policy_review_ci_values, true) ? 'checked' : ''; ?>>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                </div>
+
+                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="limit" hidden>
+                                <div class="credit-engine-panel credit-engine-panel-span-2 credit-policy-panel" id="credit-policy-limit">
+                                    <div class="credit-engine-panel-head credit-policy-panel-headline">
+                                        <div class="credit-policy-head-main">
+                                            <div class="credit-policy-head-icon"><span class="material-symbols-rounded">payments</span></div>
+                                            <div class="credit-policy-panel-title">
+                                                <span class="credit-policy-section-step">Section 4</span>
+                                                <h4>Credit Limit Rules</h4>
+                                                <p class="text-muted">Estimate the offer using income, score strength, investigation outcome, and a maximum limit.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-section-meta">
+                                            <span class="badge badge-gray">Automatic estimate</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-policy-note-card" style="margin-bottom: 16px;">
+                                        <strong>How the offer is estimated</strong>
+                                        <ul>
+                                            <li><span id="credit-policy-formula-preview">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x investigation factor</span></li>
+                                            <li>Keep the final estimate within <span id="credit-policy-formula-cap"><?php echo 'PHP ' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?></span>.</li>
+                                            <li>Round the result down to the nearest <span id="credit-policy-formula-round"><?php echo number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?></span>.</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-income-multiplier">Income Multiplier</label>
+                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?>">
+                                            <p class="credit-policy-field-hint">Base multiplier applied to monthly income before cap and rounding.</p>
+                                        </div>
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-ci-multiplier-hr">Highly Recommended Multiplier</label>
+                                            <input type="number" class="form-control" id="cp-ci-multiplier-hr" name="cp_ci_multiplier_highly_recommended" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['ci_multiplier_highly_recommended'] ?? 0)); ?>">
+                                            <p class="credit-policy-field-hint">Boost for the strongest CI outcome.</p>
+                                        </div>
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-ci-multiplier-r">Recommended Multiplier</label>
+                                            <input type="number" class="form-control" id="cp-ci-multiplier-r" name="cp_ci_multiplier_recommended" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['ci_multiplier_recommended'] ?? 0)); ?>">
+                                            <p class="credit-policy-field-hint">Neutral multiplier for standard recommendations.</p>
+                                        </div>
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-ci-multiplier-c">Conditional Multiplier</label>
+                                            <input type="number" class="form-control" id="cp-ci-multiplier-c" name="cp_ci_multiplier_conditional" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['ci_multiplier_conditional'] ?? 0)); ?>">
+                                            <p class="credit-policy-field-hint">Lower this when conditional CI should limit exposure.</p>
+                                        </div>
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-max-credit-limit-cap">Maximum Credit Limit Cap</label>
+                                            <div class="credit-input-with-prefix">
+                                                <span class="credit-input-prefix">PHP</span>
+                                                <input type="number" class="form-control" id="cp-max-credit-limit-cap" name="cp_max_credit_limit_cap" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0)); ?>">
+                                            </div>
+                                            <p class="credit-policy-field-hint">Hard app ceiling even when income and score suggest more.</p>
+                                        </div>
+                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                            <label for="cp-round-to-nearest">Round To Nearest</label>
+                                            <div class="credit-input-with-prefix">
+                                                <span class="credit-input-prefix">PHP</span>
+                                                <input type="number" class="form-control" id="cp-round-to-nearest" name="cp_round_to_nearest" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['round_to_nearest'] ?? 0)); ?>">
+                                            </div>
+                                            <p class="credit-policy-field-hint">Use values like <code>500</code> or <code>1000</code> for cleaner offers.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                </div>
+
+                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="product" hidden>
+                                <div class="credit-engine-panel credit-policy-panel" id="credit-policy-product">
+                                    <div class="credit-engine-panel-head credit-policy-panel-headline">
+                                        <div class="credit-policy-head-main">
+                                            <div class="credit-policy-head-icon"><span class="material-symbols-rounded">inventory_2</span></div>
+                                            <div class="credit-policy-panel-title">
+                                                <span class="credit-policy-section-step">Section 5</span>
+                                                <h4>Product Checks</h4>
+                                                <p class="text-muted">Use product guardrails to keep the final offer within the selected loan option.</p>
+                                            </div>
+                                        </div>
+                                        <div class="credit-policy-section-meta">
+                                            <span class="badge badge-gray">Product guardrails</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-engine-inline-grid">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <input type="hidden" name="cp_use_product_minimum_credit_score" value="0">
+                                            <label class="credit-toggle-row" for="cp-use-product-min-score">
+                                                <span class="credit-toggle-copy">
+                                                    <strong>Use Product Minimum Credit Score</strong>
+                                                    <small>Reject when the borrower is below the product score floor.</small>
+                                                </span>
+                                                <input type="checkbox" id="cp-use-product-min-score" name="cp_use_product_minimum_credit_score" value="1" <?php echo !empty($credit_policy['product_checks']['use_product_minimum_credit_score']) ? 'checked' : ''; ?>>
+                                            </label>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <input type="hidden" name="cp_use_product_min_amount" value="0">
+                                            <label class="credit-toggle-row" for="cp-use-product-min-amount">
+                                                <span class="credit-toggle-copy">
+                                                    <strong>Use Product Minimum Amount</strong>
+                                                    <small>Reject when the request or estimated offer falls below the product minimum.</small>
+                                                </span>
+                                                <input type="checkbox" id="cp-use-product-min-amount" name="cp_use_product_min_amount" value="1" <?php echo !empty($credit_policy['product_checks']['use_product_min_amount']) ? 'checked' : ''; ?>>
+                                            </label>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <input type="hidden" name="cp_use_product_max_amount" value="0">
+                                            <label class="credit-toggle-row" for="cp-use-product-max-amount">
+                                                <span class="credit-toggle-copy">
+                                                    <strong>Use Product Maximum Amount</strong>
+                                                    <small>Reject when the request exceeds the product maximum.</small>
+                                                </span>
+                                                <input type="checkbox" id="cp-use-product-max-amount" name="cp_use_product_max_amount" value="1" <?php echo !empty($credit_policy['product_checks']['use_product_max_amount']) ? 'checked' : ''; ?>>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            </div>
+
+                            <div class="credit-policy-action-bar">
+                                <div class="credit-policy-action-copy">
+                                    <strong>Save when the flow feels right</strong>
+                                    <span>This policy controls automatic limit estimates and application decisions for your app.</span>
+                                </div>
+                                <div class="credit-policy-primary-actions">
+                                    <button type="button" class="btn btn-outline" id="credit-policy-reset-trigger-bottom">
+                                        <span class="material-symbols-rounded">restart_alt</span>
+                                        Reset to Defaults
+                                    </button>
+                                    <button type="submit" class="btn btn-primary">
+                                        <span class="material-symbols-rounded">save</span>
+                                        Save Credit Policy
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <aside class="credit-limit-preview-pane">
+                            <div class="credit-engine-summary-card credit-limit-preview-card credit-policy-sticky-card">
+                                <div class="credit-engine-summary-card-head">
+                                    <div>
+                                        <h4>Live Summary</h4>
+                                        <p class="text-muted">Quick sanity check while you edit the policy.</p>
+                                    </div>
+                                    <span class="badge badge-green">MVP</span>
+                                </div>
+
+                                <div class="credit-policy-preview-hero">
+                                    <span class="credit-policy-preview-label">Current Snapshot</span>
+                                    <strong id="credit-policy-preview-summary">Reject below <?php echo (int)$credit_policy_reject_below; ?>, review <?php echo (int)$credit_policy_reject_below; ?>-<?php echo (int)$credit_policy_review_band_end; ?>, approve <?php echo (int)$credit_policy_approve_from; ?>+.</strong>
+                                    <p id="credit-policy-preview-caption"><?php echo htmlspecialchars($credit_policy_ci_mode_label); ?>. Maximum offer <?php echo 'PHP ' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?>. Rounded to nearest <?php echo 'PHP ' . number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?>.</p>
+                                </div>
+
+                                <div class="credit-policy-output-grid">
+                                    <div class="credit-policy-output-card">
+                                        <span>Reject</span>
+                                        <strong id="credit-policy-summary-reject">Below <?php echo (int)$credit_policy_reject_below; ?></strong>
+                                    </div>
+                                    <div class="credit-policy-output-card">
+                                        <span>Review</span>
+                                        <strong id="credit-policy-summary-review"><?php echo (int)$credit_policy_reject_below; ?>-<?php echo (int)$credit_policy_review_band_end; ?></strong>
+                                    </div>
+                                    <div class="credit-policy-output-card">
+                                        <span>Approve</span>
+                                        <strong id="credit-policy-summary-approve"><?php echo (int)$credit_policy_approve_from; ?> and above</strong>
+                                    </div>
+                                    <div class="credit-policy-output-card">
+                                        <span>CI Mode</span>
+                                        <strong id="credit-policy-summary-ci"><?php echo htmlspecialchars($credit_policy_ci_mode_label); ?></strong>
+                                    </div>
+                                    <div class="credit-policy-output-card">
+                                        <span>Employment Statuses</span>
+                                        <strong id="credit-policy-summary-employment"><?php echo (int)$credit_policy_allowed_employment_count; ?> allowed</strong>
+                                    </div>
+                                    <div class="credit-policy-output-card">
+                                        <span>Product Checks</span>
+                                        <strong id="credit-policy-summary-product-count"><?php echo (int)$credit_policy_product_checks_enabled; ?> enabled</strong>
+                                    </div>
+                                </div>
+
+                                <div class="credit-policy-note is-good" id="credit-policy-health-note">This setup is ready to use. Keep the approve score above the reject score so the review band stays clear.</div>
+
+                                <div class="credit-preview-initial-card">
+                                    <div class="credit-engine-summary-card-head">
+                                        <div>
+                                            <h4>How the offer is estimated</h4>
+                                            <p class="text-muted">A quick snapshot of the settings behind the current estimate.</p>
+                                        </div>
+                                    </div>
+                                    <div class="credit-summary-categories">
+                                        <div class="credit-summary-category"><b>Income rule</b><br><span id="credit-policy-formula-preview-inline">Income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x investigation factor</span></div>
+                                        <div class="credit-summary-category"><b>Maximum limit</b><br><span id="credit-policy-formula-cap-inline"><?php echo 'PHP ' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?></span></div>
+                                        <div class="credit-summary-category"><b>Rounding rule</b><br><span id="credit-policy-formula-round-inline"><?php echo 'Nearest ' . number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?></span></div>
+                                    </div>
+                                </div>
+
+                                <div class="credit-engine-summary-card" id="credit-policy-simulator" style="margin-top: 16px;">
+                                    <div class="credit-engine-summary-card-head">
+                                        <div>
+                                            <h4>Quick Simulator</h4>
+                                            <p class="text-muted">Test the current form values with a sample borrower before saving.</p>
+                                        </div>
+                                    </div>
+                                    <div class="credit-policy-simulator-grid">
+                                        <div class="form-group">
+                                            <label for="credit-policy-sim-income">Monthly Income</label>
+                                            <div class="credit-input-with-prefix">
+                                                <span class="credit-input-prefix">PHP</span>
+                                                <input type="number" class="form-control" id="credit-policy-sim-income" value="25000" min="0" step="0.01">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="credit-policy-sim-score">Credit Score</label>
+                                            <input type="number" class="form-control" id="credit-policy-sim-score" value="820" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="credit-policy-sim-requested">Requested Amount</label>
+                                            <div class="credit-input-with-prefix">
+                                                <span class="credit-input-prefix">PHP</span>
+                                                <input type="number" class="form-control" id="credit-policy-sim-requested" value="60000" min="0" step="0.01">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="credit-policy-sim-ci">CI Recommendation</label>
+                                            <select class="form-control" id="credit-policy-sim-ci">
+                                                <?php foreach ($credit_policy_ci_options as $ci_option): ?>
+                                                    <option value="<?php echo htmlspecialchars($ci_option); ?>" <?php echo $ci_option === 'Recommended' ? 'selected' : ''; ?>><?php echo htmlspecialchars($ci_option); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="credit-policy-output-grid" style="margin-top: 14px;">
+                                        <div class="credit-policy-output-card">
+                                            <span>Estimated Limit</span>
+                                            <strong id="credit-policy-sim-limit">PHP 0.00</strong>
+                                        </div>
+                                        <div class="credit-policy-output-card">
+                                            <span>Suggested Offer</span>
+                                            <strong id="credit-policy-sim-offer">PHP 0.00</strong>
+                                        </div>
+                                        <div class="credit-policy-output-card is-review" id="credit-policy-sim-decision-card">
+                                            <span>Likely Decision</span>
+                                            <strong id="credit-policy-sim-decision">Review</strong>
+                                        </div>
+                                        <div class="credit-policy-output-card">
+                                            <span>Estimate Logic</span>
+                                            <strong id="credit-policy-sim-formula">Income x score strength x investigation factor</strong>
+                                        </div>
+                                    </div>
+                                    <div class="credit-policy-note">Simulator assumes the borrower passes eligibility and document checks, and product checks do not block the offer.</div>
+                                </div>
+
+                            </div>
+                        </aside>
+                    </div>
                     </div>
                 </section>
             </div>
@@ -5214,6 +6569,326 @@ function hexToRgb($hex) {
             '<button type="button" class="we-btn-remove" onclick="this.closest(\'.we-service-row\').remove()" title="Remove"><span class="material-symbols-rounded">close</span></button>';
         list.appendChild(row);
     }
+    </script>
+    <script>
+    (function () {
+        var form = document.getElementById('credit-policy-form');
+        if (!form) return;
+
+        var defaults = {};
+        try {
+            defaults = JSON.parse(form.getAttribute('data-credit-policy-defaults') || '{}') || {};
+        } catch (e) {
+            defaults = {};
+        }
+
+        function byId(id) {
+            return document.getElementById(id);
+        }
+
+        function setText(id, text) {
+            var el = byId(id);
+            if (el) el.textContent = text;
+        }
+
+        function getValue(id) {
+            var el = byId(id);
+            return el ? el.value : '';
+        }
+
+        function getNumber(id) {
+            var value = parseFloat(getValue(id));
+            return isFinite(value) ? value : 0;
+        }
+
+        function getInt(id) {
+            var value = parseInt(getValue(id), 10);
+            return isFinite(value) ? value : 0;
+        }
+
+        function isChecked(id) {
+            var el = byId(id);
+            return !!(el && el.checked);
+        }
+
+        function getCheckedValues(name) {
+            return Array.prototype.slice.call(form.querySelectorAll('input[name="' + name + '[]"]:checked')).map(function (el) {
+                return el.value;
+            });
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-PH', {
+                style: 'currency',
+                currency: 'PHP',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(Number(amount || 0));
+        }
+
+        function formatNumber(value) {
+            var number = Number(value || 0);
+            if (!isFinite(number)) return '0';
+            if (Math.abs(number - Math.round(number)) < 0.00001) {
+                return String(Math.round(number));
+            }
+            return number.toFixed(2).replace(/\.?0+$/, '');
+        }
+
+        function roundDown(amount, roundTo) {
+            if (!(roundTo > 0)) return amount;
+            return Math.floor(amount / roundTo) * roundTo;
+        }
+
+        function setDecisionTone(id, decision) {
+            var el = byId(id);
+            if (!el) return;
+            el.classList.remove('is-approve', 'is-review', 'is-reject');
+            if (decision === 'Approve') {
+                el.classList.add('is-approve');
+            } else if (decision === 'Reject') {
+                el.classList.add('is-reject');
+            } else {
+                el.classList.add('is-review');
+            }
+        }
+
+        var tabButtons = Array.prototype.slice.call(document.querySelectorAll('[data-credit-policy-tab]'));
+        var tabPanels = Array.prototype.slice.call(document.querySelectorAll('[data-credit-policy-tab-panel]'));
+
+        function getEmploymentStatuses() {
+            return getCheckedValues('cp_allowed_employment_statuses');
+        }
+
+        function setPolicyTab(tabName) {
+            var activeTab = tabName;
+            var tabExists = tabButtons.some(function (tab) {
+                return tab.getAttribute('data-credit-policy-tab') === tabName;
+            });
+
+            if (!tabExists && tabButtons.length) {
+                activeTab = tabButtons[0].getAttribute('data-credit-policy-tab');
+            }
+
+            tabButtons.forEach(function (tab) {
+                tab.classList.toggle('is-active', tab.getAttribute('data-credit-policy-tab') === activeTab);
+            });
+
+            tabPanels.forEach(function (panel) {
+                panel.hidden = panel.getAttribute('data-credit-policy-tab-panel') !== activeTab;
+            });
+        }
+
+        function applyDefaults() {
+            if (!defaults || typeof defaults !== 'object') return;
+
+            function setValue(id, value) {
+                var el = byId(id);
+                if (el) el.value = value;
+            }
+
+            function setChecked(id, value) {
+                var el = byId(id);
+                if (el) el.checked = !!value;
+            }
+
+            function setGroup(name, values) {
+                var lookup = {};
+                (Array.isArray(values) ? values : []).forEach(function (value) {
+                    lookup[value] = true;
+                });
+                form.querySelectorAll('input[name="' + name + '[]"]').forEach(function (el) {
+                    el.checked = !!lookup[el.value];
+                });
+            }
+
+            setValue('cp-min-monthly-income', defaults.eligibility ? defaults.eligibility.min_monthly_income : 0);
+            setGroup('cp_allowed_employment_statuses', defaults.eligibility ? defaults.eligibility.allowed_employment_statuses : []);
+            setChecked('cp-require-verified-documents', defaults.eligibility ? defaults.eligibility.require_verified_documents : false);
+
+            setValue('cp-review-min-score', defaults.score_thresholds ? defaults.score_thresholds.review_min_score : 0);
+            setValue('cp-approve-min-score', defaults.score_thresholds ? defaults.score_thresholds.approve_min_score : 0);
+
+            setChecked('cp-require-ci', defaults.ci_rules ? defaults.ci_rules.require_ci : false);
+            setValue('cp-ci-required-above-amount', defaults.ci_rules ? defaults.ci_rules.ci_required_above_amount : 0);
+            setGroup('cp_auto_approve_ci_values', defaults.ci_rules ? defaults.ci_rules.auto_approve_ci_values : []);
+            setGroup('cp_review_ci_values', defaults.ci_rules ? defaults.ci_rules.review_ci_values : []);
+
+            setValue('cp-income-multiplier', defaults.credit_limit ? defaults.credit_limit.income_multiplier : 0);
+            setValue('cp-ci-multiplier-hr', defaults.credit_limit ? defaults.credit_limit.ci_multiplier_highly_recommended : 0);
+            setValue('cp-ci-multiplier-r', defaults.credit_limit ? defaults.credit_limit.ci_multiplier_recommended : 0);
+            setValue('cp-ci-multiplier-c', defaults.credit_limit ? defaults.credit_limit.ci_multiplier_conditional : 0);
+            setValue('cp-max-credit-limit-cap', defaults.credit_limit ? defaults.credit_limit.max_credit_limit_cap : 0);
+            setValue('cp-round-to-nearest', defaults.credit_limit ? defaults.credit_limit.round_to_nearest : 0);
+
+            setChecked('cp-use-product-min-score', defaults.product_checks ? defaults.product_checks.use_product_minimum_credit_score : false);
+            setChecked('cp-use-product-min-amount', defaults.product_checks ? defaults.product_checks.use_product_min_amount : false);
+            setChecked('cp-use-product-max-amount', defaults.product_checks ? defaults.product_checks.use_product_max_amount : false);
+
+            syncCreditPolicyUI();
+        }
+
+        function syncCreditPolicyUI() {
+            var rejectBelow = Math.max(0, getInt('cp-review-min-score'));
+            var approveFrom = Math.max(0, getInt('cp-approve-min-score'));
+            var reviewBandEnd = Math.max(rejectBelow, approveFrom - 1);
+            var incomeMultiplier = Math.max(0, getNumber('cp-income-multiplier'));
+            var cap = Math.max(0, getNumber('cp-max-credit-limit-cap'));
+            var roundTo = Math.max(0, getNumber('cp-round-to-nearest'));
+            var requireCi = isChecked('cp-require-ci');
+            var ciAbove = Math.max(0, getNumber('cp-ci-required-above-amount'));
+            var allowedEmploymentCount = getEmploymentStatuses().length;
+            var autoCiCount = getCheckedValues('cp_auto_approve_ci_values').length;
+            var reviewCiCount = getCheckedValues('cp_review_ci_values').length;
+            var productCheckCount = ['cp-use-product-min-score', 'cp-use-product-min-amount', 'cp-use-product-max-amount'].filter(function (id) {
+                return isChecked(id);
+            }).length;
+
+            var ciMode = requireCi ? 'Always required' : (ciAbove > 0 ? 'Required above ' + formatCurrency(ciAbove) : 'Optional');
+            var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x score strength x investigation factor';
+            var capText = cap > 0 ? formatCurrency(cap) : 'No cap';
+            var roundText = roundTo > 0 ? formatCurrency(roundTo) : 'No rounding';
+
+            setText('credit-policy-badge-reject', 'Below ' + rejectBelow);
+            setText('credit-policy-badge-review', rejectBelow + '-' + reviewBandEnd);
+            setText('credit-policy-badge-approve', approveFrom + '+');
+            setText('credit-policy-badge-ci-mode', ciMode);
+            setText('credit-policy-badge-product-count', productCheckCount + ' product checks');
+
+            setText('credit-policy-summary-reject', 'Below ' + rejectBelow);
+            setText('credit-policy-summary-review', rejectBelow + '-' + reviewBandEnd);
+            setText('credit-policy-summary-approve', approveFrom + ' and above');
+            setText('credit-policy-summary-ci', ciMode);
+            setText('credit-policy-summary-employment', allowedEmploymentCount + ' allowed');
+            setText('credit-policy-summary-product-count', productCheckCount + ' enabled');
+
+            setText('credit-policy-glance-band', 'Reject below ' + rejectBelow + ', approve from ' + approveFrom);
+            setText('credit-policy-glance-band-note', 'Scores ' + rejectBelow + '-' + reviewBandEnd + ' stay in review.');
+            setText('credit-policy-glance-ci', ciMode);
+            setText('credit-policy-glance-ci-note', autoCiCount + ' investigation outcomes can move straight to approval.');
+            setText('credit-policy-glance-cap', capText);
+            setText('credit-policy-glance-cap-note', roundTo > 0 ? 'Rounded to nearest ' + roundText + '.' : 'No rounding rule.');
+
+            setText('credit-policy-employment-count-badge', allowedEmploymentCount + ' statuses enabled');
+            setText('credit-policy-employment-count-text', allowedEmploymentCount + ' selected');
+            setText('credit-policy-ci-count-badge', autoCiCount + ' approve / ' + reviewCiCount + ' review');
+            setText('credit-policy-auto-ci-count-text', autoCiCount + ' selected');
+            setText('credit-policy-review-ci-count-text', reviewCiCount + ' selected');
+
+            setText('credit-policy-threshold-copy-reject', 'Below ' + rejectBelow);
+            setText('credit-policy-threshold-copy-review', rejectBelow + '-' + reviewBandEnd);
+            setText('credit-policy-threshold-copy-approve', approveFrom + ' and above');
+
+            setText('credit-policy-formula-preview', formulaText);
+            setText('credit-policy-formula-preview-inline', 'Income x ' + formatNumber(incomeMultiplier) + ' x score strength x investigation factor');
+            setText('credit-policy-formula-cap', capText);
+            setText('credit-policy-formula-round', roundText);
+            setText('credit-policy-formula-cap-inline', capText);
+            setText('credit-policy-formula-round-inline', roundTo > 0 ? 'Nearest ' + roundText : roundText);
+            setText('credit-policy-preview-summary', 'Reject below ' + rejectBelow + ', review ' + rejectBelow + '-' + reviewBandEnd + ', approve ' + approveFrom + '+.');
+            setText('credit-policy-preview-caption', ciMode + '. Maximum offer ' + capText + '. ' + (roundTo > 0 ? 'Rounded to nearest ' + roundText + '.' : 'No rounding rule.'));
+
+            var healthNote = byId('credit-policy-health-note');
+            if (healthNote) {
+                healthNote.classList.remove('is-warning', 'is-good');
+                if (approveFrom <= rejectBelow) {
+                    healthNote.textContent = 'Approve score should be higher than the reject score so the review band stays clear.';
+                    healthNote.classList.add('is-warning');
+                } else if (allowedEmploymentCount === 0) {
+                    healthNote.textContent = 'No employment status is currently allowed. Every application will be blocked by the eligibility rules.';
+                    healthNote.classList.add('is-warning');
+                } else if (requireCi && autoCiCount === 0) {
+                    healthNote.textContent = 'CI is required, but no investigation outcome is marked for approval, so strong applications may still stay in review.';
+                    healthNote.classList.add('is-warning');
+                } else if (productCheckCount === 0) {
+                    healthNote.textContent = 'All product checks are disabled. Decisions will rely only on borrower checks, score rules, investigation rules, and limit settings.';
+                    healthNote.classList.add('is-warning');
+                } else {
+                    healthNote.textContent = 'This setup is ready to use. Keep the approve score above the reject score so the review band stays clear.';
+                    healthNote.classList.add('is-good');
+                }
+            }
+
+            syncSimulator();
+        }
+
+        function syncSimulator() {
+            var income = Math.max(0, getNumber('credit-policy-sim-income'));
+            var scoreCeiling = Math.max(1, <?php echo (int)$credit_policy_score_ceiling; ?>);
+            var score = Math.max(0, Math.min(scoreCeiling, getNumber('credit-policy-sim-score')));
+            var requested = Math.max(0, getNumber('credit-policy-sim-requested'));
+            var ciRecommendation = getValue('credit-policy-sim-ci');
+            var incomeMultiplier = Math.max(0, getNumber('cp-income-multiplier'));
+            var cap = Math.max(0, getNumber('cp-max-credit-limit-cap'));
+            var roundTo = Math.max(0, getNumber('cp-round-to-nearest'));
+            var rejectBelow = Math.max(0, getInt('cp-review-min-score'));
+            var approveFrom = Math.max(0, getInt('cp-approve-min-score'));
+            var autoCiValues = getCheckedValues('cp_auto_approve_ci_values');
+            var reviewCiValues = getCheckedValues('cp_review_ci_values');
+
+            var ciFactor = 1;
+            if (ciRecommendation === 'Highly Recommended') ciFactor = Math.max(0, getNumber('cp-ci-multiplier-hr'));
+            if (ciRecommendation === 'Recommended') ciFactor = Math.max(0, getNumber('cp-ci-multiplier-r'));
+            if (ciRecommendation === 'Conditional') ciFactor = Math.max(0, getNumber('cp-ci-multiplier-c'));
+
+            var scoreFactor = Math.max(0, Math.min(1, score / scoreCeiling));
+            var computedLimit = income * incomeMultiplier * scoreFactor * ciFactor;
+            if (cap > 0) computedLimit = Math.min(computedLimit, cap);
+            computedLimit = roundDown(computedLimit, roundTo);
+
+            var suggestedOffer = requested > 0 ? Math.min(requested, computedLimit) : computedLimit;
+            var decision = 'Approve';
+
+            if (score < rejectBelow) {
+                decision = 'Reject';
+            } else if (reviewCiValues.indexOf(ciRecommendation) !== -1) {
+                decision = 'Review';
+            } else if (score < approveFrom) {
+                decision = 'Review';
+            } else if (requested > 0 && suggestedOffer < requested) {
+                decision = 'Review';
+            } else if (autoCiValues.length > 0 && autoCiValues.indexOf(ciRecommendation) === -1) {
+                decision = 'Review';
+            }
+
+            if (!(computedLimit > 0)) {
+                decision = 'Review';
+            }
+
+            setText('credit-policy-sim-limit', formatCurrency(computedLimit));
+            setText('credit-policy-sim-offer', formatCurrency(suggestedOffer > 0 ? suggestedOffer : 0));
+            setText('credit-policy-sim-decision', decision);
+            setText('credit-policy-sim-formula', 'Score strength ' + scoreFactor.toFixed(2) + ' x investigation factor ' + formatNumber(ciFactor));
+            setDecisionTone('credit-policy-sim-decision-card', decision);
+        }
+
+        form.querySelectorAll('input, select').forEach(function (el) {
+            el.addEventListener('input', syncCreditPolicyUI);
+            el.addEventListener('change', syncCreditPolicyUI);
+        });
+
+        ['credit-policy-sim-income', 'credit-policy-sim-score', 'credit-policy-sim-requested', 'credit-policy-sim-ci'].forEach(function (id) {
+            var el = byId(id);
+            if (!el) return;
+            el.addEventListener('input', syncSimulator);
+            el.addEventListener('change', syncSimulator);
+        });
+
+        ['credit-policy-reset-trigger-top', 'credit-policy-reset-trigger-bottom'].forEach(function (id) {
+            var btn = byId(id);
+            if (!btn) return;
+            btn.addEventListener('click', applyDefaults);
+        });
+
+        tabButtons.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                setPolicyTab(tab.getAttribute('data-credit-policy-tab') || 'overview');
+            });
+        });
+
+        syncCreditPolicyUI();
+        setPolicyTab('overview');
+    })();
     </script>
     <script src="admin.js?v=<?php echo filemtime(__DIR__ . '/admin.js'); ?>"></script>
 </body>
