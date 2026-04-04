@@ -362,6 +362,247 @@ if (!function_exists('mf_get_tenant_credit_policy')) {
     }
 }
 
+if (!function_exists('mf_credit_limit_rule_defaults')) {
+    function mf_credit_limit_rule_defaults(): array
+    {
+        return [
+            'workflow' => [
+                // Upgrade approvals are fixed to semi-auto so staff always confirms the change.
+                'approval_mode' => 'semi',
+            ],
+            'initial_limits' => [
+                'base_limit_default' => 5000,
+                'custom_categories' => [],
+            ],
+            'upgrade_eligibility' => [
+                'min_completed_loans' => 2,
+                'max_allowed_late_payments' => 0,
+            ],
+            'increase_rules' => [
+                'increase_type' => 'percentage',
+                'increase_value' => 20,
+                'absolute_max_limit' => 50000,
+            ],
+        ];
+    }
+}
+
+if (!function_exists('mf_credit_limit_rules_normalize')) {
+    function mf_credit_limit_rules_normalize($payload): array
+    {
+        $defaults = mf_credit_limit_rule_defaults();
+        $rules = is_array($payload) ? array_replace_recursive($defaults, $payload) : $defaults;
+
+        $baseLimitDefault = round(max(0, (float) ($rules['initial_limits']['base_limit_default'] ?? $defaults['initial_limits']['base_limit_default'])), 2);
+        $customCategories = [];
+
+        if (!empty($rules['initial_limits']['custom_categories']) && is_array($rules['initial_limits']['custom_categories'])) {
+            foreach ($rules['initial_limits']['custom_categories'] as $categoryRule) {
+                if (!is_array($categoryRule)) {
+                    continue;
+                }
+
+                $categoryName = trim((string) ($categoryRule['category_name'] ?? ''));
+                $limitType = (string) ($categoryRule['limit_type'] ?? 'fixed');
+                $value = round(max(0, (float) ($categoryRule['value'] ?? 0)), 2);
+
+                if ($categoryName === '') {
+                    continue;
+                }
+                if ($limitType === 'multiplier') {
+                    $value = round($baseLimitDefault * $value, 2);
+                    $limitType = 'fixed';
+                }
+                if (!in_array($limitType, ['fixed', 'income_percent'], true)) {
+                    $limitType = 'fixed';
+                }
+
+                $customCategories[] = [
+                    'category_name' => substr($categoryName, 0, 80),
+                    'limit_type' => $limitType,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        $increaseType = (string) ($rules['increase_rules']['increase_type'] ?? $defaults['increase_rules']['increase_type']);
+        if (!in_array($increaseType, ['percentage', 'fixed'], true)) {
+            $increaseType = $defaults['increase_rules']['increase_type'];
+        }
+
+        return [
+            'workflow' => [
+                'approval_mode' => 'semi',
+            ],
+            'initial_limits' => [
+                'base_limit_default' => $baseLimitDefault,
+                'custom_categories' => $customCategories,
+            ],
+            'upgrade_eligibility' => [
+                'min_completed_loans' => max(0, (int) ($rules['upgrade_eligibility']['min_completed_loans'] ?? $defaults['upgrade_eligibility']['min_completed_loans'])),
+                'max_allowed_late_payments' => max(0, (int) ($rules['upgrade_eligibility']['max_allowed_late_payments'] ?? $defaults['upgrade_eligibility']['max_allowed_late_payments'])),
+            ],
+            'increase_rules' => [
+                'increase_type' => $increaseType,
+                'increase_value' => round(max(0, (float) ($rules['increase_rules']['increase_value'] ?? $defaults['increase_rules']['increase_value'])), 2),
+                'absolute_max_limit' => round(max(0, (float) ($rules['increase_rules']['absolute_max_limit'] ?? $defaults['increase_rules']['absolute_max_limit'])), 2),
+            ],
+        ];
+    }
+}
+
+if (!function_exists('mf_get_tenant_credit_limit_rules')) {
+    function mf_get_tenant_credit_limit_rules(PDO $pdo, string $tenantId): array
+    {
+        $tenantId = trim($tenantId);
+        if ($tenantId === '') {
+            return mf_credit_limit_rule_defaults();
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT setting_value
+            FROM system_settings
+            WHERE tenant_id = ? AND setting_key = 'credit_limit_rules'
+            LIMIT 1
+        ");
+        $stmt->execute([$tenantId]);
+        $raw = $stmt->fetchColumn();
+
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return mf_credit_limit_rules_normalize($decoded);
+            }
+        }
+
+        return mf_credit_limit_rule_defaults();
+    }
+}
+
+if (!function_exists('mf_credit_policy_fetch_upgrade_metrics')) {
+    function mf_credit_policy_fetch_upgrade_metrics(PDO $pdo, string $tenantId, int $clientId): array
+    {
+        $completedLoansStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM loans
+            WHERE tenant_id = ? AND client_id = ? AND loan_status = 'Fully Paid'
+        ");
+        $completedLoansStmt->execute([$tenantId, $clientId]);
+        $completedLoans = (int) $completedLoansStmt->fetchColumn();
+
+        $latePaymentsStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM amortization_schedule sched
+            INNER JOIN loans l
+                ON l.loan_id = sched.loan_id
+               AND l.tenant_id = sched.tenant_id
+            WHERE l.tenant_id = ?
+              AND l.client_id = ?
+              AND (COALESCE(sched.days_late, 0) > 0 OR sched.payment_status = 'Overdue')
+        ");
+        $latePaymentsStmt->execute([$tenantId, $clientId]);
+        $latePayments = (int) $latePaymentsStmt->fetchColumn();
+
+        return [
+            'completed_loans' => $completedLoans,
+            'late_payments' => $latePayments,
+        ];
+    }
+}
+
+if (!function_exists('mf_credit_policy_compute_upgrade_snapshot')) {
+    function mf_credit_policy_compute_upgrade_snapshot(array $rules, array $client, array $metrics): array
+    {
+        $rules = mf_credit_limit_rules_normalize($rules);
+
+        $currentLimit = round(max(0, (float) ($client['credit_limit'] ?? 0)), 2);
+        $baseLimit = round(max(0, (float) ($rules['initial_limits']['base_limit_default'] ?? 0)), 2);
+        $completedLoans = max(0, (int) ($metrics['completed_loans'] ?? 0));
+        $latePayments = max(0, (int) ($metrics['late_payments'] ?? 0));
+        $minCompletedLoans = max(0, (int) ($rules['upgrade_eligibility']['min_completed_loans'] ?? 0));
+        $maxLatePayments = max(0, (int) ($rules['upgrade_eligibility']['max_allowed_late_payments'] ?? 0));
+        $increaseType = (string) ($rules['increase_rules']['increase_type'] ?? 'percentage');
+        $increaseValue = round(max(0, (float) ($rules['increase_rules']['increase_value'] ?? 0)), 2);
+        $absoluteMaxLimit = round(max(0, (float) ($rules['increase_rules']['absolute_max_limit'] ?? 0)), 2);
+
+        $meetsCompletedLoanRule = $completedLoans >= $minCompletedLoans;
+        $meetsLatePaymentRule = $latePayments <= $maxLatePayments;
+        $blockers = [];
+
+        if (!$meetsCompletedLoanRule) {
+            $missing = $minCompletedLoans - $completedLoans;
+            $blockers[] = 'Needs ' . $missing . ' more completed loan' . ($missing === 1 ? '' : 's') . '.';
+        }
+        if (!$meetsLatePaymentRule) {
+            $blockers[] = 'Late payments must stay at ' . $maxLatePayments . ' or fewer.';
+        }
+
+        $potentialUpgradedLimit = null;
+        if ($currentLimit > 0) {
+            $potentialUpgradedLimit = $increaseType === 'percentage'
+                ? $currentLimit + ($currentLimit * ($increaseValue / 100))
+                : $currentLimit + $increaseValue;
+
+            if ($absoluteMaxLimit > 0) {
+                $potentialUpgradedLimit = min($potentialUpgradedLimit, $absoluteMaxLimit);
+            }
+
+            $potentialUpgradedLimit = round(max(0, $potentialUpgradedLimit), 2);
+        }
+
+        $status = 'not_yet_eligible';
+        $statusLabel = 'Not Yet Eligible';
+        $statusNote = 'This borrower does not yet satisfy the current upgrade rules.';
+
+        if ($currentLimit <= 0) {
+            $status = 'no_active_limit';
+            $statusLabel = 'No Active Credit Limit';
+            $statusNote = 'A starting credit limit must be assigned before upgrade rules can be reviewed.';
+        } elseif ($absoluteMaxLimit > 0 && ($currentLimit >= $absoluteMaxLimit - 0.009 || ($potentialUpgradedLimit !== null && $potentialUpgradedLimit <= $currentLimit + 0.009))) {
+            $status = 'at_max_limit';
+            $statusLabel = 'At Maximum Limit';
+            $statusNote = 'Current credit limit already matches the configured maximum. No further increase is available.';
+            $potentialUpgradedLimit = $currentLimit;
+        } elseif ($meetsCompletedLoanRule && $meetsLatePaymentRule) {
+            $status = 'eligible';
+            $statusLabel = 'Eligible for Upgrade';
+            $statusNote = 'This borrower currently meets the upgrade history rules and is ready for staff review.';
+        } elseif (!empty($blockers)) {
+            $statusNote = implode(' ', $blockers);
+        }
+
+        $nextLimitNote = 'Shows the next possible limit once the borrower satisfies the current upgrade rules.';
+        if ($currentLimit <= 0) {
+            $nextLimitNote = 'Assign a starting credit limit first before projecting the next upgrade.';
+        } elseif ($status === 'at_max_limit') {
+            $nextLimitNote = 'The current credit limit already meets the configured maximum.';
+        } elseif ($status === 'eligible') {
+            $nextLimitNote = 'This is the recommended next limit if staff approves the increase.';
+        }
+
+        return [
+            'workflow_mode' => 'semi',
+            'workflow_label' => 'Semi-Automatic',
+            'current_limit' => $currentLimit,
+            'base_limit_default' => $baseLimit,
+            'completed_loans' => $completedLoans,
+            'late_payments' => $latePayments,
+            'min_completed_loans' => $minCompletedLoans,
+            'max_allowed_late_payments' => $maxLatePayments,
+            'increase_type' => $increaseType,
+            'increase_value' => $increaseValue,
+            'absolute_max_limit' => $absoluteMaxLimit,
+            'eligible' => $status === 'eligible',
+            'status' => $status,
+            'status_label' => $statusLabel,
+            'status_note' => $statusNote,
+            'blockers' => $blockers,
+            'potential_upgraded_limit' => $potentialUpgradedLimit,
+            'next_limit_note' => $nextLimitNote,
+        ];
+    }
+}
+
 if (!function_exists('mf_credit_policy_fetch_client')) {
     function mf_credit_policy_fetch_client(PDO $pdo, string $tenantId, int $clientId): ?array
     {

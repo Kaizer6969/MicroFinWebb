@@ -214,23 +214,18 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
       if (mounted) setState(() => _creditLoading = false);
       return;
     }
-    try {
-      final resp = await http.get(Uri.parse(
-        ApiConfig.getUrl(
-          'api_get_credit_info.php?user_id=${user['user_id']}&tenant_id=${activeTenant.value.id}',
-        ),
-      ));
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
-        if (data['success'] == true && mounted) {
-          setState(() {
-            _creditLimit = (data['credit_limit'] as num?)?.toDouble() ?? 0.0;
-            _usedCredit  = (data['used_credit']  as num?)?.toDouble() ?? 0.0;
-          });
-        }
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _creditLoading = false);
+    
+    // We already synced credit_limit from dashboard via the backend credit_policy logic!
+    if (mounted) {
+      setState(() {
+        final rawLimit = user['credit_limit'];
+        _creditLimit = double.tryParse(rawLimit?.toString() ?? '0') ?? 0.0;
+        
+        // Let's assume used_credit is zero for now unless the loan logic adds it
+        _usedCredit = 0.0; 
+        _creditLoading = false;
+      });
+    }
   }
 
   // ─── Dynamic doc lists ─────────────────────────────────────────────
@@ -631,8 +626,6 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
                             _buildStepperRow(primary),
                             const SizedBox(height: 20),
                             _buildCreditLimitCard(primary),
-                            const SizedBox(height: 20),
-                            _buildInfoBanner(),
                             const SizedBox(height: 24),
                             _sectionLabel('Loan Details', primary),
                             const SizedBox(height: 14),
@@ -948,26 +941,7 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
     );
   }
 
-  // ─── Info Banner ───────────────────────────────────────────────────
-  Widget _buildInfoBanner() {
-    final primary = activeTenant.value.themePrimaryColor;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: primary.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: primary.withOpacity(0.2)),
-      ),
-      child: Row(children: [
-        Icon(Icons.info_outline_rounded, color: primary, size: 18),
-        const SizedBox(width: 10),
-        Expanded(child: Text(
-          'You may have active or pending applications. Some products may be restricted.',
-          style: TextStyle(color: primary, fontSize: 13, height: 1.4),
-        )),
-      ]),
-    );
-  }
+
 
   // ─── Loan Details Card ─────────────────────────────────────────────
   Widget _buildLoanDetailsCard(Color primary) {

@@ -1484,6 +1484,24 @@ function badge(s) {
     return `<span class="badge ${cls}">${s}</span>`;
 }
 
+function upgradeStatusBadge(upgrade) {
+    const status = String(upgrade?.status || '');
+    const label = String(upgrade?.status_label || 'Upgrade Status');
+    let cls = 'badge-gray';
+    if (status === 'eligible') cls = 'badge-green';
+    else if (status === 'not_yet_eligible') cls = 'badge-amber';
+    else if (status === 'at_max_limit') cls = 'badge-purple';
+    return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
+}
+
+function formatUpgradeLimit(value, emptyLabel='—') {
+    const amount = parseFloat(value);
+    if (!Number.isFinite(amount) || amount < 0) {
+        return `<span class="detail-value is-empty">${escapeHtml(emptyLabel)}</span>`;
+    }
+    return fmt(amount);
+}
+
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 

@@ -1073,11 +1073,6 @@ function normalize_credit_limit_rules($payload): array
     $defaults = credit_limit_rule_defaults();
     $rules = is_array($payload) ? array_replace_recursive($defaults, $payload) : $defaults;
 
-    $approval_mode = (string)($rules['workflow']['approval_mode'] ?? $defaults['workflow']['approval_mode']);
-    if (!in_array($approval_mode, ['auto', 'semi', 'manual'], true)) {
-        $approval_mode = $defaults['workflow']['approval_mode'];
-    }
-
     $base_limit_default = max(0, (float)($rules['initial_limits']['base_limit_default'] ?? $defaults['initial_limits']['base_limit_default']));
     $base_limit_default = round($base_limit_default, 2);
 
@@ -1124,7 +1119,8 @@ function normalize_credit_limit_rules($payload): array
 
     return [
         'workflow' => [
-            'approval_mode' => $approval_mode,
+            // Upgrade processing is fixed to semi-auto so staff always confirms increases.
+            'approval_mode' => 'semi',
         ],
         'initial_limits' => [
             'base_limit_default' => $base_limit_default,
@@ -1148,7 +1144,7 @@ function build_credit_limit_rules_from_post(array $source): array
 
     $rules = [
         'workflow' => [
-            'approval_mode' => (string)($source['credit_approval_mode'] ?? $defaults['workflow']['approval_mode']),
+            'approval_mode' => 'semi',
         ],
         'initial_limits' => [
             'base_limit_default' => (float)($source['credit_base_limit'] ?? $defaults['initial_limits']['base_limit_default']),

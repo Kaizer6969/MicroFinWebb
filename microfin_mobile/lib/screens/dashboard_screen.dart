@@ -128,6 +128,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             // Safely parse credit limit whether it comes as string or int or double
             final rawLimit = data['credit_limit'];
             _creditLimit = double.tryParse(rawLimit?.toString() ?? '0') ?? 0.0;
+            currentUser.value?['credit_limit'] = _creditLimit;
             
             _isLoading = false;
           });
@@ -188,11 +189,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                               _buildVerificationBanner(primary),
                               const SizedBox(height: 12),
 
-                              if (_featuredProducts.isNotEmpty) ...[
-                                _buildFeaturedProductsSlider(primary),
-                                const SizedBox(height: 32),
-                              ],
-
                               if (_activeLoan != null) ...[
                                 _buildActivePortfolioCard(primary),
                                 const SizedBox(height: 16),
@@ -230,6 +226,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 ],
                               ),
                               const SizedBox(height: 32),
+                              if (_featuredProducts.isNotEmpty) ...[
+                                _buildFeaturedProductsSlider(primary),
+                                const SizedBox(height: 32),
+                              ],
                               _buildRecentActivityTitle(),
                               const SizedBox(height: 16),
                               _buildRecentActivityList(primary),
@@ -1164,23 +1164,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               final double amount = double.tryParse(product['max_amount']?.toString() ?? '0') ?? 0.0;
               final double rate = double.tryParse(product['interest_rate']?.toString() ?? '0') ?? 0.0;
 
-              return AnimatedBuilder(
-                animation: _pageController,
-                builder: (context, child) {
-                  double value = 1.0;
-                  if (_pageController.position.haveDimensions) {
-                    value = _pageController.page! - index;
-                    value = (1 - (value.abs() * 0.1)).clamp(0.0, 1.0);
-                  }
-
-                  return Center(
-                    child: Transform.scale(
-                      scale: Curves.easeOut.transform(value),
-                      child: child,
-                    ),
-                  );
-                },
-                child: Container(
+              return Container(
                   margin: EdgeInsets.zero,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(24),
@@ -1362,7 +1346,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ],
                     ),
                   ),
-                ),
               );
             },
           ),

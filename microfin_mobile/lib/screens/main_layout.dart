@@ -50,7 +50,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     if (index == 1 || index == 2) {
       final vStatus =
           currentUser.value?['verification_status'] ?? 'Unverified';
-      if (vStatus != 'Approved') {
+      if (vStatus != 'Approved' && vStatus != 'Verified') {
         AppDialogs.showVerificationRequired(context, activeTenant.value.themePrimaryColor, status: vStatus);
         return;
       }

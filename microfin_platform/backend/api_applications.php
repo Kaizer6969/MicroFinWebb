@@ -151,6 +151,10 @@ if ($method === 'GET' && $action === 'view') {
         $row['application_data'] = json_decode($row['application_data'], true) ?? [];
     }
 
+    $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
+    $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, (int) ($row['client_id'] ?? 0));
+    $row['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $row, $upgrade_metrics);
+
     echo json_encode(['status' => 'success', 'data' => $row]);
     exit;
 }

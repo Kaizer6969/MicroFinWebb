@@ -1,6 +1,6 @@
 class ApiConfig {
   static const String _defaultAppBaseUrl =
-      'http://localhost/admin-draft-withmobile/admin-draft';
+      'https://microfinwebb-production.up.railway.app';
   static const String _defaultApiPath = '/microfin_mobile/api';
   static const String _apiBaseUrlOverride = String.fromEnvironment(
     'API_BASE_URL',
