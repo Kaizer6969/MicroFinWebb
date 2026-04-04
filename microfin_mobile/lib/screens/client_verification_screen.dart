@@ -364,7 +364,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           Text(
              ok
                 ? 'Your details were auto-filled from the ID. Please review and correct anything if necessary.'
-                : errorMsg!,
+                : errorMsg,
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: AppColors.textMain, height: 1.4),
           ),
