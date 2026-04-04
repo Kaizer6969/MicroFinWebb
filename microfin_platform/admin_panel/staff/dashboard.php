@@ -1942,6 +1942,8 @@ async function viewApplication(id) {
     } else if (s === 'Draft') {
         footer.innerHTML += `<button class="btn btn-brand" onclick="appAction(${a.application_id},'submit')">Submit Application</button>`;
     }
+    } else if (s === 'Approved') {
+        footer.innerHTML += `<button class="btn btn-brand" onclick="openLoanRelease(${a.application_id}, ${a.approved_amount || a.requested_amount})"><span class="material-symbols-rounded ms">payments</span> Release / Disburse Loan</button>`;
 }
 
 async function appAction(id, action, needsAmount=false) {
