@@ -397,7 +397,9 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
 
-                if (!_showWelcomePanel && !_tenantsLoaded)
+                if (!_showWelcomePanel &&
+                    !_tenantsLoaded &&
+                    _startupErrorTitle == null)
                   // Loading state
                   const Padding(
                     padding: EdgeInsets.only(bottom: 60),
