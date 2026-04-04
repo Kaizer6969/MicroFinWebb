@@ -69,7 +69,7 @@ jobs:
           APP_NAME: ${{ steps.vars.outputs.app_name }}
           TENANT_SLUG: ${{ steps.vars.outputs.tenant_slug }}
         run: |
-          flutter build apk --release \
+          flutter build apk --release --no-tree-shake-icons \
             --dart-define=APP_NAME="$APP_NAME" \
             --dart-define=TENANT_ID="$TENANT_SLUG"
 
