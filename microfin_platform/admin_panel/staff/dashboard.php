@@ -1237,30 +1237,42 @@ tbody tr:hover { background: var(--brand-light); }
         </div>
         <div class="modal-body">
             <input type="hidden" id="releaseAppId">
+            <input type="hidden" id="releaseAmount">
+            <input type="hidden" id="releaseDate">
+            <input type="hidden" id="releaseMethod">
+            <input type="hidden" id="releaseFreq">
+            <input type="hidden" id="releaseRef">
             <div class="form-grid">
                 <div class="form-group">
-                    <label>Approved Amount (PHP)</label>
-                    <input type="number" id="releaseAmount" step="0.01" min="1">
+                    <label>Application #</label>
+                    <input type="text" id="releaseAppNumber" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Approved Amount</label>
+                    <input type="text" id="releaseAmountPreview" readonly>
                 </div>
                 <div class="form-group">
                     <label>Release Date</label>
-                    <input type="date" id="releaseDate">
+                    <input type="text" id="releaseDatePreview" readonly>
                 </div>
                 <div class="form-group">
                     <label>Disbursement Method</label>
-                    <select id="releaseMethod"><option>Cash</option><option>Check</option><option>Bank Transfer</option><option>GCash</option></select>
+                    <input type="text" id="releaseMethodPreview" readonly>
                 </div>
                 <div class="form-group">
                     <label>Payment Frequency</label>
-                    <select id="releaseFreq"><option value="Monthly">Monthly</option><option value="Weekly">Weekly</option><option value="Bi-Weekly">Bi-Weekly</option></select>
+                    <input type="text" id="releaseFreqPreview" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Disbursement Reference</label>
+                    <input type="text" id="releaseRefPreview" readonly>
                 </div>
                 <div class="form-group form-full">
-                    <label>Reference / Check # (optional)</label>
-                    <input type="text" id="releaseRef">
+                    <small style="display:block;color:var(--muted);font-size:.78rem;line-height:1.5;">These release details are filled automatically from the approved application and current system defaults.</small>
                 </div>
                 <div class="form-group form-full">
-                    <label>Notes</label>
-                    <textarea id="releaseNotes"></textarea>
+                    <label>Notes (optional)</label>
+                    <textarea id="releaseNotes" placeholder="Add internal release notes if needed."></textarea>
                 </div>
             </div>
         </div>
@@ -1461,12 +1473,14 @@ const API = {
 };
 
 let activeLoanId = null;
+let pendingDisbursementApps = {};
 let _debounceTimer = null;
 
 // ── Utilities ──────────────────────────────────────────────
 function debounce(fn, ms) { return () => { clearTimeout(_debounceTimer); _debounceTimer = setTimeout(fn, ms); }; }
 function fmt(n) { return '₱' + parseFloat(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtDate(d) { if (!d) return '—'; const dt = new Date(d); return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'2-digit'}); }
+function todayIsoDate() { return new Date().toISOString().slice(0,10); }
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -1478,6 +1492,38 @@ function escapeHtml(value) {
     })[char]);
 }
 function isBlank(value) { return value === null || value === undefined || String(value).trim() === ''; }
+function parseJsonObject(value) {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try {
+        const parsed = JSON.parse(value);
+        if (typeof parsed === 'string') return parseJsonObject(parsed);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+        return {};
+    }
+}
+function buildDisbursementReference(appId, releaseDate='') {
+    const datePart = String(releaseDate || todayIsoDate()).replace(/[^0-9]/g, '');
+    const safeDate = datePart.length === 8 ? datePart : todayIsoDate().replace(/-/g, '');
+    const safeId = String(parseInt(appId || 0, 10) || 0).padStart(6, '0');
+    return `DISB-${safeDate}-${safeId}`;
+}
+function resolveApprovedDisbursementAmount(app={}) {
+    const approved = parseFloat(app.approved_amount || 0);
+    const requested = parseFloat(app.requested_amount || 0);
+    return approved > 0 ? approved : requested;
+}
+function resolveReleaseMethod(app={}) {
+    const data = parseJsonObject(app.application_data);
+    const preferred = String(data.disbursement_method || data.release_method || 'Cash').trim();
+    return ['Cash', 'Check', 'Bank Transfer', 'GCash'].includes(preferred) ? preferred : 'Cash';
+}
+function resolveReleasePaymentFrequency(app={}) {
+    const data = parseJsonObject(app.application_data);
+    const preferred = String(data.payment_frequency || data.repayment_frequency || data.frequency || 'Monthly').trim();
+    return ['Daily', 'Weekly', 'Bi-Weekly', 'Monthly'].includes(preferred) ? preferred : 'Monthly';
+}
 function formatTextValue(value, emptyLabel='Not provided') {
     if (isBlank(value)) return `<span class="detail-value is-empty">${escapeHtml(emptyLabel)}</span>`;
     return escapeHtml(value);
@@ -2007,6 +2053,7 @@ async function loadPendingDisbursements() {
     const tbody = document.getElementById('loanDisbursementTbody');
     if (!tbody) return;
     tbody.innerHTML = '<tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr>';
+    pendingDisbursementApps = {};
 
     try {
         const response = await fetch(API.loans + '?action=approved_applications');
@@ -2024,9 +2071,10 @@ async function loadPendingDisbursements() {
         }
 
         tbody.innerHTML = rows.map(app => {
-            const approvedAmount = parseFloat(app.approved_amount || 0) > 0 ? app.approved_amount : app.requested_amount;
+            pendingDisbursementApps[String(app.application_id)] = app;
+            const approvedAmount = resolveApprovedDisbursementAmount(app);
             const approvedDate = app.approval_date || app.submitted_date;
-            const actionHtml = `<?php if (has_permission('APPROVE_LOANS')): ?><button class="btn btn-sm btn-brand" onclick="openLoanRelease(${Number(app.application_id)}, ${Number(approvedAmount || 0)})"><span class="material-symbols-rounded ms" style="font-size:16px;">payments</span> Release</button><?php else: ?><span class="td-muted">View only</span><?php endif; ?>`;
+            const actionHtml = `<?php if (has_permission('APPROVE_LOANS')): ?><button class="btn btn-sm btn-brand" onclick="openLoanRelease(${Number(app.application_id)})"><span class="material-symbols-rounded ms" style="font-size:16px;">payments</span> Release</button><?php else: ?><span class="td-muted">View only</span><?php endif; ?>`;
 
             return `<tr>
                 <td class="td-mono td-bold">${escapeHtml(app.application_number)}</td>
@@ -2100,8 +2148,11 @@ async function viewLoan(id) {
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Next Due</p><p style="color:${l.days_overdue>0?'#ef4444':''};">${fmtDate(l.next_payment_due)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Release Date</p><p>${fmtDate(l.release_date)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Maturity Date</p><p>${fmtDate(l.maturity_date)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Payment Frequency</p><p>${escapeHtml(l.payment_frequency || 'Monthly')}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Disbursement Method</p><p>${escapeHtml(l.disbursement_method || 'Cash')}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Total Paid</p><p style="color:#22c55e;font-weight:600;">${fmt(l.total_paid)}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Interest Rate</p><p>${l.interest_rate}% / month</p></div>
+            <div style="grid-column:1 / -1;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Disbursement Reference</p><p>${escapeHtml(l.disbursement_reference || 'Auto-generated on release')}</p></div>
         </div>
         <p style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;">Amortization Schedule</p>
         <div style="overflow-x:auto;"><table class="sched-table">
@@ -2115,9 +2166,25 @@ async function viewLoan(id) {
 
 function openLoanRelease(appId, amount) {
     closeModal('appReviewModal');
+    const app = pendingDisbursementApps[String(appId)] || {};
+    const releaseDate = todayIsoDate();
+    const approvedAmount = resolveApprovedDisbursementAmount(app) || parseFloat(amount || 0) || 0;
+    const releaseMethod = resolveReleaseMethod(app);
+    const paymentFrequency = resolveReleasePaymentFrequency(app);
+    const releaseReference = buildDisbursementReference(appId, releaseDate);
+
     document.getElementById('releaseAppId').value = appId;
-    document.getElementById('releaseAmount').value = amount;
-    document.getElementById('releaseRef').value = '';
+    document.getElementById('releaseAppNumber').value = app.application_number || `Application #${appId}`;
+    document.getElementById('releaseAmount').value = approvedAmount;
+    document.getElementById('releaseAmountPreview').value = fmt(approvedAmount);
+    document.getElementById('releaseDate').value = releaseDate;
+    document.getElementById('releaseDatePreview').value = fmtDate(releaseDate);
+    document.getElementById('releaseMethod').value = releaseMethod;
+    document.getElementById('releaseMethodPreview').value = releaseMethod;
+    document.getElementById('releaseFreq').value = paymentFrequency;
+    document.getElementById('releaseFreqPreview').value = paymentFrequency;
+    document.getElementById('releaseRef').value = releaseReference;
+    document.getElementById('releaseRefPreview').value = releaseReference;
     document.getElementById('releaseNotes').value = '';
     openModal('loanReleaseModal');
 }
@@ -2132,7 +2199,7 @@ async function submitLoanRelease() {
         disbursement_reference: document.getElementById('releaseRef').value,
         notes:               document.getElementById('releaseNotes').value,
     };
-    if (!payload.approved_amount || !payload.release_date) { alert('Please fill all required fields.'); return; }
+    if (!payload.application_id) { alert('Missing approved application details.'); return; }
     const r = await fetch(API.loans + '?action=release', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d = await r.json();
     alert(d.message);

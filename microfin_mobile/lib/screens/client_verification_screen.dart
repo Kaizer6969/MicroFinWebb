@@ -93,6 +93,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   final Map<int, String?> _selectedDocs = {};
 
   bool _isSubmitting = false;
+  List<String> _allowedEmploymentStatuses = ['Employed', 'Self-Employed', 'Unemployed', 'Retired'];
 
   // ── ID type definitions ────────────────────────────────────────────────
   static const _idTypes = [

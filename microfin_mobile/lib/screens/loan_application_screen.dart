@@ -119,10 +119,12 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
 
   // ─── Available Terms from product ──────────────────────────────────
   List<int> get _availableTerms {
-    if (_product == null) return [6, 9, 12, 18, 24, 36, 48, 60];
-    final minT = ((_product!['min_term'] ?? _product!['min_term_months'] ?? 6) as num).toInt();
-    final maxT = ((_product!['max_term'] ?? _product!['max_term_months'] ?? 60) as num).toInt();
-    return [6, 9, 12, 18, 24, 36, 48, 60].where((t) => t >= minT && t <= maxT).toList();
+    if (_product == null) return [];
+    int minT = ((_product!['min_term'] ?? _product!['min_term_months'] ?? 1) as num).toInt();
+    int maxT = ((_product!['max_term'] ?? _product!['max_term_months'] ?? 60) as num).toInt();
+    if (minT < 1) minT = 1;
+    if (maxT < minT) maxT = minT;
+    return List.generate(maxT - minT + 1, (index) => minT + index);
   }
 
   @override
@@ -968,7 +970,12 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
             final rate = p['rate'] ?? p['interest_rate'] ?? 0;
             return DropdownMenuItem<int>(value: id, child: Text('$name – $rate% Interest', overflow: TextOverflow.ellipsis));
           }).toList(),
-          onChanged: (v) => setState(() => _selectedProductId = v),
+          onChanged: (v) => setState(() {
+            _selectedProductId = v;
+            if (_selectedTerm != null && !_availableTerms.contains(_selectedTerm)) {
+              _selectedTerm = null;
+            }
+          }),
         ),
         const SizedBox(height: 16),
 
@@ -997,7 +1004,7 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
             _styledDropdown<int>(
               icon: Icons.calendar_month_outlined,
               hint: '— Duration —',
-              value: _selectedTerm,
+              value: _availableTerms.contains(_selectedTerm) ? _selectedTerm : null,
               items: _availableTerms.map((t) {
                 String label = '$t Months';
                 if (t == 12) label = '12 Months (1 Yr)';

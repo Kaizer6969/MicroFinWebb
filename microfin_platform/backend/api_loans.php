@@ -85,7 +85,7 @@ if ($method === 'GET' && $action === 'approved_applications') {
         SELECT
             la.application_id, la.application_number, la.application_status,
             la.requested_amount, la.approved_amount, la.approval_date, la.submitted_date,
-            la.loan_term_months, la.interest_rate,
+            la.loan_term_months, la.interest_rate, la.application_data,
             c.client_id, c.first_name, c.last_name, c.contact_number,
             lp.product_name, lp.product_type
         FROM loan_applications la
@@ -167,6 +167,60 @@ if ($method === 'GET' && $action === 'view') {
     exit;
 }
 
+function loan_release_generate_reference(int $application_id, string $release_date): string
+{
+    $date_part = preg_replace('/[^0-9]/', '', $release_date);
+    if ($date_part === null || strlen($date_part) !== 8) {
+        $date_part = date('Ymd');
+    }
+
+    return 'DISB-' . $date_part . '-' . str_pad((string) max(0, $application_id), 6, '0', STR_PAD_LEFT);
+}
+
+function loan_release_extract_application_data(array $application): array
+{
+    $raw = $application['application_data'] ?? null;
+    if (is_array($raw)) {
+        return $raw;
+    }
+
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        if (isset($decoded[0]) && is_string($decoded[0])) {
+            $nested = json_decode((string) $decoded[0], true);
+            return is_array($nested) ? $nested : $decoded;
+        }
+        return $decoded;
+    }
+
+    if (is_string($decoded)) {
+        $nested = json_decode($decoded, true);
+        return is_array($nested) ? $nested : [];
+    }
+
+    return [];
+}
+
+function loan_release_default_payment_frequency(array $application): string
+{
+    $data = loan_release_extract_application_data($application);
+    $candidate = trim((string) ($data['payment_frequency'] ?? $data['repayment_frequency'] ?? $data['frequency'] ?? 'Monthly'));
+    $allowed = ['Daily', 'Weekly', 'Bi-Weekly', 'Monthly'];
+    return in_array($candidate, $allowed, true) ? $candidate : 'Monthly';
+}
+
+function loan_release_default_disbursement_method(array $application): string
+{
+    $data = loan_release_extract_application_data($application);
+    $candidate = trim((string) ($data['disbursement_method'] ?? $data['release_method'] ?? 'Cash'));
+    $allowed = ['Cash', 'Check', 'Bank Transfer', 'GCash'];
+    return in_array($candidate, $allowed, true) ? $candidate : 'Cash';
+}
+
 // ─── POST: release/disburse loan from approved application ────────────────────
 if ($method === 'POST' && $action === 'release') {
     if (!has_perm('APPROVE_LOANS')) {
@@ -180,14 +234,14 @@ if ($method === 'POST' && $action === 'release') {
 
     $application_id       = (int) ($payload['application_id'] ?? 0);
     $approved_amount      = (float) ($payload['approved_amount'] ?? 0);
-    $disbursement_method  = trim((string) ($payload['disbursement_method'] ?? 'Cash'));
+    $disbursement_method  = trim((string) ($payload['disbursement_method'] ?? ''));
     $disbursement_ref     = trim((string) ($payload['disbursement_reference'] ?? ''));
     $release_date         = trim((string) ($payload['release_date'] ?? date('Y-m-d')));
-    $payment_frequency    = trim((string) ($payload['payment_frequency'] ?? 'Monthly'));
+    $payment_frequency    = trim((string) ($payload['payment_frequency'] ?? ''));
     $notes                = trim((string) ($payload['notes'] ?? ''));
 
-    if ($application_id <= 0 || $approved_amount <= 0) {
-        echo json_encode(['status' => 'error', 'message' => 'Application ID and approved amount are required.']);
+    if ($application_id <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Application ID is required.']);
         exit;
     }
 
@@ -226,6 +280,39 @@ if ($method === 'POST' && $action === 'release') {
         exit;
     }
     $employee_id = (int) $employee_id;
+
+    $approved_amount = $approved_amount > 0
+        ? $approved_amount
+        : ((float) ($app['approved_amount'] ?? 0) > 0
+            ? (float) $app['approved_amount']
+            : (float) ($app['requested_amount'] ?? 0));
+
+    if ($approved_amount <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Approved amount could not be resolved for this application.']);
+        exit;
+    }
+
+    if ($release_date === '') {
+        $release_date = date('Y-m-d');
+    }
+
+    $disbursement_method = $disbursement_method !== ''
+        ? $disbursement_method
+        : loan_release_default_disbursement_method($app);
+    $payment_frequency = $payment_frequency !== ''
+        ? $payment_frequency
+        : loan_release_default_payment_frequency($app);
+    $allowed_methods = ['Cash', 'Check', 'Bank Transfer', 'GCash'];
+    if (!in_array($disbursement_method, $allowed_methods, true)) {
+        $disbursement_method = loan_release_default_disbursement_method($app);
+    }
+    $allowed_frequencies = ['Daily', 'Weekly', 'Bi-Weekly', 'Monthly'];
+    if (!in_array($payment_frequency, $allowed_frequencies, true)) {
+        $payment_frequency = loan_release_default_payment_frequency($app);
+    }
+    $disbursement_ref = $disbursement_ref !== ''
+        ? $disbursement_ref
+        : loan_release_generate_reference($application_id, $release_date);
 
     $principal       = $approved_amount;
     $interest_rate   = (float) $app['interest_rate'];
