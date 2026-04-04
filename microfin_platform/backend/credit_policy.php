@@ -40,6 +40,8 @@ if (!function_exists('mf_credit_policy_score_recommendation_options')) {
 if (!function_exists('mf_credit_policy_score_ceiling')) {
     function mf_credit_policy_score_ceiling(): int
     {
+        // Legacy 0-100 scores are still expanded against this reference,
+        // but current policy thresholds are no longer hard-capped to it.
         return 1000;
     }
 }
@@ -48,13 +50,13 @@ if (!function_exists('mf_credit_policy_normalize_score_value')) {
     function mf_credit_policy_normalize_score_value($value, $fallback = 0, bool $scaleLegacy = true): int
     {
         $score = is_numeric($value) ? (float) $value : (float) $fallback;
-        $scoreCeiling = mf_credit_policy_score_ceiling();
+        $legacyScaleReference = mf_credit_policy_score_ceiling();
 
-        if ($scaleLegacy && $score > 0 && $score <= 100 && $scoreCeiling > 100) {
-            $score *= $scoreCeiling / 100;
+        if ($scaleLegacy && $score > 0 && $score <= 100 && $legacyScaleReference > 100) {
+            $score *= $legacyScaleReference / 100;
         }
 
-        return (int) round(max(0, min($scoreCeiling, $score)));
+        return (int) round(max(0, $score));
     }
 }
 
@@ -105,11 +107,10 @@ if (!function_exists('mf_credit_policy_defaults')) {
 if (!function_exists('mf_credit_policy_build_decision_routing')) {
     function mf_credit_policy_build_decision_routing(int $conditionalMinScore, int $recommendedMinScore): array
     {
-        $scoreCeiling = max(1, mf_credit_policy_score_ceiling());
-        $rejectBelowScore = max(0, min($scoreCeiling, $conditionalMinScore));
+        $rejectBelowScore = max(0, $conditionalMinScore);
         $manualReviewFromScore = $rejectBelowScore;
-        $manualReviewToScore = min(max(0, $scoreCeiling - 1), max($manualReviewFromScore, $recommendedMinScore - 1));
-        $approvalCandidateFromScore = min($scoreCeiling, max($manualReviewToScore + 1, $recommendedMinScore));
+        $manualReviewToScore = max($manualReviewFromScore, $recommendedMinScore - 1);
+        $approvalCandidateFromScore = max($manualReviewToScore + 1, $recommendedMinScore);
 
         return [
             'reject_below_score' => $rejectBelowScore,
@@ -171,7 +172,6 @@ if (!function_exists('mf_credit_policy_normalize')) {
     {
         $defaults = mf_credit_policy_defaults();
         $policy = is_array($payload) ? array_replace_recursive($defaults, $payload) : $defaults;
-        $scoreCeiling = mf_credit_policy_score_ceiling();
         $scoreThresholds = is_array($policy['score_thresholds'] ?? null) ? $policy['score_thresholds'] : [];
 
         $rawHighlyRecommendedMin = mf_credit_policy_normalize_score_value(
@@ -205,10 +205,10 @@ if (!function_exists('mf_credit_policy_normalize')) {
             $defaults['score_thresholds']['not_recommended_min_score']
         );
 
-        $notRecommendedMinScore = min(max(0, $scoreCeiling - 3), $rawNotRecommendedMin);
-        $conditionalMinScore = min(max(1, $scoreCeiling - 2), max($notRecommendedMinScore + 1, $rawConditionalMin));
-        $recommendedMinScore = min(max(2, $scoreCeiling - 1), max($conditionalMinScore + 1, $rawRecommendedMin));
-        $highlyRecommendedMinScore = min($scoreCeiling, max($recommendedMinScore + 1, $rawHighlyRecommendedMin));
+        $notRecommendedMinScore = max(0, $rawNotRecommendedMin);
+        $conditionalMinScore = max($notRecommendedMinScore + 1, $rawConditionalMin);
+        $recommendedMinScore = max($conditionalMinScore + 1, $rawRecommendedMin);
+        $highlyRecommendedMinScore = max($recommendedMinScore + 1, $rawHighlyRecommendedMin);
         $decisionRouting = mf_credit_policy_build_decision_routing($conditionalMinScore, $recommendedMinScore);
 
         $newClientDefaultScore = mf_credit_policy_normalize_score_value(
@@ -311,9 +311,9 @@ if (!function_exists('mf_credit_policy_from_legacy_settings')) {
         $legacy['score_thresholds']['conditional_min_score'] = $legacyConditionalMin;
         $legacy['score_thresholds']['recommended_min_score'] = max($legacyConditionalMin + 1, $legacyRecommendedMin);
         $legacy['score_thresholds']['not_recommended_min_score'] = max(0, $legacyConditionalMin - 200);
-        $legacy['score_thresholds']['highly_recommended_min_score'] = min(
-            mf_credit_policy_score_ceiling(),
-            max($legacy['score_thresholds']['recommended_min_score'] + 1, $legacy['score_thresholds']['recommended_min_score'] + 200)
+        $legacy['score_thresholds']['highly_recommended_min_score'] = max(
+            $legacy['score_thresholds']['recommended_min_score'] + 1,
+            $legacy['score_thresholds']['recommended_min_score'] + 200
         );
         $legacy['ci_rules']['require_ci'] = mf_credit_policy_truthy($settings['require_credit_investigation'] ?? $defaults['ci_rules']['require_ci']);
 
@@ -662,8 +662,7 @@ if (!function_exists('mf_credit_policy_fetch_latest_ci')) {
 if (!function_exists('mf_credit_policy_score_recommendation')) {
     function mf_credit_policy_score_recommendation(array $policy, float $effectiveScore): array
     {
-        $scoreCeiling = max(1, mf_credit_policy_score_ceiling());
-        $effectiveScore = max(0, min($scoreCeiling, $effectiveScore));
+        $effectiveScore = max(0, $effectiveScore);
 
         $notRecommendedMin = (float) ($policy['score_thresholds']['not_recommended_min_score'] ?? 200);
         $conditionalMin = (float) ($policy['score_thresholds']['conditional_min_score'] ?? 400);
@@ -684,6 +683,14 @@ if (!function_exists('mf_credit_policy_score_recommendation')) {
         }
 
         return ['label' => 'At-Risk Credit Score', 'decision_group' => 'reject'];
+    }
+}
+
+if (!function_exists('mf_credit_policy_score_strength_reference')) {
+    function mf_credit_policy_score_strength_reference(array $policy): float
+    {
+        $topBandThreshold = (float) ($policy['score_thresholds']['highly_recommended_min_score'] ?? 800);
+        return max(1.0, $topBandThreshold);
     }
 }
 
@@ -720,16 +727,16 @@ if (!function_exists('mf_credit_policy_compute_limit_snapshot')) {
     function mf_credit_policy_compute_limit_snapshot(array $policy, array $client, ?array $score, ?array $ci): array
     {
         $monthlyIncome = (float) ($client['monthly_income'] ?? 0);
-        $scoreCeiling = max(1, mf_credit_policy_score_ceiling());
         $defaultScore = (float) ($policy['score_thresholds']['new_client_default_score'] ?? 500);
+        $scoreStrengthReference = mf_credit_policy_score_strength_reference($policy);
 
         $hasScore = $score !== null && isset($score['total_score']);
         $totalScore = $hasScore
             ? (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0)
             : $defaultScore;
-        $effectiveScore = max(0, min($scoreCeiling, $totalScore));
+        $effectiveScore = max(0, $totalScore);
         $scoreRecommendation = mf_credit_policy_score_recommendation($policy, $effectiveScore);
-        $scoreFactor = max(0, min(1, $effectiveScore / $scoreCeiling));
+        $scoreFactor = max(0, min(1, $effectiveScore / $scoreStrengthReference));
         $bandMultiplier = mf_credit_policy_band_multiplier($policy, $effectiveScore);
 
         $rawLimit = $monthlyIncome
@@ -844,7 +851,7 @@ if (!function_exists('mf_credit_policy_compose_note')) {
             $parts[] = 'Computed credit limit: ' . mf_credit_policy_format_amount($limit) . '.';
         }
         if ($score !== null) {
-            $parts[] = 'Latest score: ' . number_format((float) $score, 0) . '/' . mf_credit_policy_score_ceiling() . '.';
+            $parts[] = 'Latest score: ' . number_format((float) $score, 0) . '.';
         }
         if ($ciRecommendation !== null && $ciRecommendation !== '') {
             $parts[] = 'CI recommendation: ' . $ciRecommendation . '.';

@@ -539,8 +539,10 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
       } else {
         _showSnack(data['message'] ?? 'Submission failed. Please try again.');
       }
-    } catch (e) {
-      if (mounted) _showSnack('An error occurred. Please try again.');
+    } catch (e, st) {
+      print('Exception: $e');
+      print('StackTrace: $st');
+      if (mounted) _showSnack('Error: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

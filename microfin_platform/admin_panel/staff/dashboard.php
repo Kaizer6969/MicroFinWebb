@@ -1725,6 +1725,7 @@ async function viewApplication(id) {
 
     const a = d.data;
     const policy = a.application_data && a.application_data.credit_policy ? a.application_data.credit_policy : null;
+    const upgrade = a.credit_upgrade || null;
     const showApprovedAmountInput = ['Under Review', 'For Approval', 'Pending Review'].includes(a.application_status);
     const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({
         '&': '&amp;',
@@ -1770,6 +1771,22 @@ async function viewApplication(id) {
                 </div>
                 <p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Policy Reasons</p>
                 ${policyReasons}
+            </div>
+        ` : ''}
+        ${upgrade ? `
+            <div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Upgrade Workflow</p><p style="font-weight:600;">${safe(upgrade.workflow_label || 'Semi-Automatic')}</p></div>
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Upgrade Status</p>${upgradeStatusBadge(upgrade)}</div>
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Potential Upgraded Limit</p><p style="font-weight:600;">${upgrade.potential_upgraded_limit !== null ? fmt(upgrade.potential_upgraded_limit) : '—'}</p></div>
+                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Maximum Limit</p><p>${upgrade.absolute_max_limit > 0 ? fmt(upgrade.absolute_max_limit) : 'No maximum set'}</p></div>
+                </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+                    <p style="margin:0;font-size:.8rem;color:var(--muted);">Completed loans: <strong style="color:var(--text);">${safe(upgrade.completed_loans)}</strong> / ${safe(upgrade.min_completed_loans)}</p>
+                    <p style="margin:0;font-size:.8rem;color:var(--muted);">Late payments: <strong style="color:var(--text);">${safe(upgrade.late_payments)}</strong> / ${safe(upgrade.max_allowed_late_payments)}</p>
+                </div>
+                <p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Upgrade Note</p>
+                <p style="font-size:.85rem;margin:0;">${safe(upgrade.status_note || upgrade.next_limit_note || 'No upgrade note available.')}</p>
             </div>
         ` : ''}
         ${a.approval_notes ? `<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:#166534;margin-bottom:4px;">Approval Notes</p><p style="font-size:.85rem;color:#14532d;">${safe(a.approval_notes)}</p></div>` : ''}
@@ -2062,6 +2079,7 @@ async function viewClient(id) {
     const coMakerAddress = joinAddress([c.comaker_house_no, c.comaker_street, c.comaker_barangay, c.comaker_city, c.comaker_province, c.comaker_postal_code]);
     const verificationBadge = badge(c.verification_status || c.document_verification_status || 'Pending');
     const accountEmail = !isBlank(c.email_address) ? escapeHtml(c.email_address) : formatTextValue(c.user_email);
+    const upgrade = c.credit_upgrade || null;
 
     document.getElementById('clientDetailTitle').textContent = fullName || `${c.first_name || ''} ${c.last_name || ''}`.trim();
 
@@ -2136,6 +2154,23 @@ async function viewClient(id) {
                     ${renderDetailItem('Last Seen Credit Limit', formatMoneyValue(c.last_seen_credit_limit))}
                 </div>
             </section>
+
+            ${upgrade ? `
+            <section class="detail-section">
+                <div class="detail-section-header">
+                    <span class="material-symbols-rounded ms">trending_up</span>
+                    <div class="detail-section-title">Credit Growth & Upgrade</div>
+                </div>
+                <div class="detail-grid">
+                    ${renderDetailItem('Workflow', escapeHtml(upgrade.workflow_label || 'Semi-Automatic'))}
+                    ${renderDetailItem('Upgrade Status', upgradeStatusBadge(upgrade))}
+                    ${renderDetailItem('Potential Upgraded Limit', formatUpgradeLimit(upgrade.potential_upgraded_limit))}
+                    ${renderDetailItem('Completed Loans', escapeHtml(`${upgrade.completed_loans} / ${upgrade.min_completed_loans} required`))}
+                    ${renderDetailItem('Late Payments', escapeHtml(`${upgrade.late_payments} / ${upgrade.max_allowed_late_payments} allowed`))}
+                    ${renderDetailItem('Maximum Limit', formatMoneyValue(upgrade.absolute_max_limit, 'No maximum set'))}
+                    ${renderDetailItem('Upgrade Note', escapeHtml(upgrade.status_note || upgrade.next_limit_note || 'No upgrade note available.'), true)}
+                </div>
+            </section>` : ''}
 
             <section class="detail-section">
                 <div class="detail-section-header">

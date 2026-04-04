@@ -1199,7 +1199,6 @@ function build_credit_limit_rules_from_post(array $source): array
 // POST Handler — Save Credit Assessment Settings
 // ==========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_credit_settings') {
-    $creditScoreCeiling = mf_credit_policy_score_ceiling();
     $form = [
         'minimum_credit_score' => trim($_POST['minimum_credit_score'] ?? '500'),
         'income_weight' => trim($_POST['income_weight'] ?? '25'),
@@ -1218,8 +1217,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     if ($total_weight !== 100) {
         $_SESSION['admin_error'] = "Scoring weights must total exactly 100%. Currently: {$total_weight}%.";
-    } elseif ((int)$form['minimum_credit_score'] < 0 || (int)$form['minimum_credit_score'] > $creditScoreCeiling) {
-        $_SESSION['admin_error'] = 'Minimum credit score must be between 0 and ' . number_format($creditScoreCeiling) . '.';
+    } elseif ((int)$form['minimum_credit_score'] < 0) {
+        $_SESSION['admin_error'] = 'Minimum credit score must be 0 or higher.';
     } elseif ((int)$form['auto_reject_below'] < 0 || (int)$form['auto_reject_below'] > (int)$form['minimum_credit_score']) {
         $_SESSION['admin_error'] = 'Auto-reject score must be between 0 and the minimum credit score.';
     } else {
@@ -5948,8 +5947,8 @@ function hexToRgb($hex) {
                                         <div class="credit-policy-threshold-card">
                                             <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                                 <label for="cp-new-client-default-score">Default Credit Score</label>
-                                                <input type="number" class="form-control" id="cp-new-client-default-score" name="cp_new_client_default_score" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['new_client_default_score'] ?? 500)); ?>">
-                                                <p class="credit-policy-field-hint">Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
+                                                <input type="number" class="form-control" id="cp-new-client-default-score" name="cp_new_client_default_score" min="0" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['new_client_default_score'] ?? 500)); ?>">
+                                                <p class="credit-policy-field-hint">Use the starting score you want to assign when no recorded score exists yet.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -5958,29 +5957,29 @@ function hexToRgb($hex) {
                                         <div class="credit-policy-threshold-card">
                                             <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                                 <label for="cp-not-recommended-score">Fair Credit Score From</label>
-                                                <input type="number" class="form-control" id="cp-not-recommended-score" name="cp_not_recommended_min_score" min="0" max="<?php echo max(0, (int)$credit_policy_score_ceiling - 3); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['not_recommended_min_score'] ?? 200)); ?>">
+                                                <input type="number" class="form-control" id="cp-not-recommended-score" name="cp_not_recommended_min_score" min="0" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['not_recommended_min_score'] ?? 200)); ?>">
                                                 <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Fair Credit Score</code>. Anything below this remains <code>At-Risk Credit Score</code>.</p>
                                             </div>
                                         </div>
                                         <div class="credit-policy-threshold-card">
                                             <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                                 <label for="cp-conditional-score">Standard Credit Score From</label>
-                                                <input type="number" class="form-control" id="cp-conditional-score" name="cp_conditional_min_score" min="1" max="<?php echo max(1, (int)$credit_policy_score_ceiling - 2); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['conditional_min_score'] ?? 400)); ?>">
+                                                <input type="number" class="form-control" id="cp-conditional-score" name="cp_conditional_min_score" min="1" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['conditional_min_score'] ?? 400)); ?>">
                                                 <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Standard Credit Score</code>.</p>
                                             </div>
                                         </div>
                                         <div class="credit-policy-threshold-card">
                                             <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                                 <label for="cp-recommended-score">Good Credit Score From</label>
-                                                <input type="number" class="form-control" id="cp-recommended-score" name="cp_recommended_min_score" min="2" max="<?php echo max(2, (int)$credit_policy_score_ceiling - 1); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['recommended_min_score'] ?? 600)); ?>">
+                                                <input type="number" class="form-control" id="cp-recommended-score" name="cp_recommended_min_score" min="2" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['recommended_min_score'] ?? 600)); ?>">
                                                 <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Good Credit Score</code>.</p>
                                             </div>
                                         </div>
                                         <div class="credit-policy-threshold-card">
                                             <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                                 <label for="cp-highly-recommended-score">High Credit Score From</label>
-                                                <input type="number" class="form-control" id="cp-highly-recommended-score" name="cp_highly_recommended_min_score" min="3" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['highly_recommended_min_score'] ?? 800)); ?>">
-                                                <p class="credit-policy-field-hint">Scores at or above this are classified as <code>High Credit Score</code>. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
+                                                <input type="number" class="form-control" id="cp-highly-recommended-score" name="cp_highly_recommended_min_score" min="3" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['highly_recommended_min_score'] ?? 800)); ?>">
+                                                <p class="credit-policy-field-hint">Scores at or above this are classified as <code>High Credit Score</code>. The score range stays open above this point.</p>
                                                 <p class="credit-policy-field-hint is-warning" id="credit-policy-threshold-warning" hidden>Each score band must start higher than the band before it.</p>
                                             </div>
                                         </div>
@@ -6146,7 +6145,7 @@ function hexToRgb($hex) {
                                     <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-income-multiplier">Income Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?>">
+                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 1.5)); ?>">
                                             <p class="credit-policy-field-hint">Base multiplier applied to monthly income before the classification multiplier, cap, and rounding.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
@@ -6275,7 +6274,7 @@ function hexToRgb($hex) {
                                             </div>
                                             <div class="form-group">
                                                 <label for="credit-policy-sim-score">Credit Score</label>
-                                                <input type="number" class="form-control" id="credit-policy-sim-score" value="820" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1">
+                                                <input type="number" class="form-control" id="credit-policy-sim-score" value="820" min="0" step="1">
                                             </div>
                                             <div class="form-group">
                                                 <label for="credit-policy-sim-requested">Requested Amount</label>
@@ -6309,7 +6308,7 @@ function hexToRgb($hex) {
                                         <strong id="credit-policy-sim-formula">Income x score strength x classification multiplier</strong>
                                     </div>
 
-                                    <div class="credit-policy-note">Simulator assumes the borrower passes eligibility checks. A missing score uses the new-client default score.</div>
+                                    <div class="credit-policy-note">Simulator assumes the borrower passes eligibility checks. A missing score uses the new-client default score, and scores at or above the High Credit Score threshold use full score strength.</div>
                                 </div>
                             </div>
                         </aside>
@@ -7025,31 +7024,31 @@ function hexToRgb($hex) {
             syncCreditPolicyUI();
         }
 
-        function syncCreditPolicyUI() {
-            var scoreCeiling = Math.max(1, <?php echo (int)$credit_policy_score_ceiling; ?>);
-            var reviewBandCeiling = Math.max(0, scoreCeiling - 1);
+        function syncCreditPolicyUILegacy() {
+            var scoreTopBandStart = Math.max(1, getInt('cp-highly-recommended-score'));
+            var reviewBandCeiling = Math.max(0, scoreTopBandStart - 1);
             var activeId = document.activeElement ? document.activeElement.id : '';
             var rejectBelow = Math.max(0, Math.min(reviewBandCeiling, getInt('cp-reject-below-score')));
             var reviewEndRaw = Math.max(0, Math.min(reviewBandCeiling, getInt('cp-review-end-score')));
-            var approveFromRaw = Math.max(1, Math.min(scoreCeiling, getInt('cp-approve-min-score')));
+            var approveFromRaw = Math.max(1, Math.min(scoreTopBandStart, getInt('cp-approve-min-score')));
             var reviewBandEnd = Math.max(rejectBelow, reviewEndRaw);
-            var approveFrom = Math.min(scoreCeiling, Math.max(reviewBandEnd + 1, approveFromRaw));
+            var approveFrom = Math.min(scoreTopBandStart, Math.max(reviewBandEnd + 1, approveFromRaw));
 
             if (activeId === 'cp-approve-min-score') {
                 approveFrom = Math.max(rejectBelow + 1, approveFromRaw);
                 reviewBandEnd = Math.max(rejectBelow, Math.min(reviewBandCeiling, approveFrom - 1));
             } else {
                 reviewBandEnd = Math.max(rejectBelow, reviewEndRaw);
-                approveFrom = Math.min(scoreCeiling, Math.max(reviewBandEnd + 1, approveFromRaw));
+                approveFrom = Math.min(scoreTopBandStart, Math.max(reviewBandEnd + 1, approveFromRaw));
                 if (activeId === 'cp-review-end-score' || activeId === 'cp-reject-below-score' || approveFromRaw !== reviewBandEnd + 1) {
-                    approveFrom = Math.min(scoreCeiling, reviewBandEnd + 1);
+                    approveFrom = Math.min(scoreTopBandStart, reviewBandEnd + 1);
                 }
             }
 
             setValue('cp-reject-below-score', rejectBelow);
             setValue('cp-review-end-score', reviewBandEnd);
             setValue('cp-approve-min-score', approveFrom);
-            var defaultScoreRaw = Math.max(0, Math.min(scoreCeiling, getInt('cp-new-client-default-score')));
+            var defaultScoreRaw = Math.max(0, getInt('cp-new-client-default-score'));
             setValue('cp-new-client-default-score', defaultScoreRaw);
             var defaultBandLabel = '';
             var defaultBandColor = '';
@@ -7128,15 +7127,15 @@ function hexToRgb($hex) {
                 approveInput.setAttribute('aria-invalid', hasThresholdConflict ? 'true' : 'false');
             }
 
-            syncSimulator();
+            syncSimulatorLegacy();
         }
 
-        function syncSimulator() {
+        function syncSimulatorLegacy() {
             var income = Math.max(0, getNumber('credit-policy-sim-income'));
-            var scoreCeiling = Math.max(1, <?php echo (int)$credit_policy_score_ceiling; ?>);
+            var scoreTopBandStart = Math.max(1, getInt('cp-highly-recommended-score'));
             var simScore = getNumber('credit-policy-sim-score');
-            var defaultScore = Math.max(0, Math.min(scoreCeiling, getInt('cp-new-client-default-score')));
-            var effectiveScore = simScore > 0 ? Math.max(0, Math.min(scoreCeiling, simScore)) : defaultScore;
+            var defaultScore = Math.max(0, getInt('cp-new-client-default-score'));
+            var effectiveScore = simScore > 0 ? Math.max(0, simScore) : defaultScore;
             var requested = Math.max(0, getNumber('credit-policy-sim-requested'));
             var incomeMultiplier = Math.max(0, getNumber('cp-income-multiplier'));
             var approveBandMult = Math.max(0, getNumber('cp-approve-band-multiplier'));
@@ -7144,10 +7143,10 @@ function hexToRgb($hex) {
             var rejectBandMult = Math.max(0, getNumber('cp-reject-band-multiplier'));
             var cap = Math.max(0, getNumber('cp-max-credit-limit-cap'));
             var roundTo = Math.max(0, getNumber('cp-round-to-nearest'));
-            var reviewBandCeiling = Math.max(0, scoreCeiling - 1);
+            var reviewBandCeiling = Math.max(0, scoreTopBandStart - 1);
             var rejectBelow = Math.max(0, Math.min(reviewBandCeiling, getInt('cp-reject-below-score')));
             var reviewBandEnd = Math.max(rejectBelow, Math.max(0, Math.min(reviewBandCeiling, getInt('cp-review-end-score'))));
-            var approveFrom = Math.max(reviewBandEnd + 1, Math.min(scoreCeiling, getInt('cp-approve-min-score')));
+            var approveFrom = Math.max(reviewBandEnd + 1, Math.min(scoreTopBandStart, getInt('cp-approve-min-score')));
 
             var bandMultiplier = rejectBandMult;
             if (effectiveScore >= approveFrom) {
@@ -7156,7 +7155,7 @@ function hexToRgb($hex) {
                 bandMultiplier = reviewBandMult;
             }
 
-            var scoreFactor = Math.max(0, Math.min(1, effectiveScore / scoreCeiling));
+            var scoreFactor = Math.max(0, Math.min(1, effectiveScore / scoreTopBandStart));
             var computedLimit = income * incomeMultiplier * scoreFactor * bandMultiplier;
             if (cap > 0) computedLimit = Math.min(computedLimit, cap);
             computedLimit = roundDown(computedLimit, roundTo);
@@ -7198,15 +7197,10 @@ function hexToRgb($hex) {
         }
 
         function getScoreThresholdState() {
-            var scoreCeiling = Math.max(1, <?php echo (int)$credit_policy_score_ceiling; ?>);
-            var notRecommendedFrom = Math.max(0, Math.min(Math.max(0, scoreCeiling - 3), getInt('cp-not-recommended-score')));
-            var conditionalFrom = Math.max(1, Math.min(Math.max(1, scoreCeiling - 2), getInt('cp-conditional-score')));
-            var recommendedFrom = Math.max(2, Math.min(Math.max(2, scoreCeiling - 1), getInt('cp-recommended-score')));
-            var highlyRecommendedFrom = Math.max(3, Math.min(scoreCeiling, getInt('cp-highly-recommended-score')));
-
-            conditionalFrom = Math.max(notRecommendedFrom + 1, conditionalFrom);
-            recommendedFrom = Math.max(conditionalFrom + 1, recommendedFrom);
-            highlyRecommendedFrom = Math.max(recommendedFrom + 1, highlyRecommendedFrom);
+            var notRecommendedFrom = Math.max(0, getInt('cp-not-recommended-score'));
+            var conditionalFrom = Math.max(notRecommendedFrom + 1, getInt('cp-conditional-score'));
+            var recommendedFrom = Math.max(conditionalFrom + 1, getInt('cp-recommended-score'));
+            var highlyRecommendedFrom = Math.max(recommendedFrom + 1, getInt('cp-highly-recommended-score'));
 
             setValue('cp-not-recommended-score', notRecommendedFrom);
             setValue('cp-conditional-score', conditionalFrom);
@@ -7214,7 +7208,6 @@ function hexToRgb($hex) {
             setValue('cp-highly-recommended-score', highlyRecommendedFrom);
 
             return {
-                scoreCeiling: scoreCeiling,
                 notRecommendedFrom: notRecommendedFrom,
                 conditionalFrom: conditionalFrom,
                 recommendedFrom: recommendedFrom,
@@ -7222,7 +7215,8 @@ function hexToRgb($hex) {
                 atRiskEnd: Math.max(0, notRecommendedFrom - 1),
                 notRecommendedEnd: Math.max(notRecommendedFrom, conditionalFrom - 1),
                 conditionalEnd: Math.max(conditionalFrom, recommendedFrom - 1),
-                recommendedEnd: Math.max(recommendedFrom, highlyRecommendedFrom - 1)
+                recommendedEnd: Math.max(recommendedFrom, highlyRecommendedFrom - 1),
+                scoreStrengthReference: Math.max(1, highlyRecommendedFrom)
             };
         }
 
@@ -7250,8 +7244,7 @@ function hexToRgb($hex) {
 
         function syncCreditPolicyUI() {
             var thresholds = getScoreThresholdState();
-            var scoreCeiling = thresholds.scoreCeiling;
-            var defaultScoreRaw = Math.max(0, Math.min(scoreCeiling, getInt('cp-new-client-default-score')));
+            var defaultScoreRaw = Math.max(0, getInt('cp-new-client-default-score'));
             setValue('cp-new-client-default-score', defaultScoreRaw);
 
             var defaultRecommendation = getScoreRecommendation(defaultScoreRaw, thresholds);
@@ -7324,13 +7317,14 @@ function hexToRgb($hex) {
         }
 
         function syncSimulator(thresholds) {
-            thresholds = thresholds || getScoreThresholdState();
+            if (!thresholds || thresholds instanceof Event) {
+                thresholds = getScoreThresholdState();
+            }
 
             var income = Math.max(0, getNumber('credit-policy-sim-income'));
-            var scoreCeiling = thresholds.scoreCeiling;
             var simScore = getNumber('credit-policy-sim-score');
-            var defaultScore = Math.max(0, Math.min(scoreCeiling, getInt('cp-new-client-default-score')));
-            var effectiveScore = simScore > 0 ? Math.max(0, Math.min(scoreCeiling, simScore)) : defaultScore;
+            var defaultScore = Math.max(0, getInt('cp-new-client-default-score'));
+            var effectiveScore = simScore > 0 ? Math.max(0, simScore) : defaultScore;
             var requested = Math.max(0, getNumber('credit-policy-sim-requested'));
             var incomeMultiplier = Math.max(0, getNumber('cp-income-multiplier'));
             var approveBandMult = Math.max(0, getNumber('cp-approve-band-multiplier'));
@@ -7342,8 +7336,9 @@ function hexToRgb($hex) {
             var recommendation = getScoreRecommendation(effectiveScore, thresholds);
             var route = getScoreRecommendationRoute(recommendation);
             var bandMultiplier = route === 'approve' ? approveBandMult : (route === 'review' ? reviewBandMult : rejectBandMult);
+            var scoreStrengthReference = Math.max(1, thresholds.scoreStrengthReference);
 
-            var scoreFactor = Math.max(0, Math.min(1, effectiveScore / scoreCeiling));
+            var scoreFactor = Math.max(0, Math.min(1, effectiveScore / scoreStrengthReference));
             var computedLimit = income * incomeMultiplier * scoreFactor * bandMultiplier;
             if (cap > 0) computedLimit = Math.min(computedLimit, cap);
             computedLimit = roundDown(computedLimit, roundTo);
@@ -7373,6 +7368,9 @@ function hexToRgb($hex) {
                 }
             } else if (decision === 'Approve') {
                 decisionCaption += ' This remains an Approval Candidate if the other rules also pass.';
+                if (effectiveScore >= scoreStrengthReference) {
+                    decisionCaption += ' This score is already in the top band, so full score strength is applied.';
+                }
             }
 
             setText('credit-policy-sim-limit', formatCurrency(computedLimit));
@@ -7391,8 +7389,8 @@ function hexToRgb($hex) {
         ['credit-policy-sim-income', 'credit-policy-sim-score', 'credit-policy-sim-requested'].forEach(function (id) {
             var el = byId(id);
             if (!el) return;
-            el.addEventListener('input', syncSimulator);
-            el.addEventListener('change', syncSimulator);
+            el.addEventListener('input', function() { syncSimulator(); });
+            el.addEventListener('change', function() { syncSimulator(); });
         });
 
         ['credit-policy-reset-trigger-top', 'credit-policy-reset-trigger-bottom'].forEach(function (id) {
