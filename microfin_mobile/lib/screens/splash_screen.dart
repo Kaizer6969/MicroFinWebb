@@ -166,18 +166,26 @@ class _SplashScreenState extends State<SplashScreen>
       identifiedTenant = prefs.getString('locked_tenant_id');
     }
 
-    // 2. If not locked, check build-time configuration (--dart-define=TENANT_ID=xxx)
-    if (identifiedTenant == null || identifiedTenant.isEmpty) {
-      const envTenant = String.fromEnvironment('TENANT_ID');
-      if (envTenant.isNotEmpty) identifiedTenant = envTenant;
-    }
-
-    // 3. Fallback: check URL query parameter for web (e.g., ?tenant=fundline)
-    if (kIsWeb && (identifiedTenant == null || identifiedTenant.isEmpty)) {
+    // 2. Generic builds may still pick up a web query parameter
+    if (!_isLockedTenantBuild &&
+        kIsWeb &&
+        (identifiedTenant == null || identifiedTenant.isEmpty)) {
       try {
         final uriTenant = Uri.base.queryParameters['tenant'];
-        if (uriTenant != null && uriTenant.isNotEmpty) identifiedTenant = uriTenant;
+        if (uriTenant != null && uriTenant.isNotEmpty) {
+          identifiedTenant = uriTenant;
+        }
       } catch (_) {}
+    }
+
+    if (!_isLockedTenantBuild &&
+        (identifiedTenant == null || identifiedTenant.isEmpty)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showTenantPicker(context);
+        }
+      });
+      return;
     }
 
     // 4. Persist identified tenant
@@ -189,16 +197,23 @@ class _SplashScreenState extends State<SplashScreen>
     if (identifiedTenant != null && identifiedTenant.isNotEmpty) {
       TenantBranding? matchingTenant;
       for (final t in TenantBranding.tenants) {
-        if (t.slug.toLowerCase() == identifiedTenant.toLowerCase()) {
+        if (t.slug.toLowerCase() == identifiedTenant.toLowerCase() ||
+            t.id.toLowerCase() == identifiedTenant.toLowerCase()) {
           matchingTenant = t;
           break;
         }
       }
       if (matchingTenant != null) {
         _selectedTenant = matchingTenant;
-        activeTenant.value = TenantBranding.fromTenantId(_selectedTenant!.slug) ?? _selectedTenant!;
-        setState(() => _showWelcomePanel = true);
-        _welcomeController.forward();
+        activeTenant.value =
+            TenantBranding.fromTenantId(_selectedTenant!.slug) ??
+                _selectedTenant!;
+        setState(() {
+          _startupErrorTitle = null;
+          _startupErrorMessage = null;
+          _showWelcomePanel = true;
+        });
+        _welcomeController.forward(from: 0);
         return;
       }
     }
