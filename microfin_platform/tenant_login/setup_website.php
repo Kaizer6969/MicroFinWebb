@@ -2,6 +2,7 @@
 require_once "../backend/session_auth.php";
 mf_start_backend_session();
 require_once "../backend/db_connect.php";
+require_once "../backend/mobile_app_build.php";
 mf_require_tenant_session($pdo, [
     'response' => 'redirect',
     'redirect' => 'login.php',
@@ -197,10 +198,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->prepare('UPDATE tenants SET setup_current_step = 4 WHERE tenant_id = ? AND setup_current_step = 3')->execute([$tenant_id]);
 
+        $buildResult = mf_mobile_app_dispatch_tenant_build(
+            $pdo,
+            (string) $tenant_id,
+            (string) $tenant_slug,
+            trim((string) ($payload['company_name'] ?? $tenant_name))
+        );
+
         echo json_encode([
             'status' => 'success',
             'logo_url' => $resolvedLogoPath,
-            'hero_image' => (string)($payload['hero_image'] ?? '')
+            'hero_image' => (string)($payload['hero_image'] ?? ''),
+            'mobile_app_build' => $buildResult,
         ]);
     } catch (Exception $ex) {
         echo json_encode(['status' => 'error', 'message' => $ex->getMessage()]);

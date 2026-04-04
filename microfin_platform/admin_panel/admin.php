@@ -2,6 +2,7 @@
 require_once '../backend/session_auth.php';
 mf_start_backend_session();
 require_once '../backend/db_connect.php';
+require_once '../backend/mobile_app_build.php';
 mf_require_tenant_session($pdo, [
     'response' => 'die',
     'status' => 403,
@@ -916,7 +917,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $pdo->prepare('INSERT INTO tenant_feature_toggles (tenant_id, toggle_key, is_enabled) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE is_enabled = 1')
         ->execute([$tenant_id, 'public_website_enabled']);
 
-    $_SESSION['admin_flash'] = 'Website saved and published successfully!';
+    $buildResult = mf_mobile_app_dispatch_tenant_build(
+        $pdo,
+        (string) $tenant_id,
+        (string) ($_SESSION['tenant_slug'] ?? ''),
+        trim($tenant_name !== '' ? $tenant_name : ($hero_title !== '' ? $hero_title : ''))
+    );
+
+    $flashMessage = 'Website saved and published successfully!';
+    if (!empty($buildResult['message'])) {
+        $flashMessage .= ' ' . trim((string) $buildResult['message']);
+    }
+
+    $_SESSION['admin_flash'] = $flashMessage;
     header('Location: admin.php?tab=website');
     exit;
 }

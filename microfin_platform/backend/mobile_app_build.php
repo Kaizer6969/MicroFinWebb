@@ -1,0 +1,310 @@
+<?php
+
+function mf_mobile_app_env(string $key, string $default = ''): string
+{
+    $value = getenv($key);
+    if ($value !== false && trim((string) $value) !== '') {
+        return trim((string) $value);
+    }
+
+    if (isset($_ENV[$key]) && trim((string) $_ENV[$key]) !== '') {
+        return trim((string) $_ENV[$key]);
+    }
+
+    if (isset($_SERVER[$key]) && trim((string) $_SERVER[$key]) !== '') {
+        return trim((string) $_SERVER[$key]);
+    }
+
+    if (function_exists('mf_local_config_value')) {
+        $localValue = trim((string) mf_local_config_value($key, ''));
+        if ($localValue !== '') {
+            return $localValue;
+        }
+    }
+
+    return $default;
+}
+
+function mf_mobile_app_normalize_slug(string $rawValue): string
+{
+    if (function_exists('mf_normalize_tenant_slug')) {
+        return (string) mf_normalize_tenant_slug($rawValue);
+    }
+
+    $slug = strtolower(trim($rawValue));
+    $slug = preg_replace('/[^a-z0-9]+/', '', $slug);
+    return (string) $slug;
+}
+
+function mf_mobile_app_project_root(): string
+{
+    return dirname(__DIR__, 2);
+}
+
+function mf_mobile_app_tenant_apk_path(string $tenantSlug): string
+{
+    return mf_mobile_app_project_root()
+        . DIRECTORY_SEPARATOR . 'microfin_mobile'
+        . DIRECTORY_SEPARATOR . 'tenant_apks'
+        . DIRECTORY_SEPARATOR . $tenantSlug . '.apk';
+}
+
+function mf_mobile_app_upsert_setting(PDO $pdo, string $tenantId, string $key, string $value, string $dataType = 'String'): void
+{
+    $stmt = $pdo->prepare('
+        INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            setting_value = VALUES(setting_value),
+            setting_category = VALUES(setting_category),
+            data_type = VALUES(data_type),
+            updated_at = CURRENT_TIMESTAMP
+    ');
+    $stmt->execute([$tenantId, $key, $value, 'Mobile App', $dataType]);
+}
+
+function mf_mobile_app_set_build_state(PDO $pdo, string $tenantId, array $state): void
+{
+    $status = trim((string) ($state['status'] ?? 'unknown'));
+    $message = trim((string) ($state['message'] ?? ''));
+    $slug = trim((string) ($state['tenant_slug'] ?? ''));
+    $appName = trim((string) ($state['app_name'] ?? ''));
+    $timestamp = trim((string) ($state['timestamp'] ?? gmdate('c')));
+
+    try {
+        mf_mobile_app_upsert_setting($pdo, $tenantId, 'mobile_app_build_status', $status);
+        mf_mobile_app_upsert_setting($pdo, $tenantId, 'mobile_app_build_message', $message);
+        mf_mobile_app_upsert_setting($pdo, $tenantId, 'mobile_app_build_requested_at', $timestamp);
+        if ($slug !== '') {
+            mf_mobile_app_upsert_setting($pdo, $tenantId, 'mobile_app_build_slug', $slug);
+        }
+        if ($appName !== '') {
+            mf_mobile_app_upsert_setting($pdo, $tenantId, 'mobile_app_build_app_name', $appName);
+        }
+    } catch (Throwable $ignore) {
+    }
+}
+
+function mf_mobile_app_get_build_state(PDO $pdo, string $tenantId): array
+{
+    try {
+        $stmt = $pdo->prepare("
+            SELECT setting_key, setting_value
+            FROM system_settings
+            WHERE tenant_id = ?
+              AND setting_key IN (
+                'mobile_app_build_status',
+                'mobile_app_build_message',
+                'mobile_app_build_requested_at',
+                'mobile_app_build_slug',
+                'mobile_app_build_app_name'
+              )
+        ");
+        $stmt->execute([$tenantId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+
+        return [
+            'status' => trim((string) ($rows['mobile_app_build_status'] ?? '')),
+            'message' => trim((string) ($rows['mobile_app_build_message'] ?? '')),
+            'requested_at' => trim((string) ($rows['mobile_app_build_requested_at'] ?? '')),
+            'tenant_slug' => trim((string) ($rows['mobile_app_build_slug'] ?? '')),
+            'app_name' => trim((string) ($rows['mobile_app_build_app_name'] ?? '')),
+        ];
+    } catch (Throwable $ignore) {
+        return [];
+    }
+}
+
+function mf_mobile_app_resolve_tenant(PDO $pdo, string $tenantId, string $tenantSlug = '', string $appName = ''): array
+{
+    $resolved = [
+        'tenant_id' => $tenantId,
+        'tenant_slug' => mf_mobile_app_normalize_slug($tenantSlug),
+        'app_name' => trim($appName),
+    ];
+
+    if ($resolved['tenant_slug'] !== '' && $resolved['app_name'] !== '') {
+        return $resolved;
+    }
+
+    $stmt = $pdo->prepare('SELECT tenant_slug, tenant_name FROM tenants WHERE tenant_id = ? LIMIT 1');
+    $stmt->execute([$tenantId]);
+    $tenant = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    if ($resolved['tenant_slug'] === '') {
+        $resolved['tenant_slug'] = mf_mobile_app_normalize_slug((string) ($tenant['tenant_slug'] ?? ''));
+    }
+    if ($resolved['app_name'] === '') {
+        $resolved['app_name'] = trim((string) ($tenant['tenant_name'] ?? ''));
+    }
+
+    if ($resolved['app_name'] === '') {
+        $resolved['app_name'] = strtoupper($resolved['tenant_slug']);
+    }
+
+    return $resolved;
+}
+
+function mf_mobile_app_dispatch_tenant_build(PDO $pdo, string $tenantId, string $tenantSlug = '', string $appName = ''): array
+{
+    $tenant = mf_mobile_app_resolve_tenant($pdo, $tenantId, $tenantSlug, $appName);
+    $slug = $tenant['tenant_slug'];
+    $resolvedAppName = $tenant['app_name'];
+
+    if ($slug === '') {
+        $result = [
+            'ok' => false,
+            'status' => 'failed',
+            'message' => 'Missing tenant slug, so the tenant APK could not be queued.',
+            'tenant_slug' => '',
+            'app_name' => $resolvedAppName,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    $existingApkPath = mf_mobile_app_tenant_apk_path($slug);
+    if (is_file($existingApkPath)) {
+        $result = [
+            'ok' => true,
+            'status' => 'ready',
+            'message' => 'Tenant app already exists and is ready to download.',
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+            'dispatched' => false,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    $githubToken = mf_mobile_app_env('GITHUB_ACTIONS_TOKEN', mf_mobile_app_env('MF_GITHUB_ACTIONS_TOKEN', ''));
+    if ($githubToken === '') {
+        $result = [
+            'ok' => false,
+            'status' => 'configuration_required',
+            'message' => 'GitHub Actions token is not configured yet, so the tenant app build could not be started automatically.',
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    if (!function_exists('curl_init')) {
+        $result = [
+            'ok' => false,
+            'status' => 'failed',
+            'message' => 'cURL is unavailable on the server, so the tenant app build could not be started automatically.',
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    $owner = mf_mobile_app_env('GITHUB_ACTIONS_REPO_OWNER', 'Kaizer6969');
+    $repo = mf_mobile_app_env('GITHUB_ACTIONS_REPO_NAME', 'MicroFinWebb');
+    $workflowFile = mf_mobile_app_env('GITHUB_ACTIONS_TENANT_APK_WORKFLOW', 'build-tenant-apk.yml');
+    $ref = mf_mobile_app_env('GITHUB_ACTIONS_REF', 'main');
+
+    $endpoint = sprintf(
+        'https://api.github.com/repos/%s/%s/actions/workflows/%s/dispatches',
+        rawurlencode($owner),
+        rawurlencode($repo),
+        rawurlencode($workflowFile)
+    );
+
+    $payload = json_encode([
+        'ref' => $ref,
+        'inputs' => [
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+        ],
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+    if ($payload === false) {
+        $result = [
+            'ok' => false,
+            'status' => 'failed',
+            'message' => 'Failed to encode the tenant app build request.',
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    $ch = curl_init($endpoint);
+    if ($ch === false) {
+        $result = [
+            'ok' => false,
+            'status' => 'failed',
+            'message' => 'Failed to initialize the tenant app build request.',
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/vnd.github+json',
+            'Authorization: Bearer ' . $githubToken,
+            'X-GitHub-Api-Version: 2026-03-10',
+            'User-Agent: MicroFinPlatform-TenantAPKBuilder',
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+    ]);
+
+    $responseBody = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlError !== '') {
+        $result = [
+            'ok' => false,
+            'status' => 'failed',
+            'message' => 'Tenant app build could not be queued: ' . $curlError,
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    if ($httpCode >= 200 && $httpCode < 300) {
+        $result = [
+            'ok' => true,
+            'status' => 'queued',
+            'message' => 'Tenant app build queued automatically. The APK should be available in a few minutes.',
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+            'dispatched' => true,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    $bodyText = trim((string) $responseBody);
+    if ($bodyText !== '') {
+        $bodyText = preg_replace('/\s+/', ' ', $bodyText) ?? $bodyText;
+    }
+
+    $result = [
+        'ok' => false,
+        'status' => 'failed',
+        'message' => 'GitHub rejected the tenant app build request (HTTP ' . $httpCode . ').'
+            . ($bodyText !== '' ? ' ' . $bodyText : ''),
+        'tenant_slug' => $slug,
+        'app_name' => $resolvedAppName,
+    ];
+    mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+    return $result;
+}

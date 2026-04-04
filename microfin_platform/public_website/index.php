@@ -1,5 +1,6 @@
 <?php
 require_once '../backend/db_connect.php';
+require_once '../backend/mobile_app_build.php';
 require_once __DIR__ . '/install_attribution.php';
 
 $renderUnavailable = static function (string $title, string $message): void {
@@ -29,9 +30,24 @@ if ($requestedRoute === 'get-app') {
 
     $apkAsset = mf_install_resolve_apk_asset($tenant, false);
     if (empty($apkAsset['path']) && empty($apkAsset['url'])) {
+        $buildState = mf_mobile_app_get_build_state($pdo, (string) ($tenant['tenant_id'] ?? ''));
+        $status = trim((string) ($buildState['status'] ?? ''));
+        $message = 'This tenant-specific app has not been published yet. Please contact the institution or try again after their mobile build is uploaded.';
+
+        if ($status === 'queued') {
+            $message = 'This tenant-specific app is being built right now. Please try again in a few minutes.';
+        } elseif ($status === 'configuration_required') {
+            $message = 'This tenant-specific app could not be built automatically yet because the mobile build integration is not configured on the server.';
+        } elseif ($status === 'failed') {
+            $message = trim((string) ($buildState['message'] ?? ''));
+            if ($message === '') {
+                $message = 'This tenant-specific app build failed to start. Please contact the institution and try again later.';
+            }
+        }
+
         $renderUnavailable(
             'Tenant app not ready',
-            'This tenant-specific app has not been published yet. Please contact the institution or try again after their mobile build is uploaded.'
+            $message
         );
     }
 
