@@ -1031,7 +1031,7 @@ tbody tr:hover { background: var(--brand-light); }
             </div>
             <div>
                 <h1>Loan Applications</h1>
-                <p>Monitor application progress with clearer borrower-facing status groups.</p>
+                <p>Review submitted loan applications, inspect documents, and make the lending decision.</p>
             </div>
             <div class="page-header-actions">
                 <button class="btn btn-outline" onclick="loadApps(document.querySelector('#appFilterTabs .filter-tab.active')?.dataset?.status||'all')">
@@ -1043,8 +1043,6 @@ tbody tr:hover { background: var(--brand-light); }
             <button class="filter-tab active" data-status="all" onclick="loadApps('all',this)">All</button>
             <button class="filter-tab" data-status="Draft" onclick="loadApps('Draft',this)">Draft</button>
             <button class="filter-tab" data-status="Under Review" onclick="loadApps('Under Review',this)">Under Review</button>
-            <button class="filter-tab" data-status="Reviewed" onclick="loadApps('Reviewed',this)">Reviewed</button>
-            <button class="filter-tab" data-status="Approved" onclick="loadApps('Approved',this)">Approved</button>
             <button class="filter-tab" data-status="Rejected" onclick="loadApps('Rejected',this)">Rejected</button>
         </div>
         <div class="card">
@@ -1505,8 +1503,8 @@ function applicationMonitorState(status='') {
         'Under Review': 'Under Review',
         'Document Verification': 'Under Review',
         'Credit Investigation': 'Under Review',
-        'For Approval': 'Reviewed',
-        'Reviewed': 'Reviewed',
+        'For Approval': 'Under Review',
+        'Reviewed': 'Under Review',
         'Approved': 'Approved',
         'Rejected': 'Rejected',
         'Cancelled': 'Rejected',
@@ -1516,10 +1514,7 @@ function applicationMonitorState(status='') {
 }
 function applicationMonitorBadge(status='') {
     const monitor = applicationMonitorState(status);
-    const stageNote = monitor !== status && !isBlank(status)
-        ? `<div class="status-note">Current stage: ${escapeHtml(status)}</div>`
-        : '';
-    return `<div class="status-stack">${badge(monitor)}${stageNote}</div>`;
+    return `<div class="status-stack">${badge(monitor)}</div>`;
 }
 function matchesApplicationFilter(rawStatus, filter='all') {
     if (!filter || filter === 'all') return true;
@@ -1867,9 +1862,8 @@ async function viewApplication(id) {
     }
 
     const a = d.data;
-    const policy = a.application_data && a.application_data.credit_policy ? a.application_data.credit_policy : null;
-    const upgrade = a.credit_upgrade || null;
-    const showApprovedAmountInput = ['Under Review', 'For Approval', 'Pending Review'].includes(a.application_status);
+    const reviewableStatuses = ['Submitted', 'Pending Review', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval'];
+    const showApprovedAmountInput = reviewableStatuses.includes(a.application_status);
     const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({
         '&': '&amp;',
         '<': '&lt;',
@@ -1878,93 +1872,91 @@ async function viewApplication(id) {
         "'": '&#39;'
     })[char]);
     const latestScore = a.latest_credit_score !== null && a.latest_credit_score !== undefined && a.latest_credit_score !== ''
-        ? `${safe(a.latest_credit_score)}${a.latest_credit_rating ? ` (${safe(a.latest_credit_rating)})` : ''}`
-        : 'Not available';
-    const investigationSummary = a.latest_ci_recommendation || a.latest_ci_status || 'Not available';
-    const approvedAmountValue = a.approved_amount || (policy && policy.approved_amount) || a.requested_amount || '';
-    const policyReasons = policy && Array.isArray(policy.reasons) && policy.reasons.length
-        ? `<ul style="margin:8px 0 0 18px;padding:0;">${policy.reasons.map(reason => `<li style="margin-bottom:4px;">${safe(reason)}</li>`).join('')}</ul>`
-        : '<p style="font-size:.82rem;color:var(--muted);margin:8px 0 0;">No policy reasons recorded yet.</p>';
+        ? `${safe(a.latest_credit_score)}${a.latest_credit_rating ? ` <span style="color:var(--muted);font-size:.82rem;">(${safe(a.latest_credit_rating)})</span>` : ''}`
+        : '<span class="detail-value is-empty">Not available</span>';
+    const approvedAmountValue = a.approved_amount || a.requested_amount || '';
+    const productRange = parseFloat(a.min_amount || 0) > 0 || parseFloat(a.max_amount || 0) > 0
+        ? `${fmt(a.min_amount || 0)} to ${fmt(a.max_amount || 0)}`
+        : '<span class="detail-value is-empty">Not configured</span>';
+    const termRange = parseInt(a.min_term_months || 0, 10) > 0 || parseInt(a.max_term_months || 0, 10) > 0
+        ? `${safe(a.min_term_months || 0)} to ${safe(a.max_term_months || 0)} months`
+        : '<span class="detail-value is-empty">Not configured</span>';
+    const clientDocs = Array.isArray(a.client_documents) ? a.client_documents : [];
+    const applicationDocs = Array.isArray(a.application_documents) ? a.application_documents : [];
+    const clientDocsRows = clientDocs.length ? clientDocs.map(doc => {
+        const fileHtml = doc.file_path
+            ? `<a href="../../../${safe(doc.file_path)}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>`
+            : '<span class="td-muted">Not uploaded</span>';
+        return `<tr>
+            <td class="td-bold">${safe(doc.document_name || doc.file_name || 'Client document')}</td>
+            <td>${fileHtml}</td>
+            <td class="td-muted">${fmtDate(doc.upload_date)}</td>
+            <td>${badge(doc.verification_status || 'Pending')}</td>
+        </tr>`;
+    }).join('') : '<tr class="empty-row"><td colspan="4">No client verification documents found.</td></tr>';
+    const applicationDocsRows = applicationDocs.length ? applicationDocs.map(doc => {
+        const fileHtml = doc.file_path
+            ? `<a href="../../../${safe(doc.file_path)}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>`
+            : '<span class="td-muted">File unavailable</span>';
+        return `<tr>
+            <td class="td-bold">${safe(doc.document_name || doc.file_name || 'Application attachment')}</td>
+            <td>${fileHtml}</td>
+            <td class="td-muted">${fmtDate(doc.upload_date)}</td>
+        </tr>`;
+    }).join('') : '<tr class="empty-row"><td colspan="3">No application attachments were submitted.</td></tr>';
 
     document.getElementById('appModalTitle').textContent = 'App: ' + a.application_number;
     document.getElementById('appModalBody').innerHTML = `
         <div class="form-grid" style="margin-bottom:18px;">
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Client</p><p style="font-weight:600;">${safe(a.first_name)} ${safe(a.last_name)}</p></div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Monitoring Status</p>${applicationMonitorBadge(a.application_status)}</div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Current Stage</p><p>${safe(a.application_status)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Review Status</p>${applicationMonitorBadge(a.application_status)}</div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Product</p><p>${safe(a.product_name)} (${safe(a.product_type)})</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Requested Amount</p><p style="font-weight:700;color:var(--brand);font-size:1.05rem;">${fmt(a.requested_amount)}</p></div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Term</p><p>${safe(a.loan_term_months)} months</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Requested Term</p><p>${safe(a.loan_term_months)} months</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Interest Rate</p><p>${safe(a.interest_rate)}% / month</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Contact</p><p>${safe(a.contact_number || '-')}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Submitted</p><p>${fmtDate(a.submitted_date || a.created_at)}</p></div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Credit Limit</p><p>${fmt(a.credit_limit || 0)}</p></div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Latest Score</p><p>${latestScore}</p></div>
-            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Investigation Result</p><p>${safe(investigationSummary)}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Credit Limit</p><p>${parseFloat(a.credit_limit || 0) > 0 ? fmt(a.credit_limit) : '<span class="detail-value is-empty">Not set</span>'}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Credit Score</p><p>${latestScore}</p></div>
             <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Document Status</p><p>${safe(a.document_verification_status || 'Unverified')}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Product Amount Range</p><p>${productRange}</p></div>
+            <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Allowed Term Range</p><p>${termRange}</p></div>
             ${a.loan_purpose ? `<div style="grid-column:1/-1;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Loan Purpose</p><p>${safe(a.loan_purpose)}</p></div>` : ''}
         </div>
-        ${policy ? `
-            <div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Policy Decision</p><p style="font-weight:700;text-transform:capitalize;">${safe(policy.decision || 'n/a')}</p></div>
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Computed Limit</p><p style="font-weight:600;">${fmt(policy.computed_credit_limit || 0)}</p></div>
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Suggested Amount</p><p style="font-weight:600;">${fmt(policy.approved_amount || 0)}</p></div>
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Evaluated At</p><p>${fmtDate(policy.evaluated_at)}</p></div>
-                </div>
-                <p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Policy Reasons</p>
-                ${policyReasons}
+        <div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+            <p style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;">Client Verification Documents</p>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr style="background:var(--panel);">
+                        <th>Document</th><th>File</th><th>Uploaded</th><th>Status</th>
+                    </tr></thead>
+                    <tbody>${clientDocsRows}</tbody>
+                </table>
             </div>
-        ` : ''}
-        ${upgrade ? `
-            <div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
-                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Upgrade Workflow</p><p style="font-weight:600;">${safe(upgrade.workflow_label || 'Semi-Automatic')}</p></div>
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Upgrade Status</p>${upgradeStatusBadge(upgrade)}</div>
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Potential Upgraded Limit</p><p style="font-weight:600;">${upgrade.potential_upgraded_limit !== null ? fmt(upgrade.potential_upgraded_limit) : '—'}</p></div>
-                    <div><p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Maximum Limit</p><p>${upgrade.absolute_max_limit > 0 ? fmt(upgrade.absolute_max_limit) : 'No maximum set'}</p></div>
-                </div>
-                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
-                    <p style="margin:0;font-size:.8rem;color:var(--muted);">Completed loans: <strong style="color:var(--text);">${safe(upgrade.completed_loans)}</strong> / ${safe(upgrade.min_completed_loans)}</p>
-                    <p style="margin:0;font-size:.8rem;color:var(--muted);">Late payments: <strong style="color:var(--text);">${safe(upgrade.late_payments)}</strong> / ${safe(upgrade.max_allowed_late_payments)}</p>
-                </div>
-                <p style="font-size:.72rem;color:var(--muted);margin-bottom:3px;">Upgrade Note</p>
-                <p style="font-size:.85rem;margin:0;">${safe(upgrade.status_note || upgrade.next_limit_note || 'No upgrade note available.')}</p>
+        </div>
+        ${applicationDocs.length ? `
+        <div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px;">
+            <p style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;">Application Attachments</p>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr style="background:var(--panel);">
+                        <th>Document</th><th>File</th><th>Uploaded</th>
+                    </tr></thead>
+                    <tbody>${applicationDocsRows}</tbody>
+                </table>
             </div>
-        ` : ''}
+        </div>` : ''}
         ${a.approval_notes ? `<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:#166534;margin-bottom:4px;">Approval Notes</p><p style="font-size:.85rem;color:#14532d;">${safe(a.approval_notes)}</p></div>` : ''}
         ${a.review_notes ? `<div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:4px;">Review Notes</p><p style="font-size:.85rem;">${safe(a.review_notes)}</p></div>` : ''}
         ${a.rejection_reason ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:#991b1b;margin-bottom:4px;">Rejection Reason</p><p style="font-size:.85rem;color:#7f1d1d;">${safe(a.rejection_reason)}</p></div>` : ''}
         ${showApprovedAmountInput ? `<div class="form-group" style="margin-bottom:14px;"><label>Approved Amount (PHP)</label><input type="number" id="approvedAmountInput" value="${approvedAmountValue}" min="0" step="0.01" style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;"></div>` : ''}
-        <div class="form-group"><label>Notes / Reason</label><textarea id="appActionNotes" placeholder="Add notes or reason for action..." style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;min-height:70px;resize:vertical;outline:none;"></textarea></div>`;
+        <div class="form-group"><label>Notes / Rejection Reason</label><textarea id="appActionNotes" placeholder="Add optional approval notes or a rejection reason..." style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;min-height:70px;resize:vertical;outline:none;"></textarea></div>`;
 
     const footer = document.getElementById('appModalFooter');
     footer.innerHTML = '<button class="btn btn-outline" onclick="closeModal(\'appReviewModal\')">Close</button>';
-    const s = a.application_status;
-
-    if (s === 'Submitted' || s === 'Pending Review') {
-        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
-                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'start_review')">Start Review</button>
-                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
-    } else if (s === 'Under Review') {
-        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
-                             <button class="btn btn-outline" onclick="appAction(${a.application_id},'verify_docs')"><span class="material-symbols-rounded ms">verified</span> Verify Docs</button>
-                             <button class="btn btn-success" onclick="appAction(${a.application_id},'approve',true)"><span class="material-symbols-rounded ms">check_circle</span> Approve</button>
-                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
-    } else if (s === 'Document Verification') {
-        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
-                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'credit_inv')">Investigation</button>
-                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
-    } else if (s === 'Credit Investigation') {
-        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
-                             <button class="btn btn-brand" onclick="appAction(${a.application_id},'for_approval')">Mark Reviewed</button>
-                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
-    } else if (s === 'For Approval') {
-        footer.innerHTML += `<button class="btn btn-outline" onclick="appAction(${a.application_id},'evaluate_policy')">Run Policy</button>
-                             <button class="btn btn-success" onclick="appAction(${a.application_id},'approve',true)"><span class="material-symbols-rounded ms">check_circle</span> Approve</button>
-                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
-    } else if (s === 'Draft') {
-        footer.innerHTML += `<button class="btn btn-brand" onclick="appAction(${a.application_id},'submit')">Submit Application</button>`;
+    if (showApprovedAmountInput) {
+        footer.innerHTML += `<button class="btn btn-success" onclick="appAction(${a.application_id},'approve',true)"><span class="material-symbols-rounded ms">check_circle</span> Approve Loan</button>
+                             <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject Loan</button>`;
     }
 }
 

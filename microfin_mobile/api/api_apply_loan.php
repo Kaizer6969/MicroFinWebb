@@ -4,9 +4,11 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS')
+    exit;
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    echo json_encode(['success' => false, 'message' => 'Invalid Request']); exit;
+    echo json_encode(['success' => false, 'message' => 'Invalid Request']);
+    exit;
 }
 
 require_once 'db.php';
@@ -14,18 +16,19 @@ require_once 'db.php';
 $data = json_decode(file_get_contents("php://input"), true);
 
 // Required
-$user_id    = $data['user_id']    ?? null;
-$tenant_id  = $data['tenant_id']  ?? null;
+$user_id = $data['user_id'] ?? null;
+$tenant_id = $data['tenant_id'] ?? null;
 $product_id = $data['product_id'] ?? null;
-$amount     = floatval($data['amount'] ?? 0);
-$term       = intval($data['term'] ?? 0);
-$category   = $data['purpose_category'] ?? '';
-$purpose    = $data['purpose']    ?? '';
-$documents  = $data['documents']  ?? [];
-$app_data   = $data['app_data']   ?? '{}'; // JSON string for dynamic purpose fields
+$amount = floatval($data['amount'] ?? 0);
+$term = intval($data['term'] ?? 0);
+$category = $data['purpose_category'] ?? '';
+$purpose = $data['purpose'] ?? '';
+$documents = $data['documents'] ?? [];
+$app_data = $data['app_data'] ?? '{}'; // JSON string for dynamic purpose fields
 
 if (empty($user_id) || empty($tenant_id) || empty($product_id) || $amount <= 0 || $term <= 0) {
-    echo json_encode(['success' => false, 'message' => 'Required application details are missing']); exit;
+    echo json_encode(['success' => false, 'message' => 'Required application details are missing']);
+    exit;
 }
 
 $conn->begin_transaction();
@@ -40,10 +43,10 @@ try {
     if ($res->num_rows === 0) {
         throw new Exception("Profile not verified. Please complete verification first.");
     }
-    
+
     $client = $res->fetch_assoc();
     $client_id = $client['client_id'];
-    
+
     // Check the admin-controlled verification_status (set when admin clicks "Verify Client")
     if ($client['document_verification_status'] !== 'Approved' && $client['document_verification_status'] !== 'Verified') {
         throw new Exception("Your profile must be Approved or Verified before applying for a loan.");
@@ -62,7 +65,8 @@ try {
     $lStmt->bind_param("i", $client_id);
     $lStmt->execute();
     $lRes = $lStmt->get_result();
-    if ($lRow = $lRes->fetch_assoc()) $used_credit += floatval($lRow['total']);
+    if ($lRow = $lRes->fetch_assoc())
+        $used_credit += floatval($lRow['total']);
     $lStmt->close();
 
     // Pending / in-review applications also consume credit
@@ -70,7 +74,8 @@ try {
     $aStmt->bind_param("i", $client_id);
     $aStmt->execute();
     $aRes = $aStmt->get_result();
-    if ($aRow = $aRes->fetch_assoc()) $used_credit += floatval($aRow['total']);
+    if ($aRow = $aRes->fetch_assoc())
+        $used_credit += floatval($aRow['total']);
     $aStmt->close();
 
     $available_credit = $credit_limit - $used_credit;
@@ -80,22 +85,47 @@ try {
 
 
 
-    // 3. Get product interest rate
-    $pStmt = $conn->prepare("SELECT interest_rate, product_type FROM loan_products WHERE product_id = ?");
-    $pStmt->bind_param("i", $product_id);
+    // 3. Get product settings and enforce product bounds
+    $pStmt = $conn->prepare("
+        SELECT
+            interest_rate, product_type, min_amount, max_amount, min_term_months, max_term_months
+        FROM loan_products
+        WHERE product_id = ? AND tenant_id = ? AND is_active = 1
+        LIMIT 1
+    ");
+    $pStmt->bind_param("is", $product_id, $tenant_id);
     $pStmt->execute();
     $pRes = $pStmt->get_result();
-    if ($pRes->num_rows === 0) throw new Exception("Selected loan product not found.");
+    if ($pRes->num_rows === 0)
+        throw new Exception("Selected loan product not found.");
     $pRow = $pRes->fetch_assoc();
     $interest_rate = floatval($pRow['interest_rate']);
     $product_type = $pRow['product_type'];
+    $product_min_amount = floatval($pRow['min_amount'] ?? 0);
+    $product_max_amount = floatval($pRow['max_amount'] ?? 0);
+    $product_min_term = intval($pRow['min_term_months'] ?? 0);
+    $product_max_term = intval($pRow['max_term_months'] ?? 0);
     $pStmt->close();
+
+    if ($product_min_amount > 0 && $amount < $product_min_amount) {
+        throw new Exception("Requested amount must be at least PHP " . number_format($product_min_amount, 2) . " for this loan product.");
+    }
+    if ($product_max_amount > 0 && $amount > $product_max_amount) {
+        throw new Exception("Requested amount cannot exceed PHP " . number_format($product_max_amount, 2) . " for this loan product.");
+    }
+    if ($product_min_term > 0 && $term < $product_min_term) {
+        throw new Exception("Loan term must be at least " . number_format($product_min_term) . " month(s) for this loan product.");
+    }
+    if ($product_max_term > 0 && $term > $product_max_term) {
+        throw new Exception("Loan term cannot exceed " . number_format($product_max_term) . " month(s) for this loan product.");
+    }
 
     // Check duplicate pending identical product type
     $dupStmt = $conn->prepare("SELECT la.application_id FROM loan_applications la JOIN loan_products lp ON la.product_id = lp.product_id WHERE la.client_id = ? AND lp.product_type = ? AND la.application_status IN ('Submitted', 'Pending', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval')");
     $dupStmt->bind_param("is", $client_id, $product_type);
     $dupStmt->execute();
-    if ($dupStmt->get_result()->num_rows > 0) throw new Exception("You already have a pending application for this loan type.");
+    if ($dupStmt->get_result()->num_rows > 0)
+        throw new Exception("You already have a pending application for this loan type.");
     $dupStmt->close();
 
     // 4. Generate application number
@@ -108,7 +138,8 @@ try {
 
     $iaStmt = $conn->prepare("INSERT INTO loan_applications (application_number, client_id, tenant_id, product_id, requested_amount, loan_term_months, interest_rate, purpose_category, loan_purpose, application_data, application_status, submitted_date, has_comaker, comaker_name, comaker_relationship, comaker_contact, comaker_address, comaker_income) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', NOW(), ?, ?, ?, ?, ?, ?)");
     $iaStmt->bind_param("sisidissssissssd", $app_number, $client_id, $tenant_id, $product_id, $amount, $term, $interest_rate, $category, $purpose, $app_data, $has_co, $co_name, $client['comaker_relationship'], $client['comaker_contact'], $co_address, $client['comaker_income']);
-    if (!$iaStmt->execute()) throw new Exception("Failed to save loan application: " . $iaStmt->error);
+    if (!$iaStmt->execute())
+        throw new Exception("Failed to save loan application: " . $iaStmt->error);
     $application_id = $conn->insert_id;
     $iaStmt->close();
 
@@ -117,8 +148,8 @@ try {
         $dStmt = $conn->prepare("INSERT INTO application_documents (application_id, tenant_id, document_type_id, file_name, file_path) VALUES (?, ?, ?, ?, ?)");
         foreach ($documents as $doc) {
             $doc_type_id = $doc['document_type_id'];
-            $file_name   = $doc['file_name'];
-            $file_path   = $doc['file_path'];
+            $file_name = $doc['file_name'];
+            $file_path = $doc['file_path'];
             $dStmt->bind_param("isiss", $application_id, $tenant_id, $doc_type_id, $file_name, $file_path);
             $dStmt->execute();
         }
@@ -126,7 +157,7 @@ try {
     }
 
     // 7. Insert notification for user
-    $notif_title   = 'Loan Application Submitted';
+    $notif_title = 'Loan Application Submitted';
     $notif_message = "Your application $app_number for $product_type has been submitted and is under review.";
     $nStmt = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, notification_type, title, message, priority) VALUES (?, ?, 'General', ?, ?, 'High')");
     $nStmt->bind_param("isss", $user_id, $tenant_id, $notif_title, $notif_message);

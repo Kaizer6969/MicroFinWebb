@@ -48,6 +48,8 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
     if ($status_filter !== '' && $status_filter !== 'all') {
         $where_extra = ' AND la.application_status = ?';
         $params[]    = $status_filter;
+    } else {
+        $where_extra = " AND la.application_status != 'Approved'";
     }
 
     $stmt = $pdo->prepare("
@@ -151,6 +153,30 @@ if ($method === 'GET' && $action === 'view') {
         $row['application_data'] = json_decode($row['application_data'], true) ?? [];
     }
 
+    $application_docs_stmt = $pdo->prepare("
+        SELECT
+            ad.app_document_id, ad.document_type_id, ad.file_name, ad.file_path, ad.upload_date,
+            dt.document_name
+        FROM application_documents ad
+        LEFT JOIN document_types dt ON dt.document_type_id = ad.document_type_id
+        WHERE ad.application_id = ? AND ad.tenant_id = ?
+        ORDER BY ad.upload_date DESC, ad.app_document_id DESC
+    ");
+    $application_docs_stmt->execute([$application_id, $tenant_id]);
+    $row['application_documents'] = $application_docs_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $client_docs_stmt = $pdo->prepare("
+        SELECT
+            cd.client_document_id, cd.document_type_id, cd.file_name, cd.file_path, cd.upload_date,
+            cd.verification_status, dt.document_name, dt.is_required
+        FROM client_documents cd
+        LEFT JOIN document_types dt ON dt.document_type_id = cd.document_type_id
+        WHERE cd.client_id = ? AND cd.tenant_id = ?
+        ORDER BY dt.is_required DESC, cd.upload_date DESC, cd.client_document_id DESC
+    ");
+    $client_docs_stmt->execute([(int) ($row['client_id'] ?? 0), $tenant_id]);
+    $row['client_documents'] = $client_docs_stmt->fetchAll(PDO::FETCH_ASSOC);
+
     $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
     $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, (int) ($row['client_id'] ?? 0));
     $row['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $row, $upgrade_metrics);
@@ -183,7 +209,15 @@ if ($method === 'POST') {
     }
 
     // Fetch current app
-    $cur_stmt = $pdo->prepare('SELECT application_status, client_id, product_id, requested_amount, approved_amount FROM loan_applications WHERE application_id = ? AND tenant_id = ? LIMIT 1');
+    $cur_stmt = $pdo->prepare("
+        SELECT
+            la.application_status, la.client_id, la.product_id, la.requested_amount, la.approved_amount,
+            la.loan_term_months, lp.min_amount, lp.max_amount, lp.min_term_months, lp.max_term_months
+        FROM loan_applications la
+        JOIN loan_products lp ON lp.product_id = la.product_id
+        WHERE la.application_id = ? AND la.tenant_id = ? AND lp.tenant_id = la.tenant_id
+        LIMIT 1
+    ");
     $cur_stmt->execute([$application_id, $tenant_id]);
     $current = $cur_stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -231,7 +265,14 @@ if ($method === 'POST') {
         'verify_docs'     => ['Under Review'    => 'Document Verification'],
         'credit_inv'      => ['Document Verification' => 'Credit Investigation'],
         'for_approval'    => ['Credit Investigation' => 'For Approval'],
-        'approve'         => ['For Approval'    => 'Approved', 'Under Review' => 'Approved', 'Submitted' => 'Approved'],
+        'approve'         => [
+            'Submitted' => 'Approved',
+            'Pending Review' => 'Approved',
+            'Under Review' => 'Approved',
+            'Document Verification' => 'Approved',
+            'Credit Investigation' => 'Approved',
+            'For Approval' => 'Approved'
+        ],
         'reject'          => ['Submitted' => 'Rejected', 'Under Review' => 'Rejected', 'Pending Review' => 'Rejected', 'For Approval' => 'Rejected', 'Document Verification' => 'Rejected', 'Credit Investigation' => 'Rejected'],
         'cancel'          => ['Draft' => 'Cancelled', 'Submitted' => 'Cancelled'],
     ];
@@ -264,6 +305,15 @@ if ($method === 'POST') {
                 throw new Exception('Approved amount is required.');
             }
 
+            $productMinAmount = (float) ($current['min_amount'] ?? 0);
+            $productMaxAmount = (float) ($current['max_amount'] ?? 0);
+            if ($productMinAmount > 0 && $finalApprovedAmount < $productMinAmount) {
+                throw new Exception('Approved amount is below the minimum allowed for this loan product.');
+            }
+            if ($productMaxAmount > 0 && $finalApprovedAmount > $productMaxAmount) {
+                throw new Exception('Approved amount exceeds the maximum allowed for this loan product.');
+            }
+
             $pdo->prepare("
                 UPDATE loan_applications
                 SET application_status = ?, approved_amount = ?, approved_by = ?,
@@ -276,6 +326,8 @@ if ($method === 'POST') {
                 $now, $notes, $now,
                 $application_id, $tenant_id
             ]);
+
+            $responseMessage = 'Loan application approved. It is now ready for disbursement in Loans Management.';
 
         } elseif ($new_action === 'reject') {
             if ($notes === '') {
