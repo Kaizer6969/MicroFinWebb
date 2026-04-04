@@ -1719,7 +1719,7 @@ async function viewClient(id) {
 
     const docsHtml = (c.documents||[]).length ? (c.documents||[]).map(d => `<tr>
         <td class="td-bold">${d.document_name} ${d.is_required ? '<span class="badge badge-amber" style="font-size:.65rem;padding:2px 6px;">Req</span>' : ''}</td>
-        <td>${d.file_path ? `<a href="../../${d.file_path}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>` : '<span class="td-muted">Not uploaded</span>'}</td>
+        <td>${d.file_path ? `<a href="../../../${d.file_path}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>` : '<span class="td-muted">Not uploaded</span>'}</td>
         <td class="td-muted">${fmtDate(d.upload_date)}</td>
         <td>${badge(d.verification_status || 'Pending')}</td>
         <td>
