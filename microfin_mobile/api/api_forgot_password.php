@@ -1,39 +1,43 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+require_once __DIR__ . '/api_utils.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/email_service.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit;
+microfin_api_bootstrap();
+microfin_require_post();
+
+$data = microfin_read_json_input();
+
+$email = microfin_clean_string($data['email'] ?? '');
+$tenantId = microfin_clean_string($data['tenant_id'] ?? '');
+
+if ($email === '' || $tenantId === '') {
+    microfin_json_response(['success' => false, 'message' => 'Required fields are missing'], 422);
 }
 
-require_once 'db.php';
+try {
+    $tenantStmt = $conn->prepare("
+        SELECT tenant_id, tenant_name
+        FROM tenants
+        WHERE tenant_id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+    ");
+    $tenantStmt->bind_param('s', $tenantId);
+    $tenantStmt->execute();
+    $tenant = $tenantStmt->get_result()->fetch_assoc();
+    $tenantStmt->close();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = json_decode(file_get_contents("php://input"), true);
-    
-    $email = $data['email'] ?? '';
-    $tenant_id = $data['tenant_id'] ?? '';
-    
-    if(empty($email) || empty($tenant_id)) {
-        echo json_encode(['success' => false, 'message' => 'Required fields are missing']);
-        exit;
+    if (!$tenant) {
+        microfin_json_response(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.'], 404);
     }
 
-    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
-    $tenant_stmt->bind_param("s", $tenant_id);
-    $tenant_stmt->execute();
-    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
-    $tenant_stmt->close();
-
-    if (!$tenant_exists) {
-        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
-        exit;
-    }
-
-    $stmt = $conn->prepare("
-        SELECT u.user_id
+    $userStmt = $conn->prepare("
+        SELECT
+            u.user_id,
+            u.first_name,
+            u.last_name,
+            u.email
         FROM users u
         INNER JOIN clients c
             ON c.user_id = u.user_id
@@ -41,23 +45,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         WHERE u.email = ?
           AND u.tenant_id = ?
           AND u.user_type = 'Client'
+          AND u.deleted_at IS NULL
+          AND c.deleted_at IS NULL
           AND c.client_status = 'Active'
         LIMIT 1
     ");
-    $stmt->bind_param("ss", $email, $tenant_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    
-    if ($res->num_rows === 1) {
-        // User found. In a real app, generate a token and send an email.
-        // For this functional demo, we'll return success and allow them to proceed to reset.
-        echo json_encode(['success' => true, 'message' => 'User found. You can now reset your password.']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'No account found with that email for this tenant.']);
+    $userStmt->bind_param('ss', $email, $tenantId);
+    $userStmt->execute();
+    $user = $userStmt->get_result()->fetch_assoc();
+    $userStmt->close();
+
+    if (!$user) {
+        microfin_json_response(['success' => false, 'message' => 'No account found with that email for this tenant.'], 404);
     }
-    
-    $stmt->close();
-} else {
-    echo json_encode(['success' => false, 'message' => 'Invalid Request']);
+
+    $resetCode = microfin_generate_one_time_code();
+    $resetToken = password_hash($resetCode, PASSWORD_DEFAULT);
+    $resetExpiry = date('Y-m-d H:i:s', time() + (15 * 60));
+
+    $conn->begin_transaction();
+
+    $updateStmt = $conn->prepare("
+        UPDATE users
+        SET reset_token = ?, reset_token_expiry = ?
+        WHERE user_id = ?
+          AND tenant_id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+    ");
+    $updateStmt->bind_param('ssis', $resetToken, $resetExpiry, $user['user_id'], $tenantId);
+    $updateStmt->execute();
+    $updateStmt->close();
+
+    $emailResult = microfin_send_password_reset_email($conn, [
+        'tenant_id' => $tenantId,
+        'tenant_name' => $tenant['tenant_name'],
+        'user_id' => $user['user_id'],
+        'to_email' => $email,
+        'recipient_name' => trim(((string) ($user['first_name'] ?? '')) . ' ' . ((string) ($user['last_name'] ?? ''))),
+        'otp' => $resetCode,
+        'ttl_minutes' => 15,
+    ]);
+
+    if (!$emailResult['success']) {
+        throw new RuntimeException('Unable to send reset email: ' . ($emailResult['message'] ?? 'Unknown email error.'));
+    }
+
+    $conn->commit();
+
+    microfin_json_response(['success' => true, 'message' => 'Reset code sent to your email.']);
+} catch (Throwable $e) {
+    try {
+        $conn->rollback();
+    } catch (Throwable $rollbackError) {
+    }
+
+    microfin_json_response(['success' => false, 'message' => $e->getMessage()], 500);
 }
-?>

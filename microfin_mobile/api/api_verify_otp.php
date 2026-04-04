@@ -10,32 +10,14 @@ $data = microfin_read_json_input();
 $email = microfin_clean_string($data['email'] ?? '');
 $tenantId = microfin_clean_string($data['tenant_id'] ?? '');
 $resetCode = microfin_clean_string($data['reset_code'] ?? '');
-$newPassword = (string) ($data['new_password'] ?? '');
 
-if ($email === '' || $tenantId === '' || $resetCode === '' || $newPassword === '') {
+if ($email === '' || $tenantId === '' || $resetCode === '') {
     microfin_json_response(['success' => false, 'message' => 'Required fields are missing'], 422);
 }
 
 try {
-    $tenantStmt = $conn->prepare("
-        SELECT tenant_id
-        FROM tenants
-        WHERE tenant_id = ?
-          AND deleted_at IS NULL
-        LIMIT 1
-    ");
-    $tenantStmt->bind_param('s', $tenantId);
-    $tenantStmt->execute();
-    $tenantExists = $tenantStmt->get_result()->num_rows === 1;
-    $tenantStmt->close();
-
-    if (!$tenantExists) {
-        microfin_json_response(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.'], 404);
-    }
-
     $userStmt = $conn->prepare("
         SELECT
-            u.user_id,
             u.reset_token,
             u.reset_token_expiry
         FROM users u
@@ -68,26 +50,7 @@ try {
         microfin_json_response(['success' => false, 'message' => 'The reset code you entered is invalid.'], 422);
     }
 
-    $passwordHash = password_hash($newPassword, PASSWORD_ARGON2ID);
-    $updateStmt = $conn->prepare("
-        UPDATE users
-        SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL, failed_login_attempts = 0
-        WHERE user_id = ?
-          AND tenant_id = ?
-          AND deleted_at IS NULL
-        LIMIT 1
-    ");
-    $updateStmt->bind_param('sis', $passwordHash, $user['user_id'], $tenantId);
-    $updateStmt->execute();
-
-    if ($updateStmt->affected_rows !== 1) {
-        $updateStmt->close();
-        microfin_json_response(['success' => false, 'message' => 'Password update failed. Make sure you are registered.'], 500);
-    }
-
-    $updateStmt->close();
-
-    microfin_json_response(['success' => true, 'message' => 'Password reset successful!']);
+    microfin_json_response(['success' => true, 'message' => 'Reset code verified.']);
 } catch (Throwable $e) {
     microfin_json_response(['success' => false, 'message' => $e->getMessage()], 500);
 }
