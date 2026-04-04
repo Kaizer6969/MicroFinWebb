@@ -98,6 +98,24 @@ $result = $productStmt->get_result();
 
 $products = [];
 while ($row = $result->fetch_assoc()) {
+    $row['product_id'] = (int) ($row['product_id'] ?? 0);
+    $row['id'] = (int) ($row['id'] ?? 0);
+    $row['min_amount'] = (float) ($row['min_amount'] ?? 0);
+    $row['min'] = (float) ($row['min'] ?? 0);
+    $row['max_amount'] = (float) ($row['max_amount'] ?? 0);
+    $row['max'] = (float) ($row['max'] ?? 0);
+    $row['interest_rate'] = (float) ($row['interest_rate'] ?? 0);
+    $row['rate'] = (float) ($row['rate'] ?? 0);
+    $row['min_term_months'] = (int) ($row['min_term_months'] ?? 0);
+    $row['min_term'] = (int) ($row['min_term'] ?? 0);
+    $row['max_term_months'] = (int) ($row['max_term_months'] ?? 0);
+    $row['max_term'] = (int) ($row['max_term'] ?? 0);
+    $row['processing_fee_percentage'] = (float) ($row['processing_fee_percentage'] ?? 0);
+    $row['service_charge'] = (float) ($row['service_charge'] ?? 0);
+    $row['documentary_stamp'] = (float) ($row['documentary_stamp'] ?? 0);
+    $row['insurance_fee_percentage'] = (float) ($row['insurance_fee_percentage'] ?? 0);
+    $row['penalty_rate'] = (float) ($row['penalty_rate'] ?? 0);
+    $row['grace_period_days'] = (int) ($row['grace_period_days'] ?? 0);
     $products[] = $row;
 }
 
