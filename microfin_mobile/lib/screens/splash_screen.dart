@@ -66,6 +66,9 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   static const String _buildTenantId = String.fromEnvironment('TENANT_ID');
+  static const bool _forceTenantPicker = bool.fromEnvironment(
+    'FORCE_TENANT_PICKER',
+  );
 
   // Animation controllers
   late AnimationController _logoController;
@@ -90,6 +93,8 @@ class _SplashScreenState extends State<SplashScreen>
   String? _startupErrorMessage;
 
   bool get _isLockedTenantBuild => _buildTenantId.trim().isNotEmpty;
+  bool get _shouldAlwaysShowTenantPicker =>
+      !_isLockedTenantBuild && (kDebugMode || _forceTenantPicker);
 
   @override
   void initState() {
@@ -165,7 +170,7 @@ class _SplashScreenState extends State<SplashScreen>
     final prefs = await SharedPreferences.getInstance();
 
     // ── DEBUG MODE: always show the tenant picker so you can freely choose ──
-    if (kDebugMode && !_isLockedTenantBuild) {
+    if (_shouldAlwaysShowTenantPicker) {
       // Clear any previously locked tenant so the picker is always fresh
       await prefs.remove('locked_tenant_id');
 

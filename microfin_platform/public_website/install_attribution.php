@@ -100,7 +100,25 @@ function mf_install_tenant_apk_directory(): string
     return mf_install_project_root() . DIRECTORY_SEPARATOR . 'microfin_mobile' . DIRECTORY_SEPARATOR . 'tenant_apks';
 }
 
-function mf_install_resolve_apk_asset(array $tenant): array
+function mf_install_resolve_generic_apk_asset(): array
+{
+    $genericPath = mf_install_generic_apk_path();
+    if (is_file($genericPath)) {
+        return [
+            'path' => $genericPath,
+            'filename' => 'MicroFin Generic.apk',
+            'variant' => 'generic',
+        ];
+    }
+
+    return [
+        'url' => mf_install_generic_apk_url(),
+        'filename' => 'MicroFin Generic.apk',
+        'variant' => 'remote-generic',
+    ];
+}
+
+function mf_install_resolve_tenant_apk_asset(array $tenant): ?array
 {
     $directory = mf_install_tenant_apk_directory();
     $candidates = [];
@@ -125,20 +143,24 @@ function mf_install_resolve_apk_asset(array $tenant): array
         }
     }
 
-    $genericPath = mf_install_generic_apk_path();
-    if (is_file($genericPath)) {
+    return null;
+}
+
+function mf_install_resolve_apk_asset(array $tenant, bool $allowGenericFallback = true): array
+{
+    $tenantAsset = mf_install_resolve_tenant_apk_asset($tenant);
+    if ($tenantAsset !== null) {
+        return $tenantAsset;
+    }
+
+    if (!$allowGenericFallback) {
         return [
-            'path' => $genericPath,
             'filename' => mf_install_download_filename($tenant),
-            'variant' => 'generic',
+            'variant' => 'missing',
         ];
     }
 
-    return [
-        'url' => mf_install_generic_apk_url(),
-        'filename' => mf_install_download_filename($tenant),
-        'variant' => 'remote',
-    ];
+    return mf_install_resolve_generic_apk_asset();
 }
 
 function mf_install_stream_apk(string $path, string $filename): void
@@ -307,7 +329,7 @@ function mf_install_format_tenant(array $tenant): array
     ];
 }
 
-function mf_install_record_download(PDO $pdo, array $tenant): array
+function mf_install_record_download(PDO $pdo, array $tenant, ?array $apkAsset = null): array
 {
     $token = bin2hex(random_bytes(24));
     $ipAddress = mf_install_client_ip();
@@ -354,7 +376,9 @@ function mf_install_record_download(PDO $pdo, array $tenant): array
     return [
         'tracking_token' => $token,
         'platform_hint' => $platformHint,
-        'apk_url' => mf_install_generic_apk_url(),
+        'apk_url' => is_array($apkAsset) && !empty($apkAsset['url'])
+            ? (string) $apkAsset['url']
+            : mf_install_generic_apk_url(),
     ];
 }
 
