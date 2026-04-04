@@ -12,6 +12,8 @@ import 'loan_details_screen.dart';
 import 'my_loans_screen.dart';
 import 'support_center_screen.dart';
 import 'transaction_history_screen.dart';
+import 'splash_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -116,14 +118,31 @@ class _DashboardScreenState extends State<DashboardScreen>
             _isProfileComplete = data['is_profile_complete'] ?? false;
             _verificationStatus = data['verification_status'] ?? 'Unverified';
             currentUser.value?['verification_status'] = _verificationStatus;
-            _creditLimit = (data['credit_limit'] as num?)?.toDouble() ?? 0.0;
+            
+            // Safely parse credit limit whether it comes as string or int or double
+            final rawLimit = data['credit_limit'];
+            _creditLimit = double.tryParse(rawLimit?.toString() ?? '0') ?? 0.0;
+            
             _isLoading = false;
           });
           _animController.forward();
         }
+      } else {
+        // Automatically logout if the account was deleted from the server
+        if (mounted) {
+          currentUser.value = null;
+          SharedPreferences.getInstance().then((prefs) => prefs.remove('user_data'));
+          setState(() => _isLoading = false);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const SplashScreen())
+          );
+        }
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _animController.forward(); // Ensure content becomes visible even if some data parsing fails!
+      }
     }
   }
 
@@ -161,12 +180,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                             children: [
                               // Verification banner
                               _buildVerificationBanner(primary),
+                              const SizedBox(height: 12),
+
+                              if (_featuredProducts.isNotEmpty) ...[
+                                _buildFeaturedProductsSlider(primary),
+                                const SizedBox(height: 32),
+                              ],
+
                               if (_activeLoan != null) ...[
                                 _buildActivePortfolioCard(primary),
                                 const SizedBox(height: 16),
                                 _buildMakePaymentButton(primary),
                                 const SizedBox(height: 24),
-                              ] else if (_creditLimit > 0) ...[
+                              ] else if (_creditLimit > 0 || _verificationStatus == 'Approved' || _verificationStatus == 'Verified') ...[
                                 _buildCreditLimitCard(primary),
                                 const SizedBox(height: 24),
                               ] else ...[

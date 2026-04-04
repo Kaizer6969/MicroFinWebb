@@ -5789,20 +5789,20 @@ function hexToRgb($hex) {
                                 Credit Policy Engine
                             </span>
                             <h2>Credit Policy</h2>
-                            <p class="text-muted">Configure borrower checks, score recommendation bands, investigation rules, product checks, and automatic limit estimates for your app.</p>
+                            <p class="text-muted">Configure borrower checks, score classifications, investigation rules, product checks, and automatic limit estimates for your app.</p>
                             <div class="credit-policy-preview-hero credit-policy-header-preview">
                                 <span class="credit-policy-preview-label">Current Snapshot</span>
-                                <strong id="credit-policy-preview-summary">Below <?php echo (int)$credit_policy_not_recommended_from; ?> = At Risk, <?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?> = Not Recommended, <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> = Conditional, <?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?> = Recommended, <?php echo (int)$credit_policy_highly_recommended_from; ?>+ = Highly Recommended.</strong>
-                                <p id="credit-policy-preview-caption">Reject below <?php echo (int)$credit_policy_conditional_from; ?>. Route <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> to review. Let <?php echo (int)$credit_policy_recommended_from; ?>+ continue as approval candidates. Maximum offer <?php echo '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?>. Rounded to nearest <?php echo '&#8369;' . number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?>.</p>
+                                <strong id="credit-policy-preview-summary">Below <?php echo (int)$credit_policy_not_recommended_from; ?> = At-Risk Credit Score, <?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?> = Fair Credit Score, <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> = Standard Credit Score, <?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?> = Good Credit Score, <?php echo (int)$credit_policy_highly_recommended_from; ?>+ = High Credit Score.</strong>
+                                <p id="credit-policy-preview-caption">Decision routing: Below <?php echo (int)$credit_policy_conditional_from; ?> = Reject, <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> = Manual Review, <?php echo (int)$credit_policy_recommended_from; ?>+ = Approval Candidate. Maximum offer <?php echo '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?>. Rounded to nearest <?php echo '&#8369;' . number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?>.</p>
                             </div>
                         </div>
                         <div class="credit-policy-toolbar">
                             <div class="credit-policy-badges">
-                                <span class="receipt-filter-pill receipt-filter-pill-primary">At Risk <strong id="credit-policy-badge-at-risk">Below <?php echo (int)$credit_policy_not_recommended_from; ?></strong></span>
-                                <span class="receipt-filter-pill">Not Recommended <strong id="credit-policy-badge-not-recommended"><?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?></strong></span>
-                                <span class="receipt-filter-pill">Conditional <strong id="credit-policy-badge-conditional"><?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?></strong></span>
-                                <span class="receipt-filter-pill">Recommended <strong id="credit-policy-badge-recommended"><?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?></strong></span>
-                                <span class="receipt-filter-pill">Highly Recommended <strong id="credit-policy-badge-highly-recommended"><?php echo (int)$credit_policy_highly_recommended_from; ?>+</strong></span>
+                                <span class="receipt-filter-pill receipt-filter-pill-primary">At-Risk Credit Score <strong id="credit-policy-badge-at-risk">Below <?php echo (int)$credit_policy_not_recommended_from; ?></strong></span>
+                                <span class="receipt-filter-pill">Fair Credit Score <strong id="credit-policy-badge-not-recommended"><?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?></strong></span>
+                                <span class="receipt-filter-pill">Standard Credit Score <strong id="credit-policy-badge-conditional"><?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?></strong></span>
+                                <span class="receipt-filter-pill">Good Credit Score <strong id="credit-policy-badge-recommended"><?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?></strong></span>
+                                <span class="receipt-filter-pill">High Credit Score <strong id="credit-policy-badge-highly-recommended"><?php echo (int)$credit_policy_highly_recommended_from; ?>+</strong></span>
                             </div>
                         </div>
                     </div>
@@ -5827,7 +5827,7 @@ function hexToRgb($hex) {
                                 <button type="button" class="credit-policy-tab-btn is-active" data-credit-policy-tab="score">
                                     <span class="material-symbols-rounded">query_stats</span>
                                     Score Rules
-                                    <small>Reject, review, approve</small>
+                                    <small>Classify and route</small>
                                 </button>
                                 <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="limit">
                                     <span class="material-symbols-rounded">payments</span>
@@ -5904,48 +5904,48 @@ function hexToRgb($hex) {
                                             <div class="credit-policy-panel-title">
                                                 <span class="credit-policy-section-step">Section 2</span>
                                                 <h4>Score Thresholds</h4>
-                                                <p class="text-muted">Set the score ranges that label borrowers as At Risk, Not Recommended, Conditional, Recommended, or Highly Recommended.</p>
+                                                <p class="text-muted">Set the score ranges used to classify borrower credit scores. Decision routing is shown separately below.</p>
                                             </div>
                                         </div>
                                         <div class="credit-policy-section-meta">
-                                            <span class="badge badge-gray">Recommendation bands</span>
+                                            <span class="badge badge-gray">Score classification</span>
                                         </div>
                                     </div>
 
                                     <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-not-recommended-score">Not Recommended From Score</label>
+                                            <label for="cp-not-recommended-score">Fair Credit Score From</label>
                                             <input type="number" class="form-control" id="cp-not-recommended-score" name="cp_not_recommended_min_score" min="0" max="<?php echo max(0, (int)$credit_policy_score_ceiling - 3); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['not_recommended_min_score'] ?? 200)); ?>">
-                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are tagged <code>Not Recommended</code>. Anything below this stays <code>At Risk</code>.</p>
+                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Fair Credit Score</code>. Anything below this remains <code>At-Risk Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-conditional-score">Conditional From Score</label>
+                                            <label for="cp-conditional-score">Standard Credit Score From</label>
                                             <input type="number" class="form-control" id="cp-conditional-score" name="cp_conditional_min_score" min="1" max="<?php echo max(1, (int)$credit_policy_score_ceiling - 2); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['conditional_min_score'] ?? 400)); ?>">
-                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are tagged <code>Conditional</code> and usually route to manual review.</p>
+                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Standard Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-recommended-score">Recommended From Score</label>
+                                            <label for="cp-recommended-score">Good Credit Score From</label>
                                             <input type="number" class="form-control" id="cp-recommended-score" name="cp_recommended_min_score" min="2" max="<?php echo max(2, (int)$credit_policy_score_ceiling - 1); ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['recommended_min_score'] ?? 600)); ?>">
-                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are tagged <code>Recommended</code> and can continue as approval candidates.</p>
+                                            <p class="credit-policy-field-hint">Scores from this point up to the next band are classified as <code>Good Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-highly-recommended-score">Highly Recommended From Score</label>
+                                            <label for="cp-highly-recommended-score">High Credit Score From</label>
                                             <input type="number" class="form-control" id="cp-highly-recommended-score" name="cp_highly_recommended_min_score" min="3" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['highly_recommended_min_score'] ?? 800)); ?>">
-                                            <p class="credit-policy-field-hint">Scores at or above this are tagged <code>Highly Recommended</code>. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
+                                            <p class="credit-policy-field-hint">Scores at or above this are classified as <code>High Credit Score</code>. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
                                             <p class="credit-policy-field-hint is-warning" id="credit-policy-threshold-warning" hidden>Each score band must start higher than the band before it.</p>
                                         </div>
                                     </div>
 
                                     <div class="credit-policy-note-card" style="margin-top: 16px;">
-                                        <strong>Band logic</strong>
+                                        <strong>Score Classification</strong>
                                         <ul>
-                                            <li><span id="credit-policy-threshold-copy-at-risk">Below <?php echo (int)$credit_policy_not_recommended_from; ?></span> = At Risk.</li>
-                                            <li><span id="credit-policy-threshold-copy-not-recommended"><?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?></span> = Not Recommended.</li>
-                                            <li><span id="credit-policy-threshold-copy-conditional"><?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?></span> = Conditional.</li>
-                                            <li><span id="credit-policy-threshold-copy-recommended"><?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?></span> = Recommended.</li>
-                                            <li><span id="credit-policy-threshold-copy-highly-recommended"><?php echo (int)$credit_policy_highly_recommended_from; ?> and above</span> = Highly Recommended.</li>
+                                            <li><span id="credit-policy-threshold-copy-at-risk">Below <?php echo (int)$credit_policy_not_recommended_from; ?></span> = At-Risk Credit Score.</li>
+                                            <li><span id="credit-policy-threshold-copy-not-recommended"><?php echo (int)$credit_policy_not_recommended_from; ?>-<?php echo (int)$credit_policy_not_recommended_end; ?></span> = Fair Credit Score.</li>
+                                            <li><span id="credit-policy-threshold-copy-conditional"><?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?></span> = Standard Credit Score.</li>
+                                            <li><span id="credit-policy-threshold-copy-recommended"><?php echo (int)$credit_policy_recommended_from; ?>-<?php echo (int)$credit_policy_recommended_end; ?></span> = Good Credit Score.</li>
+                                            <li><span id="credit-policy-threshold-copy-highly-recommended"><?php echo (int)$credit_policy_highly_recommended_from; ?> and above</span> = High Credit Score.</li>
                                         </ul>
-                                        <p class="credit-policy-field-hint" id="credit-policy-threshold-routing-copy" style="margin-bottom: 0; margin-top: 10px;">Reject below <?php echo (int)$credit_policy_conditional_from; ?>. Route <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> to review. Let <?php echo (int)$credit_policy_recommended_from; ?> and above continue as approval candidates.</p>
+                                        <p class="credit-policy-field-hint" id="credit-policy-threshold-routing-copy" style="margin-bottom: 0; margin-top: 10px;">Decision routing: Below <?php echo (int)$credit_policy_conditional_from; ?> = Reject, <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> = Manual Review, <?php echo (int)$credit_policy_recommended_from; ?> and above = Approval Candidate.</p>
                                     </div>
                                 </div>
 
@@ -5957,7 +5957,7 @@ function hexToRgb($hex) {
                                             <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                                 <label for="cp-new-client-default-score">Default Credit Score</label>
                                                 <input type="number" class="form-control" id="cp-new-client-default-score" name="cp_new_client_default_score" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($credit_policy['score_thresholds']['new_client_default_score'] ?? 500)); ?>">
-                                                <p class="credit-policy-field-hint">Assigned to walk-in clients who don't have a credit score yet. The system treats them as if they scored this value. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
+                                                <p class="credit-policy-field-hint">Used when a borrower does not yet have a recorded credit score. Maximum credit score is <?php echo (int)$credit_policy_score_ceiling; ?>.</p>
                                                 <p class="credit-policy-field-hint" id="credit-policy-default-score-band-hint" style="font-weight: 500;"></p>
                                             </div>
                                         </div>
@@ -6096,7 +6096,7 @@ function hexToRgb($hex) {
                                     <div class="credit-policy-note-card" style="margin-bottom: 16px;">
                                         <strong>How the offer is estimated</strong>
                                         <ul>
-                                            <li><span id="credit-policy-formula-preview">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x recommendation multiplier</span></li>
+                                            <li><span id="credit-policy-formula-preview">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x classification multiplier</span></li>
                                             <li>Keep the final estimate within <span id="credit-policy-formula-cap"><?php echo '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?></span>.</li>
                                             <li>Round the result down to the nearest <span id="credit-policy-formula-round"><?php echo number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?></span>.</li>
                                         </ul>
@@ -6106,22 +6106,22 @@ function hexToRgb($hex) {
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-income-multiplier">Income Multiplier</label>
                                             <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?>">
-                                            <p class="credit-policy-field-hint">Base multiplier applied to monthly income before cap and rounding.</p>
+                                            <p class="credit-policy-field-hint">Base multiplier applied to monthly income before the classification multiplier, cap, and rounding.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-approve-band-multiplier">Approve Band Multiplier</label>
+                                            <label for="cp-approve-band-multiplier">Good / High Band Multiplier</label>
                                             <input type="number" class="form-control" id="cp-approve-band-multiplier" name="cp_approve_band_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['approve_band_multiplier'] ?? 1.10)); ?>">
-                                            <p class="credit-policy-field-hint">Applied when the score is <code>Recommended</code> or <code>Highly Recommended</code>.</p>
+                                            <p class="credit-policy-field-hint">Applied when the score classification is <code>Good Credit Score</code> or <code>High Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-review-band-multiplier">Review Band Multiplier</label>
+                                            <label for="cp-review-band-multiplier">Standard Band Multiplier</label>
                                             <input type="number" class="form-control" id="cp-review-band-multiplier" name="cp_review_band_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['review_band_multiplier'] ?? 1.00)); ?>">
-                                            <p class="credit-policy-field-hint">Applied when the score is <code>Conditional</code>.</p>
+                                            <p class="credit-policy-field-hint">Applied when the score classification is <code>Standard Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-reject-band-multiplier">Reject Band Multiplier</label>
+                                            <label for="cp-reject-band-multiplier">At-Risk / Fair Band Multiplier</label>
                                             <input type="number" class="form-control" id="cp-reject-band-multiplier" name="cp_reject_band_multiplier" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['reject_band_multiplier'] ?? 0.50)); ?>">
-                                            <p class="credit-policy-field-hint">Applied when the score is <code>Not Recommended</code> or <code>At Risk</code>.</p>
+                                            <p class="credit-policy-field-hint">Applied when the score classification is <code>Fair Credit Score</code> or <code>At-Risk Credit Score</code>.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-max-credit-limit-cap">Maximum Credit Limit Cap</label>
@@ -6129,7 +6129,7 @@ function hexToRgb($hex) {
                                                 <span class="credit-input-prefix">&#8369;</span>
                                                 <input type="number" class="form-control" id="cp-max-credit-limit-cap" name="cp_max_credit_limit_cap" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0)); ?>">
                                             </div>
-                                            <p class="credit-policy-field-hint">Hard app ceiling even when income and score suggest more.</p>
+                                            <p class="credit-policy-field-hint">Maximum offer the app can recommend, even when income and score suggest more.</p>
                                         </div>
                                         <div class="form-group credit-policy-field" style="margin-bottom: 0;">
                                             <label for="cp-round-to-nearest">Round To Nearest</label>
@@ -6137,7 +6137,7 @@ function hexToRgb($hex) {
                                                 <span class="credit-input-prefix">&#8369;</span>
                                                 <input type="number" class="form-control" id="cp-round-to-nearest" name="cp_round_to_nearest" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['round_to_nearest'] ?? 0)); ?>">
                                             </div>
-                                            <p class="credit-policy-field-hint">Use values like <code>500</code> or <code>1000</code> for cleaner offers.</p>
+                                            <p class="credit-policy-field-hint">Use values like <code>500</code> or <code>1000</code> for cleaner recommended offers.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -6249,7 +6249,7 @@ function hexToRgb($hex) {
                                     <div class="credit-policy-simulator-hero is-review" id="credit-policy-sim-decision-card">
                                         <span>Likely Decision</span>
                                         <strong id="credit-policy-sim-decision">Review</strong>
-                                        <p id="credit-policy-sim-caption">Based on the current score recommendation and requested amount.</p>
+                                        <p id="credit-policy-sim-caption">Shows the score classification, routing outcome, and estimated offer for the sample borrower.</p>
                                     </div>
 
                                     <div class="credit-policy-simulator-metrics">
@@ -6265,7 +6265,7 @@ function hexToRgb($hex) {
 
                                     <div class="credit-policy-simulator-formula">
                                         <span>Estimate Logic</span>
-                                        <strong id="credit-policy-sim-formula">Income x score strength x recommendation multiplier</strong>
+                                        <strong id="credit-policy-sim-formula">Income x score strength x classification multiplier</strong>
                                     </div>
 
                                     <div class="credit-policy-note">Simulator assumes the borrower passes eligibility checks. A missing score uses the new-client default score.</div>
@@ -7186,24 +7186,24 @@ function hexToRgb($hex) {
         }
 
         function getScoreRecommendation(scoreValue, thresholds) {
-            if (scoreValue >= thresholds.highlyRecommendedFrom) return 'Highly Recommended';
-            if (scoreValue >= thresholds.recommendedFrom) return 'Recommended';
-            if (scoreValue >= thresholds.conditionalFrom) return 'Conditional';
-            if (scoreValue >= thresholds.notRecommendedFrom) return 'Not Recommended';
-            return 'At Risk';
+            if (scoreValue >= thresholds.highlyRecommendedFrom) return 'High Credit Score';
+            if (scoreValue >= thresholds.recommendedFrom) return 'Good Credit Score';
+            if (scoreValue >= thresholds.conditionalFrom) return 'Standard Credit Score';
+            if (scoreValue >= thresholds.notRecommendedFrom) return 'Fair Credit Score';
+            return 'At-Risk Credit Score';
         }
 
         function getScoreRecommendationRoute(recommendation) {
-            if (recommendation === 'Highly Recommended' || recommendation === 'Recommended') return 'approve';
-            if (recommendation === 'Conditional') return 'review';
+            if (recommendation === 'High Credit Score' || recommendation === 'Good Credit Score') return 'approve';
+            if (recommendation === 'Standard Credit Score') return 'review';
             return 'reject';
         }
 
         function getScoreRecommendationRange(recommendation, thresholds) {
-            if (recommendation === 'Highly Recommended') return thresholds.highlyRecommendedFrom + '+';
-            if (recommendation === 'Recommended') return thresholds.recommendedFrom + '-' + thresholds.recommendedEnd;
-            if (recommendation === 'Conditional') return thresholds.conditionalFrom + '-' + thresholds.conditionalEnd;
-            if (recommendation === 'Not Recommended') return thresholds.notRecommendedFrom + '-' + thresholds.notRecommendedEnd;
+            if (recommendation === 'High Credit Score') return thresholds.highlyRecommendedFrom + '+';
+            if (recommendation === 'Good Credit Score') return thresholds.recommendedFrom + '-' + thresholds.recommendedEnd;
+            if (recommendation === 'Standard Credit Score') return thresholds.conditionalFrom + '-' + thresholds.conditionalEnd;
+            if (recommendation === 'Fair Credit Score') return thresholds.notRecommendedFrom + '-' + thresholds.notRecommendedEnd;
             return 'Below ' + thresholds.notRecommendedFrom;
         }
 
@@ -7215,13 +7215,13 @@ function hexToRgb($hex) {
 
             var defaultRecommendation = getScoreRecommendation(defaultScoreRaw, thresholds);
             var defaultRoute = getScoreRecommendationRoute(defaultRecommendation);
-            var defaultBandLabel = 'New clients will start as ' + defaultRecommendation + ' (' + getScoreRecommendationRange(defaultRecommendation, thresholds) + ').';
+            var defaultBandLabel = 'New clients will start in the ' + defaultRecommendation + ' range (' + getScoreRecommendationRange(defaultRecommendation, thresholds) + ').';
             if (defaultRoute === 'reject') {
-                defaultBandLabel += ' This routes to reject unless other rules intervene.';
+                defaultBandLabel += ' Under the current routing rules, this leads to Reject.';
             } else if (defaultRoute === 'review') {
-                defaultBandLabel += ' This routes to manual review.';
+                defaultBandLabel += ' Under the current routing rules, this leads to Manual Review.';
             } else {
-                defaultBandLabel += ' This stays approval-eligible when the rest of the policy still passes.';
+                defaultBandLabel += ' Under the current routing rules, this remains an Approval Candidate if the other rules also pass.';
             }
 
             var defaultBandColor = defaultRoute === 'reject'
@@ -7239,7 +7239,7 @@ function hexToRgb($hex) {
             var allowedEmploymentCount = getEmploymentStatuses().length;
             var autoCiCount = getCheckedValues('cp_auto_approve_ci_values').length;
             var reviewCiCount = getCheckedValues('cp_review_ci_values').length;
-            var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x score strength x recommendation multiplier';
+            var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x score strength x classification multiplier';
             var capText = cap > 0 ? formatCurrency(cap) : 'No cap';
             var roundText = roundTo > 0 ? formatCurrency(roundTo) : 'No rounding';
 
@@ -7260,13 +7260,13 @@ function hexToRgb($hex) {
             setText('credit-policy-threshold-copy-conditional', thresholds.conditionalFrom + '-' + thresholds.conditionalEnd);
             setText('credit-policy-threshold-copy-recommended', thresholds.recommendedFrom + '-' + thresholds.recommendedEnd);
             setText('credit-policy-threshold-copy-highly-recommended', thresholds.highlyRecommendedFrom + ' and above');
-            setText('credit-policy-threshold-routing-copy', 'Reject below ' + thresholds.conditionalFrom + '. Route ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' to review. Let ' + thresholds.recommendedFrom + ' and above continue as approval candidates.');
+            setText('credit-policy-threshold-routing-copy', 'Decision routing: Below ' + thresholds.conditionalFrom + ' = Reject, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Manual Review, ' + thresholds.recommendedFrom + ' and above = Approval Candidate.');
 
             setText('credit-policy-formula-preview', formulaText);
             setText('credit-policy-formula-cap', capText);
             setText('credit-policy-formula-round', roundText);
-            setText('credit-policy-preview-summary', 'Below ' + thresholds.notRecommendedFrom + ' = At Risk, ' + thresholds.notRecommendedFrom + '-' + thresholds.notRecommendedEnd + ' = Not Recommended, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Conditional, ' + thresholds.recommendedFrom + '-' + thresholds.recommendedEnd + ' = Recommended, ' + thresholds.highlyRecommendedFrom + '+ = Highly Recommended.');
-            setText('credit-policy-preview-caption', 'Reject below ' + thresholds.conditionalFrom + '. Route ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' to review. Let ' + thresholds.recommendedFrom + '+ continue as approval candidates. Maximum offer ' + capText + '. ' + (roundTo > 0 ? 'Rounded to nearest ' + roundText + '.' : 'No rounding rule.'));
+            setText('credit-policy-preview-summary', 'Below ' + thresholds.notRecommendedFrom + ' = At-Risk Credit Score, ' + thresholds.notRecommendedFrom + '-' + thresholds.notRecommendedEnd + ' = Fair Credit Score, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Standard Credit Score, ' + thresholds.recommendedFrom + '-' + thresholds.recommendedEnd + ' = Good Credit Score, ' + thresholds.highlyRecommendedFrom + '+ = High Credit Score.');
+            setText('credit-policy-preview-caption', 'Decision routing: Below ' + thresholds.conditionalFrom + ' = Reject, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Manual Review, ' + thresholds.recommendedFrom + '+ = Approval Candidate. Maximum offer ' + capText + '. ' + (roundTo > 0 ? 'Rounded to nearest ' + roundText + '.' : 'No rounding rule.'));
 
             var thresholdWarning = byId('credit-policy-threshold-warning');
             if (thresholdWarning) {
@@ -7316,29 +7316,29 @@ function hexToRgb($hex) {
                 decision = 'Review';
             }
 
-            var decisionCaption = recommendation + ' score band.';
+            var decisionCaption = 'Score classification is ' + recommendation + '.';
             if (simScore <= 0) {
                 decisionCaption += ' Using the new-client default score.';
             }
             if (!(computedLimit > 0)) {
                 decisionCaption = 'The current inputs do not produce a usable credit limit yet.';
             } else if (decision === 'Reject') {
-                decisionCaption += ' This score routes to reject.';
+                decisionCaption += ' Under the current routing rules, this leads to Reject.';
             } else if (decision === 'Review') {
                 if (route === 'review') {
-                    decisionCaption += ' This score routes to manual review.';
+                    decisionCaption += ' Under the current routing rules, this leads to Manual Review.';
                 } else if (requested > 0 && suggestedOffer < requested) {
-                    decisionCaption = recommendation + ' score band, but the estimated offer is lower than the requested amount.';
+                    decisionCaption = 'Score classification is ' + recommendation + ', but the requested amount exceeds the estimated offer, so Manual Review is required.';
                 }
             } else if (decision === 'Approve') {
-                decisionCaption += ' This score stays approval-eligible.';
+                decisionCaption += ' This remains an Approval Candidate if the other rules also pass.';
             }
 
             setText('credit-policy-sim-limit', formatCurrency(computedLimit));
             setText('credit-policy-sim-offer', formatCurrency(suggestedOffer > 0 ? suggestedOffer : 0));
             setText('credit-policy-sim-decision', decision);
             setText('credit-policy-sim-caption', decisionCaption);
-            setText('credit-policy-sim-formula', 'Income x ' + formatNumber(incomeMultiplier) + ' x score ' + scoreFactor.toFixed(2) + ' x ' + recommendation + ' band ' + formatNumber(bandMultiplier));
+            setText('credit-policy-sim-formula', 'Income x ' + formatNumber(incomeMultiplier) + ' x score ' + scoreFactor.toFixed(2) + ' x ' + recommendation + ' multiplier ' + formatNumber(bandMultiplier));
             setDecisionTone('credit-policy-sim-decision-card', decision);
         }
 
