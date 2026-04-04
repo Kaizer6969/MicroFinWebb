@@ -27,7 +27,13 @@ if (!function_exists('mf_credit_policy_ci_recommendation_options')) {
 if (!function_exists('mf_credit_policy_score_recommendation_options')) {
     function mf_credit_policy_score_recommendation_options(): array
     {
-        return ['At Risk', 'Not Recommended', 'Conditional', 'Recommended', 'Highly Recommended'];
+        return [
+            'At-Risk Credit Score',
+            'Fair Credit Score',
+            'Standard Credit Score',
+            'Good Credit Score',
+            'High Credit Score',
+        ];
     }
 }
 
@@ -65,10 +71,13 @@ if (!function_exists('mf_credit_policy_defaults')) {
                 'conditional_min_score' => 400,
                 'recommended_min_score' => 600,
                 'highly_recommended_min_score' => 800,
-                'review_min_score' => 400,
-                'review_max_score' => 599,
-                'approve_min_score' => 600,
                 'new_client_default_score' => 500,
+            ],
+            'decision_routing' => [
+                'reject_below_score' => 400,
+                'manual_review_from_score' => 400,
+                'manual_review_to_score' => 599,
+                'approval_candidate_from_score' => 600,
             ],
             'ci_rules' => [
                 'require_ci' => false,
@@ -89,6 +98,24 @@ if (!function_exists('mf_credit_policy_defaults')) {
                 'use_product_min_amount' => true,
                 'use_product_max_amount' => true,
             ],
+        ];
+    }
+}
+
+if (!function_exists('mf_credit_policy_build_decision_routing')) {
+    function mf_credit_policy_build_decision_routing(int $conditionalMinScore, int $recommendedMinScore): array
+    {
+        $scoreCeiling = max(1, mf_credit_policy_score_ceiling());
+        $rejectBelowScore = max(0, min($scoreCeiling, $conditionalMinScore));
+        $manualReviewFromScore = $rejectBelowScore;
+        $manualReviewToScore = min(max(0, $scoreCeiling - 1), max($manualReviewFromScore, $recommendedMinScore - 1));
+        $approvalCandidateFromScore = min($scoreCeiling, max($manualReviewToScore + 1, $recommendedMinScore));
+
+        return [
+            'reject_below_score' => $rejectBelowScore,
+            'manual_review_from_score' => $manualReviewFromScore,
+            'manual_review_to_score' => $manualReviewToScore,
+            'approval_candidate_from_score' => $approvalCandidateFromScore,
         ];
     }
 }
@@ -163,7 +190,11 @@ if (!function_exists('mf_credit_policy_normalize')) {
         );
         $conditionalFallback = isset($scoreThresholds['conditional_min_score'])
             ? $scoreThresholds['conditional_min_score']
-            : ($scoreThresholds['review_min_score'] ?? max($defaults['score_thresholds']['not_recommended_min_score'] + 1, $rawRecommendedMin - 200));
+            : (
+                $policy['decision_routing']['manual_review_from_score']
+                ?? $scoreThresholds['review_min_score']
+                ?? max($defaults['score_thresholds']['not_recommended_min_score'] + 1, $rawRecommendedMin - 200)
+            );
         $rawConditionalMin = mf_credit_policy_normalize_score_value(
             $conditionalFallback,
             $defaults['score_thresholds']['conditional_min_score']
@@ -178,10 +209,7 @@ if (!function_exists('mf_credit_policy_normalize')) {
         $conditionalMinScore = min(max(1, $scoreCeiling - 2), max($notRecommendedMinScore + 1, $rawConditionalMin));
         $recommendedMinScore = min(max(2, $scoreCeiling - 1), max($conditionalMinScore + 1, $rawRecommendedMin));
         $highlyRecommendedMinScore = min($scoreCeiling, max($recommendedMinScore + 1, $rawHighlyRecommendedMin));
-
-        $reviewMinScore = $conditionalMinScore;
-        $reviewMaxScore = min(max(0, $scoreCeiling - 1), max($reviewMinScore, $recommendedMinScore - 1));
-        $approveMinScore = min($scoreCeiling, max($reviewMaxScore + 1, $recommendedMinScore));
+        $decisionRouting = mf_credit_policy_build_decision_routing($conditionalMinScore, $recommendedMinScore);
 
         $newClientDefaultScore = mf_credit_policy_normalize_score_value(
             $scoreThresholds['new_client_default_score'] ?? $defaults['score_thresholds']['new_client_default_score'],
@@ -220,11 +248,9 @@ if (!function_exists('mf_credit_policy_normalize')) {
                 'conditional_min_score' => $conditionalMinScore,
                 'recommended_min_score' => $recommendedMinScore,
                 'highly_recommended_min_score' => $highlyRecommendedMinScore,
-                'review_min_score' => $reviewMinScore,
-                'review_max_score' => $reviewMaxScore,
-                'approve_min_score' => $approveMinScore,
                 'new_client_default_score' => $newClientDefaultScore,
             ],
+            'decision_routing' => $decisionRouting,
             'ci_rules' => [
                 'require_ci' => mf_credit_policy_truthy($policy['ci_rules']['require_ci'] ?? $defaults['ci_rules']['require_ci']),
                 'ci_required_above_amount' => round(max(0, (float) ($policy['ci_rules']['ci_required_above_amount'] ?? $defaults['ci_rules']['ci_required_above_amount'])), 2),
@@ -274,12 +300,20 @@ if (!function_exists('mf_credit_policy_from_legacy_settings')) {
     {
         $defaults = mf_credit_policy_defaults();
         $legacy = $defaults;
-
-        $legacy['score_thresholds']['review_min_score'] = (int) ($settings['auto_reject_below_score'] ?? $defaults['score_thresholds']['review_min_score']);
-        $legacy['score_thresholds']['approve_min_score'] = (int) ($settings['minimum_credit_score'] ?? $defaults['score_thresholds']['approve_min_score']);
-        $legacy['score_thresholds']['review_max_score'] = max(
-            $legacy['score_thresholds']['review_min_score'],
-            $legacy['score_thresholds']['approve_min_score'] - 1
+        $legacyConditionalMin = mf_credit_policy_normalize_score_value(
+            $settings['auto_reject_below_score'] ?? $defaults['score_thresholds']['conditional_min_score'],
+            $defaults['score_thresholds']['conditional_min_score']
+        );
+        $legacyRecommendedMin = mf_credit_policy_normalize_score_value(
+            $settings['minimum_credit_score'] ?? $defaults['score_thresholds']['recommended_min_score'],
+            $defaults['score_thresholds']['recommended_min_score']
+        );
+        $legacy['score_thresholds']['conditional_min_score'] = $legacyConditionalMin;
+        $legacy['score_thresholds']['recommended_min_score'] = max($legacyConditionalMin + 1, $legacyRecommendedMin);
+        $legacy['score_thresholds']['not_recommended_min_score'] = max(0, $legacyConditionalMin - 200);
+        $legacy['score_thresholds']['highly_recommended_min_score'] = min(
+            mf_credit_policy_score_ceiling(),
+            max($legacy['score_thresholds']['recommended_min_score'] + 1, $legacy['score_thresholds']['recommended_min_score'] + 200)
         );
         $legacy['ci_rules']['require_ci'] = mf_credit_policy_truthy($settings['require_credit_investigation'] ?? $defaults['ci_rules']['require_ci']);
 
@@ -396,19 +430,19 @@ if (!function_exists('mf_credit_policy_score_recommendation')) {
         $highlyRecommendedMin = (float) ($policy['score_thresholds']['highly_recommended_min_score'] ?? 800);
 
         if ($effectiveScore >= $highlyRecommendedMin) {
-            return ['label' => 'Highly Recommended', 'decision_group' => 'approve'];
+            return ['label' => 'High Credit Score', 'decision_group' => 'approve'];
         }
         if ($effectiveScore >= $recommendedMin) {
-            return ['label' => 'Recommended', 'decision_group' => 'approve'];
+            return ['label' => 'Good Credit Score', 'decision_group' => 'approve'];
         }
         if ($effectiveScore >= $conditionalMin) {
-            return ['label' => 'Conditional', 'decision_group' => 'review'];
+            return ['label' => 'Standard Credit Score', 'decision_group' => 'review'];
         }
         if ($effectiveScore >= $notRecommendedMin) {
-            return ['label' => 'Not Recommended', 'decision_group' => 'reject'];
+            return ['label' => 'Fair Credit Score', 'decision_group' => 'reject'];
         }
 
-        return ['label' => 'At Risk', 'decision_group' => 'reject'];
+        return ['label' => 'At-Risk Credit Score', 'decision_group' => 'reject'];
     }
 }
 
@@ -667,9 +701,9 @@ if (!function_exists('mf_evaluate_application_policy')) {
         }
 
         if (($scoreRecommendation['decision_group'] ?? '') === 'reject') {
-            $rejectReasons[] = 'Credit score is rated ' . strtolower((string) ($scoreRecommendation['label'] ?? 'not recommended')) . ' by the current score thresholds.';
+            $rejectReasons[] = 'Credit score is classified as ' . (string) ($scoreRecommendation['label'] ?? 'At-Risk Credit Score') . ' by the current policy.';
         } elseif (($scoreRecommendation['decision_group'] ?? '') === 'review') {
-            $reviewReasons[] = 'Credit score is rated Conditional and requires manual review.';
+            $reviewReasons[] = 'Credit score is classified as Standard Credit Score and requires manual review.';
         }
 
         if (!empty($policy['product_checks']['use_product_minimum_credit_score']) && $effectiveScore < $productMinimumScore) {

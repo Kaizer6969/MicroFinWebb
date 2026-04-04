@@ -126,7 +126,10 @@ class _LoginScreenState extends State<LoginScreen>
           'password': _passwordController.text,
         }),
       );
-      final data = jsonDecode(response.body);
+      String loginBody = response.body;
+      final loginJsonStart = loginBody.indexOf('{');
+      if (loginJsonStart > 0) loginBody = loginBody.substring(loginJsonStart);
+      final data = jsonDecode(loginBody);
       if (data['success'] == true) {
         currentUser.value = {
           'user_id': data['user_id'],

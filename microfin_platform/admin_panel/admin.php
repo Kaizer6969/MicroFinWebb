@@ -2023,8 +2023,8 @@ $credit_policy_ci_configurable_options = array_values(array_filter(
     static fn($option) => $option !== 'Not Recommended'
 ));
 $credit_policy_not_recommended_from = (int)($credit_policy['score_thresholds']['not_recommended_min_score'] ?? 200);
-$credit_policy_conditional_from = (int)($credit_policy['score_thresholds']['conditional_min_score'] ?? ($credit_policy['score_thresholds']['review_min_score'] ?? 400));
-$credit_policy_recommended_from = (int)($credit_policy['score_thresholds']['recommended_min_score'] ?? ($credit_policy['score_thresholds']['approve_min_score'] ?? 600));
+$credit_policy_conditional_from = (int)($credit_policy['score_thresholds']['conditional_min_score'] ?? ($credit_policy['decision_routing']['manual_review_from_score'] ?? 400));
+$credit_policy_recommended_from = (int)($credit_policy['score_thresholds']['recommended_min_score'] ?? ($credit_policy['decision_routing']['approval_candidate_from_score'] ?? 600));
 $credit_policy_highly_recommended_from = (int)($credit_policy['score_thresholds']['highly_recommended_min_score'] ?? 800);
 $credit_policy_at_risk_end = max(0, $credit_policy_not_recommended_from - 1);
 $credit_policy_not_recommended_end = max($credit_policy_not_recommended_from, $credit_policy_conditional_from - 1);

@@ -96,7 +96,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
       );
       final response = await http.get(url);
-      final data = jsonDecode(response.body);
+      // Strip any PHP warnings/notices that may appear before the JSON payload
+      String body = response.body;
+      final jsonStart = body.indexOf('{');
+      if (jsonStart > 0) {
+        body = body.substring(jsonStart);
+      }
+      final data = jsonDecode(body);
       if (data['success'] == true) {
         if (mounted) {
           setState(() {
