@@ -711,7 +711,7 @@ tbody tr:hover { background: var(--brand-light); }
             </a>
             <?php endif; ?>
 
-            <?php if (has_permission('VIEW_LOANS') || has_permission('CREATE_LOANS')): ?>
+            <?php if (has_permission('VIEW_LOANS') || has_permission('CREATE_LOANS') || has_permission('APPROVE_LOANS')): ?>
             <a class="nav-item" data-target="loans" data-title="Loans Management" data-subtitle="Servicing" href="#loans">
                 <span class="material-symbols-rounded ms">real_estate_agent</span> Loans Management
             </a>
@@ -1062,19 +1062,39 @@ tbody tr:hover { background: var(--brand-light); }
     <?php endif; ?>
 
     <!-- ── LOANS ── -->
-    <?php if (has_permission('VIEW_LOANS') || has_permission('CREATE_LOANS')): ?>
+    <?php if (has_permission('VIEW_LOANS') || has_permission('CREATE_LOANS') || has_permission('APPROVE_LOANS')): ?>
     <section id="loans" class="view">
         <div class="page-header">
             <div class="page-icon" style="background:rgba(79,70,229,.1);color:#4f46e5;">
                 <span class="material-symbols-rounded ms" style="font-size:22px;">real_estate_agent</span>
             </div>
-            <div><h1>Loans Management</h1><p>Active disbursed loans, balances, and payment schedules.</p></div>
+            <div><h1>Loans Management</h1><p>Handle approved applications waiting for disbursement, then monitor released loans and payment schedules.</p></div>
+            <div class="page-header-actions">
+                <button class="btn btn-outline" onclick="loadLoans(getActiveLoanFilter(), document.querySelector('#loanFilterTabs .filter-tab.active'))">
+                    <span class="material-symbols-rounded ms">refresh</span> Refresh
+                </button>
+            </div>
         </div>
-        <div class="filter-tabs">
-            <button class="filter-tab active" onclick="loadLoans('all',this)">All</button>
-            <button class="filter-tab" onclick="loadLoans('Active',this)">Active</button>
-            <button class="filter-tab" onclick="loadLoans('Overdue',this)">Overdue</button>
-            <button class="filter-tab" onclick="loadLoans('Fully Paid',this)">Fully Paid</button>
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+                <span class="material-symbols-rounded ms">payments</span>
+                <h3>Awaiting Disbursement</h3>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>App #</th><th>Client</th><th>Product</th>
+                        <th>Approved Amount</th><th>Approved On</th><th>Action</th>
+                    </tr></thead>
+                    <tbody id="loanDisbursementTbody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="filter-tabs" id="loanFilterTabs">
+            <button class="filter-tab active" data-status="all" onclick="loadLoans('all',this)">All</button>
+            <button class="filter-tab" data-status="Active" onclick="loadLoans('Active',this)">Active</button>
+            <button class="filter-tab" data-status="Overdue" onclick="loadLoans('Overdue',this)">Overdue</button>
+            <button class="filter-tab" data-status="Fully Paid" onclick="loadLoans('Fully Paid',this)">Fully Paid</button>
         </div>
         <div class="card">
             <div class="table-wrap">
@@ -1509,6 +1529,10 @@ function getActiveAppFilter() {
     return document.querySelector('#appFilterTabs .filter-tab.active')?.dataset?.status || 'all';
 }
 
+function getActiveLoanFilter() {
+    return document.querySelector('#loanFilterTabs .filter-tab.active')?.dataset?.status || 'all';
+}
+
 function getCreditAccountFilter() {
     return document.querySelector('#creditAccountsFilterTabs .filter-tab.active')?.dataset?.status || 'all';
 }
@@ -1941,8 +1965,6 @@ async function viewApplication(id) {
                              <button class="btn btn-danger" onclick="appAction(${a.application_id},'reject')">Reject</button>`;
     } else if (s === 'Draft') {
         footer.innerHTML += `<button class="btn btn-brand" onclick="appAction(${a.application_id},'submit')">Submit Application</button>`;
-    } else if (s === 'Approved') {
-        footer.innerHTML += `<button class="btn btn-brand" onclick="openLoanRelease(${a.application_id}, ${a.approved_amount || a.requested_amount})"><span class="material-symbols-rounded ms">payments</span> Release / Disburse Loan</button>`;
     }
 }
 
@@ -1978,11 +2000,52 @@ async function appAction(id, action, needsAmount=false) {
     }
 }
 
+async function loadPendingDisbursements() {
+    const tbody = document.getElementById('loanDisbursementTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr>';
+
+    try {
+        const response = await fetch(API.loans + '?action=approved_applications');
+        const result = await response.json();
+        const rows = result.data || [];
+
+        if (result.status !== 'success') {
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="6">${escapeHtml(result.message || 'Could not load pending disbursements.')}</td></tr>`;
+            return;
+        }
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No approved applications are waiting for disbursement.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(app => {
+            const approvedAmount = parseFloat(app.approved_amount || 0) > 0 ? app.approved_amount : app.requested_amount;
+            const approvedDate = app.approval_date || app.submitted_date;
+            const actionHtml = `<?php if (has_permission('APPROVE_LOANS')): ?><button class="btn btn-sm btn-brand" onclick="openLoanRelease(${Number(app.application_id)}, ${Number(approvedAmount || 0)})"><span class="material-symbols-rounded ms" style="font-size:16px;">payments</span> Release</button><?php else: ?><span class="td-muted">View only</span><?php endif; ?>`;
+
+            return `<tr>
+                <td class="td-mono td-bold">${escapeHtml(app.application_number)}</td>
+                <td class="td-bold">${escapeHtml(app.first_name)} ${escapeHtml(app.last_name)}</td>
+                <td class="td-muted">${escapeHtml(app.product_name)}</td>
+                <td class="td-bold" style="color:var(--brand);">${fmt(approvedAmount)}</td>
+                <td class="td-muted">${fmtDate(approvedDate)}</td>
+                <td>${actionHtml}</td>
+            </tr>`;
+        }).join('');
+    } catch (error) {
+        console.error(error);
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Could not load pending disbursements right now.</td></tr>';
+    }
+}
+
 async function loadLoans(status='all', btn=null) {
     if (btn) {
         btn.closest('.filter-tabs').querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
         btn.classList.add('active');
     }
+    loadPendingDisbursements();
     const tbody = document.getElementById('loansTbody');
     if (!tbody) return;
     tbody.innerHTML = '<tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>';
@@ -2051,6 +2114,8 @@ function openLoanRelease(appId, amount) {
     closeModal('appReviewModal');
     document.getElementById('releaseAppId').value = appId;
     document.getElementById('releaseAmount').value = amount;
+    document.getElementById('releaseRef').value = '';
+    document.getElementById('releaseNotes').value = '';
     openModal('loanReleaseModal');
 }
 
@@ -2068,7 +2133,11 @@ async function submitLoanRelease() {
     const r = await fetch(API.loans + '?action=release', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d = await r.json();
     alert(d.message);
-    if (d.status === 'success') { closeModal('loanReleaseModal'); location.reload(); }
+    if (d.status === 'success') {
+        closeModal('loanReleaseModal');
+        loadLoans(getActiveLoanFilter(), document.querySelector('#loanFilterTabs .filter-tab.active'));
+        loadDashboardStats();
+    }
 }
 
 // ── Clients ──────────────────────────────────────────────────

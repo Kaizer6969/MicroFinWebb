@@ -28,13 +28,16 @@ $perm_stmt = $pdo->prepare('
 $perm_stmt->execute([$session_user_id]);
 $permissions = $perm_stmt->fetchAll(PDO::FETCH_COLUMN);
 function has_perm($code) { global $permissions; return in_array($code, $permissions); }
+function can_access_loans_module() {
+    return has_perm('VIEW_LOANS') || has_perm('CREATE_LOANS') || has_perm('APPROVE_LOANS');
+}
 
 $action = strtolower(trim((string) ($_GET['action'] ?? $_POST['action'] ?? '')));
 $method = $_SERVER['REQUEST_METHOD'];
 
 // ─── GET: list loans ──────────────────────────────────────────────────────────
 if ($method === 'GET' && ($action === 'list' || $action === '')) {
-    if (!has_perm('VIEW_LOANS')) {
+    if (!can_access_loans_module()) {
         echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
         exit;
     }
@@ -72,8 +75,38 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
 }
 
 // ─── GET: amortization schedule ───────────────────────────────────────────────
+if ($method === 'GET' && $action === 'approved_applications') {
+    if (!can_access_loans_module()) {
+        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT
+            la.application_id, la.application_number, la.application_status,
+            la.requested_amount, la.approved_amount, la.approval_date, la.submitted_date,
+            la.loan_term_months, la.interest_rate,
+            c.client_id, c.first_name, c.last_name, c.contact_number,
+            lp.product_name, lp.product_type
+        FROM loan_applications la
+        JOIN clients c ON la.client_id = c.client_id
+        JOIN loan_products lp ON la.product_id = lp.product_id
+        LEFT JOIN loans l ON l.application_id = la.application_id
+        WHERE la.tenant_id = ?
+          AND la.application_status = 'Approved'
+          AND l.loan_id IS NULL
+        ORDER BY COALESCE(la.approval_date, la.updated_at, la.submitted_date, la.created_at) DESC
+        LIMIT 200
+    ");
+    $stmt->execute([$tenant_id]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    echo json_encode(['status' => 'success', 'data' => $rows]);
+    exit;
+}
+
 if ($method === 'GET' && $action === 'schedule') {
-    if (!has_perm('VIEW_LOANS')) {
+    if (!can_access_loans_module()) {
         echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
         exit;
     }
@@ -101,7 +134,7 @@ if ($method === 'GET' && $action === 'schedule') {
 
 // ─── GET: view single loan ────────────────────────────────────────────────────
 if ($method === 'GET' && $action === 'view') {
-    if (!has_perm('VIEW_LOANS')) {
+    if (!can_access_loans_module()) {
         echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
         exit;
     }
