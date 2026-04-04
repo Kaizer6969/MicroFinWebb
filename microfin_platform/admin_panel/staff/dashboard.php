@@ -1768,7 +1768,18 @@ async function verifyDoc(doc_id, status, client_id) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        const result = await res.json();
+        const raw = await res.text();
+        let result;
+        try {
+            result = JSON.parse(raw);
+        } catch (_) {
+            result = {
+                status: 'error',
+                message: raw && !raw.trim().startsWith('<')
+                    ? raw.trim()
+                    : `Document verification failed (HTTP ${res.status}).`
+            };
+        }
         alert(result.message);
         if (result.status === 'success') {
             viewClient(client_id); // Reload the modal to show updated status
@@ -1788,7 +1799,18 @@ async function verifyClientFully(client_id) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        const result = await res.json();
+        const raw = await res.text();
+        let result;
+        try {
+            result = JSON.parse(raw);
+        } catch (_) {
+            result = {
+                status: 'error',
+                message: raw && !raw.trim().startsWith('<')
+                    ? raw.trim()
+                    : `Client verification failed (HTTP ${res.status}).`
+            };
+        }
         alert(result.message);
         if (result.status === 'success') {
             viewClient(client_id);

@@ -27,6 +27,41 @@ $perm_stmt = $pdo->prepare('
 $perm_stmt->execute([$session_user_id]);
 $permissions = $perm_stmt->fetchAll(PDO::FETCH_COLUMN);
 function has_perm($code) { global $permissions; return in_array($code, $permissions); }
+function client_table_has_column(PDO $pdo, string $column_name): bool {
+    static $cache = [];
+
+    $cache_key = strtolower($column_name);
+    if (array_key_exists($cache_key, $cache)) {
+        return $cache[$cache_key];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+          AND COLUMN_NAME = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$column_name]);
+    $cache[$cache_key] = (bool) $stmt->fetchColumn();
+
+    return $cache[$cache_key];
+}
+
+function client_effective_verification_sql(PDO $pdo, string $alias = 'c'): string {
+    if (client_table_has_column($pdo, 'verification_status')) {
+        return "{$alias}.verification_status";
+    }
+
+    return "
+        CASE
+            WHEN {$alias}.document_verification_status IN ('Verified', 'Approved') THEN 'Approved'
+            WHEN {$alias}.document_verification_status = 'Rejected' THEN 'Rejected'
+            ELSE 'Pending'
+        END
+    ";
+}
 
 $action = strtolower(trim((string) ($_GET['action'] ?? $_POST['action'] ?? '')));
 $method = $_SERVER['REQUEST_METHOD'];
@@ -83,8 +118,10 @@ if ($method === 'GET' && $action === 'view') {
         exit;
     }
 
+    $verification_status_sql = client_effective_verification_sql($pdo, 'c');
+
     $stmt = $pdo->prepare("
-        SELECT c.*, u.email AS user_email, u.username, u.status AS user_status, u.last_login
+        SELECT c.*, {$verification_status_sql} AS verification_status, u.email AS user_email, u.username, u.status AS user_status, u.last_login
         FROM clients c
         JOIN users u ON c.user_id = u.user_id
         WHERE c.client_id = ? AND c.tenant_id = ?
@@ -190,49 +227,74 @@ if ($method === 'POST' && $action === 'verify_document') {
         exit;
     }
 
-    // Resolve employee_id from user_id (verified_by is a FK to employees)
-    $emp_row = $pdo->prepare("SELECT employee_id FROM employees WHERE user_id = ? AND tenant_id = ? LIMIT 1");
-    $emp_row->execute([$session_user_id, $tenant_id]);
-    $emp = $emp_row->fetch(PDO::FETCH_ASSOC);
-    $verified_by = $emp ? $emp['employee_id'] : null;
+    try {
+        $pdo->beginTransaction();
 
-    $pdo->prepare("UPDATE client_documents SET verification_status = ?, verified_by = ?, verification_date = NOW() WHERE client_document_id = ? AND tenant_id = ?")
-        ->execute([$status, $verified_by, $doc_id, $tenant_id]);
+        // Resolve employee_id from user_id (verified_by is a FK to employees)
+        $emp_row = $pdo->prepare("SELECT employee_id FROM employees WHERE user_id = ? AND tenant_id = ? LIMIT 1");
+        $emp_row->execute([$session_user_id, $tenant_id]);
+        $emp = $emp_row->fetch(PDO::FETCH_ASSOC);
+        $verified_by = $emp ? $emp['employee_id'] : null;
 
-    // Cascade update to clients table (document_verification_status)
-    $pdo->prepare("
-        UPDATE clients c
-        SET document_verification_status = (
-            CASE
-                WHEN (SELECT COUNT(*) FROM client_documents WHERE client_id = c.client_id AND tenant_id = c.tenant_id AND verification_status = 'Rejected') > 0 THEN 'Rejected'
-                WHEN (SELECT COUNT(*) FROM client_documents WHERE client_id = c.client_id AND tenant_id = c.tenant_id AND verification_status IN ('Pending', 'Uploaded', 'CONSIDER')) > 0 THEN 'Pending'
-                ELSE 'Verified'
-            END
-        )
-        WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
-    ")->execute([$doc_id]);
+        $pdo->prepare("UPDATE client_documents SET verification_status = ?, verified_by = ?, verification_date = NOW() WHERE client_document_id = ? AND tenant_id = ?")
+            ->execute([$status, $verified_by, $doc_id, $tenant_id]);
 
-    // Cascade update to clients table (overall verification_status)
-    $pdo->prepare("
-        UPDATE clients c
-        SET verification_status = (
-            CASE 
-                WHEN document_verification_status = 'Verified' THEN 'Approved'
-                WHEN document_verification_status = 'Rejected' THEN 'Rejected'
-                ELSE 'Pending'
-            END
-        ),
-        credit_limit = (
-            CASE 
-                WHEN document_verification_status = 'Verified' THEN 50000.00
-                ELSE credit_limit
-            END
-        ),
-        updated_at = NOW()
-        WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
-    ")->execute([$doc_id]);
+        // Cascade update to clients table (document_verification_status)
+        $pdo->prepare("
+            UPDATE clients c
+            SET document_verification_status = (
+                CASE
+                    WHEN (SELECT COUNT(*) FROM client_documents WHERE client_id = c.client_id AND tenant_id = c.tenant_id AND verification_status = 'Rejected') > 0 THEN 'Rejected'
+                    WHEN (SELECT COUNT(*) FROM client_documents WHERE client_id = c.client_id AND tenant_id = c.tenant_id AND verification_status IN ('Pending', 'Uploaded', 'CONSIDER')) > 0 THEN 'Unverified'
+                    ELSE 'Verified'
+                END
+            )
+            WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
+        ")->execute([$doc_id]);
 
-    echo json_encode(['status' => 'success', 'message' => "Document marked as $status."]);
+        $overall_update_sql = "
+            UPDATE clients c
+            SET credit_limit = (
+                CASE
+                    WHEN document_verification_status IN ('Verified', 'Approved') THEN 50000.00
+                    ELSE credit_limit
+                END
+            ),
+            updated_at = NOW()
+            WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
+        ";
+
+        if (client_table_has_column($pdo, 'verification_status')) {
+            $overall_update_sql = "
+                UPDATE clients c
+                SET verification_status = (
+                    CASE
+                        WHEN document_verification_status IN ('Verified', 'Approved') THEN 'Approved'
+                        WHEN document_verification_status = 'Rejected' THEN 'Rejected'
+                        ELSE 'Pending'
+                    END
+                ),
+                credit_limit = (
+                    CASE
+                        WHEN document_verification_status IN ('Verified', 'Approved') THEN 50000.00
+                        ELSE credit_limit
+                    END
+                ),
+                updated_at = NOW()
+                WHERE client_id = (SELECT client_id FROM client_documents WHERE client_document_id = ? LIMIT 1)
+            ";
+        }
+
+        $pdo->prepare($overall_update_sql)->execute([$doc_id]);
+
+        $pdo->commit();
+        echo json_encode(['status' => 'success', 'message' => "Document marked as $status."]);
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo json_encode(['status' => 'error', 'message' => 'Unable to verify document: ' . $e->getMessage()]);
+    }
     exit;
 }
 
@@ -254,30 +316,51 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
         exit;
     }
 
-    // Resolve employee_id from user_id (verified_by is a FK to employees)
-    $emp_row2 = $pdo->prepare("SELECT employee_id FROM employees WHERE user_id = ? AND tenant_id = ? LIMIT 1");
-    $emp_row2->execute([$session_user_id, $tenant_id]);
-    $emp2 = $emp_row2->fetch(PDO::FETCH_ASSOC);
-    $verified_by2 = $emp2 ? $emp2['employee_id'] : null;
+    try {
+        $pdo->beginTransaction();
 
-    // Force ALL documents to be verified
-    $pdo->prepare("UPDATE client_documents SET verification_status = 'Verified', verified_by = ?, verification_date = NOW() WHERE client_id = ? AND tenant_id = ? AND verification_status != 'Verified'")
-        ->execute([$verified_by2, $client_id, $tenant_id]);
+        // Resolve employee_id from user_id (verified_by is a FK to employees)
+        $emp_row2 = $pdo->prepare("SELECT employee_id FROM employees WHERE user_id = ? AND tenant_id = ? LIMIT 1");
+        $emp_row2->execute([$session_user_id, $tenant_id]);
+        $emp2 = $emp_row2->fetch(PDO::FETCH_ASSOC);
+        $verified_by2 = $emp2 ? $emp2['employee_id'] : null;
 
-    // Set client status unconditionally to verified/approved and set credit limit
-    $pdo->prepare("
-        UPDATE clients 
-        SET document_verification_status = 'Verified', 
-            verification_status = 'Approved', 
-            credit_limit = 50000.00,
-            updated_at = NOW() 
-        WHERE client_id = ? AND tenant_id = ?
-    ")->execute([$client_id, $tenant_id]);
+        // Force ALL documents to be verified
+        $pdo->prepare("UPDATE client_documents SET verification_status = 'Verified', verified_by = ?, verification_date = NOW() WHERE client_id = ? AND tenant_id = ? AND verification_status != 'Verified'")
+            ->execute([$verified_by2, $client_id, $tenant_id]);
 
-    $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CLIENT_VERIFIED', 'client', ?, 'Admin manually verified client overall status')")
-        ->execute([$session_user_id, $tenant_id, $client_id]);
+        $client_verify_sql = "
+            UPDATE clients
+            SET document_verification_status = 'Approved',
+                credit_limit = 50000.00,
+                updated_at = NOW()
+            WHERE client_id = ? AND tenant_id = ?
+        ";
 
-    echo json_encode(['status' => 'success', 'message' => "Client fully verified and approved!"]);
+        if (client_table_has_column($pdo, 'verification_status')) {
+            $client_verify_sql = "
+                UPDATE clients
+                SET document_verification_status = 'Approved',
+                    verification_status = 'Approved',
+                    credit_limit = 50000.00,
+                    updated_at = NOW()
+                WHERE client_id = ? AND tenant_id = ?
+            ";
+        }
+
+        $pdo->prepare($client_verify_sql)->execute([$client_id, $tenant_id]);
+
+        $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CLIENT_VERIFIED', 'client', ?, 'Admin manually verified client overall status')")
+            ->execute([$session_user_id, $tenant_id, $client_id]);
+
+        $pdo->commit();
+        echo json_encode(['status' => 'success', 'message' => "Client fully verified and approved!"]);
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo json_encode(['status' => 'error', 'message' => 'Unable to fully verify client: ' . $e->getMessage()]);
+    }
     exit;
 }
 
