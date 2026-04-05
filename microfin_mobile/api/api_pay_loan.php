@@ -50,9 +50,9 @@ try {
     $uStmt->execute();
     $uStmt->close();
 
-    // 3. Insert into payments
-    $pStmt = $conn->prepare("INSERT INTO payments (loan_id, client_id, tenant_id, amount_paid, payment_date, payment_method, reference_number, status, processed_by) VALUES (?, ?, ?, ?, NOW(), ?, ?, 'Completed', ?)");
-    $pStmt->bind_param('iisdssi', $loanId, $loan['client_id'], $tenantId, $amount, $method, $refNum, $userId);
+    // 3. Insert into payments (principal/interest parsed loosely for simplicity here)
+    $pStmt = $conn->prepare("INSERT INTO payments (loan_id, client_id, tenant_id, payment_amount, principal_paid, interest_paid, payment_date, payment_method, payment_reference, payment_status, received_by) VALUES (?, ?, ?, ?, ?, 0, NOW(), ?, ?, 'Verified', ?)");
+    $pStmt->bind_param('iisddssi', $loanId, $loan['client_id'], $tenantId, $amount, $amount, $method, $refNum, $userId);
     $pStmt->execute();
     $pStmt->close();
 
