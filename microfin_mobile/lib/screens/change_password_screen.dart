@@ -29,7 +29,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     HapticFeedback.mediumImpact();
 
     setState(() => _isSaving = true);
-    
+
     try {
       final uId = currentUser.value!['user_id'];
       final tId = activeTenant.value.id;
@@ -52,18 +52,25 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (data['success'] == true) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password changed successfully!'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Password changed successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
         Navigator.pop(context);
       } else {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data['message'] ?? 'Failed to change password.')),
+          SnackBar(
+            content: Text(data['message'] ?? 'Failed to change password.'),
+          ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error connecting to server. Please try again later.')),
+        SnackBar(
+          content: Text('Error connecting to server. Please try again later.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -78,7 +85,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: primary,
-        title: const Text('Change Password', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text(
+          'Change Password',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         centerTitle: true,
@@ -101,20 +115,45 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.lock_reset_rounded, size: 54, color: AppColors.textMuted),
+                    Icon(
+                      Icons.lock_reset_rounded,
+                      size: 54,
+                      color: AppColors.textMuted,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'Create a strong password with at least 8 characters to keep your account secure.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textMain, fontSize: 13, height: 1.4),
+                      style: TextStyle(
+                        color: AppColors.textMain,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
                     ),
                     const SizedBox(height: 24),
-                    
-                    _passwordField('Current Password', _currentPwdCtrl, _obsCurrent, () => setState(() => _obsCurrent = !_obsCurrent)),
+
+                    _passwordField(
+                      'Current Password',
+                      _currentPwdCtrl,
+                      _obsCurrent,
+                      () => setState(() => _obsCurrent = !_obsCurrent),
+                    ),
                     const SizedBox(height: 16),
-                    _passwordField('New Password', _newPwdCtrl, _obsNew, () => setState(() => _obsNew = !_obsNew), isNew: true),
+                    _passwordField(
+                      'New Password',
+                      _newPwdCtrl,
+                      _obsNew,
+                      () => setState(() => _obsNew = !_obsNew),
+                      isNew: true,
+                    ),
                     const SizedBox(height: 16),
-                    _passwordField('Confirm New Password', _confirmPwdCtrl, _obsConfirm, () => setState(() => _obsConfirm = !_obsConfirm), isConfirm: true),
+                    _passwordField(
+                      'Confirm New Password',
+                      _confirmPwdCtrl,
+                      _obsConfirm,
+                      () => setState(() => _obsConfirm = !_obsConfirm),
+                      isConfirm: true,
+                    ),
                   ],
                 ),
               ),
@@ -126,11 +165,27 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   child: _isSaving
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Change Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Change Password',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -140,7 +195,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 
-  Widget _passwordField(String label, TextEditingController ctrl, bool obs, VoidCallback toggle, {bool isNew = false, bool isConfirm = false}) {
+  Widget _passwordField(
+    String label,
+    TextEditingController ctrl,
+    bool obs,
+    VoidCallback toggle, {
+    bool isNew = false,
+    bool isConfirm = false,
+  }) {
     return TextFormField(
       controller: ctrl,
       obscureText: obs,
@@ -148,9 +210,17 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(fontSize: 13, color: AppColors.textMuted),
-        prefixIcon: Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textMuted),
+        prefixIcon: Icon(
+          Icons.lock_outline_rounded,
+          size: 18,
+          color: AppColors.textMuted,
+        ),
         suffixIcon: IconButton(
-          icon: Icon(obs ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: AppColors.textMuted),
+          icon: Icon(
+            obs ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+            size: 18,
+            color: AppColors.textMuted,
+          ),
           onPressed: toggle,
         ),
       ),
