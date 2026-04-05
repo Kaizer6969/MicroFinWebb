@@ -3413,27 +3413,29 @@ function hexToRgb($hex) {
             $page_title = $page_titles[$active_view] ?? 'Dashboard';
             ?>
             <nav class="sidebar-nav">
-                <span class="sidebar-section-title">Overview</span>
+                <span class="sidebar-section-title">Dashboard</span>
                 <a href="admin.php" class="nav-item <?php echo $active_view === 'dashboard' ? 'active' : ''; ?>" data-target="dashboard" data-title="Dashboard">
                     <span class="material-symbols-rounded">dashboard</span>
                     <span>Dashboard</span>
                 </a>
 
-                <span class="sidebar-section-title">User Management</span>
+                <span class="sidebar-section-title">Team</span>
                 <a href="admin.php?tab=staff-list" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff" data-title="Staff Accounts">
                     <span class="material-symbols-rounded">groups</span>
                     <span>Staff Accounts</span>
                 </a>
 
-                <span class="sidebar-section-title">Workspace</span>
+                <span class="sidebar-section-title">Products &amp; Operations</span>
                 <a href="admin.php?tab=loan_products" class="nav-item <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>" data-target="loan_products" data-title="Loan Products">
                     <span class="material-symbols-rounded">payments</span>
                     <span>Loan Products</span>
                 </a>
-                <a href="admin.php?tab=credit_settings" class="nav-item <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Policy">
+                <a href="admin.php?tab=credit_settings" class="nav-item <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Control">
                     <span class="material-symbols-rounded">speed</span>
-                    <span>Credit Policy</span>
+                    <span>Credit Control</span>
                 </a>
+
+                <span class="sidebar-section-title">Website</span>
                 <a href="admin.php?tab=website" class="nav-item <?php echo $active_view === 'website' ? 'active' : ''; ?>" data-target="website" data-title="Website Editor">
                     <span class="material-symbols-rounded">language</span>
                     <span>Website</span>
@@ -3444,7 +3446,7 @@ function hexToRgb($hex) {
                 </a>
 
                 <?php if ($can_manage_billing): ?>
-                <span class="sidebar-section-title">Billing & Subscription</span>
+                <span class="sidebar-section-title">Billing</span>
                 <a href="admin.php?tab=billing" class="nav-item <?php echo $active_view === 'billing' ? 'active' : ''; ?>" data-target="billing" data-title="Billing &amp; Subscription">
                     <span class="material-symbols-rounded">receipt_long</span>
                     <span>Plan & Billing</span>
