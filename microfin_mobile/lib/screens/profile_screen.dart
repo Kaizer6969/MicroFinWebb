@@ -8,7 +8,9 @@ import '../utils/app_dialogs.dart';
 import 'support_center_screen.dart';
 import 'live_chat_screen.dart';
 import 'splash_screen.dart';
-import 'manage_profile_screen.dart';
+import 'change_password_screen.dart';
+
+// ... (we'll replace it strictly)
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
