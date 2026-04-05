@@ -69,6 +69,7 @@ class _PaymentGatewayScreenState extends State<PaymentGatewayScreen>
   Color get _gatewayColor {
     switch (widget.gatewayName) {
       case 'GCash':   return const Color(0xFF007DFE);
+      case 'Maya':
       case 'PayMaya': return const Color(0xFF00C37B);
       default:        return activeTenant.value.themePrimaryColor;
     }
@@ -77,13 +78,16 @@ class _PaymentGatewayScreenState extends State<PaymentGatewayScreen>
   IconData get _gatewayIcon {
     switch (widget.gatewayName) {
       case 'GCash':   return Icons.account_balance_wallet_rounded;
+      case 'Maya':
       case 'PayMaya': return Icons.credit_card_rounded;
       default:        return Icons.account_balance_rounded;
     }
   }
 
   bool get _usesPaymongo =>
-      widget.gatewayName == 'GCash' || widget.gatewayName == 'PayMaya';
+      widget.gatewayName == 'GCash' ||
+      widget.gatewayName == 'PayMaya' ||
+      widget.gatewayName == 'Maya';
 
   @override
   void initState() {

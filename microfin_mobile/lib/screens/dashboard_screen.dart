@@ -108,7 +108,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           setState(() {
             _activeLoan = data['active_loan'];
             _notifications = data['notifications'] ?? [];
-            globalNotifications.value = _notifications;
+            globalNotifications.value = _notifications.where((n) {
+              final isRead = n['is_read'];
+              return isRead == 0 || isRead == '0' || isRead == false;
+            }).toList();
             _featuredProducts = data['featured_products'] ?? [];
             _userName = data['user_name'] ?? 'User';
             if (_userName == 'User' && currentUser.value != null) {
@@ -897,11 +900,11 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     return Column(
       children: _notifications.take(3).map((n) {
-        bool isPayment = n['notification_type'] == 'Payment Received';
+        bool isPayment = n['notification_type'] == 'Payment Received' || n['notification_type'] == 'Payment';
         String amountText = '';
         if (isPayment && n['message'].toString().contains('paid')) {
           // crude extraction of amount for visual similarity
-          final match = RegExp(r'₱?(\d+(?:\.\d+)?)').firstMatch(n['message']);
+          final match = RegExp(r'[\u20b1$P]?\s?(\d[\d,]*(?:\.\d+)?)').firstMatch(n['message']);
           if (match != null) {
             amountText = '-\$${match.group(1)}';
           }

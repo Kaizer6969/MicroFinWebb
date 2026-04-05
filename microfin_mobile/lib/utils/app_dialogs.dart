@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'api_config.dart';
 import '../main.dart';
 import '../screens/live_chat_screen.dart';
 import '../screens/client_verification_screen.dart';
@@ -60,9 +63,21 @@ class AppDialogs {
                             ),
                             if (notifs.isNotEmpty)
                               GestureDetector(
-                                onTap: () {
+                                onTap: () async {
                                   globalNotifications.value = [];
                                   Navigator.pop(context);
+                                  
+                                  try {
+                                    final userId = currentUser.value?['user_id'] ?? 0;
+                                    final tenantId = activeTenant.value.id;
+                                    await http.post(
+                                      Uri.parse(ApiConfig.getUrl('api_clear_notifications.php')),
+                                      headers: {'Content-Type': 'application/json'},
+                                      body: jsonEncode({'user_id': userId, 'tenant_id': tenantId}),
+                                    );
+                                  } catch (e) {
+                                    // Ignore error
+                                  }
                                 },
                                 child: Text(
                                   'Clear All',

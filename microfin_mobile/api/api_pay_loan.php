@@ -203,6 +203,16 @@ try {
 
     $conn->commit();
 
+    // 5. Create payment notification for user
+    $notifTitle = 'Payment Received';
+    $notifMessage = "Your payment of ₱" . number_format($amount, 2) . " has been paid successfully.";
+    $nStmt = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, notification_type, title, message) VALUES (?, ?, 'Payment', ?, ?)");
+    if ($nStmt) {
+        $nStmt->bind_param('isss', $userId, $tenantId, $notifTitle, $notifMessage);
+        $nStmt->execute();
+        $nStmt->close();
+    }
+
     $receiptContext = microfin_fetch_payment_receipt_context($conn, $tenantId, (int) $loan['client_id'], $loanId);
 
     echo json_encode([

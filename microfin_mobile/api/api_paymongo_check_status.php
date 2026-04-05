@@ -18,6 +18,78 @@ if (empty($sourceId)) {
 
 $secretKey = microfin_config('PAYMONGO_SECRET_KEY', '');
 
+function microfin_paymongo_get(string $url, string $secretKey): array
+{
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Accept: application/json',
+        'Authorization: Basic ' . base64_encode($secretKey . ':'),
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    return [
+        'http_code' => $httpCode,
+        'raw_body' => (string) $response,
+        'json' => json_decode((string) $response, true) ?? [],
+        'curl_error' => $curlError,
+    ];
+}
+
+function microfin_paymongo_map_checkout_status(array $attributes): array
+{
+    $sessionStatus = strtolower((string) ($attributes['status'] ?? ''));
+    $payments = is_array($attributes['payments'] ?? null) ? $attributes['payments'] : [];
+    $paymentIntent = is_array($attributes['payment_intent'] ?? null) ? $attributes['payment_intent'] : [];
+    $paymentIntentAttributes = is_array($paymentIntent['attributes'] ?? null) ? $paymentIntent['attributes'] : [];
+    $paymentIntentStatus = strtolower((string) ($paymentIntentAttributes['status'] ?? $paymentIntent['status'] ?? ''));
+    $lastPaymentError = $paymentIntentAttributes['last_payment_error']['message']
+        ?? $paymentIntentAttributes['last_payment_error']['detail']
+        ?? '';
+
+    $hasFailedPayment = false;
+    foreach ($payments as $payment) {
+        $paymentStatus = strtolower((string) ($payment['attributes']['status'] ?? $payment['status'] ?? ''));
+        if ($paymentStatus === 'paid') {
+            return [
+                'status' => 'completed',
+                'paymongo' => $paymentIntentStatus !== '' ? $paymentIntentStatus : $sessionStatus,
+                'error' => '',
+            ];
+        }
+
+        if ($paymentStatus === 'failed' || $paymentStatus === 'cancelled') {
+            $hasFailedPayment = true;
+        }
+    }
+
+    if ($paymentIntentStatus === 'succeeded') {
+        return [
+            'status' => 'completed',
+            'paymongo' => $paymentIntentStatus,
+            'error' => '',
+        ];
+    }
+
+    if ($sessionStatus === 'expired' || $hasFailedPayment || ($lastPaymentError !== '' && $paymentIntentStatus !== 'processing')) {
+        return [
+            'status' => 'failed',
+            'paymongo' => $paymentIntentStatus !== '' ? $paymentIntentStatus : $sessionStatus,
+            'error' => (string) $lastPaymentError,
+        ];
+    }
+
+    return [
+        'status' => 'pending',
+        'paymongo' => $paymentIntentStatus !== '' ? $paymentIntentStatus : $sessionStatus,
+        'error' => '',
+    ];
+}
+
 // Simulation Mode (If no keys available)
 if (empty($secretKey)) {
     $mockFile = __DIR__ . "/../../.temp_mocks/$sourceId.json";
@@ -34,48 +106,52 @@ if (empty($secretKey)) {
     exit;
 }
 
-// Live PayMongo API Polling
-$ch = curl_init("https://api.paymongo.com/v1/sources/$sourceId");
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Accept: application/json',
-    'Authorization: Basic ' . base64_encode($secretKey . ':')
-]);
+if (strpos($sourceId, 'cs_') === 0) {
+    $apiResponse = microfin_paymongo_get("https://api.paymongo.com/v1/checkout_sessions/$sourceId", $secretKey);
+    $responseData = $apiResponse['json'];
+    $attributes = $responseData['data']['attributes'] ?? null;
 
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-$responseData = json_decode($response, true);
-
-if ($httpCode === 200 && isset($responseData['data']['attributes']['status'])) {
-    
-    // PayMongo status mapping. Possible 'chargeable', 'pending', 'cancelled', 'paid'
-    // Sources API returns 'chargeable' when the user has authorized the payment via their e-wallet.
-    $payMongoStatus = $responseData['data']['attributes']['status'];
-    $mappedStatus = 'pending';
-    
-    if ($payMongoStatus === 'chargeable' || $payMongoStatus === 'paid') {
-        $mappedStatus = 'completed';
-    } else if ($payMongoStatus === 'cancelled' || $payMongoStatus === 'expired') {
-        $mappedStatus = 'failed';
+    if ($apiResponse['http_code'] === 200 && is_array($attributes)) {
+        $mapped = microfin_paymongo_map_checkout_status($attributes);
+        echo json_encode([
+            'success' => true,
+            'status' => $mapped['status'],
+            'paymongo' => $mapped['paymongo'],
+            'message' => $mapped['error'],
+        ]);
+        exit;
     }
 
-    // In a full production implementation with sources API, you must theoretically create a 'Payment' 
-    // object using the chargeable source. To keep this flow direct for the client, if it's chargeable,
-    // we assume success and let api_pay_loan.php handle our internal DB.
-    
-    // NOTE: Ideally, PayMongo webhooks trigger the /v1/payments creation, but for polling we return completed.
+    echo json_encode([
+        'success' => false,
+        'message' => 'Status check failed: ' . ($responseData['errors'][0]['detail'] ?? $apiResponse['curl_error'] ?: 'Unknown error'),
+    ]);
+    exit;
+}
+
+$apiResponse = microfin_paymongo_get("https://api.paymongo.com/v1/sources/$sourceId", $secretKey);
+$responseData = $apiResponse['json'];
+
+if ($apiResponse['http_code'] === 200 && isset($responseData['data']['attributes']['status'])) {
+    $payMongoStatus = strtolower((string) $responseData['data']['attributes']['status']);
+    $mappedStatus = 'pending';
+
+    if ($payMongoStatus === 'chargeable' || $payMongoStatus === 'paid') {
+        $mappedStatus = 'completed';
+    } elseif ($payMongoStatus === 'cancelled' || $payMongoStatus === 'expired') {
+        $mappedStatus = 'failed';
+    }
 
     echo json_encode([
         'success' => true,
         'status' => $mappedStatus,
-        'paymongo' => $payMongoStatus
+        'paymongo' => $payMongoStatus,
     ]);
-} else {
-    echo json_encode([
-        'success' => false,
-        'message' => 'Status check failed.'
-    ]);
+    exit;
 }
+
+echo json_encode([
+    'success' => false,
+    'message' => 'Status check failed: ' . ($responseData['errors'][0]['detail'] ?? $apiResponse['curl_error'] ?: 'Unknown error'),
+]);
 ?>
