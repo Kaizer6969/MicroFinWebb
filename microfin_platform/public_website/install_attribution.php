@@ -111,6 +111,29 @@ function mf_install_resolve_generic_apk_asset(): array
         ];
     }
 
+    $override = trim((string)(getenv('MF_GENERIC_APK_URL') ?: getenv('MICROFIN_GENERIC_APK_URL') ?: ''));
+    if ($override !== '') {
+        return [
+            'url' => $override,
+            'filename' => 'MicroFin Generic.apk',
+            'variant' => 'remote-generic',
+        ];
+    }
+
+    if (
+        function_exists('mf_mobile_app_generic_apk_remote_url')
+        && function_exists('mf_mobile_app_remote_asset_exists')
+    ) {
+        $remoteUrl = mf_mobile_app_generic_apk_remote_url();
+        if ($remoteUrl !== '' && mf_mobile_app_remote_asset_exists($remoteUrl)) {
+            return [
+                'url' => $remoteUrl,
+                'filename' => 'MicroFin Generic.apk',
+                'variant' => 'github-generic',
+            ];
+        }
+    }
+
     return [
         'url' => mf_install_generic_apk_url(),
         'filename' => 'MicroFin Generic.apk',
@@ -122,15 +145,18 @@ function mf_install_resolve_tenant_apk_asset(array $tenant): ?array
 {
     $directory = mf_install_tenant_apk_directory();
     $candidates = [];
+    $candidateSlugs = [];
 
     $tenantSlug = mf_install_slugify((string)($tenant['tenant_slug'] ?? ''));
     $tenantId = mf_install_slugify((string)($tenant['tenant_id'] ?? ''));
 
     if ($tenantSlug !== '') {
         $candidates[] = $directory . DIRECTORY_SEPARATOR . $tenantSlug . '.apk';
+        $candidateSlugs[] = $tenantSlug;
     }
     if ($tenantId !== '') {
         $candidates[] = $directory . DIRECTORY_SEPARATOR . $tenantId . '.apk';
+        $candidateSlugs[] = $tenantId;
     }
 
     foreach ($candidates as $candidate) {
@@ -140,6 +166,22 @@ function mf_install_resolve_tenant_apk_asset(array $tenant): ?array
                 'filename' => mf_install_download_filename($tenant),
                 'variant' => 'tenant',
             ];
+        }
+    }
+
+    if (
+        function_exists('mf_mobile_app_tenant_apk_remote_url')
+        && function_exists('mf_mobile_app_remote_asset_exists')
+    ) {
+        foreach (array_values(array_unique($candidateSlugs)) as $candidateSlug) {
+            $remoteUrl = mf_mobile_app_tenant_apk_remote_url($candidateSlug);
+            if ($remoteUrl !== '' && mf_mobile_app_remote_asset_exists($remoteUrl)) {
+                return [
+                    'url' => $remoteUrl,
+                    'filename' => mf_install_download_filename($tenant),
+                    'variant' => 'github-tenant',
+                ];
+            }
         }
     }
 

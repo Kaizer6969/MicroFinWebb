@@ -49,6 +49,112 @@ function mf_mobile_app_tenant_apk_path(string $tenantSlug): string
         . DIRECTORY_SEPARATOR . $tenantSlug . '.apk';
 }
 
+function mf_mobile_app_github_raw_url(string $relativePath): string
+{
+    $owner = mf_mobile_app_env('GITHUB_ACTIONS_REPO_OWNER', 'Kaizer6969');
+    $repo = mf_mobile_app_env('GITHUB_ACTIONS_REPO_NAME', 'MicroFinWebb');
+    $ref = mf_mobile_app_env('GITHUB_ACTIONS_REF', 'main');
+
+    if ($owner === '' || $repo === '' || $ref === '') {
+        return '';
+    }
+
+    $segments = array_values(array_filter(explode('/', str_replace('\\', '/', trim($relativePath))), 'strlen'));
+    if ($segments === []) {
+        return '';
+    }
+
+    $encodedPath = implode('/', array_map('rawurlencode', $segments));
+
+    return sprintf(
+        'https://raw.githubusercontent.com/%s/%s/%s/%s',
+        rawurlencode($owner),
+        rawurlencode($repo),
+        rawurlencode($ref),
+        $encodedPath
+    );
+}
+
+function mf_mobile_app_generic_apk_remote_url(): string
+{
+    $override = mf_mobile_app_env(
+        'MF_GENERIC_APK_REMOTE_URL',
+        mf_mobile_app_env('MICROFIN_GENERIC_APK_REMOTE_URL', '')
+    );
+    if ($override !== '') {
+        return $override;
+    }
+
+    return mf_mobile_app_github_raw_url('microfin_mobile/microfin_app.apk');
+}
+
+function mf_mobile_app_tenant_apk_remote_url(string $tenantSlug): string
+{
+    $normalizedSlug = mf_mobile_app_normalize_slug($tenantSlug);
+    if ($normalizedSlug === '') {
+        return '';
+    }
+
+    $baseOverride = rtrim(
+        mf_mobile_app_env(
+            'MF_TENANT_APK_REMOTE_BASE_URL',
+            mf_mobile_app_env('MICROFIN_TENANT_APK_REMOTE_BASE_URL', '')
+        ),
+        "/\\"
+    );
+    if ($baseOverride !== '') {
+        return $baseOverride . '/' . rawurlencode($normalizedSlug) . '.apk';
+    }
+
+    return mf_mobile_app_github_raw_url('microfin_mobile/tenant_apks/' . $normalizedSlug . '.apk');
+}
+
+function mf_mobile_app_remote_asset_exists(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '') {
+        return false;
+    }
+
+    static $cache = [];
+    if (array_key_exists($url, $cache)) {
+        return $cache[$url];
+    }
+
+    $exists = false;
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        if ($ch !== false) {
+            curl_setopt_array($ch, [
+                CURLOPT_NOBODY => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT => 20,
+                CURLOPT_USERAGENT => 'MicroFinPlatform-APKLookup',
+            ]);
+
+            curl_exec($ch);
+            if (curl_errno($ch) === 0) {
+                $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $exists = $httpCode >= 200 && $httpCode < 400;
+            }
+
+            curl_close($ch);
+        }
+    } elseif (function_exists('get_headers')) {
+        $headers = @get_headers($url);
+        if (is_array($headers) && isset($headers[0])) {
+            $statusLine = is_array($headers[0]) ? (string) end($headers[0]) : (string) $headers[0];
+            $exists = preg_match('/\s(200|301|302|307|308)\b/', $statusLine) === 1;
+        }
+    }
+
+    $cache[$url] = $exists;
+    return $exists;
+}
+
 function mf_mobile_app_upsert_setting(PDO $pdo, string $tenantId, string $key, string $value, string $dataType = 'String'): void
 {
     $stmt = $pdo->prepare('
@@ -171,6 +277,21 @@ function mf_mobile_app_dispatch_tenant_build(PDO $pdo, string $tenantId, string 
             'message' => 'Tenant app already exists and is ready to download.',
             'tenant_slug' => $slug,
             'app_name' => $resolvedAppName,
+            'dispatched' => false,
+        ];
+        mf_mobile_app_set_build_state($pdo, $tenantId, $result);
+        return $result;
+    }
+
+    $existingRemoteApkUrl = mf_mobile_app_tenant_apk_remote_url($slug);
+    if ($existingRemoteApkUrl !== '' && mf_mobile_app_remote_asset_exists($existingRemoteApkUrl)) {
+        $result = [
+            'ok' => true,
+            'status' => 'ready',
+            'message' => 'Tenant app already exists in GitHub and is ready to download.',
+            'tenant_slug' => $slug,
+            'app_name' => $resolvedAppName,
+            'remote_url' => $existingRemoteApkUrl,
             'dispatched' => false,
         ];
         mf_mobile_app_set_build_state($pdo, $tenantId, $result);

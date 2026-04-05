@@ -1672,6 +1672,14 @@ function renderCreditAccountBorrower(account) {
 }
 
 function renderCreditAccountScore(account) {
+    if (account.verification_status !== 'Approved' && account.client_status !== 'Verified') {
+        return `
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                <span class="detail-value" style="color:var(--muted); font-size: 0.9rem;">No Score</span>
+                <div class="td-muted" style="font-size:.78rem;">Account not verified.</div>
+            </div>`;
+    }
+
     const snapshot = account?.limit_snapshot || {};
     const effectiveScore = parseFloat(snapshot?.effective_score);
     const hasEffectiveScore = Number.isFinite(effectiveScore);

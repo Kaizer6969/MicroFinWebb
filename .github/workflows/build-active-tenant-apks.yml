@@ -93,9 +93,6 @@ jobs:
           output_dir = pathlib.Path("microfin_mobile/tenant_apks")
           output_dir.mkdir(parents=True, exist_ok=True)
 
-          for stale_apk in output_dir.glob("*.apk"):
-              stale_apk.unlink()
-
           src_apk = pathlib.Path("microfin_mobile/build/app/outputs/flutter-apk/app-release.apk")
 
           for tenant in tenants:
