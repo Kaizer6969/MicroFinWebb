@@ -57,7 +57,7 @@ try {
     $pStmt->close();
 
     // 4. Update schedules (naive FIFO allocation for simplicity)
-    $sStmt = $conn->prepare("SELECT schedule_id, total_due, amount_paid FROM loan_schedules WHERE loan_id = ? AND status != 'Paid' ORDER BY due_date ASC");
+    $sStmt = $conn->prepare("SELECT schedule_id, total_payment AS total_due, amount_paid FROM amortization_schedule WHERE loan_id = ? AND payment_status != 'Paid' ORDER BY due_date ASC");
     $sStmt->bind_param('i', $loanId);
     $sStmt->execute();
     $sRes = $sStmt->get_result();
@@ -75,7 +75,7 @@ try {
             $allocate = min($remainingPayment, $unpaid);
             $newSchedPaid = $paid + $allocate;
             $remainingPayment -= $allocate;
-            $schedStatus = ($newSchedPaid >= $due) ? 'Paid' : 'Partial';
+            $schedStatus = ($newSchedPaid >= $due) ? 'Paid' : 'Partially Paid';
             
             $schedUpdates[] = [
                 'id' => $r['schedule_id'],
@@ -86,7 +86,7 @@ try {
     }
     $sStmt->close();
 
-    $suStmt = $conn->prepare("UPDATE loan_schedules SET amount_paid = ?, status = ? WHERE schedule_id = ?");
+    $suStmt = $conn->prepare("UPDATE amortization_schedule SET amount_paid = ?, payment_status = ? WHERE schedule_id = ?");
     foreach ($schedUpdates as $su) {
         $suStmt->bind_param('dsi', $su['paid'], $su['status'], $su['id']);
         $suStmt->execute();
