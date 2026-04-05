@@ -33,8 +33,8 @@ try {
 
     $tStmt = $conn->prepare("
         SELECT 
-            transaction_id, loan_id, amount_paid AS amount, payment_date AS date,
-            payment_method AS type, status, reference_number
+            payment_id AS transaction_id, loan_id, amount_paid AS amount, payment_date AS date,
+            payment_method AS type, payment_status AS status, payment_reference AS reference_number
         FROM payments
         WHERE client_id = ? AND tenant_id = ?
         ORDER BY payment_date DESC, payment_id DESC
