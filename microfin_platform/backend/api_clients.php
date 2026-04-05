@@ -145,7 +145,7 @@ if ($method === 'GET' && $action === 'credit_accounts') {
                c.occupation, c.employment_status, u.user_type
         FROM clients c
         LEFT JOIN users u ON c.user_id = u.user_id
-        WHERE c.tenant_id = ? AND c.deleted_at IS NULL $where_extra
+        WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.document_verification_status IN ('Verified', 'Approved') $where_extra
         ORDER BY c.registration_date DESC
         LIMIT 200
     ");
