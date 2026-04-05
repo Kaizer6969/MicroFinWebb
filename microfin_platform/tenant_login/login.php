@@ -47,6 +47,11 @@ function mf_query_flag_is_enabled(array $query, string $key): bool
     return in_array($value, ['1', 'true', 'yes', 'on'], true);
 }
 
+function mf_tenant_admin_dashboard_url(): string
+{
+    return '../admin_panel/admin.php#dashboard';
+}
+
 $allowManualTenantLogin = $_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['auth']) || isset($_GET['switch']);
 
 if (!$allowManualTenantLogin && mf_refresh_backend_session_state($pdo, 'tenant') && isset($_SESSION["user_logged_in"]) && $_SESSION["user_logged_in"] === true) {
@@ -60,6 +65,21 @@ if (!$allowManualTenantLogin && mf_refresh_backend_session_state($pdo, 'tenant')
             exit;
         }
     }
+    $sessionUserType = (string) ($_SESSION['user_type'] ?? '');
+    $sessionRole = (string) ($_SESSION['role'] ?? $_SESSION['role_name'] ?? '');
+    $isAdminSession = $sessionUserType === 'Employee'
+        && (stripos($sessionRole, 'Admin') !== false || (bool) ($_SESSION['super_admin_logged_in'] ?? false));
+
+    if ($isAdminSession) {
+        header('Location: ' . mf_tenant_admin_dashboard_url());
+        exit;
+    }
+
+    if ($sessionUserType === 'Employee') {
+        header('Location: ../admin_panel/staff/dashboard.php#dashboard');
+        exit;
+    }
+
     header("Location: ../admin_panel/admin.php");
     exit;
 }
@@ -98,7 +118,7 @@ if ($site_slug !== '' && isset($_GET['impersonate']) && $_GET['impersonate'] == 
         $log = $pdo->prepare("INSERT INTO audit_logs (action_type, entity_type, description, tenant_id) VALUES ('IMPERSONATION', 'user', 'Super Admin initiated impersonation session', ?)");
         $log->execute([$tenant['tenant_id']]);
 
-        header("Location: ../admin_panel/admin.php");
+        header('Location: ' . mf_tenant_admin_dashboard_url());
         exit;
     }
 }
@@ -234,7 +254,7 @@ if ($tenant && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         exit;
                     }
 
-                    header('Location: ../admin_panel/admin.php');
+                    header('Location: ' . mf_tenant_admin_dashboard_url());
                     exit;
                 } else {
                     // Regular Staff routing

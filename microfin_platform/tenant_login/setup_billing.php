@@ -602,16 +602,39 @@ $current_year = (int) date('Y');
             const planChangeSummary = document.getElementById('plan-change-summary');
             const planChangeCancel = document.getElementById('plan-change-cancel');
             const planChangeConfirm = document.getElementById('plan-change-confirm');
+            const applicationPlanName = <?php echo json_encode($application_plan_tier, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+            const applicationPlanAvailable = <?php echo $application_plan_is_available ? 'true' : 'false'; ?>;
             
             if (tosBtn) tosBtn.addEventListener('click', e => { e.preventDefault(); tosModal.style.display = 'block'; });
             if (closeTos1) closeTos1.addEventListener('click', () => tosModal.style.display = 'none');
             if (closeTos2) closeTos2.addEventListener('click', () => tosModal.style.display = 'none');
             if (tosModal) tosModal.addEventListener('click', e => { if (e.target === tosModal) tosModal.style.display = 'none'; });
 
+            function selectSubscriptionPlan(planName) {
+                if (!planName) {
+                    return false;
+                }
+
+                const planInput = document.querySelector(`input[name="subscription_plan"][value="${planName}"]`);
+                if (!planInput) {
+                    return false;
+                }
+
+                planInput.checked = true;
+                if (typeof updateSelectedPlanSummary === 'function') {
+                    updateSelectedPlanSummary();
+                }
+                if (typeof updateCheckoutSummary === 'function') {
+                    updateCheckoutSummary();
+                }
+
+                return true;
+            }
+
             function showPlanChangeModal(currentPlanName, selectedPlanName) {
                 return new Promise((resolve) => {
                     if (!planChangeBackdrop || !planChangeCopy || !planChangeSummary || !planChangeCancel || !planChangeConfirm) {
-                        resolve(true);
+                        resolve('change-plan');
                         return;
                     }
 
@@ -626,16 +649,16 @@ $current_year = (int) date('Y');
                         resolve(result);
                     };
 
-                    const onCancel = () => close(false);
-                    const onConfirm = () => close(true);
+                    const onCancel = () => close('keep-current');
+                    const onConfirm = () => close('change-plan');
                     const onBackdropClick = (event) => {
                         if (event.target === planChangeBackdrop) {
-                            close(false);
+                            close('dismiss');
                         }
                     };
                     const onEscape = (event) => {
                         if (event.key === 'Escape') {
-                            close(false);
+                            close('dismiss');
                         }
                     };
 
@@ -657,9 +680,11 @@ $current_year = (int) date('Y');
                 e.preventDefault();
 
                 const selectedPlanName = getSelectedPlanName();
-                if (applicationPlanName && selectedPlanName !== applicationPlanName) {
-                    const confirmed = await showPlanChangeModal(applicationPlanName, selectedPlanName);
-                    if (!confirmed) {
+                if (applicationPlanAvailable && applicationPlanName && selectedPlanName !== applicationPlanName) {
+                    const planDecision = await showPlanChangeModal(applicationPlanName, selectedPlanName);
+                    if (planDecision === 'keep-current') {
+                        selectSubscriptionPlan(applicationPlanName);
+                    } else if (planDecision !== 'change-plan') {
                         return;
                     }
                 }
