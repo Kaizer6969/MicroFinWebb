@@ -101,9 +101,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.lock_reset_rounded, size: 54, color: AppColors.textMuted),
+                    Icon(Icons.lock_reset_rounded, size: 54, color: AppColors.textMuted),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Create a strong password with at least 8 characters to keep your account secure.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: AppColors.textMain, fontSize: 13, height: 1.4),
@@ -144,11 +144,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return TextFormField(
       controller: ctrl,
       obscureText: obs,
-      style: const TextStyle(fontSize: 14, color: AppColors.textMain),
+      style: TextStyle(fontSize: 14, color: AppColors.textMain),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-        prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textMuted),
+        labelStyle: TextStyle(fontSize: 13, color: AppColors.textMuted),
+        prefixIcon: Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textMuted),
         suffixIcon: IconButton(
           icon: Icon(obs ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: AppColors.textMuted),
           onPressed: toggle,
