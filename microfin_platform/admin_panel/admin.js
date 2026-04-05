@@ -418,14 +418,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if(!targetId) return;
             const subTabId = item.getAttribute('data-subtab');
             const href = item.getAttribute('href') || '';
+            const creditPolicySubtab = targetId === 'credit_settings' ? getCreditPolicySubtabFromItem(item, href) : '';
 
             if (!isSameAdminPageLink(href)) {
                 return;
             }
             
             e.preventDefault();
-            activateSection(targetId, { navItem: item, subTabId: subTabId || '' });
-            replaceUrlForSection(targetId, subTabId || '', href);
+            activateSection(targetId, { navItem: item, subTabId: creditPolicySubtab || subTabId || '' });
+            if (targetId === 'credit_settings' && creditPolicySubtab) {
+                activateCreditPolicySubtab(creditPolicySubtab);
+            }
+            replaceUrlForSection(targetId, creditPolicySubtab || subTabId || '', href);
         });
     });
 
