@@ -14,6 +14,58 @@ if (!function_exists('mf_backend_session_timeout_minutes')) {
     }
 }
 
+if (!function_exists('mf_backend_session_cookie_name')) {
+    function mf_backend_session_cookie_name(): string
+    {
+        return 'mf_backend_session_token';
+    }
+}
+
+if (!function_exists('mf_backend_session_cookie_options')) {
+    function mf_backend_session_cookie_options(int $expiresAt): array
+    {
+        $isSecure = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+
+        return [
+            'expires' => $expiresAt,
+            'path' => '/',
+            'domain' => '',
+            'secure' => $isSecure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ];
+    }
+}
+
+if (!function_exists('mf_set_backend_session_cookie')) {
+    function mf_set_backend_session_cookie(string $token, ?int $expiresAt = null): void
+    {
+        if (headers_sent()) {
+            return;
+        }
+
+        $value = trim($token);
+        if ($value === '') {
+            return;
+        }
+
+        $ttl = $expiresAt ?? (time() + mf_backend_session_timeout_seconds());
+        setcookie(mf_backend_session_cookie_name(), $value, mf_backend_session_cookie_options($ttl));
+        $_COOKIE[mf_backend_session_cookie_name()] = $value;
+    }
+}
+
+if (!function_exists('mf_clear_backend_session_cookie')) {
+    function mf_clear_backend_session_cookie(): void
+    {
+        if (!headers_sent()) {
+            setcookie(mf_backend_session_cookie_name(), '', mf_backend_session_cookie_options(time() - 3600));
+        }
+
+        unset($_COOKIE[mf_backend_session_cookie_name()]);
+    }
+}
+
 if (!function_exists('mf_start_backend_session')) {
     function mf_start_backend_session(): void
     {
@@ -77,6 +129,7 @@ if (!function_exists('mf_backend_session_snapshot')) {
     {
         return [
             'token' => trim((string) ($_SESSION['backend_session_token'] ?? '')),
+            'cookie_token' => trim((string) ($_COOKIE[mf_backend_session_cookie_name()] ?? '')),
             'user_id' => (int) ($_SESSION['backend_session_user_id'] ?? 0),
             'context' => trim((string) ($_SESSION['backend_session_context'] ?? '')),
             'tenant_id' => isset($_SESSION['tenant_id']) ? trim((string) $_SESSION['tenant_id']) : '',
@@ -164,6 +217,7 @@ if (!function_exists('mf_backend_session_is_impersonation')) {
 if (!function_exists('mf_backend_session_destroy_php_session')) {
     function mf_backend_session_destroy_php_session(): void
     {
+        mf_clear_backend_session_cookie();
         $_SESSION = [];
 
         if (session_status() === PHP_SESSION_ACTIVE && ini_get('session.use_cookies')) {
@@ -274,8 +328,129 @@ if (!function_exists('mf_create_backend_session')) {
         $_SESSION['backend_session_user_id'] = $authUserId;
         $_SESSION['backend_session_context'] = $normalizedContext;
         $_SESSION['backend_session_expires_at'] = null;
+        mf_set_backend_session_cookie($token);
 
         return $token;
+    }
+}
+
+if (!function_exists('mf_backend_session_needs_restore')) {
+    function mf_backend_session_needs_restore(array $snapshot, string $expectedContext): bool
+    {
+        if ($snapshot['token'] === '' || $snapshot['user_id'] <= 0) {
+            return true;
+        }
+
+        if ($expectedContext === 'super_admin') {
+            return empty($snapshot['super_admin_logged_in']) || $snapshot['super_admin_id'] <= 0;
+        }
+
+        return empty($snapshot['user_logged_in']) || $snapshot['tenant_id'] === '';
+    }
+}
+
+if (!function_exists('mf_restore_backend_session_from_cookie')) {
+    function mf_restore_backend_session_from_cookie(PDO $pdo, string $expectedContext): bool
+    {
+        $token = trim((string) ($_COOKIE[mf_backend_session_cookie_name()] ?? ''));
+        if ($token === '') {
+            return false;
+        }
+
+        try {
+            $stmt = $pdo->prepare('
+                SELECT
+                    us.session_id,
+                    us.session_token,
+                    us.user_id,
+                    us.tenant_id,
+                    us.expires_at,
+                    u.username,
+                    u.user_type,
+                    u.ui_theme,
+                    u.status AS user_status,
+                    u.force_password_change,
+                    r.role_name,
+                    r.is_system_role,
+                    t.tenant_name,
+                    t.tenant_slug,
+                    b.theme_primary_color
+                FROM user_sessions us
+                JOIN users u ON u.user_id = us.user_id
+                LEFT JOIN user_roles r ON r.role_id = u.role_id
+                LEFT JOIN tenants t ON t.tenant_id = us.tenant_id
+                LEFT JOIN tenant_branding b ON b.tenant_id = t.tenant_id
+                WHERE us.session_token = ?
+                  AND us.expires_at > NOW()
+                LIMIT 1
+            ');
+            $stmt->execute([$token]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            error_log('Unable to restore backend session from cookie: ' . $e->getMessage());
+            return false;
+        }
+
+        if (!$row || (string) ($row['user_status'] ?? '') !== 'Active') {
+            mf_clear_backend_session_cookie();
+            return false;
+        }
+
+        $tenantId = trim((string) ($row['tenant_id'] ?? ''));
+        $context = $tenantId !== '' ? 'tenant' : 'super_admin';
+        if ($expectedContext === 'tenant' && $context !== 'tenant') {
+            return false;
+        }
+        if ($expectedContext === 'super_admin' && $context !== 'super_admin') {
+            return false;
+        }
+
+        $_SESSION['backend_session_token'] = (string) ($row['session_token'] ?? $token);
+        $_SESSION['backend_session_user_id'] = (int) ($row['user_id'] ?? 0);
+        $_SESSION['backend_session_context'] = $context;
+        $_SESSION['backend_session_expires_at'] = null;
+
+        if ($context === 'tenant') {
+            unset(
+                $_SESSION['super_admin_logged_in'],
+                $_SESSION['super_admin_id'],
+                $_SESSION['super_admin_username'],
+                $_SESSION['super_admin_force_password_change'],
+                $_SESSION['super_admin_onboarding_required']
+            );
+
+            $_SESSION['user_logged_in'] = true;
+            $_SESSION['user_id'] = (int) ($row['user_id'] ?? 0);
+            $_SESSION['username'] = (string) ($row['username'] ?? '');
+            $_SESSION['tenant_id'] = $tenantId;
+            $_SESSION['tenant_name'] = (string) ($row['tenant_name'] ?? '');
+            $_SESSION['tenant_slug'] = (string) ($row['tenant_slug'] ?? '');
+            $_SESSION['role'] = (string) ($row['role_name'] ?? '');
+            $_SESSION['user_type'] = (string) ($row['user_type'] ?? '');
+            $_SESSION['theme'] = (string) ($row['theme_primary_color'] ?? '#0f172a');
+            $_SESSION['ui_theme'] = ((string) ($row['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
+        } else {
+            unset(
+                $_SESSION['user_logged_in'],
+                $_SESSION['user_id'],
+                $_SESSION['username'],
+                $_SESSION['tenant_id'],
+                $_SESSION['tenant_name'],
+                $_SESSION['tenant_slug'],
+                $_SESSION['role'],
+                $_SESSION['user_type'],
+                $_SESSION['theme']
+            );
+
+            $_SESSION['super_admin_logged_in'] = true;
+            $_SESSION['super_admin_id'] = (int) ($row['user_id'] ?? 0);
+            $_SESSION['super_admin_username'] = (string) ($row['username'] ?? '');
+            $_SESSION['ui_theme'] = ((string) ($row['ui_theme'] ?? 'light') === 'dark') ? 'dark' : 'light';
+            $_SESSION['super_admin_force_password_change'] = !empty($row['force_password_change']);
+            $_SESSION['super_admin_onboarding_required'] = false;
+        }
+
+        return true;
     }
 }
 
@@ -283,8 +458,11 @@ if (!function_exists('mf_validate_backend_session')) {
     function mf_validate_backend_session(PDO $pdo, string $expectedContext): bool
     {
         $snapshot = mf_backend_session_snapshot();
-        if ($snapshot['token'] === '' || $snapshot['user_id'] <= 0) {
-            return false;
+        if (mf_backend_session_needs_restore($snapshot, $expectedContext)) {
+            if (!mf_restore_backend_session_from_cookie($pdo, $expectedContext)) {
+                return false;
+            }
+            $snapshot = mf_backend_session_snapshot();
         }
 
         $normalizedContext = $expectedContext === 'super_admin' ? 'super_admin' : 'tenant';
@@ -356,6 +534,7 @@ if (!function_exists('mf_validate_backend_session')) {
         }
 
         $_SESSION['backend_session_expires_at'] = null;
+        mf_set_backend_session_cookie($snapshot['token']);
 
         return true;
     }
