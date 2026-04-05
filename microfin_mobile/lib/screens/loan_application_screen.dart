@@ -174,6 +174,8 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
   }
 
   bool get _selectedProductAvailable => (_product?['is_available'] == true);
+  bool get _showSelectedProductFields =>
+      _product == null || _selectedProductAvailable;
   bool get _showAccessNotice => _loanAccessState['show_notice'] == true;
   bool get _allProductsOccupied =>
       _loanAccessState['all_products_occupied'] == true;
@@ -189,6 +191,21 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
 
   String get _selectedProductReason =>
       _product?['availability_reason']?.toString() ?? '';
+  String get _selectedProductBlockedMessage {
+    if (_selectedProductReason.isNotEmpty) return _selectedProductReason;
+
+    final blockingType =
+        _product?['occupied_by_type']?.toString().toLowerCase() ?? '';
+    if (blockingType == 'pending') {
+      return 'You already have a pending application for this product.';
+    }
+    if (blockingType == 'active') {
+      return 'You already have an active loan for this product.';
+    }
+
+    return 'This loan product is not available right now.';
+  }
+
   double get _selectedProductMaxAllowed {
     final maxAllowed = _asDouble(_product?['effective_max_amount']);
     if (maxAllowed > 0) return maxAllowed;
@@ -395,11 +412,7 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
     if (_selectedProductId == null)
       return _showSnack('Please select a loan product.');
     if (!_selectedProductAvailable) {
-      return _showSnack(
-        _selectedProductReason.isNotEmpty
-            ? _selectedProductReason
-            : 'This loan product is not available right now.',
-      );
+      return _showSnack(_selectedProductBlockedMessage);
     }
     if (_amount <= 0) return _showSnack('Please enter a valid loan amount.');
     if (_selectedTerm == null)
@@ -1018,12 +1031,14 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
                             _sectionLabel('Loan Details', primary),
                             const SizedBox(height: 14),
                             _buildLoanDetailsCard(primary),
-                            const SizedBox(height: 24),
-                            _sectionLabel('Estimation', primary),
-                            const SizedBox(height: 14),
-                            _buildCalculatorCard(primary),
-                            const SizedBox(height: 24),
-                            _buildReadyCard(primary),
+                            if (_showSelectedProductFields) ...[
+                              const SizedBox(height: 24),
+                              _sectionLabel('Estimation', primary),
+                              const SizedBox(height: 14),
+                              _buildCalculatorCard(primary),
+                              const SizedBox(height: 24),
+                              _buildReadyCard(primary),
+                            ],
                             const SizedBox(height: 24),
                             _buildTrustRow(primary),
                           ]),
@@ -1606,166 +1621,173 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
             const SizedBox(height: 10),
             _buildSelectedProductNotice(primary),
           ],
-          const SizedBox(height: 16),
+          if (_showSelectedProductFields) ...[
+            const SizedBox(height: 16),
 
-          // Amount + Term in a row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _fieldLabel('Amount to Borrow'),
-                    TextFormField(
-                      controller: _amountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+            // Amount + Term in a row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _fieldLabel('Amount to Borrow'),
+                      TextFormField(
+                        controller: _amountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
+                        decoration: _fieldDecor(prefixText: '₱ '),
                       ),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
-                      ),
-                      decoration: _fieldDecor(prefixText: '₱ '),
-                    ),
-                    if (_product != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          'Min ${AppFormat.pesoCompact((_product!['min_amount'] ?? _product!['min'] as num? ?? 0).toDouble())} – Max ${AppFormat.pesoCompact((_product!['max_amount'] ?? _product!['max'] as num? ?? 0).toDouble())}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: primary,
-                            fontWeight: FontWeight.w600,
+                      if (_product != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Min ${AppFormat.pesoCompact((_product!['min_amount'] ?? _product!['min'] as num? ?? 0).toDouble())} – Max ${AppFormat.pesoCompact((_product!['max_amount'] ?? _product!['max'] as num? ?? 0).toDouble())}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: primary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _fieldLabel('Repayment Term'),
+                      _styledDropdown<int>(
+                        icon: Icons.calendar_month_outlined,
+                        hint: '— Duration —',
+                        value: _availableTerms.contains(_selectedTerm)
+                            ? _selectedTerm
+                            : null,
+                        items: _availableTerms.map((t) {
+                          String label = '$t Months';
+                          if (t == 12) label = '12 Months (1 Yr)';
+                          if (t == 24) label = '24 Months (2 Yr)';
+                          if (t == 36) label = '36 Months (3 Yr)';
+                          return DropdownMenuItem<int>(
+                            value: t,
+                            child: Text(label, overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (v) => setState(() => _selectedTerm = v),
                       ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _fieldLabel('Repayment Term'),
-                    _styledDropdown<int>(
-                      icon: Icons.calendar_month_outlined,
-                      hint: '— Duration —',
-                      value: _availableTerms.contains(_selectedTerm)
-                          ? _selectedTerm
-                          : null,
-                      items: _availableTerms.map((t) {
-                        String label = '$t Months';
-                        if (t == 12) label = '12 Months (1 Yr)';
-                        if (t == 24) label = '24 Months (2 Yr)';
-                        if (t == 36) label = '36 Months (3 Yr)';
-                        return DropdownMenuItem<int>(
-                          value: t,
-                          child: Text(label, overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
-                      onChanged: (v) => setState(() => _selectedTerm = v),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Purpose category
-          _fieldLabel('Purpose Category'),
-          _styledDropdown<String>(
-            icon: Icons.category_outlined,
-            hint: '— Select Purpose —',
-            value: _purposeCategory,
-            items:
-                [
-                      'Business',
-                      'Personal',
-                      'Education',
-                      'Agricultural',
-                      'Medical',
-                      'Housing',
-                    ]
-                    .map(
-                      (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
-                    )
-                    .toList(),
-            onChanged: (v) => setState(() {
-              _purposeCategory = v;
-              _selectedDocs.clear();
-            }),
-          ),
-          const SizedBox(height: 16),
-
-          // Purpose description
-          _fieldLabel('Specific Purpose Description'),
-          TextFormField(
-            controller: _purposeDescCtrl,
-            maxLines: 3,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF111827),
-            ),
-            decoration: _fieldDecor(
-              hint: 'Describe exactly how you will use the funds...',
-            ),
-          ),
-
-          // Dynamic requirements
-          if (_purposeCategory != null && _purposeCategory != 'Personal') ...[
-            const SizedBox(height: 20),
-            const Divider(color: Color(0xFFF3F4F6)),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(_purposeIcon(_purposeCategory!), color: primary, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  '$_purposeCategory Requirements',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: primary,
-                    letterSpacing: -0.3,
+                    ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            _buildDynamicFields(primary),
-            if (_requiredDocs().isNotEmpty || _optionalDocs().isNotEmpty) ...[
+
+            // Purpose category
+            _fieldLabel('Purpose Category'),
+            _styledDropdown<String>(
+              icon: Icons.category_outlined,
+              hint: '— Select Purpose —',
+              value: _purposeCategory,
+              items:
+                  [
+                        'Business',
+                        'Personal',
+                        'Education',
+                        'Agricultural',
+                        'Medical',
+                        'Housing',
+                      ]
+                      .map(
+                        (c) =>
+                            DropdownMenuItem<String>(value: c, child: Text(c)),
+                      )
+                      .toList(),
+              onChanged: (v) => setState(() {
+                _purposeCategory = v;
+                _selectedDocs.clear();
+              }),
+            ),
+            const SizedBox(height: 16),
+
+            // Purpose description
+            _fieldLabel('Specific Purpose Description'),
+            TextFormField(
+              controller: _purposeDescCtrl,
+              maxLines: 3,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF111827),
+              ),
+              decoration: _fieldDecor(
+                hint: 'Describe exactly how you will use the funds...',
+              ),
+            ),
+
+            // Dynamic requirements
+            if (_purposeCategory != null && _purposeCategory != 'Personal') ...[
               const SizedBox(height: 20),
               const Divider(color: Color(0xFFF3F4F6)),
               const SizedBox(height: 12),
-              const Text(
-                'Required Documents',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF374151),
-                ),
+              Row(
+                children: [
+                  Icon(
+                    _purposeIcon(_purposeCategory!),
+                    color: primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$_purposeCategory Requirements',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: primary,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              ..._requiredDocs().map(
-                (d) => _docRow(d, primary, required: true),
-              ),
-              if (_optionalDocs().isNotEmpty) ...[
-                const SizedBox(height: 8),
+              const SizedBox(height: 16),
+              _buildDynamicFields(primary),
+              if (_requiredDocs().isNotEmpty || _optionalDocs().isNotEmpty) ...[
+                const SizedBox(height: 20),
+                const Divider(color: Color(0xFFF3F4F6)),
+                const SizedBox(height: 12),
                 const Text(
-                  'Optional Documents',
+                  'Required Documents',
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF9CA3AF),
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF374151),
                   ),
                 ),
                 const SizedBox(height: 12),
-                ..._optionalDocs().map(
-                  (d) => _docRow(d, primary, required: false),
+                ..._requiredDocs().map(
+                  (d) => _docRow(d, primary, required: true),
                 ),
+                if (_optionalDocs().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Optional Documents',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ..._optionalDocs().map(
+                    (d) => _docRow(d, primary, required: false),
+                  ),
+                ],
               ],
             ],
           ],
@@ -1787,9 +1809,7 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
         ? (_selectedProductMaxAllowed > 0
               ? 'You can borrow up to ${AppFormat.peso(_selectedProductMaxAllowed)} on this product based on your remaining shared credit limit.'
               : 'This product is ready for application.')
-        : (_selectedProductReason.isNotEmpty
-              ? _selectedProductReason
-              : 'This product is currently blocked because you already have an active loan or pending application for it.');
+        : _selectedProductBlockedMessage;
 
     return Container(
       width: double.infinity,

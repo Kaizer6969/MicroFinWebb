@@ -38,6 +38,20 @@ try {
         $uStmt->close();
     }
 
+    if (!$client) {
+        $client = [];
+    }
+
+    $memberSince = '';
+    $registrationDate = trim((string) ($client['registration_date'] ?? ''));
+    if ($registrationDate !== '') {
+        $timestamp = strtotime($registrationDate);
+        if ($timestamp !== false) {
+            $memberSince = date('Y', $timestamp);
+        }
+    }
+    $client['member_since'] = $memberSince;
+
     echo json_encode(['success' => true, 'profile' => $client]);
 
 } catch (Exception $e) {

@@ -41,6 +41,7 @@ function microfin_loan_rules_default_summary(string $tenantId = ''): array
         'remaining_credit' => 0.0,
         'active_loans' => [],
         'open_applications' => [],
+        'occupied_products' => [],
         'occupied_product_ids' => [],
         'occupied_product_count' => 0,
     ];
@@ -107,11 +108,13 @@ function microfin_build_client_loan_application_summary(mysqli $conn, array $cli
         'remaining_credit' => 0.0,
         'active_loans' => [],
         'open_applications' => [],
+        'occupied_products' => [],
         'occupied_product_ids' => [],
         'occupied_product_count' => 0,
     ];
 
     $occupiedProductIds = [];
+    $occupiedProducts = [];
     $usedCredit = 0.0;
 
     $loanStatuses = microfin_loan_rules_active_loan_statuses();
@@ -150,6 +153,11 @@ function microfin_build_client_loan_application_summary(mysqli $conn, array $cli
 
             if ($row['product_id'] > 0) {
                 $occupiedProductIds[$row['product_id']] = true;
+                $occupiedProducts[$row['product_id']] = [
+                    'blocking_type' => 'active',
+                    'blocking_status' => trim((string) ($row['loan_status'] ?? 'Active')) ?: 'Active',
+                    'message' => 'You already have an active loan for this product.',
+                ];
             }
         }
 
@@ -194,6 +202,13 @@ function microfin_build_client_loan_application_summary(mysqli $conn, array $cli
 
             if ($row['product_id'] > 0) {
                 $occupiedProductIds[$row['product_id']] = true;
+                if (!isset($occupiedProducts[$row['product_id']])) {
+                    $occupiedProducts[$row['product_id']] = [
+                        'blocking_type' => 'pending',
+                        'blocking_status' => trim((string) ($row['application_status'] ?? 'Pending')) ?: 'Pending',
+                        'message' => 'You already have a pending application for this product.',
+                    ];
+                }
             }
         }
 
@@ -202,6 +217,7 @@ function microfin_build_client_loan_application_summary(mysqli $conn, array $cli
 
     $summary['used_credit'] = round($usedCredit, 2);
     $summary['remaining_credit'] = round(max(0, $summary['credit_limit'] - $usedCredit), 2);
+    $summary['occupied_products'] = $occupiedProducts;
     $summary['occupied_product_ids'] = array_values(array_map('intval', array_keys($occupiedProductIds)));
     $summary['occupied_product_count'] = count($summary['occupied_product_ids']);
 
@@ -213,6 +229,9 @@ function microfin_annotate_loan_products(array $products, array $summary): array
     $creditLimit = (float) ($summary['credit_limit'] ?? 0);
     $remainingCredit = (float) ($summary['remaining_credit'] ?? 0);
     $occupiedLookup = [];
+    $occupiedProducts = is_array($summary['occupied_products'] ?? null)
+        ? $summary['occupied_products']
+        : [];
 
     foreach (($summary['occupied_product_ids'] ?? []) as $productId) {
         $productId = (int) $productId;
@@ -232,8 +251,13 @@ function microfin_annotate_loan_products(array $products, array $summary): array
         }
 
         $isOccupied = $productId > 0 && isset($occupiedLookup[$productId]);
+        $occupiedState = $productId > 0 && isset($occupiedProducts[$productId]) && is_array($occupiedProducts[$productId])
+            ? $occupiedProducts[$productId]
+            : [];
         $isAvailable = true;
         $availabilityReason = '';
+        $occupiedByType = trim((string) ($occupiedState['blocking_type'] ?? ''));
+        $occupiedByStatus = trim((string) ($occupiedState['blocking_status'] ?? ''));
 
         if ($creditLimit <= 0) {
             $isAvailable = false;
@@ -243,13 +267,21 @@ function microfin_annotate_loan_products(array $products, array $summary): array
             $availabilityReason = 'Your current loans and pending applications already use your full credit limit.';
         } elseif ($isOccupied) {
             $isAvailable = false;
-            $availabilityReason = 'You already have an active loan or pending application for this product.';
+            if ($occupiedByType === 'active') {
+                $availabilityReason = 'You already have an active loan for this product.';
+            } elseif ($occupiedByType === 'pending') {
+                $availabilityReason = 'You already have a pending application for this product.';
+            } else {
+                $availabilityReason = 'You already have an active loan or pending application for this product.';
+            }
         } elseif ($minAmount > 0 && $effectiveMax > 0 && $effectiveMax < $minAmount) {
             $isAvailable = false;
             $availabilityReason = 'Your remaining limit is below this product minimum amount.';
         }
 
         $row['occupied_by_existing'] = $isOccupied;
+        $row['occupied_by_type'] = $occupiedByType;
+        $row['occupied_by_status'] = $occupiedByStatus;
         $row['is_available'] = $isAvailable;
         $row['availability_reason'] = $availabilityReason;
         $row['effective_max_amount'] = round(max(0, $effectiveMax), 2);

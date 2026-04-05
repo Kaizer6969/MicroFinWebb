@@ -151,6 +151,23 @@ try {
         throw new Exception('Loan term cannot exceed ' . number_format($product_max_term) . ' month(s) for this loan product.');
     }
 
+    $activeLoanStmt = $conn->prepare("
+        SELECT loan_id
+        FROM loans
+        WHERE client_id = ?
+          AND tenant_id = ?
+          AND product_id = ?
+          AND loan_status IN ('Active', 'Overdue', 'Restructured')
+        LIMIT 1
+    ");
+    $activeLoanStmt->bind_param('isi', $client_id, $tenant_id, $product_id);
+    $activeLoanStmt->execute();
+    if ($activeLoanStmt->get_result()->num_rows > 0) {
+        $activeLoanStmt->close();
+        throw new Exception('You already have an active loan for this product.');
+    }
+    $activeLoanStmt->close();
+
     $dupStmt = $conn->prepare("
         SELECT la.application_id
         FROM loan_applications la
@@ -168,26 +185,9 @@ try {
     $dupStmt->execute();
     if ($dupStmt->get_result()->num_rows > 0) {
         $dupStmt->close();
-        throw new Exception('You already have an active or pending application for this loan product.');
+        throw new Exception('You already have a pending application for this product.');
     }
     $dupStmt->close();
-
-    $activeLoanStmt = $conn->prepare("
-        SELECT loan_id
-        FROM loans
-        WHERE client_id = ?
-          AND tenant_id = ?
-          AND product_id = ?
-          AND loan_status IN ('Active', 'Overdue', 'Restructured')
-        LIMIT 1
-    ");
-    $activeLoanStmt->bind_param('isi', $client_id, $tenant_id, $product_id);
-    $activeLoanStmt->execute();
-    if ($activeLoanStmt->get_result()->num_rows > 0) {
-        $activeLoanStmt->close();
-        throw new Exception('You already have an active loan for this product.');
-    }
-    $activeLoanStmt->close();
 
     $app_number = strtoupper($tenant_id) . '-' . date('YmdHi') . '-' . str_pad((string) $client_id, 4, '0', STR_PAD_LEFT);
 
