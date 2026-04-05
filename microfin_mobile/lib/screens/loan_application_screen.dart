@@ -695,7 +695,7 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'You currently have an active or pending loan. Please settle your existing balance or wait for your current application to finish before applying for a new one.',
+                  'You already have an active loan. As part of our policy, you may only maintain one active loan per product at a time.\n\nPlease settle your existing balance before applying for a new loan.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 15,
