@@ -6170,38 +6170,15 @@ function hexToRgb($hex) {
                                 </div>
                             </div>
 
-                            <div class="credit-policy-tab-nav" id="credit-policy-tab-nav">
-                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="builder">
-                                    <span class="material-symbols-rounded">dashboard_customize</span>
-                                    Policy Builder
-                                    <small>Overview and flow</small>
-                                </button>
-                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="eligibility">
-                                    <span class="material-symbols-rounded">verified_user</span>
-                                    Borrower Eligibility
-                                    <small>Who can move forward</small>
-                                </button>
-                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="score">
-                                    <span class="material-symbols-rounded">query_stats</span>
-                                    Score Classification
-                                    <small>Classify and route</small>
-                                </button>
-                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="limit">
-                                    <span class="material-symbols-rounded">payments</span>
-                                    Limit Engine
-                                    <small>Offers and guardrails</small>
-                                </button>
-                            </div>
-
                             <div class="credit-policy-tab-panels">
-                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="builder" hidden>
+                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="overview" hidden>
                                     <div class="credit-engine-panel credit-engine-panel-span-2 credit-policy-panel" id="credit-policy-builder">
                                         <div class="credit-engine-panel-head credit-policy-panel-headline">
                                             <div class="credit-policy-head-main">
                                                 <div class="credit-policy-head-icon"><span class="material-symbols-rounded">dashboard_customize</span></div>
                                                 <div class="credit-policy-panel-title">
                                                     <span class="credit-policy-section-step">Workspace</span>
-                                                    <h4>Policy Builder</h4>
+                                                    <h4>Overview</h4>
                                                     <p class="text-muted">Use this overview to shape the full borrower flow before you fine-tune each rule set.</p>
                                                 </div>
                                             </div>
