@@ -73,25 +73,17 @@ try {
     }
     $txStmt->close();
 
+    // Pass the full loan row directly — the Dart code expects raw column names
+    // (e.g. total_loan_amount, loan_status, interest_rate, release_date, etc.)
+    $loan['product_name'] = $loan['product_name'] ?? 'Term Loan';
+    $loan['progress'] = round($progress, 4);
+    $loan['number_of_payments'] = count($schedules);
+    $loan['transactions'] = $transactions;
+
     $response = [
         'success' => true,
-        'loan' => [
-            'loan_number' => $loan['loan_number'],
-            'status' => $loan['loan_status'],
-            'product_name' => $loan['product_name'],
-            'applied_date' => $loan['created_at'],
-            'approved_date' => $loan['release_date'],
-            'total_amount' => $loan['principal_amount'],
-            'total_interest' => $loan['interest_amount'],
-            'duration' => $loan['loan_term_months'] . ' Months',
-            'monthly_amortization' => $loan['monthly_amortization'],
-            'total_paid' => $loan['total_paid'],
-            'remaining_balance' => $loan['remaining_balance'],
-            'progress' => round($progress, 4),
-            'next_due_date' => $loan['next_payment_due'],
-            'schedules' => $schedules,
-            'transactions' => $transactions
-        ]
+        'loan' => $loan,
+        'schedule' => $schedules,
     ];
 
     echo json_encode($response);
