@@ -1950,8 +1950,9 @@ async function viewApplication(id) {
     const clientDocs = Array.isArray(a.client_documents) ? a.client_documents : [];
     const applicationDocs = Array.isArray(a.application_documents) ? a.application_documents : [];
     const clientDocsRows = clientDocs.length ? clientDocs.map(doc => {
-        const fileHtml = doc.file_path
-            ? `<a href="../../../${safe(doc.file_path)}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>`
+        const href = documentHref(doc);
+        const fileHtml = href
+            ? `<a href="${safe(href)}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>`
             : '<span class="td-muted">Not uploaded</span>';
         return `<tr>
             <td class="td-bold">${safe(doc.document_name || doc.file_name || 'Client document')}</td>
@@ -1961,8 +1962,9 @@ async function viewApplication(id) {
         </tr>`;
     }).join('') : '<tr class="empty-row"><td colspan="4">No client verification documents found.</td></tr>';
     const applicationDocsRows = applicationDocs.length ? applicationDocs.map(doc => {
-        const fileHtml = doc.file_path
-            ? `<a href="../../../${safe(doc.file_path)}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>`
+        const href = documentHref(doc);
+        const fileHtml = href
+            ? `<a href="${safe(href)}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>`
             : '<span class="td-muted">File unavailable</span>';
         return `<tr>
             <td class="td-bold">${safe(doc.document_name || doc.file_name || 'Application attachment')}</td>
