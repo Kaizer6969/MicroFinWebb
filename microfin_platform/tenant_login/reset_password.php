@@ -9,11 +9,12 @@ $user_id = null;
 $tenant_id = null;
 $theme_color = '#2563eb';
 $tenant_slug = '';
+$user_type = '';
 
 if ($token) {
     // Validate token and check if it's expired
     $stmt = $pdo->prepare("
-        SELECT u.user_id, u.tenant_id, u.status, b.theme_primary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, t.tenant_slug
+        SELECT u.user_id, u.tenant_id, u.status, u.user_type, b.theme_primary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family, t.tenant_slug
         FROM users u
         JOIN tenants t ON u.tenant_id = t.tenant_id
         LEFT JOIN tenant_branding b ON t.tenant_id = b.tenant_id
@@ -28,15 +29,16 @@ if ($token) {
             $message_type = 'error';
             $message = 'This account is no longer eligible for password reset.';
         } else {
-        $user_id = $user['user_id'];
-        $tenant_id = $user['tenant_id'];
-        $theme_color = $user['theme_primary_color'] ?: '#2563eb';
-        $theme_text_main = $user['theme_text_main'] ?: '#0f172a';
-        $theme_text_muted = $user['theme_text_muted'] ?: '#64748b';
-        $theme_bg_body = $user['theme_bg_body'] ?: '#f8fafc';
-        $theme_bg_card = $user['theme_bg_card'] ?: '#ffffff';
-        $theme_font = $user['font_family'] ?: 'Inter';
-        $tenant_slug = $user['tenant_slug'];
+            $user_id = $user['user_id'];
+            $tenant_id = $user['tenant_id'];
+            $user_type = $user['user_type'];
+            $theme_color = $user['theme_primary_color'] ?: '#2563eb';
+            $theme_text_main = $user['theme_text_main'] ?: '#0f172a';
+            $theme_text_muted = $user['theme_text_muted'] ?: '#64748b';
+            $theme_bg_body = $user['theme_bg_body'] ?: '#f8fafc';
+            $theme_bg_card = $user['theme_bg_card'] ?: '#ffffff';
+            $theme_font = $user['font_family'] ?: 'Inter';
+            $tenant_slug = $user['tenant_slug'];
         }
     } else {
         $message_type = 'error';
@@ -70,7 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user_id) {
         
         if ($update->execute([$password_hash, $user_id])) {
             $message_type = 'success';
-            $message = 'Your password has been successfully reset! You can now log in.';
+            $message = 'Your password has been successfully reset!';
+            // Fetch user type again to be sure
+            $stmt_type = $pdo->prepare("SELECT user_type FROM users WHERE user_id = ?");
+            $stmt_type->execute([$user_id]);
+            $user_type = $stmt_type->fetchColumn();
+            
             $user_id = null; // Hide the form on success
         } else {
             $message_type = 'error';
@@ -156,10 +163,17 @@ $theme_font = $theme_font ?? 'Inter';
     </form>
     <?php endif; ?>
 
-    <?php if ($message_type === 'success' || !$user_id): ?>
-        <a href="login.php<?php echo $tenant_slug ? '?s='.urlencode($tenant_slug) : ''; ?>" class="login-link">
-            Return to Login
-        </a>
+    <?php if ($message_type === 'success' || ($message && !$user_id)): ?>
+        <?php if ($user_type === 'Client'): ?>
+            <div style="text-align: center; margin-top: 24px; padding: 20px; border-radius: 12px; background: color-mix(in srgb, var(--brand-color) 5%, transparent); border: 1px dashed var(--brand-color);">
+                <p style="color: var(--text-main); font-weight: 600; margin-bottom: 8px;">Account Ready!</p>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">You can now log in using the mobile app with your new password.</p>
+            </div>
+        <?php elseif ($user_type === 'Employee'): ?>
+            <a href="login.php<?php echo $tenant_slug ? '?s='.urlencode($tenant_slug) : ''; ?>" class="login-link">
+                Return to Login
+            </a>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 
