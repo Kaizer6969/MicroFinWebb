@@ -1258,7 +1258,7 @@ if (!function_exists('mf_sync_client_credit_profile')) {
             : 0.0;
         $currentLimit = (float) ($client['credit_limit'] ?? 0);
 
-        // If staff has manually upgraded this client, never lower the limit below their last upgrade
+        // If staff has manually upgraded this client, the staff-approved limit is the Gold Standard.
         $lastUpgradeStmt = $pdo->prepare("
             SELECT description FROM audit_logs
             WHERE tenant_id = ? AND entity_type = 'client' AND entity_id = ? AND action_type = 'CREDIT_LIMIT_UPGRADED'
@@ -1267,14 +1267,18 @@ if (!function_exists('mf_sync_client_credit_profile')) {
         $lastUpgradeStmt->execute([$tenantId, $clientId]);
         $lastUpgradeDesc = $lastUpgradeStmt->fetchColumn();
         if ($lastUpgradeDesc) {
-            // Extract the upgraded-to amount from "Credit limit upgraded to 4800 from 4000"
-            if (preg_match('/upgraded to ([\d.]+)/', $lastUpgradeDesc, $m)) {
-                $staffUpgradedLimit = (float) $m[1];
-                $newLimit = max($newLimit, $staffUpgradedLimit);
+            // Extract the upgraded-to amount (handles formats like 4800 or 4,800.00)
+            if (preg_match('/upgraded to ([\d,.]+)/', $lastUpgradeDesc, $m)) {
+                $rawStaffLimit = str_replace(',', '', $m[1]);
+                $staffUpgradedLimit = (float) $rawStaffLimit;
+                
+                // If the staff set a limit, it overrides the auto-computed score limit.
+                // This also'corrects' borrowers who were hit by the 44,000 bug.
+                $newLimit = $staffUpgradedLimit;
             }
         }
 
-        if (abs($newLimit - $currentLimit) > 0.009) {
+        if (abs($newLimit - $currentLimit) > 0.001) {
             $update = $pdo->prepare("
                 UPDATE clients
                 SET last_seen_credit_limit = credit_limit,
