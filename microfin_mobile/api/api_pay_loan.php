@@ -51,13 +51,17 @@ try {
     $uStmt->close();
 
     // 3. Insert into payments
-    $pStmt = $conn->prepare("INSERT INTO payments (loan_id, client_id, tenant_id, amount_paid, payment_date, payment_method, reference_number, status, processed_by) VALUES (?, ?, ?, ?, NOW(), ?, ?, 'Completed', ?)");
-    $pStmt->bind_param('iisdssi', $loanId, $loan['client_id'], $tenantId, $amount, $method, $refNum, $userId);
-    $pStmt->execute();
-    $pStmt->close();
-
+    // Construct a unique payment reference
+    $payRef = 'PAY-' . strtoupper(bin2hex(random_bytes(4))) . '-' . time();
+    $paymentDate = date('Y-m-d');
+    
+    // We'll use a placeholder for principal/interest if we don't have a breakdown, 
+    // or we can sum up from the schedule updates.
+    $totalPrincipal = 0;
+    $totalInterest = 0;
+    
     // 4. Update schedules (naive FIFO allocation for simplicity)
-    $sStmt = $conn->prepare("SELECT schedule_id, total_payment AS total_due, amount_paid FROM amortization_schedule WHERE loan_id = ? AND payment_status != 'Paid' ORDER BY due_date ASC");
+    $sStmt = $conn->prepare("SELECT schedule_id, principal_amount, interest_amount, total_payment AS total_due, amount_paid FROM amortization_schedule WHERE loan_id = ? AND payment_status != 'Paid' ORDER BY due_date ASC");
     $sStmt->bind_param('i', $loanId);
     $sStmt->execute();
     $sRes = $sStmt->get_result();
@@ -73,6 +77,10 @@ try {
         
         if ($unpaid > 0) {
             $allocate = min($remainingPayment, $unpaid);
+            
+            // Simple logic: apply to interest first? Or just proportion? 
+            // Most systems do interest then principal.
+            // For now, let's just allocate and we'll manually estimate for the payment record.
             $newSchedPaid = $paid + $allocate;
             $remainingPayment -= $allocate;
             $schedStatus = ($newSchedPaid >= $due) ? 'Paid' : 'Partially Paid';
@@ -82,9 +90,31 @@ try {
                 'paid' => $newSchedPaid,
                 'status' => $schedStatus
             ];
+            
+            // For payment record breakdown (ESTIMATION)
+            // If it's a full payment, we know exactly. If partial, it's harder without more state.
+            // Let's assume proportional allocation for the record.
+            $pRatio = floatval($r['principal_amount']) / ($due > 0 ? $due : 1);
+            $totalPrincipal += ($allocate * $pRatio);
+            $totalInterest += ($allocate * (1 - $pRatio));
         }
     }
     $sStmt->close();
+
+    // 5. Get a valid employee ID for 'received_by' (required by schema)
+    // We'll try to find any active employee for this tenant, default to a system one if needed.
+    $empStmt = $conn->prepare("SELECT employee_id FROM employees WHERE tenant_id = ? AND employment_status = 'Active' LIMIT 1");
+    $empStmt->bind_param('s', $tenantId);
+    $empStmt->execute();
+    $empRes = $empStmt->get_result();
+    $emp = $empRes->fetch_assoc();
+    $receivedBy = $emp ? $emp['employee_id'] : 1; // Fallback to 1 if no employee found
+    $empStmt->close();
+
+    $pStmt = $conn->prepare("INSERT INTO payments (payment_reference, loan_id, client_id, tenant_id, payment_date, payment_amount, principal_paid, interest_paid, payment_method, payment_reference_number, received_by, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Posted')");
+    $pStmt->bind_param('siissdddssi', $payRef, $loanId, $loan['client_id'], $tenantId, $paymentDate, $amount, $totalPrincipal, $totalInterest, $method, $refNum, $receivedBy);
+    $pStmt->execute();
+    $pStmt->close();
 
     $suStmt = $conn->prepare("UPDATE amortization_schedule SET amount_paid = ?, payment_status = ? WHERE schedule_id = ?");
     foreach ($schedUpdates as $su) {
