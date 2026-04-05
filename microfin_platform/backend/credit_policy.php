@@ -65,6 +65,7 @@ if (!function_exists('mf_credit_policy_defaults')) {
     {
         return [
             'eligibility' => [
+                'allow_no_minimum_income' => true,
                 'min_monthly_income' => 0,
                 'allowed_employment_statuses' => ['Employed', 'Self-Employed', 'Retired'],
             ],
@@ -74,6 +75,14 @@ if (!function_exists('mf_credit_policy_defaults')) {
                 'recommended_min_score' => 600,
                 'highly_recommended_min_score' => 800,
                 'new_client_default_score' => 500,
+            ],
+            'score_growth' => [
+                'verified_documents_bonus' => 20,
+                'completed_loan_bonus' => 30,
+                'on_time_payment_bonus' => 8,
+                'late_payment_penalty' => 18,
+                'missed_payment_penalty' => 40,
+                'active_loan_penalty' => 12,
             ],
             'decision_routing' => [
                 'reject_below_score' => 400,
@@ -91,7 +100,8 @@ if (!function_exists('mf_credit_policy_defaults')) {
                 'income_multiplier' => 4,
                 'approve_band_multiplier' => 1.10,
                 'review_band_multiplier' => 1.00,
-                'reject_band_multiplier' => 0.50,
+                'fair_band_multiplier' => 0.75,
+                'at_risk_band_multiplier' => 0.50,
                 'max_credit_limit_cap' => 200000,
                 'round_to_nearest' => 500,
             ],
@@ -210,6 +220,12 @@ if (!function_exists('mf_credit_policy_normalize')) {
         $recommendedMinScore = max($conditionalMinScore + 1, $rawRecommendedMin);
         $highlyRecommendedMinScore = max($recommendedMinScore + 1, $rawHighlyRecommendedMin);
         $decisionRouting = mf_credit_policy_build_decision_routing($conditionalMinScore, $recommendedMinScore);
+        $eligibility = is_array($policy['eligibility'] ?? null) ? $policy['eligibility'] : [];
+        $scoreGrowth = is_array($policy['score_growth'] ?? null) ? $policy['score_growth'] : [];
+        $minMonthlyIncome = round(max(0, (float) ($eligibility['min_monthly_income'] ?? $defaults['eligibility']['min_monthly_income'])), 2);
+        $allowNoMinimumIncome = array_key_exists('allow_no_minimum_income', $eligibility)
+            ? mf_credit_policy_truthy($eligibility['allow_no_minimum_income'])
+            : ($minMonthlyIncome <= 0);
 
         $newClientDefaultScore = mf_credit_policy_normalize_score_value(
             $scoreThresholds['new_client_default_score'] ?? $defaults['score_thresholds']['new_client_default_score'],
@@ -220,6 +236,8 @@ if (!function_exists('mf_credit_policy_normalize')) {
         $creditLimit = $policy['credit_limit'] ?? [];
         $hasNewBandKeys = isset($creditLimit['approve_band_multiplier'])
             || isset($creditLimit['review_band_multiplier'])
+            || isset($creditLimit['fair_band_multiplier'])
+            || isset($creditLimit['at_risk_band_multiplier'])
             || isset($creditLimit['reject_band_multiplier']);
         if (!$hasNewBandKeys) {
             if (isset($creditLimit['ci_multiplier_highly_recommended'])) {
@@ -229,15 +247,25 @@ if (!function_exists('mf_credit_policy_normalize')) {
                 $creditLimit['review_band_multiplier'] = $creditLimit['ci_multiplier_recommended'];
             }
             if (isset($creditLimit['ci_multiplier_conditional'])) {
-                $creditLimit['reject_band_multiplier'] = $creditLimit['ci_multiplier_conditional'];
+                $creditLimit['fair_band_multiplier'] = $creditLimit['ci_multiplier_conditional'];
+                $creditLimit['at_risk_band_multiplier'] = $creditLimit['ci_multiplier_conditional'];
             }
+        }
+
+        $legacyRejectBandMultiplier = $creditLimit['reject_band_multiplier'] ?? null;
+        if (!isset($creditLimit['fair_band_multiplier']) && $legacyRejectBandMultiplier !== null) {
+            $creditLimit['fair_band_multiplier'] = $legacyRejectBandMultiplier;
+        }
+        if (!isset($creditLimit['at_risk_band_multiplier']) && $legacyRejectBandMultiplier !== null) {
+            $creditLimit['at_risk_band_multiplier'] = $legacyRejectBandMultiplier;
         }
 
         return [
             'eligibility' => [
-                'min_monthly_income' => round(max(0, (float) ($policy['eligibility']['min_monthly_income'] ?? $defaults['eligibility']['min_monthly_income'])), 2),
+                'allow_no_minimum_income' => $allowNoMinimumIncome,
+                'min_monthly_income' => $minMonthlyIncome,
                 'allowed_employment_statuses' => mf_credit_policy_normalize_list(
-                    $policy['eligibility']['allowed_employment_statuses'] ?? [],
+                    $eligibility['allowed_employment_statuses'] ?? [],
                     mf_credit_policy_employment_options(),
                     $defaults['eligibility']['allowed_employment_statuses'],
                     true
@@ -249,6 +277,14 @@ if (!function_exists('mf_credit_policy_normalize')) {
                 'recommended_min_score' => $recommendedMinScore,
                 'highly_recommended_min_score' => $highlyRecommendedMinScore,
                 'new_client_default_score' => $newClientDefaultScore,
+            ],
+            'score_growth' => [
+                'verified_documents_bonus' => (int) round(max(0, (float) ($scoreGrowth['verified_documents_bonus'] ?? $defaults['score_growth']['verified_documents_bonus']))),
+                'completed_loan_bonus' => (int) round(max(0, (float) ($scoreGrowth['completed_loan_bonus'] ?? $defaults['score_growth']['completed_loan_bonus']))),
+                'on_time_payment_bonus' => (int) round(max(0, (float) ($scoreGrowth['on_time_payment_bonus'] ?? $defaults['score_growth']['on_time_payment_bonus']))),
+                'late_payment_penalty' => (int) round(max(0, (float) ($scoreGrowth['late_payment_penalty'] ?? $defaults['score_growth']['late_payment_penalty']))),
+                'missed_payment_penalty' => (int) round(max(0, (float) ($scoreGrowth['missed_payment_penalty'] ?? $defaults['score_growth']['missed_payment_penalty']))),
+                'active_loan_penalty' => (int) round(max(0, (float) ($scoreGrowth['active_loan_penalty'] ?? $defaults['score_growth']['active_loan_penalty']))),
             ],
             'decision_routing' => $decisionRouting,
             'ci_rules' => [
@@ -269,7 +305,8 @@ if (!function_exists('mf_credit_policy_normalize')) {
                 'income_multiplier' => round(max(0, (float) ($creditLimit['income_multiplier'] ?? $defaults['credit_limit']['income_multiplier'])), 2),
                 'approve_band_multiplier' => round(max(0, (float) ($creditLimit['approve_band_multiplier'] ?? $defaults['credit_limit']['approve_band_multiplier'])), 2),
                 'review_band_multiplier' => round(max(0, (float) ($creditLimit['review_band_multiplier'] ?? $defaults['credit_limit']['review_band_multiplier'])), 2),
-                'reject_band_multiplier' => round(max(0, (float) ($creditLimit['reject_band_multiplier'] ?? $defaults['credit_limit']['reject_band_multiplier'])), 2),
+                'fair_band_multiplier' => round(max(0, (float) ($creditLimit['fair_band_multiplier'] ?? $defaults['credit_limit']['fair_band_multiplier'])), 2),
+                'at_risk_band_multiplier' => round(max(0, (float) ($creditLimit['at_risk_band_multiplier'] ?? $defaults['credit_limit']['at_risk_band_multiplier'])), 2),
                 'max_credit_limit_cap' => round(max(0, (float) ($creditLimit['max_credit_limit_cap'] ?? $defaults['credit_limit']['max_credit_limit_cap'])), 2),
                 'round_to_nearest' => round(max(0, (float) ($creditLimit['round_to_nearest'] ?? $defaults['credit_limit']['round_to_nearest'])), 2),
             ],
@@ -642,6 +679,91 @@ if (!function_exists('mf_credit_policy_fetch_latest_score')) {
     }
 }
 
+if (!function_exists('mf_credit_policy_map_rating_label')) {
+    function mf_credit_policy_map_rating_label(string $recommendationLabel): string
+    {
+        $label = trim($recommendationLabel);
+
+        if ($label === 'High Credit Score') {
+            return 'Excellent';
+        }
+        if ($label === 'Good Credit Score') {
+            return 'Good';
+        }
+        if ($label === 'Standard Credit Score') {
+            return 'Fair';
+        }
+        if ($label === 'Fair Credit Score') {
+            return 'Poor';
+        }
+
+        return 'High Risk';
+    }
+}
+
+if (!function_exists('mf_credit_policy_ensure_default_score_record')) {
+    function mf_credit_policy_ensure_default_score_record(
+        PDO $pdo,
+        string $tenantId,
+        int $clientId,
+        ?array $policy = null,
+        ?array $client = null,
+        ?int $computedBy = null
+    ): ?array {
+        $existing = mf_credit_policy_fetch_latest_score($pdo, $tenantId, $clientId);
+        if ($existing) {
+            return $existing;
+        }
+
+        $policy = $policy ?? mf_get_tenant_credit_policy($pdo, $tenantId);
+        $client = $client ?? mf_credit_policy_fetch_client($pdo, $tenantId, $clientId);
+
+        if (!$client) {
+            return null;
+        }
+
+        $documentStatus = strtolower(trim((string) ($client['document_verification_status'] ?? '')));
+        if (!in_array($documentStatus, ['approved', 'verified'], true)) {
+            return null;
+        }
+
+        $defaultScore = (int) mf_credit_policy_normalize_score_value(
+            $policy['score_thresholds']['new_client_default_score'] ?? 500,
+            500
+        );
+        $recommendation = mf_credit_policy_score_recommendation($policy, (float) $defaultScore);
+        $ratingLabel = mf_credit_policy_map_rating_label((string) ($recommendation['label'] ?? ''));
+        $snapshot = mf_credit_policy_compute_limit_snapshot($policy, $client, [
+            'total_score' => $defaultScore,
+        ], null);
+
+        $insert = $pdo->prepare("
+            INSERT INTO credit_scores (
+                client_id,
+                tenant_id,
+                total_score,
+                credit_rating,
+                max_loan_amount,
+                recommended_interest_rate,
+                computed_by,
+                notes,
+                computation_date
+            ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NOW())
+        ");
+        $insert->execute([
+            $clientId,
+            $tenantId,
+            $defaultScore,
+            $ratingLabel,
+            (float) ($snapshot['computed_limit'] ?? 0),
+            $computedBy,
+            'Default credit score initialized from the tenant credit policy after client approval.',
+        ]);
+
+        return mf_credit_policy_fetch_latest_score($pdo, $tenantId, $clientId);
+    }
+}
+
 if (!function_exists('mf_credit_policy_fetch_latest_ci')) {
     function mf_credit_policy_fetch_latest_ci(PDO $pdo, string $tenantId, int $clientId): ?array
     {
@@ -705,8 +827,11 @@ if (!function_exists('mf_credit_policy_band_multiplier')) {
         if (($recommendation['decision_group'] ?? '') === 'review') {
             return (float) ($policy['credit_limit']['review_band_multiplier'] ?? 1.00);
         }
+        if (($recommendation['label'] ?? '') === 'Fair Credit Score') {
+            return (float) ($policy['credit_limit']['fair_band_multiplier'] ?? 0.75);
+        }
 
-        return (float) ($policy['credit_limit']['reject_band_multiplier'] ?? 0.50);
+        return (float) ($policy['credit_limit']['at_risk_band_multiplier'] ?? 0.50);
     }
 }
 
@@ -779,6 +904,9 @@ if (!function_exists('mf_sync_client_credit_profile')) {
         }
 
         $score = mf_credit_policy_fetch_latest_score($pdo, $tenantId, $clientId);
+        if (!$score) {
+            $score = mf_credit_policy_ensure_default_score_record($pdo, $tenantId, $clientId, $policy, $client);
+        }
         $ci = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, $clientId);
         $snapshot = mf_credit_policy_compute_limit_snapshot($policy, $client, $score, $ci);
 
@@ -928,7 +1056,8 @@ if (!function_exists('mf_evaluate_application_policy')) {
         $rejectReasons = [];
         $reviewReasons = [];
 
-        if ((float) ($policy['eligibility']['min_monthly_income'] ?? 0) > 0
+        if (empty($policy['eligibility']['allow_no_minimum_income'])
+            && (float) ($policy['eligibility']['min_monthly_income'] ?? 0) > 0
             && (float) ($client['monthly_income'] ?? 0) < (float) ($policy['eligibility']['min_monthly_income'] ?? 0)
         ) {
             $rejectReasons[] = 'Monthly income is below the minimum requirement.';

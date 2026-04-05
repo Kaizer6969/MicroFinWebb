@@ -122,7 +122,7 @@ if ($method === 'GET' && $action === 'credit_accounts') {
     if (!in_array($filter, $allowedFilters, true)) {
         $filter = 'all';
     }
-    $allowedScoreFilters = ['all', 'high_credit', 'good_credit', 'standard_credit', 'fair_credit'];
+    $allowedScoreFilters = ['all', 'high_credit', 'good_credit', 'standard_credit', 'fair_credit', 'at_risk_credit'];
     if (!in_array($score_filter, $allowedScoreFilters, true)) {
         $score_filter = 'all';
     }
@@ -180,6 +180,7 @@ if ($method === 'GET' && $action === 'credit_accounts') {
             'good_credit' => 'good credit score',
             'standard_credit' => 'standard credit score',
             'fair_credit' => 'fair credit score',
+            'at_risk_credit' => 'at-risk credit score',
         ];
 
         return $label !== '' && $label === ($labelMap[$selectedScoreFilter] ?? '');
@@ -193,6 +194,9 @@ if ($method === 'GET' && $action === 'credit_accounts') {
         }
 
         $score = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
+        if (!$score) {
+            $score = mf_credit_policy_ensure_default_score_record($pdo, $tenant_id, $client_id, $credit_policy, $client);
+        }
         if ($score) {
             $score['total_score'] = (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0);
         }
@@ -307,6 +311,12 @@ if ($method === 'GET' && $action === 'view') {
     $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
     $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
     $client['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
+
+    $latestScore = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
+    if (!$latestScore) {
+        $latestScore = mf_credit_policy_ensure_default_score_record($pdo, $tenant_id, $client_id, mf_get_tenant_credit_policy($pdo, $tenant_id), $client);
+    }
+    $client['latest_score'] = $latestScore ?: null;
 
     echo json_encode(['status' => 'success', 'data' => $client]);
     exit;

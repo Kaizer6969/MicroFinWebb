@@ -1010,6 +1010,7 @@ tbody tr:hover { background: var(--brand-light); }
             <button class="filter-tab" data-score-filter="good_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'good_credit', this)">Good Credit</button>
             <button class="filter-tab" data-score-filter="standard_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'standard_credit', this)">Standard Credit</button>
             <button class="filter-tab" data-score-filter="fair_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'fair_credit', this)">Fair Credit</button>
+            <button class="filter-tab" data-score-filter="at_risk_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'at_risk_credit', this)">At-Risk</button>
         </div>
         <div class="card">
             <div class="table-wrap">

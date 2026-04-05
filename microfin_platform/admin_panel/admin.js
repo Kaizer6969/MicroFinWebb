@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function normalizeCreditPolicySubtab(tabId) {
-        if (tabId === 'builder') {
+        if (tabId === 'builder' || tabId === 'simulator') {
             return 'overview';
         }
         return tabId || '';
