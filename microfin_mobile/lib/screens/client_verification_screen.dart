@@ -114,8 +114,31 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    _fetchTenantConfig();
     _fetchDocTypes();
     _prefillFromUser();
+  }
+
+  Future<void> _fetchTenantConfig() async {
+    try {
+      final resp = await http.get(Uri.parse(
+        ApiConfig.getUrl('api_get_tenant_config.php?tenant_id=${activeTenant.value.id}'),
+      ));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data['success'] == true && data['allowed_employment_statuses'] != null) {
+          final List<dynamic> list = data['allowed_employment_statuses'];
+          if (mounted) {
+            setState(() {
+              _allowedEmploymentStatuses = list.map((e) => e.toString()).toList();
+              if (_allowedEmploymentStatuses.isNotEmpty && !_allowedEmploymentStatuses.contains(_employmentStatus)) {
+                _employmentStatus = _allowedEmploymentStatuses.first;
+              }
+            });
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -920,7 +943,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
               (v) => setState(() => _civilStatus = v!), icon: Icons.people_outline_rounded),
           const SizedBox(height: 12),
           _dropdownField('Employment Status', _employmentStatus,
-              ['Employed', 'Self-Employed', 'Unemployed', 'Retired'],
+              _allowedEmploymentStatuses.isNotEmpty ? _allowedEmploymentStatuses : ['Employed'],
               (v) => setState(() => _employmentStatus = v!), icon: Icons.work_outline_rounded),
           const SizedBox(height: 12),
           _inputField('Occupation / Job Title', _occupationCtrl, icon: Icons.badge_outlined),
