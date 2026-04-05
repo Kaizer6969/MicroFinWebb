@@ -571,6 +571,9 @@ tbody tr:hover { background: var(--brand-light); }
 .modal-header h3 { font-size: 1rem; font-weight: 600; flex: 1; }
 .modal-body   { padding: 22px; }
 .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.popup-message { font-size: .9rem; line-height: 1.6; color: var(--text); white-space: pre-line; }
+.popup-input-wrap { margin-top: 18px; }
+.popup-input-error { display: none; margin-top: 6px; font-size: .74rem; color: #b91c1c; font-weight: 600; }
 
 /* ── Forms ── */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -1229,6 +1232,29 @@ tbody tr:hover { background: var(--brand-light); }
     </div>
 </div>
 
+<!-- Dashboard Popup Modal -->
+<div class="modal-backdrop" id="dashboardPopupModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <span class="material-symbols-rounded ms" id="dashboardPopupIcon" style="color:var(--brand);">info</span>
+            <h3 id="dashboardPopupTitle">Notice</h3>
+            <button class="icon-btn" onclick="dismissDashboardPopup()"><span class="material-symbols-rounded ms">close</span></button>
+        </div>
+        <div class="modal-body">
+            <div class="popup-message" id="dashboardPopupMessage"></div>
+            <div class="form-group popup-input-wrap" id="dashboardPopupInputWrap" style="display:none;">
+                <label id="dashboardPopupInputLabel" for="dashboardPopupInput">Details</label>
+                <textarea id="dashboardPopupInput" placeholder="" style="min-height:110px;"></textarea>
+                <div class="popup-input-error" id="dashboardPopupInputError">This field is required.</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" id="dashboardPopupCancel" onclick="resolveDashboardPopup(false)" style="display:none;">Cancel</button>
+            <button class="btn btn-brand" id="dashboardPopupConfirm" onclick="resolveDashboardPopup(true)">OK</button>
+        </div>
+    </div>
+</div>
+
 <!-- Loan Release Modal -->
 <div class="modal-backdrop" id="loanReleaseModal">
     <div class="modal modal-md">
@@ -1750,6 +1776,188 @@ function onCreditAccountSearchInput() {
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+let dashboardPopupResolver = null;
+let dashboardPopupState = {
+    requiresInput: false,
+    trimInput: true,
+    inputValue: ''
+};
+
+function dashboardPopupVariantConfig(variant='info') {
+    const map = {
+        info:    { icon: 'info', color: 'var(--brand)', buttonClass: 'btn btn-brand', title: 'Notice' },
+        success: { icon: 'check_circle', color: '#16a34a', buttonClass: 'btn btn-success', title: 'Success' },
+        warning: { icon: 'warning', color: '#b45309', buttonClass: 'btn btn-brand', title: 'Please Review' },
+        danger:  { icon: 'error', color: '#991b1b', buttonClass: 'btn btn-danger', title: 'Action Needed' }
+    };
+    return map[variant] || map.info;
+}
+
+function getDashboardPopupElements() {
+    return {
+        modal: document.getElementById('dashboardPopupModal'),
+        icon: document.getElementById('dashboardPopupIcon'),
+        title: document.getElementById('dashboardPopupTitle'),
+        message: document.getElementById('dashboardPopupMessage'),
+        inputWrap: document.getElementById('dashboardPopupInputWrap'),
+        inputLabel: document.getElementById('dashboardPopupInputLabel'),
+        input: document.getElementById('dashboardPopupInput'),
+        inputError: document.getElementById('dashboardPopupInputError'),
+        cancel: document.getElementById('dashboardPopupCancel'),
+        confirm: document.getElementById('dashboardPopupConfirm')
+    };
+}
+
+function dismissDashboardPopup() {
+    resolveDashboardPopup(false);
+}
+
+function resolveDashboardPopup(confirmed) {
+    const els = getDashboardPopupElements();
+    if (!els.modal) return;
+
+    const rawValue = els.input ? els.input.value : '';
+    const resolvedValue = dashboardPopupState.trimInput === false ? rawValue : rawValue.trim();
+
+    if (confirmed && dashboardPopupState.requiresInput && resolvedValue === '') {
+        if (els.inputError) {
+            els.inputError.textContent = dashboardPopupState.requiredMessage || 'This field is required.';
+            els.inputError.style.display = 'block';
+        }
+        if (els.input) els.input.focus();
+        return;
+    }
+
+    closeModal('dashboardPopupModal');
+
+    const resolver = dashboardPopupResolver;
+    dashboardPopupResolver = null;
+    dashboardPopupState = { requiresInput: false, trimInput: true, inputValue: '' };
+
+    if (els.input) {
+        els.input.value = '';
+    }
+    if (els.inputError) {
+        els.inputError.style.display = 'none';
+        els.inputError.textContent = 'This field is required.';
+    }
+
+    if (typeof resolver === 'function') {
+        resolver({ confirmed, value: resolvedValue });
+    }
+}
+
+function showDashboardPopup({
+    title = 'Notice',
+    message = '',
+    variant = 'info',
+    confirmText = 'OK',
+    cancelText = 'Cancel',
+    showCancel = false,
+    requireInput = false,
+    inputLabel = 'Details',
+    inputPlaceholder = '',
+    inputValue = '',
+    requiredMessage = 'This field is required.'
+} = {}) {
+    const els = getDashboardPopupElements();
+    const variantConfig = dashboardPopupVariantConfig(variant);
+
+    if (dashboardPopupResolver) {
+        resolveDashboardPopup(false);
+    }
+
+    dashboardPopupState = {
+        requiresInput: requireInput === true,
+        trimInput: true,
+        inputValue,
+        requiredMessage
+    };
+
+    if (els.icon) {
+        els.icon.textContent = variantConfig.icon;
+        els.icon.style.color = variantConfig.color;
+    }
+    if (els.title) {
+        els.title.textContent = title || variantConfig.title;
+    }
+    if (els.message) {
+        els.message.textContent = message;
+    }
+    if (els.confirm) {
+        els.confirm.textContent = confirmText;
+        els.confirm.className = variantConfig.buttonClass;
+    }
+    if (els.cancel) {
+        els.cancel.textContent = cancelText;
+        els.cancel.style.display = showCancel ? '' : 'none';
+    }
+    if (els.inputWrap) {
+        els.inputWrap.style.display = requireInput ? '' : 'none';
+    }
+    if (els.inputLabel) {
+        els.inputLabel.textContent = inputLabel;
+    }
+    if (els.input) {
+        els.input.placeholder = inputPlaceholder;
+        els.input.value = inputValue || '';
+    }
+    if (els.inputError) {
+        els.inputError.style.display = 'none';
+        els.inputError.textContent = requiredMessage;
+    }
+
+    openModal('dashboardPopupModal');
+
+    if (requireInput && els.input) {
+        requestAnimationFrame(() => els.input.focus());
+    } else if (els.confirm) {
+        requestAnimationFrame(() => els.confirm.focus());
+    }
+
+    return new Promise(resolve => {
+        dashboardPopupResolver = resolve;
+    });
+}
+
+async function showAlertPopup(message, options = {}) {
+    return showDashboardPopup({
+        title: options.title || 'Notice',
+        message,
+        variant: options.variant || 'info',
+        confirmText: options.confirmText || 'OK',
+        showCancel: false
+    });
+}
+
+async function showConfirmPopup(message, options = {}) {
+    const result = await showDashboardPopup({
+        title: options.title || 'Please Confirm',
+        message,
+        variant: options.variant || 'warning',
+        confirmText: options.confirmText || 'Continue',
+        cancelText: options.cancelText || 'Cancel',
+        showCancel: true
+    });
+    return result.confirmed === true;
+}
+
+async function showPromptPopup(message, options = {}) {
+    return showDashboardPopup({
+        title: options.title || 'Action Needed',
+        message,
+        variant: options.variant || 'danger',
+        confirmText: options.confirmText || 'Submit',
+        cancelText: options.cancelText || 'Cancel',
+        showCancel: true,
+        requireInput: true,
+        inputLabel: options.inputLabel || 'Details',
+        inputPlaceholder: options.inputPlaceholder || '',
+        inputValue: options.inputValue || '',
+        requiredMessage: options.requiredMessage || 'This field is required.'
+    });
+}
+
 function setActiveTab(el) {
     el.closest('.page-header-actions').querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
@@ -1896,6 +2104,31 @@ async function loadApps(status='all', btn=null) {
 
 function filterApps(status, btn) { loadApps(status, btn); }
 
+async function collectApplicationActionNotes(action) {
+    const notesField = document.getElementById('appActionNotes');
+    const currentNotes = ((notesField && notesField.value) || '').trim();
+
+    if (action === 'reject') {
+        const popup = await showPromptPopup('Please enter the rejection reason for this loan application.', {
+            title: 'Reject Loan Application',
+            variant: 'danger',
+            confirmText: 'Reject Loan',
+            inputLabel: 'Rejection Reason',
+            inputPlaceholder: 'State the reason for rejecting this application...',
+            inputValue: currentNotes,
+            requiredMessage: 'Rejection reason is required.'
+        });
+
+        if (!popup.confirmed) {
+            return null;
+        }
+
+        return popup.value;
+    }
+
+    return currentNotes;
+}
+
 // ── View Application ────────────────────────────────────────
 async function viewApplication(id) {
     openModal('appReviewModal');
@@ -1922,7 +2155,7 @@ async function viewApplication(id) {
         ${a.review_notes ? `<div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:4px;">Review Notes</p><p style="font-size:.85rem;">${a.review_notes}</p></div>` : ''}
         ${a.rejection_reason ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:#991b1b;margin-bottom:4px;">Rejection Reason</p><p style="font-size:.85rem;color:#7f1d1d;">${a.rejection_reason}</p></div>` : ''}
         ${a.application_status === 'Approved' ? `<div class="form-group" style="margin-bottom:14px;"><label>Approved Amount (PHP)</label><input type="number" id="approvedAmountInput" value="${a.approved_amount||a.requested_amount}" style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;"></div>` : ''}
-        <div class="form-group"><label>Notes / Reason</label><textarea id="appActionNotes" placeholder="Add notes or reason for action…" style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;min-height:70px;resize:vertical;outline:none;"></textarea></div>`;
+        <div class="form-group"><label>Action Notes (optional)</label><textarea id="appActionNotes" placeholder="Add optional review or approval notes..." style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;min-height:70px;resize:vertical;outline:none;"></textarea></div>`;
 
     const footer = document.getElementById('appModalFooter');
     footer.innerHTML = '<button class="btn btn-outline" onclick="closeModal(\'appReviewModal\')">Close</button>';
@@ -1949,14 +2182,17 @@ async function viewApplication(id) {
 }
 
 async function appAction(id, action, needsAmount=false) {
-    const notes = (document.getElementById('appActionNotes')||{}).value || '';
+    const notes = await collectApplicationActionNotes(action);
     const approved = needsAmount ? parseFloat((document.getElementById('approvedAmountInput')||{}).value||0) : null;
-    if (action === 'reject' && !notes.trim()) { alert('Please enter a rejection reason.'); return; }
+    if (notes === null) return;
     const payload = { application_id: id, action, notes };
     if (approved) payload.approved_amount = approved;
     const r = await fetch(API.applications, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d = await r.json();
-    alert(d.message);
+    await showAlertPopup(d.message || 'Application updated.', {
+        title: d.status === 'success' ? 'Success' : 'Unable to Update Application',
+        variant: d.status === 'success' ? 'success' : 'danger'
+    });
     if (d.status === 'success') {
         closeModal('appReviewModal');
         loadApps(getActiveAppFilter());
@@ -2073,7 +2309,7 @@ async function viewApplication(id) {
         ${a.review_notes ? `<div style="background:var(--body-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:var(--muted);margin-bottom:4px;">Review Notes</p><p style="font-size:.85rem;">${safe(a.review_notes)}</p></div>` : ''}
         ${a.rejection_reason ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;"><p style="font-size:.72rem;color:#991b1b;margin-bottom:4px;">Rejection Reason</p><p style="font-size:.85rem;color:#7f1d1d;">${safe(a.rejection_reason)}</p></div>` : ''}
         ${showApprovedAmountInput ? `<div class="form-group" style="margin-bottom:14px;"><label>Approved Amount (PHP)</label><input type="number" id="approvedAmountInput" value="${approvedAmountValue}" min="0" step="0.01" style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;"></div>` : ''}
-        <div class="form-group"><label>Notes / Rejection Reason</label><textarea id="appActionNotes" placeholder="Add optional approval notes or a rejection reason..." style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;min-height:70px;resize:vertical;outline:none;"></textarea></div>`;
+        <div class="form-group"><label>Action Notes (optional)</label><textarea id="appActionNotes" placeholder="Add optional approval notes..." style="padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--body-bg);color:var(--text);width:100%;font-family:var(--font);font-size:.85rem;min-height:70px;resize:vertical;outline:none;"></textarea></div>`;
 
     const footer = document.getElementById('appModalFooter');
     footer.innerHTML = '<button class="btn btn-outline" onclick="closeModal(\'appReviewModal\')">Close</button>';
@@ -2084,15 +2320,17 @@ async function viewApplication(id) {
 }
 
 async function appAction(id, action, needsAmount=false) {
-    const notes = (document.getElementById('appActionNotes') || {}).value || '';
+    const notes = await collectApplicationActionNotes(action);
     const approved = needsAmount ? parseFloat((document.getElementById('approvedAmountInput') || {}).value || 0) : null;
 
-    if (action === 'reject' && !notes.trim()) {
-        alert('Please enter a rejection reason.');
+    if (notes === null) {
         return;
     }
     if (needsAmount && !(approved > 0)) {
-        alert('Please enter an approved amount.');
+        await showAlertPopup('Please enter an approved amount.', {
+            title: 'Approved Amount Required',
+            variant: 'warning'
+        });
         return;
     }
 
@@ -2107,14 +2345,25 @@ async function appAction(id, action, needsAmount=false) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        alert(d.message || 'Application updated.');
         if (d.status === 'success') {
             closeModal('appReviewModal');
+            await showAlertPopup(d.message || 'Application updated.', {
+                title: 'Success',
+                variant: 'success'
+            });
             loadApps(getActiveAppFilter());
             loadDashboardStats();
+            return;
         }
+        await showAlertPopup(d.message || 'Could not update the application.', {
+            title: 'Unable to Update Application',
+            variant: 'danger'
+        });
     } catch (error) {
-        alert(getRequestErrorMessage(error, 'Could not update the application.'));
+        await showAlertPopup(getRequestErrorMessage(error, 'Could not update the application.'), {
+            title: 'Unable to Update Application',
+            variant: 'danger'
+        });
     }
 }
 
@@ -2268,15 +2517,29 @@ async function submitLoanRelease() {
         disbursement_reference: document.getElementById('releaseRef').value,
         notes:               document.getElementById('releaseNotes').value,
     };
-    if (!payload.application_id) { alert('Missing approved application details.'); return; }
+    if (!payload.application_id) {
+        await showAlertPopup('Missing approved application details.', {
+            title: 'Loan Release Unavailable',
+            variant: 'danger'
+        });
+        return;
+    }
     const r = await fetch(API.loans + '?action=release', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d = await r.json();
-    alert(d.message);
     if (d.status === 'success') {
         closeModal('loanReleaseModal');
+        await showAlertPopup(d.message || 'Loan released successfully.', {
+            title: 'Success',
+            variant: 'success'
+        });
         loadLoans(getActiveLoanFilter(), document.querySelector('#loanFilterTabs .filter-tab.active'));
         loadDashboardStats();
+        return;
     }
+    await showAlertPopup(d.message || 'Could not release this loan.', {
+        title: 'Unable to Release Loan',
+        variant: 'danger'
+    });
 }
 
 // ── Clients ──────────────────────────────────────────────────
@@ -2661,7 +2924,12 @@ async function loadClients(search='') {
 }
 
 async function verifyDoc(doc_id, status, client_id) {
-    if (!confirm(`Are you sure you want to mark this document as ${status}?`)) return;
+    const confirmed = await showConfirmPopup(`Are you sure you want to mark this document as ${status}?`, {
+        title: 'Confirm Document Action',
+        variant: status === 'Rejected' ? 'danger' : 'warning',
+        confirmText: status === 'Rejected' ? 'Reject Document' : 'Confirm'
+    });
+    if (!confirmed) return;
     try {
         const payload = { document_id: doc_id, status: status };
         const res = await fetch(API.clients + '?action=verify_document', {
@@ -2681,18 +2949,29 @@ async function verifyDoc(doc_id, status, client_id) {
                     : `Document verification failed (HTTP ${res.status}).`
             };
         }
-        alert(result.message);
+        await showAlertPopup(result.message, {
+            title: result.status === 'success' ? 'Success' : 'Unable to Verify Document',
+            variant: result.status === 'success' ? 'success' : 'danger'
+        });
         if (result.status === 'success') {
             viewClient(client_id); // Reload the modal to show updated status
             loadClients(); // Reload the clients grid
         }
     } catch(err) {
-        alert('An error occurred.');
+        await showAlertPopup('An error occurred.', {
+            title: 'Unable to Verify Document',
+            variant: 'danger'
+        });
     }
 }
 
 async function verifyClientFully(client_id) {
-    if (!confirm('Are you sure you want to fully verify this client? This will approve all their documents and allow them to apply for loans.')) return;
+    const confirmed = await showConfirmPopup('Are you sure you want to fully verify this client? This will approve all their documents and allow them to apply for loans.', {
+        title: 'Fully Verify Client',
+        variant: 'warning',
+        confirmText: 'Verify Client'
+    });
+    if (!confirmed) return;
     try {
         const payload = { client_id: client_id };
         const res = await fetch(API.clients + '?action=verify_client_fully', {
@@ -2712,13 +2991,19 @@ async function verifyClientFully(client_id) {
                     : `Client verification failed (HTTP ${res.status}).`
             };
         }
-        alert(result.message);
+        await showAlertPopup(result.message, {
+            title: result.status === 'success' ? 'Success' : 'Unable to Verify Client',
+            variant: result.status === 'success' ? 'success' : 'danger'
+        });
         if (result.status === 'success') {
             viewClient(client_id);
             loadClients();
         }
     } catch(err) {
-        alert('An error occurred automatically verifying the client.');
+        await showAlertPopup('An error occurred automatically verifying the client.', {
+            title: 'Unable to Verify Client',
+            variant: 'danger'
+        });
     }
 }
 
@@ -2814,11 +3099,30 @@ async function submitPayment() {
         payment_ref_number: document.getElementById('payRef').value,
         remarks: document.getElementById('payRemarks').value,
     };
-    if (!payload.loan_id || !payload.payment_amount) { alert('Please select a loan and enter an amount.'); return; }
+    if (!payload.loan_id || !payload.payment_amount) {
+        await showAlertPopup('Please select a loan and enter an amount.', {
+            title: 'Payment Details Required',
+            variant: 'warning'
+        });
+        return;
+    }
     const r = await fetch(API.payments + '?action=post', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d = await r.json();
-    alert(d.message);
-    if (d.status === 'success') { closeModal('paymentModal'); loadPayments(); loadDashboardStats(); loadPaymentLoans(); }
+    if (d.status === 'success') {
+        closeModal('paymentModal');
+        await showAlertPopup(d.message || 'Payment posted successfully.', {
+            title: 'Success',
+            variant: 'success'
+        });
+        loadPayments();
+        loadDashboardStats();
+        loadPaymentLoans();
+        return;
+    }
+    await showAlertPopup(d.message || 'Could not post this payment.', {
+        title: 'Unable to Post Payment',
+        variant: 'danger'
+    });
 }
 
 // ── Reports ───────────────────────────────────────────────────
@@ -2896,17 +3200,38 @@ async function submitWalkIn(action) {
         const res = await fetch(API.walk_in, {method:'POST',body:formData});
         const result = await res.json();
         if (result.status === 'success') {
-            alert(result.message || 'Walk-in registration saved.');
-            form.reset();
             closeModal('walkInModal');
+            await showAlertPopup(result.message || 'Walk-in registration saved.', {
+                title: 'Success',
+                variant: 'success'
+            });
+            form.reset();
             location.reload();
-        } else { alert('Error: ' + result.message); }
-    } catch(err) { console.error(err); alert('An error occurred. Please try again.'); }
+        } else {
+            await showAlertPopup('Error: ' + result.message, {
+                title: 'Unable to Save Walk-In',
+                variant: 'danger'
+            });
+        }
+    } catch(err) {
+        console.error(err);
+        await showAlertPopup('An error occurred. Please try again.', {
+            title: 'Unable to Save Walk-In',
+            variant: 'danger'
+        });
+    }
 }
 
 // ── Close on backdrop click ─────────────────────────────────────
 document.querySelectorAll('.modal-backdrop').forEach(bd => {
-    bd.addEventListener('click', e => { if (e.target === bd) bd.classList.remove('open'); });
+    bd.addEventListener('click', e => {
+        if (e.target !== bd) return;
+        if (bd.id === 'dashboardPopupModal') {
+            dismissDashboardPopup();
+            return;
+        }
+        bd.classList.remove('open');
+    });
 });
 </script>
 
