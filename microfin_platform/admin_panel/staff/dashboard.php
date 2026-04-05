@@ -1874,6 +1874,9 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                                 increase.</p>
                         </div>
                         <div class="page-header-actions">
+                            <button class="btn btn-brand" id="upgradeSelectedBtn" onclick="upgradeSelectedClients()" style="display: none;">
+                                <span class="material-symbols-rounded ms">upgrade</span> Upgrade Selected
+                            </button>
                             <button class="btn btn-outline"
                                 onclick="loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter())">
                                 <span class="material-symbols-rounded ms">refresh</span> Refresh
@@ -1907,6 +1910,7 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                             <table>
                                 <thead>
                                     <tr>
+                                        <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllEligible" onclick="toggleSelectAllEligible(this)" title="Select all eligible"></th>
                                         <th>Borrower</th>
                                         <th>Score Profile</th>
                                         <th>Current Limit</th>
@@ -1918,7 +1922,7 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                                 </thead>
                                 <tbody id="creditAccountsTbody">
                                     <tr class="loading-row">
-                                        <td colspan="7"><span class="spinner"></span></td>
+                                        <td colspan="8"><span class="spinner"></span></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -3661,7 +3665,7 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                 ? search
                 : (document.getElementById('creditAccountSearch')?.value || '');
 
-            tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
+            tbody.innerHTML = '<tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>';
 
             const url = API.clients
                 + '?action=credit_accounts'
@@ -3674,13 +3678,13 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                 const result = await response.json();
 
                 if (result.status !== 'success') {
-                    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${escapeHtml(result.message || 'The credit accounts list is unavailable right now.')}</td></tr>`;
+                    tbody.innerHTML = `<tr class="empty-row"><td colspan="8">${escapeHtml(result.message || 'The credit accounts list is unavailable right now.')}</td></tr>`;
                     return;
                 }
 
                 const rows = result.data || [];
                 if (!rows.length) {
-                    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No credit accounts matched these filters.</td></tr>';
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No credit accounts matched these filters.</td></tr>';
                     return;
                 }
 
@@ -3688,7 +3692,12 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                     const upgrade = account.credit_upgrade || {};
                     const note = escapeHtml(upgrade.status_note || upgrade.next_limit_note || 'No upgrade note available.');
                     const currentLimit = parseFloat(upgrade.current_limit || 0);
+                    const isEligible = upgrade.status === 'eligible' && (parseFloat(upgrade.potential_upgraded_limit || 0) > currentLimit);
+                    const checkboxHtml = isEligible 
+                        ? `<input type="checkbox" class="eligible-checkbox" value="${account.client_id}" onclick="updateUpgradeButtonState()" />` 
+                        : `<input type="checkbox" disabled />`;
                     return `<tr>
+                <td style="text-align: center;">${checkboxHtml}</td>
                 <td>${renderCreditAccountBorrower(account)}</td>
                 <td>${renderCreditAccountScore(account)}</td>
                 <td>${currentLimit > 0 ? formatUpgradeLimit(currentLimit) : '<span class="detail-value is-empty">No active limit</span>'}</td>
@@ -3705,12 +3714,76 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                     </div>
                 </td>
                 <td>${renderCreditAccountRuleProgress(upgrade)}</td>
-                <td><button class="btn btn-sm btn-outline" onclick="viewClient(${account.client_id}, 'credit-accounts')">View Profile</button></td>
+                <td>
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <button class="btn btn-sm btn-outline" onclick="viewClient(${account.client_id}, 'credit-accounts')">View Profile</button>
+                        ${isEligible ? `<button class="btn btn-sm btn-brand" onclick="upgradeSingleClient(${account.client_id})">Upgrade</button>` : ''}
+                    </div>
+                </td>
             </tr>`;
                 }).join('');
+                document.getElementById('selectAllEligible').checked = false;
+                updateUpgradeButtonState();
             } catch (error) {
                 console.error(error);
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Could not load credit accounts right now.</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Could not load credit accounts right now.</td></tr>';
+            }
+        }
+
+        function toggleSelectAllEligible(source) {
+            const checkboxes = document.querySelectorAll('.eligible-checkbox');
+            checkboxes.forEach(cb => cb.checked = source.checked);
+            updateUpgradeButtonState();
+        }
+
+        function updateUpgradeButtonState() {
+            const anyChecked = document.querySelectorAll('.eligible-checkbox:checked').length > 0;
+            const btn = document.getElementById('upgradeSelectedBtn');
+            if (btn) {
+                btn.style.display = anyChecked ? 'inline-flex' : 'none';
+            }
+        }
+
+        async function upgradeSingleClient(clientId) {
+            await upgradeClientsList([clientId]);
+        }
+
+        async function upgradeSelectedClients() {
+            const checkboxes = document.querySelectorAll('.eligible-checkbox:checked');
+            const clientIds = Array.from(checkboxes).map(cb => cb.value);
+            if (!clientIds.length) return;
+            await upgradeClientsList(clientIds);
+        }
+
+        async function upgradeClientsList(clientIds) {
+            const confirmed = await showConfirmPopup(`Are you sure you want to approve the upgrade for ${clientIds.length} borrower(s)?`, {
+                title: 'Confirm Upgrades',
+                variant: 'brand',
+                confirmText: 'Approve & Upgrade'
+            });
+            if (!confirmed) return;
+
+            try {
+                const response = await fetch(API.clients + '?action=approve_upgrade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_ids: clientIds })
+                });
+                const result = await response.json();
+                
+                await showAlertPopup(result.message || 'Operation complete.', {
+                    title: result.status === 'success' ? 'Success' : 'Upgrade Failed',
+                    variant: result.status === 'success' ? 'success' : 'danger'
+                });
+
+                if (result.status === 'success') {
+                    loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter());
+                }
+            } catch (err) {
+                await showAlertPopup('A network error occurred.', {
+                    title: 'Upgrade Failed',
+                    variant: 'danger'
+                });
             }
         }
 

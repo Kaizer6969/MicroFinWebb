@@ -10,8 +10,8 @@ mf_require_tenant_session($pdo, [
     'message' => 'Unauthorized.',
 ]);
 
-$tenant_id       = (string) ($_SESSION['tenant_id'] ?? '');
-$session_user_id = (int)    ($_SESSION['user_id']   ?? 0);
+$tenant_id = (string) ($_SESSION['tenant_id'] ?? '');
+$session_user_id = (int) ($_SESSION['user_id'] ?? 0);
 
 if ($tenant_id === '') {
     echo json_encode(['status' => 'error', 'message' => 'Missing tenant context.']);
@@ -28,8 +28,13 @@ $perm_stmt = $pdo->prepare('
 ');
 $perm_stmt->execute([$session_user_id]);
 $permissions = $perm_stmt->fetchAll(PDO::FETCH_COLUMN);
-function has_perm($code) { global $permissions; return in_array($code, $permissions); }
-function can_access_loans_module() {
+function has_perm($code)
+{
+    global $permissions;
+    return in_array($code, $permissions);
+}
+function can_access_loans_module()
+{
     return has_perm('VIEW_LOANS') || has_perm('CREATE_LOANS') || has_perm('APPROVE_LOANS');
 }
 
@@ -44,12 +49,12 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
     }
 
     $status_filter = trim((string) ($_GET['status'] ?? ''));
-    $where_extra   = '';
-    $params        = [$tenant_id];
+    $where_extra = '';
+    $params = [$tenant_id];
 
     if ($status_filter !== '' && $status_filter !== 'all') {
         $where_extra = ' AND l.loan_status = ?';
-        $params[]    = $status_filter;
+        $params[] = $status_filter;
     }
 
     $stmt = $pdo->prepare("
@@ -231,15 +236,16 @@ if ($method === 'POST' && $action === 'release') {
 
     $raw = file_get_contents('php://input');
     $payload = json_decode($raw, true);
-    if (!is_array($payload)) $payload = $_POST;
+    if (!is_array($payload))
+        $payload = $_POST;
 
-    $application_id       = (int) ($payload['application_id'] ?? 0);
-    $approved_amount      = (float) ($payload['approved_amount'] ?? 0);
-    $disbursement_method  = trim((string) ($payload['disbursement_method'] ?? ''));
-    $disbursement_ref     = trim((string) ($payload['disbursement_reference'] ?? ''));
-    $release_date         = trim((string) ($payload['release_date'] ?? date('Y-m-d')));
-    $payment_frequency    = trim((string) ($payload['payment_frequency'] ?? ''));
-    $notes                = trim((string) ($payload['notes'] ?? ''));
+    $application_id = (int) ($payload['application_id'] ?? 0);
+    $approved_amount = (float) ($payload['approved_amount'] ?? 0);
+    $disbursement_method = trim((string) ($payload['disbursement_method'] ?? ''));
+    $disbursement_ref = trim((string) ($payload['disbursement_reference'] ?? ''));
+    $release_date = trim((string) ($payload['release_date'] ?? date('Y-m-d')));
+    $payment_frequency = trim((string) ($payload['payment_frequency'] ?? ''));
+    $notes = trim((string) ($payload['notes'] ?? ''));
 
     if ($application_id <= 0) {
         echo json_encode(['status' => 'error', 'message' => 'Application ID is required.']);
@@ -315,10 +321,10 @@ if ($method === 'POST' && $action === 'release') {
         ? $disbursement_ref
         : loan_release_generate_reference($application_id, $release_date);
 
-    $principal       = $approved_amount;
-    $interest_rate   = (float) $app['interest_rate'];
-    $loan_term       = (int) $app['loan_term_months'];
-    $interest_type   = $app['interest_type'] ?? 'Diminishing';
+    $principal = $approved_amount;
+    $interest_rate = (float) $app['interest_rate'];
+    $loan_term = (int) $app['loan_term_months'];
+    $interest_type = $app['interest_type'] ?? 'Diminishing';
 
     // Calculate interest based on type
     $monthly_rate = $interest_rate / 100 / 12;
@@ -338,45 +344,47 @@ if ($method === 'POST' && $action === 'release') {
     $total_loan_amount = $principal + $interest_amount;
 
     // Fees
-    $processing_fee = $principal * ((float)($app['processing_fee_percentage'] ?? 0) / 100);
-    $service_charge = (float)($app['service_charge'] ?? 0);
-    $doc_stamp      = (float)($app['documentary_stamp'] ?? 0);
-    $insurance_fee  = $principal * ((float)($app['insurance_fee_percentage'] ?? 0) / 100);
+    $processing_fee = $principal * ((float) ($app['processing_fee_percentage'] ?? 0) / 100);
+    $service_charge = (float) ($app['service_charge'] ?? 0);
+    $doc_stamp = (float) ($app['documentary_stamp'] ?? 0);
+    $insurance_fee = $principal * ((float) ($app['insurance_fee_percentage'] ?? 0) / 100);
     $total_deductions = $processing_fee + $service_charge + $doc_stamp + $insurance_fee;
-    $net_proceeds   = $principal - $total_deductions;
+    $net_proceeds = $principal - $total_deductions;
 
     // Payment frequency
     $freq_months = match ($payment_frequency) {
-        'Weekly'    => 0.25,
+        'Weekly' => 0.25,
         'Bi-Weekly' => 0.5,
-        'Daily'     => 1/30,
-        default     => 1,  // Monthly
+        'Daily' => 1 / 30,
+        default => 1,  // Monthly
     };
 
     $number_of_payments = match ($payment_frequency) {
-        'Weekly'    => $loan_term * 4,
+        'Weekly' => $loan_term * 4,
         'Bi-Weekly' => $loan_term * 2,
-        'Daily'     => $loan_term * 30,
-        default     => $loan_term,
+        'Daily' => $loan_term * 30,
+        default => $loan_term,
     };
 
     // Dates
-    $release_dt       = new DateTime($release_date);
+    $release_dt = new DateTime($release_date);
     $first_payment_dt = clone $release_dt;
     $first_payment_dt->modify('+1 month');
-    $maturity_dt      = clone $release_dt;
+    $maturity_dt = clone $release_dt;
     $maturity_dt->modify("+$loan_term months");
 
     $first_payment_date = $first_payment_dt->format('Y-m-d');
-    $maturity_date      = $maturity_dt->format('Y-m-d');
+    $maturity_date = $maturity_dt->format('Y-m-d');
 
     // Generate unique loan number
-    function generateLoanNumber(PDO $pdo): string {
+    function generateLoanNumber(PDO $pdo): string
+    {
         for ($i = 0; $i < 20; $i++) {
             $candidate = 'LN-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
             $check = $pdo->prepare('SELECT 1 FROM loans WHERE loan_number = ? LIMIT 1');
             $check->execute([$candidate]);
-            if (!$check->fetchColumn()) return $candidate;
+            if (!$check->fetchColumn())
+                return $candidate;
         }
         return 'LN-' . date('YmdHis') . '-' . rand(1000, 9999);
     }
@@ -407,36 +415,36 @@ if ($method === 'POST' && $action === 'release') {
                 'Active', ?, ?, ?, ?
             )
         ")->execute([
-            $loan_number,
-            $application_id,
-            (int) $app['client_id'],
-            $tenant_id,
-            (int) $app['product_id'],
-            $principal,
-            round($interest_amount, 2),
-            round($total_loan_amount, 2),
-            round($processing_fee, 2),
-            round($service_charge, 2),
-            round($doc_stamp, 2),
-            round($insurance_fee, 2),
-            round($total_deductions, 2),
-            round($net_proceeds, 2),
-            $interest_rate,
-            $loan_term,
-            round($monthly_payment, 2),
-            $payment_frequency,
-            $number_of_payments,
-            $release_date,
-            $first_payment_date,
-            $maturity_date,
-            round($total_loan_amount, 2),
-            round($principal, 2),
-            round($interest_amount, 2),
-            $employee_id,
-            $disbursement_method,
-            $disbursement_ref ?: null,
-            $notes ?: null
-        ]);
+                    $loan_number,
+                    $application_id,
+                    (int) $app['client_id'],
+                    $tenant_id,
+                    (int) $app['product_id'],
+                    $principal,
+                    round($interest_amount, 2),
+                    round($total_loan_amount, 2),
+                    round($processing_fee, 2),
+                    round($service_charge, 2),
+                    round($doc_stamp, 2),
+                    round($insurance_fee, 2),
+                    round($total_deductions, 2),
+                    round($net_proceeds, 2),
+                    $interest_rate,
+                    $loan_term,
+                    round($monthly_payment, 2),
+                    $payment_frequency,
+                    $number_of_payments,
+                    $release_date,
+                    $first_payment_date,
+                    $maturity_date,
+                    round($total_loan_amount, 2),
+                    round($principal, 2),
+                    round($interest_amount, 2),
+                    $employee_id,
+                    $disbursement_method,
+                    $disbursement_ref ?: null,
+                    $notes ?: null
+                ]);
 
         $loan_id = (int) $pdo->lastInsertId();
 
@@ -457,7 +465,7 @@ if ($method === 'POST' && $action === 'release') {
                 $int_portion = $interest_amount / $loan_term;
                 $prin_portion = $principal / $loan_term;
             } else {
-                $int_portion  = $balance * $monthly_rate;
+                $int_portion = $balance * $monthly_rate;
                 $prin_portion = $monthly_payment - $int_portion;
             }
 
@@ -468,7 +476,9 @@ if ($method === 'POST' && $action === 'release') {
             $ending = max(0, $balance - $prin_portion);
 
             $sched_insert->execute([
-                $loan_id, $tenant_id, $n,
+                $loan_id,
+                $tenant_id,
+                $n,
                 $due_dt->format('Y-m-d'),
                 round($balance, 2),
                 round($prin_portion, 2),
@@ -479,6 +489,8 @@ if ($method === 'POST' && $action === 'release') {
 
             $balance = $ending;
         }
+
+
 
         // Update application to reflect loan released
         $pdo->prepare("UPDATE loan_applications SET updated_at = NOW() WHERE application_id = ?")
@@ -493,14 +505,15 @@ if ($method === 'POST' && $action === 'release') {
         $pdo->commit();
 
         echo json_encode([
-            'status'      => 'success',
-            'message'     => "Loan $loan_number successfully released.",
-            'loan_id'     => $loan_id,
+            'status' => 'success',
+            'message' => "Loan $loan_number successfully released.",
+            'loan_id' => $loan_id,
             'loan_number' => $loan_number,
         ]);
 
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($pdo->inTransaction())
+            $pdo->rollBack();
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
     exit;

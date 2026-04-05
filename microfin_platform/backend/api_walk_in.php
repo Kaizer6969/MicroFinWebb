@@ -296,7 +296,6 @@ try {
     $pdo->commit();
 
     // Sync credit profile to compute and persist credit limit
-    $credit_profile = null;
     $computed_credit_limit = 0;
     try {
         $credit_profile = mf_sync_client_credit_profile($pdo, $tenant_id, $new_client_id);

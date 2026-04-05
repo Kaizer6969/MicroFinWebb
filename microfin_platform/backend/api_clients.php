@@ -514,4 +514,65 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
     exit;
 }
 
+// ─── POST: approve credit upgrade ────────────────────────────────────────────────
+if ($method === 'POST' && $action === 'approve_upgrade') {
+    if (!has_perm('APPROVE_LOANS') && !has_perm('CREATE_CLIENTS') && !has_perm('VIEW_CREDIT_ACCOUNTS')) {
+        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
+        exit;
+    }
+
+    $raw = file_get_contents('php://input');
+    $payload = json_decode($raw, true);
+    if (!is_array($payload)) $payload = $_POST;
+
+    $client_ids = (array) ($payload['client_ids'] ?? []);
+    if (empty($client_ids)) {
+        echo json_encode(['status' => 'error', 'message' => 'No clients selected for upgrade.']);
+        exit;
+    }
+
+    $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
+    $upgraded_count = 0;
+
+    try {
+        $pdo->beginTransaction();
+        
+        foreach ($client_ids as $client_id) {
+            $client_id = (int)$client_id;
+            
+            $stmt = $pdo->prepare("SELECT * FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
+            $stmt->execute([$client_id, $tenant_id]);
+            $client = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$client) continue;
+
+            $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
+            $upgrade = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
+
+            if (($upgrade['status'] ?? '') === 'eligible' && ($upgrade['potential_upgraded_limit'] ?? 0) > (($client['credit_limit'] ?? 0) > 0 ? $client['credit_limit'] : 0)) {
+                $new_limit = (float) $upgrade['potential_upgraded_limit'];
+                
+                $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                    ->execute([$new_limit, $client_id, $tenant_id]);
+                
+                mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
+
+                $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_UPGRADED', 'client', ?, ?)")
+                    ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit upgraded to limit {$new_limit}"]);
+                    
+                $upgraded_count++;
+            }
+        }
+        
+        $pdo->commit();
+        echo json_encode(['status' => 'success', 'message' => "Successfully upgraded {$upgraded_count} client(s)."]);
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo json_encode(['status' => 'error', 'message' => 'Unable to upgrade clients: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 echo json_encode(['status' => 'error', 'message' => 'Invalid request.']);
