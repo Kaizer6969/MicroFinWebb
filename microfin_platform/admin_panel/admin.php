@@ -3415,7 +3415,7 @@ function hexToRgb($hex) {
             $page_title = $page_titles[$active_view] ?? 'Dashboard';
             $credit_control_views = ['credit_settings'];
             $credit_control_is_active = in_array($active_view, $credit_control_views, true);
-            $credit_policy_allowed_tabs = ['eligibility', 'score', 'limit'];
+            $credit_policy_allowed_tabs = ['builder', 'eligibility', 'score', 'limit'];
             $credit_policy_subtab_requested = trim((string)($_GET['credit_policy_tab'] ?? ''));
             if ($credit_policy_subtab_requested === '' && isset($_GET['tab'])) {
                 $legacy_credit_tab_map = [
@@ -3427,7 +3427,7 @@ function hexToRgb($hex) {
                 $credit_policy_subtab_requested = $legacy_credit_tab_map[(string)$_GET['tab']] ?? '';
             }
             $credit_policy_has_explicit_subtab = in_array($credit_policy_subtab_requested, $credit_policy_allowed_tabs, true);
-            $credit_policy_subtab = $credit_policy_has_explicit_subtab ? $credit_policy_subtab_requested : 'score';
+            $credit_policy_subtab = $credit_policy_has_explicit_subtab ? $credit_policy_subtab_requested : 'builder';
             $team_is_active = $active_view === 'staff';
             $team_tab = (string)($_GET['tab'] ?? 'staff-list');
             $team_staff_is_active = $team_is_active && $team_tab !== 'roles-list';
