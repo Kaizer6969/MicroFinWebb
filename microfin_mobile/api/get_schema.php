@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/db.php';
-$r = $conn->query('DESCRIBE loans');
+$r = $conn->query('SELECT loan_number, next_payment_due FROM loans WHERE loan_number = "LN-000001" OR loan_number = "L-0000001" LIMIT 1');
 while($row = $r->fetch_assoc()) {
-    echo $row['Field'] . ' | ' . $row['Type'] . "\n";
+    echo "Loan: " . $row['loan_number'] . " | Next Due: " . ($row['next_payment_due'] ?? 'NULL') . "\n";
 }
 ?>
