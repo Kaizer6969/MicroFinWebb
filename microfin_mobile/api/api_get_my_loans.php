@@ -40,7 +40,11 @@ try {
     $lStmt = $conn->prepare("
         SELECT 
             l.loan_id, l.loan_number, l.loan_status, l.principal_amount, l.total_loan_amount,
-            l.remaining_balance, l.total_paid, l.monthly_amortization, l.next_payment_due,
+            l.remaining_balance, l.total_paid, l.monthly_amortization, 
+            COALESCE(
+                CASE WHEN l.next_payment_due IN ('', '0000-00-00') THEN NULL ELSE l.next_payment_due END,
+                (SELECT due_date FROM amortization_schedule WHERE loan_id = l.loan_id AND payment_status NOT IN ('Paid', 'Fully Paid') ORDER BY due_date ASC LIMIT 1)
+            ) AS next_payment_due,
             COALESCE(lp.product_name, 'Term Loan') AS product_name
         FROM loans l
         LEFT JOIN loan_products lp ON l.product_id = lp.product_id
