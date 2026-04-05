@@ -6606,51 +6606,83 @@ function hexToRgb($hex) {
                                         </div>
                                     </div>
 
-                                    <div class="credit-policy-note-card" style="margin-bottom: 16px;">
-                                        <strong>How the offer is estimated</strong>
-                                        <ul>
-                                            <li><span id="credit-policy-formula-preview">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x classification multiplier</span></li>
-                                            <li>Keep the final estimate within <span id="credit-policy-formula-cap"><?php echo '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2); ?></span>.</li>
-                                            <li>Round the result down to the nearest <span id="credit-policy-formula-round"><?php echo number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2); ?></span>.</li>
-                                        </ul>
-                                    </div>
+                                    <div class="credit-policy-limit-shell">
+                                        <div class="credit-policy-note-card">
+                                            <strong>How the offer is estimated</strong>
+                                            <ul>
+                                                <li><span id="credit-policy-formula-preview">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x classification multiplier</span></li>
+                                                <li>Keep the final estimate within <span id="credit-policy-formula-cap"><?php echo ((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0) > 0) ? '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2) : 'No cap'; ?></span>.</li>
+                                                <li>Round the result down to the nearest <span id="credit-policy-formula-round"><?php echo ((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0) > 0) ? '&#8369;' . number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2) : 'No rounding'; ?></span>.</li>
+                                            </ul>
+                                        </div>
 
-                                    <div class="credit-engine-inline-grid credit-engine-inline-grid-tight">
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-income-multiplier">Income Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['income_multiplier'] ?? 0) <= 0) ? '1.5' : htmlspecialchars((string)$credit_policy['credit_limit']['income_multiplier']); ?>">
-                                            <p class="credit-policy-field-hint">Base multiplier applied to monthly income before the classification multiplier, cap, and rounding.</p>
-                                        </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-approve-band-multiplier">Good / High Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-approve-band-multiplier" name="cp_approve_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['approve_band_multiplier'] ?? 0) <= 0) ? '1.10' : htmlspecialchars((string)$credit_policy['credit_limit']['approve_band_multiplier']); ?>">
-                                            <p class="credit-policy-field-hint">Applied when the score classification is <code>Good Credit Score</code> or <code>High Credit Score</code>.</p>
-                                        </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-review-band-multiplier">Standard Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-review-band-multiplier" name="cp_review_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['review_band_multiplier'] ?? 0) <= 0) ? '1.00' : htmlspecialchars((string)$credit_policy['credit_limit']['review_band_multiplier']); ?>">
-                                            <p class="credit-policy-field-hint">Applied when the score classification is <code>Standard Credit Score</code>.</p>
-                                        </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-reject-band-multiplier">At-Risk / Fair Band Multiplier</label>
-                                            <input type="number" class="form-control" id="cp-reject-band-multiplier" name="cp_reject_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['reject_band_multiplier'] ?? 0) <= 0) ? '0.50' : htmlspecialchars((string)$credit_policy['credit_limit']['reject_band_multiplier']); ?>">
-                                            <p class="credit-policy-field-hint">Applied when the score classification is <code>Fair Credit Score</code> or <code>At-Risk Credit Score</code>.</p>
-                                        </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-max-credit-limit-cap">Maximum Credit Limit Cap</label>
-                                            <div class="credit-input-with-prefix">
-                                                <span class="credit-input-prefix">&#8369;</span>
-                                                <input type="number" class="form-control" id="cp-max-credit-limit-cap" name="cp_max_credit_limit_cap" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0)); ?>">
+                                        <div class="credit-policy-limit-groups">
+                                            <div class="credit-policy-subpanel">
+                                                <div class="credit-policy-subpanel-header">
+                                                    <div>
+                                                        <strong>Core Estimate Inputs</strong>
+                                                        <p>These values drive the main formula before the app checks offer guardrails.</p>
+                                                    </div>
+                                                    <span class="badge badge-blue">Core math</span>
+                                                </div>
+                                                <div class="credit-policy-config-grid">
+                                                    <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                        <label for="cp-income-multiplier">Income Multiplier</label>
+                                                        <input type="number" class="form-control" id="cp-income-multiplier" name="cp_income_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['income_multiplier'] ?? 0) <= 0) ? '1.5' : htmlspecialchars((string)$credit_policy['credit_limit']['income_multiplier']); ?>">
+                                                        <p class="credit-policy-field-hint">Base multiplier applied to monthly income before the classification multiplier, cap, and rounding.</p>
+                                                    </div>
+                                                    <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                        <label for="cp-approve-band-multiplier">Good / High Band Multiplier</label>
+                                                        <input type="number" class="form-control" id="cp-approve-band-multiplier" name="cp_approve_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['approve_band_multiplier'] ?? 0) <= 0) ? '1.10' : htmlspecialchars((string)$credit_policy['credit_limit']['approve_band_multiplier']); ?>">
+                                                        <p class="credit-policy-field-hint">Applied when the score classification is <code>Good Credit Score</code> or <code>High Credit Score</code>.</p>
+                                                    </div>
+                                                    <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                        <label for="cp-review-band-multiplier">Standard Band Multiplier</label>
+                                                        <input type="number" class="form-control" id="cp-review-band-multiplier" name="cp_review_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['review_band_multiplier'] ?? 0) <= 0) ? '1.00' : htmlspecialchars((string)$credit_policy['credit_limit']['review_band_multiplier']); ?>">
+                                                        <p class="credit-policy-field-hint">Applied when the score classification is <code>Standard Credit Score</code>.</p>
+                                                    </div>
+                                                    <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                        <label for="cp-reject-band-multiplier">At-Risk / Fair Band Multiplier</label>
+                                                        <input type="number" class="form-control" id="cp-reject-band-multiplier" name="cp_reject_band_multiplier" min="0" step="0.01" value="<?php echo ((float)($credit_policy['credit_limit']['reject_band_multiplier'] ?? 0) <= 0) ? '0.50' : htmlspecialchars((string)$credit_policy['credit_limit']['reject_band_multiplier']); ?>">
+                                                        <p class="credit-policy-field-hint">Applied when the score classification is <code>Fair Credit Score</code> or <code>At-Risk Credit Score</code>.</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <p class="credit-policy-field-hint">Maximum offer the app can recommend, even when income and score suggest more.</p>
-                                        </div>
-                                        <div class="form-group credit-policy-field" style="margin-bottom: 0;">
-                                            <label for="cp-round-to-nearest">Round To Nearest</label>
-                                            <div class="credit-input-with-prefix">
-                                                <span class="credit-input-prefix">&#8369;</span>
-                                                <input type="number" class="form-control" id="cp-round-to-nearest" name="cp_round_to_nearest" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['round_to_nearest'] ?? 0)); ?>">
+
+                                            <div class="credit-policy-subpanel">
+                                                <div class="credit-policy-subpanel-header">
+                                                    <div>
+                                                        <strong>Offer Guardrails</strong>
+                                                        <p>Use these to keep the recommendation inside your preferred range and format.</p>
+                                                    </div>
+                                                    <span class="badge badge-gray">Guardrails</span>
+                                                </div>
+                                                <div class="credit-policy-config-grid" style="grid-template-columns: 1fr;">
+                                                    <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                        <label for="cp-max-credit-limit-cap">Maximum Credit Limit Cap</label>
+                                                        <div class="credit-input-with-prefix">
+                                                            <span class="credit-input-prefix">&#8369;</span>
+                                                            <input type="number" class="form-control" id="cp-max-credit-limit-cap" name="cp_max_credit_limit_cap" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0)); ?>">
+                                                        </div>
+                                                        <p class="credit-policy-field-hint">Maximum offer the app can recommend, even when income and score suggest more.</p>
+                                                    </div>
+                                                    <div class="form-group credit-policy-field" style="margin-bottom: 0;">
+                                                        <label for="cp-round-to-nearest">Round To Nearest</label>
+                                                        <div class="credit-input-with-prefix">
+                                                            <span class="credit-input-prefix">&#8369;</span>
+                                                            <input type="number" class="form-control" id="cp-round-to-nearest" name="cp_round_to_nearest" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['credit_limit']['round_to_nearest'] ?? 0)); ?>">
+                                                        </div>
+                                                        <p class="credit-policy-field-hint">Use values like <code>500</code> or <code>1000</code> for cleaner recommended offers.</p>
+                                                    </div>
+                                                </div>
+                                                <div class="credit-policy-note-card">
+                                                    <strong>Guardrail guidance</strong>
+                                                    <ul>
+                                                        <li>Leave the cap at <code>0</code> if you do not want the app to clip the recommendation.</li>
+                                                        <li>Use rounding to keep suggested offers easy for staff to review and explain.</li>
+                                                    </ul>
+                                                </div>
                                             </div>
-                                            <p class="credit-policy-field-hint">Use values like <code>500</code> or <code>1000</code> for cleaner recommended offers.</p>
                                         </div>
                                     </div>
                                 </div>
