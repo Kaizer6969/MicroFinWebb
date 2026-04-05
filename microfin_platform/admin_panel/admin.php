@@ -3435,6 +3435,7 @@ function hexToRgb($hex) {
                 'credit_control_overrides',
             ];
             $credit_control_is_active = in_array($active_view, $credit_control_views, true);
+            $team_is_active = $active_view === 'staff';
             ?>
             <nav class="sidebar-nav">
                 <span class="sidebar-section-title">Dashboard</span>
@@ -3444,10 +3445,23 @@ function hexToRgb($hex) {
                 </a>
 
                 <span class="sidebar-section-title">Team</span>
-                <a href="admin.php?tab=staff-list" class="nav-item <?php echo $active_view === 'staff' ? 'active' : ''; ?>" data-target="staff" data-title="Staff Accounts">
-                    <span class="material-symbols-rounded">groups</span>
-                    <span>Staff Accounts</span>
-                </a>
+                <details class="sidebar-nav-dropdown" <?php echo $team_is_active ? 'open' : ''; ?>>
+                    <summary class="nav-item nav-item-toggle <?php echo $team_is_active ? 'active' : ''; ?>">
+                        <span class="sidebar-dropdown-label">
+                            <span class="material-symbols-rounded">groups</span>
+                            <span>Temas</span>
+                        </span>
+                        <span class="material-symbols-rounded sidebar-dropdown-icon">expand_more</span>
+                    </summary>
+                    <div class="sidebar-dropdown-items">
+                        <a href="admin.php?tab=staff-list" class="nav-item nav-item-child" data-target="staff" data-subtab="staff-list" data-title="Staff Accounts">
+                            <span>Staff Accounts</span>
+                        </a>
+                        <a href="admin.php?tab=roles-list" class="nav-item nav-item-child" data-target="staff" data-subtab="roles-list" data-title="Roles &amp; Permissions">
+                            <span>Roles &amp; Permissions</span>
+                        </a>
+                    </div>
+                </details>
 
                 <span class="sidebar-section-title">Products &amp; Operations</span>
                 <a href="admin.php?tab=loan_products" class="nav-item <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>" data-target="loan_products" data-title="Loan Products">
