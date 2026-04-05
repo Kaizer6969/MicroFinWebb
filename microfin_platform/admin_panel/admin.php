@@ -3473,7 +3473,7 @@ function hexToRgb($hex) {
                         <span class="material-symbols-rounded sidebar-dropdown-icon">expand_more</span>
                     </summary>
                     <div class="sidebar-dropdown-items">
-                        <a href="admin.php?tab=credit_control_policy" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && !$credit_policy_has_explicit_subtab ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Policy">
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=builder" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'builder' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="builder" data-title="Policy Builder">
                             <span>Policy Builder</span>
                         </a>
                         <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=eligibility" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'eligibility' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="eligibility" data-title="Borrower Eligibility">
