@@ -1,9 +1,7 @@
 <?php
-require_once 'db.php';
-$res = $conn->query("DESCRIBE application_documents");
-$rows = [];
-while ($row = $res->fetch_assoc()) {
-    $rows[] = $row;
+require_once __DIR__ . '/db.php';
+$r = $conn->query('DESCRIBE loans');
+while($row = $r->fetch_assoc()) {
+    echo $row['Field'] . ' | ' . $row['Type'] . "\n";
 }
-echo json_encode($rows, JSON_PRETTY_PRINT);
 ?>
