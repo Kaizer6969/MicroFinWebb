@@ -7486,6 +7486,24 @@ function hexToRgb($hex) {
             tabPanels.forEach(function (panel) {
                 panel.hidden = panel.getAttribute('data-credit-policy-tab-panel') !== activeTab;
             });
+
+            document.querySelectorAll('.sidebar-nav .nav-item[data-target="credit_settings"]').forEach(function (item) {
+                var itemTab = item.getAttribute('data-credit-policy-subtab') || 'builder';
+                item.classList.toggle('active', itemTab === activeTab);
+            });
+
+            try {
+                var currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('tab', 'credit_control_policy');
+                if (activeTab === 'builder') {
+                    currentUrl.searchParams.delete('credit_policy_tab');
+                } else {
+                    currentUrl.searchParams.set('credit_policy_tab', activeTab);
+                }
+                window.history.replaceState(window.history.state, '', currentUrl.toString());
+            } catch (error) {
+                // Ignore URL sync issues and keep the visual tab state working.
+            }
         }
         window.setCreditPolicyTab = setPolicyTab;
 
@@ -7761,6 +7779,7 @@ function hexToRgb($hex) {
         function syncCreditPolicyUI() {
             var thresholds = getScoreThresholdState();
             var defaultScoreRaw = Math.max(0, getInt('cp-new-client-default-score'));
+            var minMonthlyIncome = Math.max(0, getNumber('cp-min-monthly-income'));
             setValue('cp-new-client-default-score', defaultScoreRaw);
 
             var defaultRecommendation = getScoreRecommendation(defaultScoreRaw, thresholds);
@@ -7792,6 +7811,7 @@ function hexToRgb($hex) {
             var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x score strength x classification multiplier';
             var capText = cap > 0 ? formatCurrency(cap) : 'No cap';
             var roundText = roundTo > 0 ? formatCurrency(roundTo) : 'No rounding';
+            var routingSummary = 'Below ' + thresholds.conditionalFrom + ' = Reject, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Manual Review, ' + thresholds.recommendedFrom + '+ = Approval Candidate.';
 
             setText('credit-policy-badge-at-risk', 'Below ' + thresholds.notRecommendedFrom);
             setText('credit-policy-badge-not-recommended', thresholds.notRecommendedFrom + '-' + thresholds.notRecommendedEnd);
@@ -7801,6 +7821,8 @@ function hexToRgb($hex) {
 
             setText('credit-policy-employment-count-badge', allowedEmploymentCount + ' statuses enabled');
             setText('credit-policy-employment-count-text', allowedEmploymentCount + ' selected');
+            setText('credit-policy-eligibility-income-stat', formatCurrency(minMonthlyIncome));
+            setText('credit-policy-eligibility-status-stat', allowedEmploymentCount + ' statuses currently allowed');
             setText('credit-policy-ci-count-badge', autoCiCount + ' approve / ' + reviewCiCount + ' review');
             setText('credit-policy-auto-ci-count-text', autoCiCount + ' selected');
             setText('credit-policy-review-ci-count-text', reviewCiCount + ' selected');
@@ -7810,13 +7832,23 @@ function hexToRgb($hex) {
             setText('credit-policy-threshold-copy-conditional', thresholds.conditionalFrom + '-' + thresholds.conditionalEnd);
             setText('credit-policy-threshold-copy-recommended', thresholds.recommendedFrom + '-' + thresholds.recommendedEnd);
             setText('credit-policy-threshold-copy-highly-recommended', thresholds.highlyRecommendedFrom + ' and above');
-            setText('credit-policy-threshold-routing-copy', 'Decision routing: Below ' + thresholds.conditionalFrom + ' = Reject, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Manual Review, ' + thresholds.recommendedFrom + ' and above = Approval Candidate.');
+            setText('credit-policy-threshold-routing-copy', 'Decision routing: ' + routingSummary.replace(/\+ =/g, ' and above ='));
 
             setText('credit-policy-formula-preview', formulaText);
             setText('credit-policy-formula-cap', capText);
             setText('credit-policy-formula-round', roundText);
             setText('credit-policy-preview-summary', 'Below ' + thresholds.notRecommendedFrom + ' = At-Risk Credit Score, ' + thresholds.notRecommendedFrom + '-' + thresholds.notRecommendedEnd + ' = Fair Credit Score, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Standard Credit Score, ' + thresholds.recommendedFrom + '-' + thresholds.recommendedEnd + ' = Good Credit Score, ' + thresholds.highlyRecommendedFrom + '+ = High Credit Score.');
             setText('credit-policy-preview-caption', 'Decision routing: Below ' + thresholds.conditionalFrom + ' = Reject, ' + thresholds.conditionalFrom + '-' + thresholds.conditionalEnd + ' = Manual Review, ' + thresholds.recommendedFrom + '+ = Approval Candidate. Maximum offer ' + capText + '. ' + (roundTo > 0 ? 'Rounded to nearest ' + roundText + '.' : 'No rounding rule.'));
+            setText('credit-policy-builder-income-floor', formatCurrency(minMonthlyIncome));
+            setText('credit-policy-builder-default-score', String(defaultScoreRaw));
+            setText('credit-policy-builder-approval-start', thresholds.recommendedFrom + ' and above');
+            setText('credit-policy-builder-cap', capText);
+            setText('credit-policy-builder-eligibility-summary', 'Minimum income ' + formatCurrency(minMonthlyIncome) + '. ' + allowedEmploymentCount + ' employment statuses can proceed.');
+            setText('credit-policy-builder-score-summary', 'Fair starts at ' + thresholds.notRecommendedFrom + ', Standard at ' + thresholds.conditionalFrom + ', Good at ' + thresholds.recommendedFrom + ', and High at ' + thresholds.highlyRecommendedFrom + '.');
+            setText('credit-policy-builder-limit-summary', 'Income x ' + formatNumber(incomeMultiplier) + ' with band multipliers, ' + (cap > 0 ? 'capped at ' + capText : 'with no cap') + ', ' + (roundTo > 0 ? 'rounded to ' + roundText : 'with no rounding') + '.');
+            setText('credit-policy-builder-routing-summary', routingSummary);
+            setText('credit-policy-builder-offer-summary', formulaText + '.');
+            setText('credit-policy-builder-rounding-summary', 'Maximum offer ' + capText + '. ' + (roundTo > 0 ? 'Rounded to nearest ' + roundText + '.' : 'No rounding rule.'));
 
             var thresholdWarning = byId('credit-policy-threshold-warning');
             if (thresholdWarning) {
@@ -7918,6 +7950,12 @@ function hexToRgb($hex) {
         tabButtons.forEach(function (tab) {
             tab.addEventListener('click', function () {
                 setPolicyTab(tab.getAttribute('data-credit-policy-tab') || 'eligibility');
+            });
+        });
+
+        Array.prototype.slice.call(document.querySelectorAll('[data-credit-policy-nav-action]')).forEach(function (button) {
+            button.addEventListener('click', function () {
+                setPolicyTab(button.getAttribute('data-credit-policy-nav-action') || 'builder');
             });
         });
 
