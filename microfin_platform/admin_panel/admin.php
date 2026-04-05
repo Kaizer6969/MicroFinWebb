@@ -2557,6 +2557,262 @@ function hexToRgb($hex) {
             display: none !important;
         }
 
+        .credit-policy-tab-panel {
+            display: grid;
+            gap: 18px;
+        }
+
+        .credit-policy-builder-shell {
+            display: grid;
+            gap: 18px;
+        }
+
+        .credit-policy-builder-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+            gap: 18px;
+            padding: 22px;
+            border: 1px solid rgba(var(--primary-rgb), 0.16);
+            border-radius: 24px;
+            background:
+                radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.12), transparent 34%),
+                linear-gradient(180deg, rgba(var(--primary-rgb), 0.08), rgba(var(--primary-rgb), 0.02)),
+                var(--bg-card);
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+        }
+
+        .credit-policy-builder-copy {
+            display: grid;
+            gap: 14px;
+            align-content: start;
+        }
+
+        .credit-policy-builder-copy h4 {
+            margin: 0;
+            color: var(--text-main);
+            font-size: 1.3rem;
+            line-height: 1.2;
+        }
+
+        .credit-policy-builder-copy p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .credit-policy-inline-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .credit-policy-builder-snapshot {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .credit-policy-builder-stat {
+            padding: 14px 15px;
+            border-radius: 16px;
+            border: 1px solid rgba(var(--primary-rgb), 0.14);
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(8px);
+        }
+
+        html[data-theme="dark"] .credit-policy-builder-stat {
+            background: rgba(17, 24, 39, 0.78);
+        }
+
+        .credit-policy-builder-stat span {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .credit-policy-builder-stat strong {
+            color: var(--text-main);
+            font-size: 0.98rem;
+            line-height: 1.45;
+        }
+
+        .credit-policy-builder-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .credit-policy-builder-step {
+            display: grid;
+            gap: 14px;
+            padding: 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(var(--primary-rgb), 0.14);
+            background:
+                linear-gradient(180deg, rgba(var(--primary-rgb), 0.05), rgba(var(--primary-rgb), 0.015)),
+                var(--bg-card);
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.05);
+        }
+
+        .credit-policy-builder-step-head {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .credit-policy-builder-step-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 14px;
+            background: rgba(var(--primary-rgb), 0.12);
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+
+        .credit-policy-builder-step-icon .material-symbols-rounded {
+            font-size: 20px;
+        }
+
+        .credit-policy-builder-step-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .credit-policy-builder-step-copy strong {
+            color: var(--text-main);
+            font-size: 0.98rem;
+            line-height: 1.35;
+        }
+
+        .credit-policy-builder-step-copy p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+
+        .credit-policy-builder-step-summary {
+            display: grid;
+            gap: 8px;
+            padding: 14px;
+            border-radius: 16px;
+            border: 1px dashed rgba(var(--primary-rgb), 0.22);
+            background: rgba(var(--primary-rgb), 0.04);
+        }
+
+        .credit-policy-builder-step-summary span {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .credit-policy-builder-step-summary strong {
+            color: var(--text-main);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .credit-policy-builder-step .btn {
+            justify-content: center;
+        }
+
+        .credit-policy-builder-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .credit-policy-subpanel {
+            display: grid;
+            gap: 14px;
+            padding: 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(var(--primary-rgb), 0.14);
+            background: rgba(var(--primary-rgb), 0.02);
+        }
+
+        .credit-policy-subpanel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .credit-policy-subpanel-header strong {
+            color: var(--text-main);
+            font-size: 0.96rem;
+        }
+
+        .credit-policy-subpanel-header p {
+            margin: 4px 0 0;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
+        .credit-policy-list-compact {
+            display: grid;
+            gap: 8px;
+            margin: 0;
+            padding-left: 18px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+
+        .credit-policy-eligibility-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .credit-policy-score-shell {
+            display: grid;
+            grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .credit-policy-score-main,
+        .credit-policy-score-rail {
+            display: grid;
+            gap: 16px;
+            min-width: 0;
+        }
+
+        .credit-policy-score-rail {
+            align-content: start;
+        }
+
+        .credit-policy-limit-shell {
+            display: grid;
+            gap: 16px;
+        }
+
+        .credit-policy-limit-groups {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+            gap: 16px;
+            align-items: start;
+        }
+
+        .credit-policy-config-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
         .credit-policy-engine-header {
             display: flex;
             justify-content: space-between;
