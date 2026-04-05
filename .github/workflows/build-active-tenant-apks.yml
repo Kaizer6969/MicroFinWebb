@@ -131,7 +131,7 @@ jobs:
 
       - name: Commit tenant APK updates
         run: |
-          if git diff --quiet -- microfin_mobile/tenant_apks; then
+          if [ -z "$(git status --porcelain -- microfin_mobile/tenant_apks)" ]; then
             echo "Tenant APKs are already up to date."
             exit 0
           fi

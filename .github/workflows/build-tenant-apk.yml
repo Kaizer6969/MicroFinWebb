@@ -91,7 +91,7 @@ jobs:
         env:
           TENANT_SLUG: ${{ steps.vars.outputs.tenant_slug }}
         run: |
-          if git diff --quiet -- "microfin_mobile/tenant_apks/${TENANT_SLUG}.apk"; then
+          if [ -z "$(git status --porcelain -- "microfin_mobile/tenant_apks/${TENANT_SLUG}.apk")" ]; then
             echo "Tenant APK is already up to date."
             exit 0
           fi

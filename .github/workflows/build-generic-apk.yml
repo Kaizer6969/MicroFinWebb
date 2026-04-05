@@ -85,7 +85,7 @@ jobs:
 
       - name: Commit updated APK
         run: |
-          if git diff --quiet -- microfin_mobile/microfin_app.apk; then
+          if [ -z "$(git status --porcelain -- microfin_mobile/microfin_app.apk)" ]; then
             echo "microfin_app.apk is already up to date."
             exit 0
           fi
