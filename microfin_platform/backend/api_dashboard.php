@@ -45,8 +45,10 @@ if ($method === 'GET' && ($action === 'stats' || $action === '')) {
 
     // Today's collections
     if (has_perm('PROCESS_PAYMENTS')) {
-        $s = $pdo->prepare("SELECT COALESCE(SUM(payment_amount), 0) FROM payments WHERE tenant_id = ? AND DATE(payment_date) = CURDATE() AND payment_status != 'Cancelled'");
-        $s->execute([$tenant_id]);
+        $s = $pdo->prepare("SELECT 
+            (SELECT COALESCE(SUM(payment_amount), 0) FROM payments WHERE tenant_id = ? AND DATE(payment_date) = CURDATE() AND payment_status != 'Cancelled') +
+            (SELECT COALESCE(SUM(amount), 0) FROM payment_transactions WHERE tenant_id = ? AND DATE(payment_date) = CURDATE() AND status != 'Cancelled')");
+        $s->execute([$tenant_id, $tenant_id]);
         $stats['todays_collections'] = (float) $s->fetchColumn();
     }
 
@@ -101,18 +103,28 @@ if ($method === 'GET' && $action === 'reports') {
 
     // Collections by day (for chart)
     $s = $pdo->prepare("
-        SELECT DATE(payment_date) as day, SUM(payment_amount) as total
-        FROM payments
-        WHERE tenant_id = ? AND payment_date >= ? AND payment_status != 'Cancelled'
-        GROUP BY DATE(payment_date)
+        SELECT day, SUM(total) as total FROM (
+            SELECT DATE(payment_date) as day, SUM(payment_amount) as total
+            FROM payments
+            WHERE tenant_id = ? AND payment_date >= ? AND payment_status != 'Cancelled'
+            GROUP BY DATE(payment_date)
+            UNION ALL
+            SELECT DATE(payment_date) as day, SUM(amount) as total
+            FROM payment_transactions
+            WHERE tenant_id = ? AND payment_date >= ? AND status != 'Cancelled'
+            GROUP BY DATE(payment_date)
+        ) combined_collections
+        GROUP BY day
         ORDER BY day ASC
     ");
-    $s->execute([$tenant_id, $date_from]);
+    $s->execute([$tenant_id, $date_from, $tenant_id, $date_from]);
     $data['collections_by_day'] = $s->fetchAll(PDO::FETCH_ASSOC);
 
     // Summary
-    $s = $pdo->prepare("SELECT COALESCE(SUM(payment_amount), 0) FROM payments WHERE tenant_id = ? AND payment_date >= ? AND payment_status != 'Cancelled'");
-    $s->execute([$tenant_id, $date_from]);
+    $s = $pdo->prepare("SELECT 
+        (SELECT COALESCE(SUM(payment_amount), 0) FROM payments WHERE tenant_id = ? AND payment_date >= ? AND payment_status != 'Cancelled') +
+        (SELECT COALESCE(SUM(amount), 0) FROM payment_transactions WHERE tenant_id = ? AND payment_date >= ? AND status != 'Cancelled')");
+    $s->execute([$tenant_id, $date_from, $tenant_id, $date_from]);
     $data['total_collections'] = (float) $s->fetchColumn();
 
     $s = $pdo->prepare("SELECT COUNT(*) FROM loan_applications WHERE tenant_id = ? AND created_at >= ?");
