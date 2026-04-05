@@ -4,6 +4,7 @@ require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
 require_once 'credit_policy.php';
+require_once 'document_access.php';
 mf_require_tenant_session($pdo, [
     'response' => 'json',
     'status' => 401,
@@ -298,7 +299,10 @@ if ($method === 'GET' && $action === 'view') {
         ORDER BY dt.is_required DESC, cd.upload_date DESC
     ");
     $docs_stmt->execute([$client_id, $tenant_id]);
-    $client['documents'] = $docs_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $client['documents'] = array_map(
+        static fn(array $document): array => mf_document_attach_url($document),
+        $docs_stmt->fetchAll(PDO::FETCH_ASSOC)
+    );
 
     $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
     $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
