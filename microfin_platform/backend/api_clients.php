@@ -193,18 +193,23 @@ if ($method === 'GET' && $action === 'credit_accounts') {
             continue;
         }
 
-        $score = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
-        if (!$score) {
-            $score = mf_credit_policy_ensure_default_score_record($pdo, $tenant_id, $client_id, $credit_policy, $client);
+        $profile = mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
+        if (array_key_exists('credit_limit', (array) ($profile['client'] ?? []))) {
+            $client['credit_limit'] = $profile['client']['credit_limit'];
         }
-        if ($score) {
-            $score['total_score'] = (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0);
+        if (array_key_exists('last_seen_credit_limit', (array) ($profile['client'] ?? []))) {
+            $client['last_seen_credit_limit'] = $profile['client']['last_seen_credit_limit'];
         }
 
-        $ci = mf_credit_policy_fetch_latest_ci($pdo, $tenant_id, $client_id);
+        $score = $profile['score'] ?? null;
+        if ($score) {
+            $score['total_score'] = (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0, 0, false);
+        }
+
+        $ci = $profile['ci'] ?? mf_credit_policy_fetch_latest_ci($pdo, $tenant_id, $client_id);
         $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
         $upgrade = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
-        $limit_snapshot = mf_credit_policy_compute_limit_snapshot($credit_policy, $client, $score, $ci);
+        $limit_snapshot = $profile['limit'] ?? mf_credit_policy_compute_limit_snapshot($credit_policy, $client, $score, $ci);
 
         if (!$matchesFilter($upgrade, $filter)) {
             continue;
@@ -310,13 +315,16 @@ if ($method === 'GET' && $action === 'view') {
 
     $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
     $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
-    $client['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
-
-    $latestScore = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
-    if (!$latestScore) {
-        $latestScore = mf_credit_policy_ensure_default_score_record($pdo, $tenant_id, $client_id, mf_get_tenant_credit_policy($pdo, $tenant_id), $client);
+    $profile = mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
+    if (array_key_exists('credit_limit', (array) ($profile['client'] ?? []))) {
+        $client['credit_limit'] = $profile['client']['credit_limit'];
     }
-    $client['latest_score'] = $latestScore ?: null;
+    if (array_key_exists('last_seen_credit_limit', (array) ($profile['client'] ?? []))) {
+        $client['last_seen_credit_limit'] = $profile['client']['last_seen_credit_limit'];
+    }
+    $client['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
+    $client['latest_score'] = $profile['score'] ?? null;
+    $client['limit_snapshot'] = $profile['limit'] ?? null;
 
     echo json_encode(['status' => 'success', 'data' => $client]);
     exit;
@@ -344,6 +352,8 @@ if ($method === 'POST' && $action === 'update_status') {
 
     $pdo->prepare("UPDATE clients SET client_status = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
         ->execute([$new_status, $client_id, $tenant_id]);
+
+    mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
 
     $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CLIENT_STATUS_CHANGE', 'client', ?, ?)")
         ->execute([$session_user_id, $tenant_id, $client_id, "Client status updated to $new_status"]);

@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
+require_once 'credit_policy.php';
 mf_require_tenant_session($pdo, [
     'response' => 'json',
     'status' => 401,
@@ -304,6 +305,8 @@ if ($method === 'POST' && ($action === 'post' || $action === '')) {
                 (int) $sched_entry['schedule_id']
             ]);
         }
+
+        mf_sync_client_credit_profile($pdo, $tenant_id, (int) $loan['client_id']);
 
         // Audit
         $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'PAYMENT_POSTED', 'payment', ?, ?)")

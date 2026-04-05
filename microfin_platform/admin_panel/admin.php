@@ -2529,28 +2529,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         $_SESSION['admin_error'] = 'Unable to save credit policy right now.';
     } else {
+        try {
+            $pdo->beginTransaction();
 
-        $upsert = $pdo->prepare(
+            $upsert = $pdo->prepare(
 
-            'INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) '
+                'INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) '
 
-                . 'VALUES (?, ?, ?, ?, ?) '
+                    . 'VALUES (?, ?, ?, ?, ?) '
 
-                . 'ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP'
+                    . 'ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP'
 
-        );
+            );
 
-        $upsert->execute([$tenant_id, 'credit_policy', $encoded_policy, 'Credit', 'JSON']);
-
-
-
-        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'CREDIT_POLICY_UPDATED', 'system_settings', 'Credit policy settings updated', ?)");
-
-        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
+            $upsert->execute([$tenant_id, 'credit_policy', $encoded_policy, 'Credit', 'JSON']);
 
 
 
-        $_SESSION['admin_flash'] = 'Credit policy saved successfully.';
+            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'CREDIT_POLICY_UPDATED', 'system_settings', 'Credit policy settings updated', ?)");
+
+            $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
+
+            $syncedProfiles = mf_credit_policy_sync_tenant_clients($pdo, $tenant_id);
+
+            $pdo->commit();
+            $_SESSION['admin_flash'] = 'Credit policy saved successfully and reapplied to ' . number_format((int) $syncedProfiles) . ' borrower profile(s).';
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $_SESSION['admin_error'] = 'Unable to save credit policy right now.';
+        }
     }
 
 
@@ -12881,10 +12890,8 @@ function hexToRgb($hex)
                                             $credit_policy_limit_calc_score_default = (int)($credit_policy_limit_calc_default_scenario['score'] ?? 650);
                                             $credit_policy_limit_calc_recommendation = mf_credit_policy_score_recommendation($credit_policy, (float)$credit_policy_limit_calc_score_default);
                                             $credit_policy_limit_calc_multiplier = mf_credit_policy_band_multiplier($credit_policy, (float)$credit_policy_limit_calc_score_default);
-                                            $credit_policy_limit_calc_score_factor = max(0, min(1, $credit_policy_limit_calc_score_default / mf_credit_policy_score_strength_reference($credit_policy)));
                                             $credit_policy_limit_calc_limit = $credit_policy_limit_calc_income_default
                                                 * $credit_policy_limit_income_multiplier_display
-                                                * $credit_policy_limit_calc_score_factor
                                                 * $credit_policy_limit_calc_multiplier;
                                             $credit_policy_limit_calc_cap = (float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0);
                                             if ($credit_policy_limit_calc_cap > 0) {
@@ -13056,7 +13063,7 @@ function hexToRgb($hex)
 
                                                                 <span>Offer Logic</span>
 
-                                                                <strong id="credit-policy-builder-offer-summary">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x classification multiplier.</strong>
+                                                                <strong id="credit-policy-builder-offer-summary">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x classification multiplier.</strong>
 
                                                             </div>
 
@@ -13200,7 +13207,7 @@ function hexToRgb($hex)
 
                                                                 <span>Estimate Logic</span>
 
-                                                                <strong id="credit-policy-sim-formula">Income x score strength x classification multiplier</strong>
+                                                                <strong id="credit-policy-sim-formula">Income x classification multiplier</strong>
 
                                                             </div>
 
@@ -13896,7 +13903,7 @@ function hexToRgb($hex)
 
                                                         <h4>Credit Limit Rules</h4>
 
-                                                        <p class="text-muted">Estimate the offer using income, score strength, and a maximum limit. Backend adjustments can still refine the final offer.</p>
+                                                        <p class="text-muted">Estimate the offer using income and the score-class band multiplier before cap and rounding. Backend checks can still refine the final offer.</p>
 
                                                     </div>
 
@@ -13920,7 +13927,7 @@ function hexToRgb($hex)
 
                                                     <ul>
 
-                                                        <li><span id="credit-policy-formula-preview">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x classification multiplier</span></li>
+                                                        <li><span id="credit-policy-formula-preview">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x classification multiplier</span></li>
 
                                                         <li>Keep the final estimate within <span id="credit-policy-formula-cap"><?php echo ((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0) > 0) ? '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2) : 'No cap'; ?></span>.</li>
 
@@ -14189,7 +14196,7 @@ function hexToRgb($hex)
 
                                                         <span>Limit Formula</span>
 
-                                                        <strong id="credit-policy-limit-calc-formula">Income x <?php echo htmlspecialchars(number_format((float)$credit_policy_limit_income_multiplier_display, 2, '.', '')); ?> x score <?php echo htmlspecialchars(number_format((float)$credit_policy_limit_calc_score_factor, 2, '.', '')); ?> x <?php echo htmlspecialchars((string)($credit_policy_limit_calc_recommendation['label'] ?? 'Good Credit Score')); ?> multiplier <?php echo htmlspecialchars(number_format((float)$credit_policy_limit_calc_multiplier, 2, '.', '')); ?></strong>
+                                                        <strong id="credit-policy-limit-calc-formula">Income x <?php echo htmlspecialchars(number_format((float)$credit_policy_limit_income_multiplier_display, 2, '.', '')); ?> x <?php echo htmlspecialchars((string)($credit_policy_limit_calc_recommendation['label'] ?? 'Good Credit Score')); ?> multiplier <?php echo htmlspecialchars(number_format((float)$credit_policy_limit_calc_multiplier, 2, '.', '')); ?></strong>
 
                                                     </div>
 
@@ -16056,7 +16063,7 @@ function hexToRgb($hex)
 
                 var ciMode = requireCi ? 'Always required' : (ciAbove > 0 ? 'Required above ' + formatCurrency(ciAbove) : 'Optional');
 
-                var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x score strength x band multiplier';
+                var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x band multiplier';
 
                 var capText = cap > 0 ? formatCurrency(cap) : 'No cap';
 
@@ -16208,9 +16215,7 @@ function hexToRgb($hex)
 
 
 
-                var scoreFactor = Math.max(0, Math.min(1, effectiveScore / scoreTopBandStart));
-
-                var computedLimit = income * incomeMultiplier * scoreFactor * bandMultiplier;
+                var computedLimit = income * incomeMultiplier * bandMultiplier;
 
                 if (cap > 0) computedLimit = Math.min(computedLimit, cap);
 
@@ -16226,6 +16231,8 @@ function hexToRgb($hex)
 
                 if (effectiveScore < rejectBelow) {
 
+                    computedLimit = 0;
+                    suggestedOffer = 0;
                     decision = 'Reject';
 
                 } else if (effectiveScore <= reviewBandEnd) {
@@ -16282,7 +16289,7 @@ function hexToRgb($hex)
 
                 setText('credit-policy-sim-caption', decisionCaption);
 
-                setText('credit-policy-sim-formula', 'Income x ' + formatNumber(incomeMultiplier) + ' x score ' + scoreFactor.toFixed(2) + ' x band ' + formatNumber(bandMultiplier));
+                setText('credit-policy-sim-formula', 'Income x ' + formatNumber(incomeMultiplier) + ' x band ' + formatNumber(bandMultiplier));
 
                 setDecisionTone('credit-policy-sim-decision-card', decision);
 
@@ -16328,9 +16335,7 @@ function hexToRgb($hex)
 
                     conditionalEnd: Math.max(conditionalFrom, recommendedFrom - 1),
 
-                    recommendedEnd: Math.max(recommendedFrom, highlyRecommendedFrom - 1),
-
-                    scoreStrengthReference: Math.max(1, highlyRecommendedFrom)
+                    recommendedEnd: Math.max(recommendedFrom, highlyRecommendedFrom - 1)
 
                 };
 
@@ -16459,11 +16464,7 @@ function hexToRgb($hex)
                     bandMultiplier = atRiskBandMult;
                 }
 
-                var scoreStrengthReference = Math.max(1, thresholds.scoreStrengthReference);
-
-                var scoreFactor = Math.max(0, Math.min(1, effectiveScore / scoreStrengthReference));
-
-                var computedLimit = income * incomeMultiplier * scoreFactor * bandMultiplier;
+                var computedLimit = income * incomeMultiplier * bandMultiplier;
 
                 if (cap > 0) computedLimit = Math.min(computedLimit, cap);
 
@@ -16474,6 +16475,11 @@ function hexToRgb($hex)
                 var suggestedOffer = requested > 0 ? Math.min(requested, computedLimit) : computedLimit;
 
                 var decision = route === 'reject' ? 'Reject' : (route === 'review' ? 'Review' : 'Approve');
+
+                if (route === 'reject') {
+                    computedLimit = 0;
+                    suggestedOffer = 0;
+                }
 
                 var applyEligibility = !!config.applyEligibility;
                 var employmentStatus = config.employmentStatus || '';
@@ -16566,9 +16572,9 @@ function hexToRgb($hex)
 
                         decisionCaption += ' This remains an Approval Candidate if the other rules also pass.';
 
-                        if (effectiveScore >= scoreStrengthReference) {
+                        if (recommendation === 'High Credit Score' || recommendation === 'Good Credit Score') {
 
-                            decisionCaption += ' This score is already in the top band, so full score strength is applied.';
+                            decisionCaption += ' The Good / High band multiplier is applied here.';
 
                         }
 
@@ -16588,7 +16594,7 @@ function hexToRgb($hex)
 
                     bandMultiplier: bandMultiplier,
 
-                    scoreFactor: scoreFactor,
+                    scoreFactor: 1,
 
                     computedLimit: computedLimit,
 
@@ -16604,7 +16610,7 @@ function hexToRgb($hex)
 
                     usedDefaultScore: simScore <= 0,
 
-                    formulaText: 'Income x ' + formatNumber(incomeMultiplier) + ' x score ' + scoreFactor.toFixed(2) + ' x ' + recommendation + ' multiplier ' + formatNumber(bandMultiplier),
+                    formulaText: 'Income x ' + formatNumber(incomeMultiplier) + ' x ' + recommendation + ' multiplier ' + formatNumber(bandMultiplier),
 
                     requested: requested
 
@@ -16682,7 +16688,7 @@ function hexToRgb($hex)
 
                 var reviewCiCount = getCheckedValues('cp_review_ci_values').length;
 
-                var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x score strength x classification multiplier';
+                var formulaText = 'Start with monthly income x ' + formatNumber(incomeMultiplier) + ' x classification multiplier';
 
                 var capText = cap > 0 ? formatCurrency(cap) : 'No cap';
                 var roundText = roundTo > 0 ? formatCurrency(roundTo) : 'No rounding';

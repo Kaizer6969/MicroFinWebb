@@ -701,6 +701,279 @@ if (!function_exists('mf_credit_policy_map_rating_label')) {
     }
 }
 
+if (!function_exists('mf_credit_policy_document_is_verified')) {
+    function mf_credit_policy_document_is_verified($status): bool
+    {
+        $normalized = strtolower(trim((string) $status));
+        return in_array($normalized, ['approved', 'verified'], true);
+    }
+}
+
+if (!function_exists('mf_credit_policy_client_has_active_limit')) {
+    function mf_credit_policy_client_has_active_limit(array $client): bool
+    {
+        $clientStatus = strtolower(trim((string) ($client['client_status'] ?? '')));
+        $documentStatus = $client['document_verification_status'] ?? '';
+
+        if (in_array($clientStatus, ['inactive', 'blacklisted', 'deceased', 'rejected'], true)) {
+            return false;
+        }
+
+        return mf_credit_policy_document_is_verified($documentStatus);
+    }
+}
+
+if (!function_exists('mf_credit_policy_limit_block_reason')) {
+    function mf_credit_policy_limit_block_reason(array $client): string
+    {
+        $clientStatus = strtolower(trim((string) ($client['client_status'] ?? '')));
+        if (in_array($clientStatus, ['inactive', 'blacklisted', 'deceased', 'rejected'], true)) {
+            return 'Borrower status is not eligible for an active credit limit.';
+        }
+
+        if (!mf_credit_policy_document_is_verified($client['document_verification_status'] ?? '')) {
+            return 'Borrower verification is not approved.';
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('mf_credit_policy_fetch_score_growth_metrics')) {
+    function mf_credit_policy_fetch_score_growth_metrics(PDO $pdo, string $tenantId, int $clientId, ?array $client = null): array
+    {
+        $client = $client ?? mf_credit_policy_fetch_client($pdo, $tenantId, $clientId);
+        $isVerified = mf_credit_policy_document_is_verified($client['document_verification_status'] ?? '');
+
+        $completedLoansStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM loans
+            WHERE tenant_id = ? AND client_id = ? AND loan_status = 'Fully Paid'
+        ");
+        $completedLoansStmt->execute([$tenantId, $clientId]);
+
+        $activeLoansStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM loans
+            WHERE tenant_id = ? AND client_id = ? AND loan_status IN ('Active', 'Overdue')
+        ");
+        $activeLoansStmt->execute([$tenantId, $clientId]);
+
+        $onTimePaymentsStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM amortization_schedule sched
+            INNER JOIN loans l
+                ON l.loan_id = sched.loan_id
+               AND l.tenant_id = sched.tenant_id
+            WHERE l.tenant_id = ?
+              AND l.client_id = ?
+              AND sched.payment_status = 'Paid'
+              AND sched.payment_date IS NOT NULL
+              AND sched.payment_date <= sched.due_date
+              AND COALESCE(sched.days_late, 0) <= 0
+        ");
+        $onTimePaymentsStmt->execute([$tenantId, $clientId]);
+
+        $latePaymentsStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM amortization_schedule sched
+            INNER JOIN loans l
+                ON l.loan_id = sched.loan_id
+               AND l.tenant_id = sched.tenant_id
+            WHERE l.tenant_id = ?
+              AND l.client_id = ?
+              AND sched.payment_date IS NOT NULL
+              AND (
+                    COALESCE(sched.days_late, 0) > 0
+                    OR sched.payment_date > sched.due_date
+              )
+        ");
+        $latePaymentsStmt->execute([$tenantId, $clientId]);
+
+        $missedPaymentsStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM amortization_schedule sched
+            INNER JOIN loans l
+                ON l.loan_id = sched.loan_id
+               AND l.tenant_id = sched.tenant_id
+            WHERE l.tenant_id = ?
+              AND l.client_id = ?
+              AND sched.due_date < CURDATE()
+              AND sched.payment_status IN ('Pending', 'Overdue', 'Partially Paid')
+        ");
+        $missedPaymentsStmt->execute([$tenantId, $clientId]);
+
+        return [
+            'verified_documents' => $isVerified,
+            'completed_loans' => (int) $completedLoansStmt->fetchColumn(),
+            'active_loans' => (int) $activeLoansStmt->fetchColumn(),
+            'on_time_payments' => (int) $onTimePaymentsStmt->fetchColumn(),
+            'late_payments' => (int) $latePaymentsStmt->fetchColumn(),
+            'missed_payments' => (int) $missedPaymentsStmt->fetchColumn(),
+        ];
+    }
+}
+
+if (!function_exists('mf_credit_policy_compute_score_snapshot')) {
+    function mf_credit_policy_compute_score_snapshot(array $policy, array $client, array $metrics): array
+    {
+        $scoreGrowth = is_array($policy['score_growth'] ?? null) ? $policy['score_growth'] : [];
+        $baseScore = max(0, (int) mf_credit_policy_normalize_score_value(
+            $policy['score_thresholds']['new_client_default_score'] ?? 500,
+            500,
+            false
+        ));
+
+        $verifiedDocumentsBonus = !empty($metrics['verified_documents'])
+            ? max(0, (int) ($scoreGrowth['verified_documents_bonus'] ?? 0))
+            : 0;
+        $completedLoansCount = max(0, (int) ($metrics['completed_loans'] ?? 0));
+        $onTimePaymentsCount = max(0, (int) ($metrics['on_time_payments'] ?? 0));
+        $latePaymentsCount = max(0, (int) ($metrics['late_payments'] ?? 0));
+        $missedPaymentsCount = max(0, (int) ($metrics['missed_payments'] ?? 0));
+        $activeLoansCount = max(0, (int) ($metrics['active_loans'] ?? 0));
+
+        $completedLoansBonus = $completedLoansCount * max(0, (int) ($scoreGrowth['completed_loan_bonus'] ?? 0));
+        $onTimePaymentsBonus = $onTimePaymentsCount * max(0, (int) ($scoreGrowth['on_time_payment_bonus'] ?? 0));
+        $latePaymentsPenalty = $latePaymentsCount * max(0, (int) ($scoreGrowth['late_payment_penalty'] ?? 0));
+        $missedPaymentsPenalty = $missedPaymentsCount * max(0, (int) ($scoreGrowth['missed_payment_penalty'] ?? 0));
+        $activeLoansPenalty = $activeLoansCount * max(0, (int) ($scoreGrowth['active_loan_penalty'] ?? 0));
+
+        $totalScore = $baseScore
+            + $verifiedDocumentsBonus
+            + $completedLoansBonus
+            + $onTimePaymentsBonus
+            - $latePaymentsPenalty
+            - $missedPaymentsPenalty
+            - $activeLoansPenalty;
+        $totalScore = max(0, (int) round($totalScore));
+
+        $recommendation = mf_credit_policy_score_recommendation($policy, (float) $totalScore);
+        $ratingLabel = mf_credit_policy_map_rating_label((string) ($recommendation['label'] ?? ''));
+
+        return [
+            'base_score' => $baseScore,
+            'verified_documents_bonus' => $verifiedDocumentsBonus,
+            'completed_loans_count' => $completedLoansCount,
+            'completed_loans_bonus' => $completedLoansBonus,
+            'on_time_payments_count' => $onTimePaymentsCount,
+            'on_time_payments_bonus' => $onTimePaymentsBonus,
+            'late_payments_count' => $latePaymentsCount,
+            'late_payments_penalty' => $latePaymentsPenalty,
+            'missed_payments_count' => $missedPaymentsCount,
+            'missed_payments_penalty' => $missedPaymentsPenalty,
+            'active_loans_count' => $activeLoansCount,
+            'active_loans_penalty' => $activeLoansPenalty,
+            'total_score' => $totalScore,
+            'recommendation' => $recommendation,
+            'rating_label' => $ratingLabel,
+            'document_verified' => !empty($metrics['verified_documents']),
+        ];
+    }
+}
+
+if (!function_exists('mf_credit_policy_compose_score_sync_note')) {
+    function mf_credit_policy_compose_score_sync_note(array $snapshot): string
+    {
+        $parts = [
+            'Tenant credit policy score sync.',
+            'Base ' . number_format((float) ($snapshot['base_score'] ?? 0), 0) . '.',
+        ];
+
+        if (!empty($snapshot['verified_documents_bonus'])) {
+            $parts[] = '+' . number_format((float) $snapshot['verified_documents_bonus'], 0) . ' verified docs.';
+        }
+        if (!empty($snapshot['completed_loans_bonus'])) {
+            $parts[] = '+' . number_format((float) $snapshot['completed_loans_bonus'], 0)
+                . ' completed loans (' . (int) ($snapshot['completed_loans_count'] ?? 0) . ').';
+        }
+        if (!empty($snapshot['on_time_payments_bonus'])) {
+            $parts[] = '+' . number_format((float) $snapshot['on_time_payments_bonus'], 0)
+                . ' on-time payments (' . (int) ($snapshot['on_time_payments_count'] ?? 0) . ').';
+        }
+        if (!empty($snapshot['late_payments_penalty'])) {
+            $parts[] = '-' . number_format((float) $snapshot['late_payments_penalty'], 0)
+                . ' late payments (' . (int) ($snapshot['late_payments_count'] ?? 0) . ').';
+        }
+        if (!empty($snapshot['missed_payments_penalty'])) {
+            $parts[] = '-' . number_format((float) $snapshot['missed_payments_penalty'], 0)
+                . ' missed schedules (' . (int) ($snapshot['missed_payments_count'] ?? 0) . ').';
+        }
+        if (!empty($snapshot['active_loans_penalty'])) {
+            $parts[] = '-' . number_format((float) $snapshot['active_loans_penalty'], 0)
+                . ' active exposure (' . (int) ($snapshot['active_loans_count'] ?? 0) . ').';
+        }
+
+        $parts[] = 'Total ' . number_format((float) ($snapshot['total_score'] ?? 0), 0) . '.';
+
+        return implode(' ', $parts);
+    }
+}
+
+if (!function_exists('mf_credit_policy_store_score_snapshot')) {
+    function mf_credit_policy_store_score_snapshot(
+        PDO $pdo,
+        string $tenantId,
+        int $clientId,
+        array $snapshot,
+        ?array $existingScore = null,
+        ?array $ci = null,
+        ?int $computedBy = null
+    ): ?array {
+        $note = mf_credit_policy_compose_score_sync_note($snapshot);
+        $ciId = isset($ci['ci_id']) && (int) ($ci['ci_id'] ?? 0) > 0 ? (int) $ci['ci_id'] : null;
+
+        if ($existingScore && !empty($existingScore['score_id'])) {
+            $stmt = $pdo->prepare("
+                UPDATE credit_scores
+                SET ci_id = ?,
+                    total_score = ?,
+                    credit_rating = ?,
+                    recommended_interest_rate = NULL,
+                    computed_by = ?,
+                    notes = ?,
+                    computation_date = NOW()
+                WHERE score_id = ? AND tenant_id = ?
+            ");
+            $stmt->execute([
+                $ciId,
+                (int) ($snapshot['total_score'] ?? 0),
+                $snapshot['rating_label'] ?? null,
+                $computedBy,
+                $note,
+                (int) $existingScore['score_id'],
+                $tenantId,
+            ]);
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO credit_scores (
+                    client_id,
+                    tenant_id,
+                    ci_id,
+                    total_score,
+                    credit_rating,
+                    max_loan_amount,
+                    recommended_interest_rate,
+                    computed_by,
+                    notes,
+                    computation_date
+                ) VALUES (?, ?, ?, ?, ?, 0, NULL, ?, ?, NOW())
+            ");
+            $stmt->execute([
+                $clientId,
+                $tenantId,
+                $ciId,
+                (int) ($snapshot['total_score'] ?? 0),
+                $snapshot['rating_label'] ?? null,
+                $computedBy,
+                $note,
+            ]);
+        }
+
+        return mf_credit_policy_fetch_latest_score($pdo, $tenantId, $clientId);
+    }
+}
+
 if (!function_exists('mf_credit_policy_ensure_default_score_record')) {
     function mf_credit_policy_ensure_default_score_record(
         PDO $pdo,
@@ -722,25 +995,25 @@ if (!function_exists('mf_credit_policy_ensure_default_score_record')) {
             return null;
         }
 
-        $documentStatus = strtolower(trim((string) ($client['document_verification_status'] ?? '')));
-        if (!in_array($documentStatus, ['approved', 'verified'], true)) {
+        if (!mf_credit_policy_document_is_verified($client['document_verification_status'] ?? '')) {
             return null;
         }
 
-        $defaultScore = (int) mf_credit_policy_normalize_score_value(
-            $policy['score_thresholds']['new_client_default_score'] ?? 500,
-            500
+        $ci = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, $clientId);
+        $scoreSnapshot = mf_credit_policy_compute_score_snapshot(
+            $policy,
+            $client,
+            mf_credit_policy_fetch_score_growth_metrics($pdo, $tenantId, $clientId, $client)
         );
-        $recommendation = mf_credit_policy_score_recommendation($policy, (float) $defaultScore);
-        $ratingLabel = mf_credit_policy_map_rating_label((string) ($recommendation['label'] ?? ''));
         $snapshot = mf_credit_policy_compute_limit_snapshot($policy, $client, [
-            'total_score' => $defaultScore,
-        ], null);
+            'total_score' => (int) ($scoreSnapshot['total_score'] ?? 0),
+        ], $ci);
 
         $insert = $pdo->prepare("
             INSERT INTO credit_scores (
                 client_id,
                 tenant_id,
+                ci_id,
                 total_score,
                 credit_rating,
                 max_loan_amount,
@@ -748,16 +1021,17 @@ if (!function_exists('mf_credit_policy_ensure_default_score_record')) {
                 computed_by,
                 notes,
                 computation_date
-            ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NOW())
         ");
         $insert->execute([
             $clientId,
             $tenantId,
-            $defaultScore,
-            $ratingLabel,
+            isset($ci['ci_id']) ? (int) $ci['ci_id'] : null,
+            (int) ($scoreSnapshot['total_score'] ?? 0),
+            $scoreSnapshot['rating_label'] ?? null,
             (float) ($snapshot['computed_limit'] ?? 0),
             $computedBy,
-            'Default credit score initialized from the tenant credit policy after client approval.',
+            mf_credit_policy_compose_score_sync_note($scoreSnapshot),
         ]);
 
         return mf_credit_policy_fetch_latest_score($pdo, $tenantId, $clientId);
@@ -853,20 +1127,39 @@ if (!function_exists('mf_credit_policy_compute_limit_snapshot')) {
     {
         $monthlyIncome = (float) ($client['monthly_income'] ?? 0);
         $defaultScore = (float) ($policy['score_thresholds']['new_client_default_score'] ?? 500);
-        $scoreStrengthReference = mf_credit_policy_score_strength_reference($policy);
 
         $hasScore = $score !== null && isset($score['total_score']);
         $totalScore = $hasScore
-            ? (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0)
+            ? (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0, 0, false)
             : $defaultScore;
         $effectiveScore = max(0, $totalScore);
         $scoreRecommendation = mf_credit_policy_score_recommendation($policy, $effectiveScore);
-        $scoreFactor = max(0, min(1, $effectiveScore / $scoreStrengthReference));
         $bandMultiplier = mf_credit_policy_band_multiplier($policy, $effectiveScore);
+        $canComputeLimit = mf_credit_policy_client_has_active_limit($client);
+        $blockedReason = $canComputeLimit ? '' : mf_credit_policy_limit_block_reason($client);
+
+        if ($canComputeLimit && (($scoreRecommendation['decision_group'] ?? '') === 'reject')) {
+            $canComputeLimit = false;
+            $blockedReason = 'Borrower is currently in a reject credit score band.';
+        }
+
+        if (!$canComputeLimit) {
+            return [
+                'can_compute_limit' => false,
+                'computed_limit' => 0.0,
+                'applied_limit' => 0.0,
+                'score_factor' => 1.0,
+                'band_multiplier' => $bandMultiplier,
+                'effective_score' => $effectiveScore,
+                'recommendation_label' => $scoreRecommendation['label'] ?? null,
+                'recommendation_group' => $scoreRecommendation['decision_group'] ?? null,
+                'used_default_score' => !$hasScore,
+                'blocked_reason' => $blockedReason,
+            ];
+        }
 
         $rawLimit = $monthlyIncome
             * (float) ($policy['credit_limit']['income_multiplier'] ?? 0)
-            * $scoreFactor
             * $bandMultiplier;
 
         $cap = (float) ($policy['credit_limit']['max_credit_limit_cap'] ?? 0);
@@ -883,12 +1176,13 @@ if (!function_exists('mf_credit_policy_compute_limit_snapshot')) {
             'can_compute_limit' => true,
             'computed_limit' => $computedLimit,
             'applied_limit' => $computedLimit,
-            'score_factor' => $scoreFactor,
+            'score_factor' => 1.0,
             'band_multiplier' => $bandMultiplier,
             'effective_score' => $effectiveScore,
             'recommendation_label' => $scoreRecommendation['label'] ?? null,
             'recommendation_group' => $scoreRecommendation['decision_group'] ?? null,
             'used_default_score' => !$hasScore,
+            'blocked_reason' => '',
         ];
     }
 }
@@ -904,47 +1198,96 @@ if (!function_exists('mf_sync_client_credit_profile')) {
         }
 
         $score = mf_credit_policy_fetch_latest_score($pdo, $tenantId, $clientId);
-        if (!$score) {
-            $score = mf_credit_policy_ensure_default_score_record($pdo, $tenantId, $clientId, $policy, $client);
-        }
         $ci = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, $clientId);
-        $snapshot = mf_credit_policy_compute_limit_snapshot($policy, $client, $score, $ci);
+        $scoreSnapshot = mf_credit_policy_compute_score_snapshot(
+            $policy,
+            $client,
+            mf_credit_policy_fetch_score_growth_metrics($pdo, $tenantId, $clientId, $client)
+        );
+        $shouldPersistScore = $score !== null || mf_credit_policy_document_is_verified($client['document_verification_status'] ?? '');
 
-        if ($snapshot['can_compute_limit']) {
-            $newLimit = (float) ($snapshot['computed_limit'] ?? 0);
-            $currentLimit = (float) ($client['credit_limit'] ?? 0);
+        if ($shouldPersistScore) {
+            $storedScoreValue = $score !== null
+                ? (int) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0, 0, false)
+                : null;
+            $expectedScoreValue = (int) ($scoreSnapshot['total_score'] ?? 0);
+            $storedRating = (string) ($score['credit_rating'] ?? '');
+            $expectedRating = (string) ($scoreSnapshot['rating_label'] ?? '');
 
-            if (abs($newLimit - $currentLimit) > 0.009) {
-                $update = $pdo->prepare("
-                    UPDATE clients
-                    SET last_seen_credit_limit = credit_limit,
-                        credit_limit = ?,
-                        updated_at = NOW()
-                    WHERE tenant_id = ? AND client_id = ?
-                ");
-                $update->execute([$newLimit, $tenantId, $clientId]);
+            if ($score === null || $storedScoreValue !== $expectedScoreValue || $storedRating !== $expectedRating) {
+                $score = mf_credit_policy_store_score_snapshot(
+                    $pdo,
+                    $tenantId,
+                    $clientId,
+                    $scoreSnapshot,
+                    $score,
+                    $ci
+                );
             }
-
-            if ($score && !empty($score['score_id'])) {
-                $updateScore = $pdo->prepare("
-                    UPDATE credit_scores
-                    SET max_loan_amount = ?
-                    WHERE score_id = ? AND tenant_id = ?
-                ");
-                $updateScore->execute([$newLimit, (int) $score['score_id'], $tenantId]);
-            }
-
-            $client['last_seen_credit_limit'] = $currentLimit;
-            $client['credit_limit'] = $newLimit;
         }
+        $scoreForLimit = $score ?: [
+            'total_score' => (int) ($scoreSnapshot['total_score'] ?? 0),
+            'credit_rating' => $scoreSnapshot['rating_label'] ?? null,
+        ];
+        $snapshot = mf_credit_policy_compute_limit_snapshot($policy, $client, $scoreForLimit, $ci);
+
+        $newLimit = $snapshot['can_compute_limit']
+            ? (float) ($snapshot['computed_limit'] ?? 0)
+            : 0.0;
+        $currentLimit = (float) ($client['credit_limit'] ?? 0);
+
+        if (abs($newLimit - $currentLimit) > 0.009) {
+            $update = $pdo->prepare("
+                UPDATE clients
+                SET last_seen_credit_limit = credit_limit,
+                    credit_limit = ?,
+                    updated_at = NOW()
+                WHERE tenant_id = ? AND client_id = ?
+            ");
+            $update->execute([$newLimit, $tenantId, $clientId]);
+        }
+
+        if ($score && !empty($score['score_id'])) {
+            $updateScore = $pdo->prepare("
+                UPDATE credit_scores
+                SET max_loan_amount = ?
+                WHERE score_id = ? AND tenant_id = ?
+            ");
+            $updateScore->execute([$newLimit, (int) $score['score_id'], $tenantId]);
+        }
+
+        $client['last_seen_credit_limit'] = $currentLimit;
+        $client['credit_limit'] = $newLimit;
 
         return [
             'policy' => $policy,
             'client' => $client,
-            'score' => $score,
+            'score' => $scoreForLimit,
             'ci' => $ci,
             'limit' => $snapshot,
         ];
+    }
+}
+
+if (!function_exists('mf_credit_policy_sync_tenant_clients')) {
+    function mf_credit_policy_sync_tenant_clients(PDO $pdo, string $tenantId): int
+    {
+        $stmt = $pdo->prepare("
+            SELECT client_id
+            FROM clients
+            WHERE tenant_id = ? AND deleted_at IS NULL
+            ORDER BY client_id ASC
+        ");
+        $stmt->execute([$tenantId]);
+        $clientIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $count = 0;
+        foreach ($clientIds as $clientId) {
+            mf_sync_client_credit_profile($pdo, $tenantId, (int) $clientId);
+            $count++;
+        }
+
+        return $count;
     }
 }
 

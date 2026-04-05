@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
+require_once 'credit_policy.php';
 mf_require_tenant_session($pdo, [
     'response' => 'json',
     'status' => 401,
@@ -482,6 +483,8 @@ if ($method === 'POST' && $action === 'release') {
         // Update application to reflect loan released
         $pdo->prepare("UPDATE loan_applications SET updated_at = NOW() WHERE application_id = ?")
             ->execute([$application_id]);
+
+        mf_sync_client_credit_profile($pdo, $tenant_id, (int) $app['client_id']);
 
         // Audit
         $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'LOAN_RELEASED', 'loan', ?, ?)")
