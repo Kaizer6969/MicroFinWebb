@@ -7949,7 +7949,7 @@ function hexToRgb($hex) {
 
         tabButtons.forEach(function (tab) {
             tab.addEventListener('click', function () {
-                setPolicyTab(tab.getAttribute('data-credit-policy-tab') || 'eligibility');
+                setPolicyTab(tab.getAttribute('data-credit-policy-tab') || 'builder');
             });
         });
 
