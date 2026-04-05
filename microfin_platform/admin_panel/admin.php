@@ -7477,18 +7477,14 @@ function hexToRgb($hex) {
             });
 
             document.querySelectorAll('.sidebar-nav .nav-item[data-target="credit_settings"]').forEach(function (item) {
-                var itemTab = item.getAttribute('data-credit-policy-subtab') || 'builder';
+                var itemTab = item.getAttribute('data-credit-policy-subtab') || 'overview';
                 item.classList.toggle('active', itemTab === activeTab);
             });
 
             try {
                 var currentUrl = new URL(window.location.href);
                 currentUrl.searchParams.set('tab', 'credit_control_policy');
-                if (activeTab === 'builder') {
-                    currentUrl.searchParams.delete('credit_policy_tab');
-                } else {
-                    currentUrl.searchParams.set('credit_policy_tab', activeTab);
-                }
+                currentUrl.searchParams.set('credit_policy_tab', activeTab || 'overview');
                 window.history.replaceState(window.history.state, '', currentUrl.toString());
             } catch (error) {
                 // Ignore URL sync issues and keep the visual tab state working.
@@ -7938,13 +7934,13 @@ function hexToRgb($hex) {
 
         tabButtons.forEach(function (tab) {
             tab.addEventListener('click', function () {
-                setPolicyTab(tab.getAttribute('data-credit-policy-tab') || 'builder');
+                setPolicyTab(tab.getAttribute('data-credit-policy-tab') || 'overview');
             });
         });
 
         Array.prototype.slice.call(document.querySelectorAll('[data-credit-policy-nav-action]')).forEach(function (button) {
             button.addEventListener('click', function () {
-                setPolicyTab(button.getAttribute('data-credit-policy-nav-action') || 'builder');
+                setPolicyTab(button.getAttribute('data-credit-policy-nav-action') || 'overview');
             });
         });
 
