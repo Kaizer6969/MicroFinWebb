@@ -239,7 +239,7 @@ try {
         $monthly_income,
         $id_type,
         $registered_by,
-        'Inactive',
+        'Active',
         'Unverified',
     ];
 
@@ -280,7 +280,7 @@ try {
         }
     }
 
-    $audit_description = 'Walk-in client registered as Inactive with verification pending.';
+    $audit_description = 'Walk-in client registered as Active with document verification pending.';
     $audit_description .= $documents_complete ? ' Staff marked the document set as complete.' : ' Staff marked the document set as incomplete.';
     if ($missing_documents_notes !== '') {
         $audit_description .= ' Notes: ' . $missing_documents_notes;
@@ -328,9 +328,9 @@ try {
 
     echo json_encode([
         'status' => 'success',
-        'message' => 'Walk-in client registered successfully. The account is inactive until verification is approved. A password setup email has been sent to ' . htmlspecialchars($email) . '.',
+        'message' => 'Walk-in client registered successfully. A password setup email has been sent to ' . htmlspecialchars($email) . '.',
         'client_id' => $new_client_id,
-        'client_status' => 'Inactive',
+        'client_status' => 'Active',
         'verification_status' => 'Pending',
         'uploaded_document_count' => $uploaded_count,
         'email_status' => $email_result
