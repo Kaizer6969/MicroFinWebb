@@ -8,9 +8,8 @@ import '../utils/app_dialogs.dart';
 import 'support_center_screen.dart';
 import 'live_chat_screen.dart';
 import 'splash_screen.dart';
+import 'manage_profile_screen.dart';
 import 'change_password_screen.dart';
-
-// ... (we'll replace it strictly)
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -163,7 +162,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _divider(),
                     _switchRow(Icons.notifications_outlined, 'Push Notifications', _notificationsOn, (v) => setState(() => _notificationsOn = v), primary),
                     _divider(),
-                    _navRow(Icons.lock_outline_rounded, 'Change Password', primary, () {}),
+                    _navRow(Icons.lock_outline_rounded, 'Change Password', primary, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()))),
                   ], primary),
                   const SizedBox(height: 28),
 
