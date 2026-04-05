@@ -4162,19 +4162,20 @@ body.loan-products-modal-open::before {
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.56);
-    z-index: 9991;
+    z-index: 11991;
 }
 
 .loan-products-modal-panel {
     position: fixed;
     inset: 0;
-    z-index: 9992;
+    z-index: 11992;
     margin: 0;
     padding: 28px 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow-y: auto;
+    isolation: isolate;
     pointer-events: auto;
 }
 

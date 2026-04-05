@@ -156,7 +156,10 @@ document.addEventListener('DOMContentLoaded', () => {
         history: 'billing-history',
     };
 
-    if (loanProductsModalPanel && loanProductsModalShell) {
+    const loanProductsSection = document.getElementById('loan_products');
+    const loanProductsModalOpen = Boolean(loanProductsModalPanel && loanProductsModalShell && loanProductsSection);
+
+    if (loanProductsModalOpen) {
         const focusableSelector = [
             'a[href]',
             'button:not([disabled])',
@@ -169,9 +172,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const inertTargets = [
             document.querySelector('.sidebar'),
             document.querySelector('.top-header'),
-            document.querySelector('.section-intro'),
-            document.querySelector('.loan-products-tabs'),
-            document.getElementById('existing-loan-products'),
+            ...viewSections.filter((section) => section !== loanProductsSection),
+            loanProductsSection.querySelector('.section-intro'),
+            loanProductsSection.querySelector('.loan-products-tabs'),
+            loanProductsSection.querySelector('#existing-loan-products'),
         ].filter((element) => element && !loanProductsModalPanel.contains(element));
 
         inertTargets.forEach((element) => {
@@ -474,7 +478,9 @@ document.addEventListener('DOMContentLoaded', () => {
         initialRoute = { sectionId: 'billing', subTabId: billingSubtabMap[subParam] };
     }
 
-    if (initialRoute && initialRoute.sectionId) {
+    if (loanProductsModalOpen) {
+        activateSection('loan_products', { navItem: findPreferredNavItem('loan_products') });
+    } else if (initialRoute && initialRoute.sectionId) {
         activateSection(initialRoute.sectionId, { subTabId: initialRoute.subTabId || '' });
         if (initialRoute.sectionId === 'credit_settings' && initialRoute.subTabId) {
             activateCreditPolicySubtab(initialRoute.subTabId);

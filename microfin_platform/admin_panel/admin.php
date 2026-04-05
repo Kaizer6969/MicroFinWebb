@@ -7598,6 +7598,11 @@ function hexToRgb($hex)
                 $active_view = 'dashboard';
             }
 
+            if ($loan_products_form_open) {
+
+                $active_view = 'loan_products';
+            }
+
             $page_titles = [
 
                 'dashboard' => 'Dashboard',
