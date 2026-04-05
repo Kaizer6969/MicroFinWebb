@@ -303,16 +303,9 @@ try {
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
         );
         require_once __DIR__ . '/../../microfin_platform/backend/credit_policy.php';
-        $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'credit_policy_settings'");
-        $stmt->execute([$tenantId]);
-        $policyBlob = json_decode($stmt->fetchColumn() ?: '{}', true) ?: [];
-        $policy = mf_credit_policy_normalize($policyBlob);
 
-        $latestScore = mf_credit_policy_fetch_latest_score($pdo, $tenantId, (int) $client['client_id']);
-        $latestCi = mf_credit_policy_fetch_latest_ci($pdo, $tenantId, (int) $client['client_id']);
-
-        $limitState = mf_credit_policy_compute_limit_snapshot($policy, $client, $latestScore, $latestCi);
-        $computedLimit = (float) ($limitState['computed_limit'] ?? 0);
+        $profile = mf_sync_client_credit_profile($pdo, $tenantId, (int) $client['client_id']);
+        $computedLimit = (float) ($profile['client']['credit_limit'] ?? $computedLimit);
     } catch (Throwable $pe) {
         error_log("Failed to compute dynamic credit limit: " . $pe->getMessage());
     }
