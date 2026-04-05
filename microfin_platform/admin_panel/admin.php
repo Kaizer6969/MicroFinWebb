@@ -3445,7 +3445,7 @@ function hexToRgb($hex) {
                     <summary class="nav-item nav-item-toggle <?php echo $team_is_active ? 'active' : ''; ?>">
                         <span class="sidebar-dropdown-label">
                             <span class="material-symbols-rounded">groups</span>
-                            <span>Temas</span>
+                            <span>Teams</span>
                         </span>
                         <span class="material-symbols-rounded sidebar-dropdown-icon">expand_more</span>
                     </summary>
