@@ -1602,11 +1602,12 @@ function getRequestErrorMessage(error, fallback='Something went wrong.') {
 async function fetchJsonStrict(url, options = {}) {
     const response = await fetch(url, options);
     const raw = await response.text();
+    const normalizedRaw = raw.replace(/^\uFEFF/, '');
     let payload = {};
 
-    if (raw.trim() !== '') {
+    if (normalizedRaw.trim() !== '') {
         try {
-            payload = JSON.parse(raw);
+            payload = JSON.parse(normalizedRaw);
         } catch (_) {
             throw new Error('The server returned an invalid response. Please refresh and try again.');
         }
