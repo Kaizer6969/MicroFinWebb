@@ -522,15 +522,28 @@ if (!function_exists('mf_get_tenant_credit_limit_rules')) {
 if (!function_exists('mf_credit_policy_fetch_upgrade_metrics')) {
     function mf_credit_policy_fetch_upgrade_metrics(PDO $pdo, string $tenantId, int $clientId): array
     {
-        $completedLoansStmt = $pdo->prepare("
-            SELECT COUNT(*)
-            FROM loans
-            WHERE tenant_id = ? AND client_id = ? AND loan_status = 'Fully Paid'
+        // Find the last explicit upgrade for this borrower
+        $lastUpgradeStmt = $pdo->prepare("
+            SELECT MAX(created_at) 
+            FROM audit_logs 
+            WHERE tenant_id = ? AND entity_type = 'client' AND entity_id = ? AND action_type = 'CREDIT_LIMIT_UPGRADED'
         ");
-        $completedLoansStmt->execute([$tenantId, $clientId]);
+        $lastUpgradeStmt->execute([$tenantId, $clientId]);
+        $lastUpgradeDate = $lastUpgradeStmt->fetchColumn();
+
+        // Count completed loans since the last upgrade
+        $completedSql = "SELECT COUNT(*) FROM loans WHERE tenant_id = ? AND client_id = ? AND loan_status = 'Fully Paid'";
+        $completedParams = [$tenantId, $clientId];
+        if ($lastUpgradeDate) {
+            $completedSql .= " AND updated_at > ?";
+            $completedParams[] = $lastUpgradeDate;
+        }
+        $completedLoansStmt = $pdo->prepare($completedSql);
+        $completedLoansStmt->execute($completedParams);
         $completedLoans = (int) $completedLoansStmt->fetchColumn();
 
-        $latePaymentsStmt = $pdo->prepare("
+        // Count late payments for loans generated after the last upgrade
+        $lateSql = "
             SELECT COUNT(*)
             FROM amortization_schedule sched
             INNER JOIN loans l
@@ -539,8 +552,14 @@ if (!function_exists('mf_credit_policy_fetch_upgrade_metrics')) {
             WHERE l.tenant_id = ?
               AND l.client_id = ?
               AND (COALESCE(sched.days_late, 0) > 0 OR sched.payment_status = 'Overdue')
-        ");
-        $latePaymentsStmt->execute([$tenantId, $clientId]);
+        ";
+        $lateParams = [$tenantId, $clientId];
+        if ($lastUpgradeDate) {
+            $lateSql .= " AND l.created_at >= ?";
+            $lateParams[] = $lastUpgradeDate;
+        }
+        $latePaymentsStmt = $pdo->prepare($lateSql);
+        $latePaymentsStmt->execute($lateParams);
         $latePayments = (int) $latePaymentsStmt->fetchColumn();
 
         return [
