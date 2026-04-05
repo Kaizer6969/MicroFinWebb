@@ -4206,9 +4206,9 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                             const pct = Math.max(Math.round((val / max) * 100), 3);
                             const label = d.transaction_day ? new Date(d.transaction_day).toLocaleDateString('en-PH', {month:'short', day:'numeric'}) : '?';
                             return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;" title="${label}: ${fmt(val)}">
-                                <div style="font-size:.6rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${fmt(val)}</div>
+                                <div style="font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${fmt(val)}</div>
                                 <div style="width:100%;max-width:36px;height:${pct}%;background:var(--brand);border-radius:4px 4px 0 0;min-height:3px;transition:height .4s ease;"></div>
-                                <div style="font-size:.58rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${escapeHtml(label)}</div>
+                                <div style="font-size:.75rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${escapeHtml(label)}</div>
                             </div>`;
                         }).join('')}
                     </div>`;
