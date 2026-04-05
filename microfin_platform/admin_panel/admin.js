@@ -330,6 +330,22 @@ document.addEventListener('DOMContentLoaded', () => {
         window.history.replaceState({}, '', currentUrl);
     }
 
+    function syncSidebarDropdownState() {
+        const dropdowns = Array.from(document.querySelectorAll('.sidebar-nav-dropdown'));
+        dropdowns.forEach((dropdown) => {
+            const summary = dropdown.querySelector('.nav-item-toggle');
+            const hasActiveChild = Boolean(dropdown.querySelector('.nav-item[data-target].active'));
+
+            if (summary) {
+                summary.classList.toggle('active', hasActiveChild);
+            }
+
+            if (hasActiveChild) {
+                dropdown.open = true;
+            }
+        });
+    }
+
     function activateSection(targetId, options = {}) {
         if (!targetId) {
             return;
@@ -350,6 +366,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (effectiveSubTabId !== '') {
             activateTabInSection(targetEl, effectiveSubTabId);
         }
+
+        syncSidebarDropdownState();
 
         setPageTitleFromNav(navItem, targetId);
         resetWorkspaceScroll();
