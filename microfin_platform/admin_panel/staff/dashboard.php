@@ -997,13 +997,6 @@ tbody tr:hover { background: var(--brand-light); }
                 <input type="text" id="creditAccountSearch" placeholder="Search by name, email, phone…" oninput="onCreditAccountSearchInput()">
             </div>
         </div>
-        <div class="filter-tabs" id="creditAccountsFilterTabs">
-            <button class="filter-tab active" data-status="all" onclick="loadCreditAccounts('all', getCreditAccountScoreFilter(), this)">All Accounts</button>
-            <button class="filter-tab" data-status="eligible" onclick="loadCreditAccounts('eligible', getCreditAccountScoreFilter(), this)">Eligible</button>
-            <button class="filter-tab" data-status="not_yet_eligible" onclick="loadCreditAccounts('not_yet_eligible', getCreditAccountScoreFilter(), this)">Not Yet Eligible</button>
-            <button class="filter-tab" data-status="no_active_limit" onclick="loadCreditAccounts('no_active_limit', getCreditAccountScoreFilter(), this)">No Active Limit</button>
-            <button class="filter-tab" data-status="at_max_limit" onclick="loadCreditAccounts('at_max_limit', getCreditAccountScoreFilter(), this)">At Maximum</button>
-        </div>
         <div class="filter-tabs" id="creditAccountsScoreFilterTabs">
             <button class="filter-tab active" data-score-filter="all" onclick="loadCreditAccounts(getCreditAccountFilter(), 'all', this)">All Scores</button>
             <button class="filter-tab" data-score-filter="high_credit" onclick="loadCreditAccounts(getCreditAccountFilter(), 'high_credit', this)">High Credit</button>
@@ -1592,7 +1585,7 @@ function getActiveLoanFilter() {
 }
 
 function getCreditAccountFilter() {
-    return document.querySelector('#creditAccountsFilterTabs .filter-tab.active')?.dataset?.status || 'all';
+    return 'all';
 }
 
 function getCreditAccountScoreFilter() {
