@@ -2338,7 +2338,7 @@ async function viewClient(id) {
 
     const docsHtml = (c.documents||[]).length ? (c.documents||[]).map(d => `<tr>
         <td class="td-bold">${d.document_name} ${d.is_required ? '<span class="badge badge-amber" style="font-size:.65rem;padding:2px 6px;">Req</span>' : ''}</td>
-        <td>${d.file_path ? `<a href="../../../${d.file_path}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>` : '<span class="td-muted">Not uploaded</span>'}</td>
+        <td>${documentHref(d) ? `<a href="${escapeHtml(documentHref(d))}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>` : '<span class="td-muted">Not uploaded</span>'}</td>
         <td class="td-muted">${fmtDate(d.upload_date)}</td>
         <td>${badge(d.verification_status || 'Pending')}</td>
         <td>
@@ -2439,7 +2439,7 @@ async function viewClient(id) {
 
     const docsHtml = (c.documents || []).length ? c.documents.map(doc => `<tr>
         <td class="td-bold">${escapeHtml(doc.document_name)} ${doc.is_required ? '<span class="badge badge-amber" style="font-size:.65rem;padding:2px 6px;">Req</span>' : ''}</td>
-        <td>${doc.file_path ? `<a href="../../../${doc.file_path}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>` : '<span class="td-muted">Not uploaded</span>'}</td>
+        <td>${documentHref(doc) ? `<a href="${escapeHtml(documentHref(doc))}" target="_blank" class="btn btn-sm btn-outline"><span class="material-symbols-rounded ms" style="font-size:16px;">visibility</span> View</a>` : '<span class="td-muted">Not uploaded</span>'}</td>
         <td class="td-muted">${fmtDate(doc.upload_date)}</td>
         <td>${badge(doc.verification_status || 'Pending')}</td>
         <td>${doc.file_path && doc.verification_status !== 'Verified' ? `<button class="btn btn-sm" style="background:#dcfce7;color:#166534;border:none;" onclick="verifyDoc(${doc.client_document_id}, 'Verified', ${c.client_id})">Verify</button> <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:none;" onclick="verifyDoc(${doc.client_document_id}, 'Rejected', ${c.client_id})">Reject</button>` : 'â€”'}</td>
