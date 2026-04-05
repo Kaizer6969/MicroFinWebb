@@ -98,6 +98,7 @@ try {
     $conn->commit();
 
     // Fetch user details for email payload
+    // Fetch user details for email payload
     $uStmt = $conn->prepare("SELECT email_address, first_name, last_name FROM clients WHERE client_id = ? LIMIT 1");
     $uStmt->bind_param('i', $loan['client_id']);
     $uStmt->execute();
@@ -105,6 +106,36 @@ try {
     $clientEmail = $userRow['email_address'] ?? '';
     $clientName = trim(($userRow['first_name'] ?? '') . ' ' . ($userRow['last_name'] ?? ''));
     $uStmt->close();
+
+    // Fetch tenant details for email 
+    $tStmt = $conn->prepare("SELECT app_name FROM app_customization WHERE tenant_id = ? LIMIT 1");
+    $tStmt->bind_param('s', $tenantId);
+    $tStmt->execute();
+    $tenantName = $tStmt->get_result()->fetch_assoc()['app_name'] ?? 'MicroFin';
+    $tStmt->close();
+    
+    // Fetch loan number
+    $lnStmt = $conn->prepare("SELECT loan_number FROM loans WHERE loan_id = ? LIMIT 1");
+    $lnStmt->bind_param('i', $loanId);
+    $lnStmt->execute();
+    $loanNumber = $lnStmt->get_result()->fetch_assoc()['loan_number'] ?? '';
+    $lnStmt->close();
+
+    // Send the dynamic receipt email securely
+    if ($clientEmail !== '') {
+        microfin_send_receipt_email($conn, [
+            'tenant_id' => $tenantId,
+            'user_id' => $userId,
+            'tenant_name' => $tenantName,
+            'client_email' => $clientEmail,
+            'client_name' => $clientName,
+            'payment_reference' => $refNum,
+            'loan_number' => $loanNumber,
+            'payment_method' => $method,
+            'payment_date' => date('Y-m-d H:i:s'),
+            'amount' => $amount
+        ]);
+    }
 
     echo json_encode([
         'success' => true,
