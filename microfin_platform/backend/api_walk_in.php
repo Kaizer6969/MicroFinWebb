@@ -161,15 +161,44 @@ try {
 
     $pdo->commit();
 
-    // Prepare password setup link simulation (since true email host might not be setup properly)
-    // If mf_send_brevo_email is available, we would send. For now, it's simulated success.
-    // In a real staging environment, we'd fire an email with: /reset_password.php?token=$reset_token
+    $tenant_slug = (string) ($_SESSION['tenant_slug'] ?? $tenant_id);
+    
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    
+    // Construct the actual URL to the reset password page for this tenant
+    $reset_url = $protocol . $host . "/tenant_login/reset_password.php?token=" . $reset_token . "&slug=" . urlencode($tenant_slug);
+    
+    $tenant_name = htmlspecialchars((string) ($_SESSION['tenant_name'] ?? 'Microfin Partner'));
+    
+    $subject = "Welcome to " . $tenant_name . " - Set up your password";
+    $htmlContent = "
+        <div style='font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333;'>
+            <h2 style='color: #2563eb;'>Welcome to {$tenant_name}!</h2>
+            <p>Hi " . htmlspecialchars($first_name) . ",</p>
+            <p>An account has been created for you. To complete your setup, please click the button below to choose your password.</p>
+            <p style='margin: 30px 0;'>
+                <a href='{$reset_url}' style='background-color: #2563eb; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; font-size: 16px;'>Set My Password</a>
+            </p>
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p><a href='{$reset_url}' style='color: #2563eb; word-break: break-all;'>{$reset_url}</a></p>
+            <p>This link will expire in 48 hours for security reasons.</p>
+            <br>
+            <p>Thank you,<br>The {$tenant_name} Team</p>
+        </div>
+    ";
+
+    $email_result = '';
+    if (function_exists('mf_send_brevo_email') && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $email_result = mf_send_brevo_email($email, $subject, $htmlContent);
+    }
 
     echo json_encode([
         'status' => 'success',
-        'message' => 'Client account created instantly (Active & Verified). An email has been triggered for them to set their password.',
+        'message' => 'Client account created instantly (Active & Verified). An email has been sent to ' . htmlspecialchars($email) . ' for password setup.',
         'client_id' => $new_client_id,
-        'uploaded_document_count' => $uploaded_count
+        'uploaded_document_count' => $uploaded_count,
+        'email_status' => $email_result
     ]);
 
 } catch (Throwable $e) {

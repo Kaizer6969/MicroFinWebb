@@ -1783,8 +1783,6 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                         <button class="filter-tab" data-client-filter="Active" onclick="loadClients(document.getElementById('clientSearch').value, 'Active', this)">Active</button>
                         <button class="filter-tab" data-client-filter="Inactive" onclick="loadClients(document.getElementById('clientSearch').value, 'Inactive', this)">Inactive</button>
                         <button class="filter-tab" data-client-filter="Pending" onclick="loadClients(document.getElementById('clientSearch').value, 'Pending', this)">Pending</button>
-                        <button class="filter-tab" data-client-filter="app" onclick="loadClients(document.getElementById('clientSearch').value, 'app', this)">📱 App</button>
-                        <button class="filter-tab" data-client-filter="walkin" onclick="loadClients(document.getElementById('clientSearch').value, 'walkin', this)">🏢 Walk-in</button>
                     </div>
                     <div class="card">
                         <div class="table-wrap">
@@ -1795,7 +1793,6 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                                         <th>Email</th>
                                         <th>Phone</th>
                                         <th>Registered</th>
-                                        <th>Source</th>
                                         <th>Status</th>
                                         <th>Action</th>
                                     </tr>
@@ -1818,13 +1815,6 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                                                 </td>
                                                 <td class="td-muted">
                                                     <?php echo date('M d, Y', strtotime($c['registration_date'])); ?></td>
-                                                <td>
-                                                    <?php if (($c['user_type'] ?? '') === 'Client'): ?>
-                                                        <span class="badge badge-blue" title="Registered via mobile app">📱 App</span>
-                                                    <?php else: ?>
-                                                        <span class="badge badge-gray">🏢 Walk-in</span>
-                                                    <?php endif; ?>
-                                                </td>
                                                 <td>
                                                     <?php
                                                     $disp_status = $c['client_status'];
@@ -3703,7 +3693,6 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
         <td class="td-muted">${c.email_address && c.email_address.trim() ? escapeHtml(c.email_address) : '—'}</td>
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : '—'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
-        <td>${sourceBadge(c.user_type)}</td>
         <td>${badge((c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active') ? 'Inactive' : c.client_status)}</td>
         <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
     </tr>`).join('');
