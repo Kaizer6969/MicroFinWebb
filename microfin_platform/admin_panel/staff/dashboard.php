@@ -1537,6 +1537,15 @@ function formatDateValue(value, emptyLabel='Not provided') {
     if (isBlank(value) || value === '1990-01-01') return `<span class="detail-value is-empty">${escapeHtml(emptyLabel)}</span>`;
     return escapeHtml(fmtDate(value));
 }
+function documentHref(doc={}) {
+    const directUrl = String(doc?.file_url || '').trim();
+    if (directUrl !== '') {
+        return directUrl;
+    }
+
+    const filePath = String(doc?.file_path || '').replace(/^\/+/, '').trim();
+    return filePath ? `../../../${filePath}` : '';
+}
 function renderDetailItem(label, valueHtml, full=false) {
     return `<div class="detail-item${full ? ' detail-item-full' : ''}"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${valueHtml}</div></div>`;
 }
