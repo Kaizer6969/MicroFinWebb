@@ -4107,39 +4107,209 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
             const body = document.getElementById('reportsBody');
             if (!body) return;
             body.innerHTML = '<div style="text-align:center;padding:40px;"><span class="spinner"></span></div>';
-            const r = await fetch(API.dashboard + `?action=reports&period=${period}`);
-            const d = await r.json();
-            if (d.status !== 'success') { body.innerHTML = '<p style="color:var(--muted);padding:24px;">Could not load report data.</p>'; return; }
-            const s = d.data;
-            body.innerHTML = `
-        <div class="reports-kpi">
-            <div class="kpi-card"><div class="kpi-label">Total Collections</div><div class="kpi-val" style="color:var(--brand);">${fmt(s.total_collections)}</div></div>
-            <div class="kpi-card"><div class="kpi-label">Disbursed</div><div class="kpi-val">${fmt(s.disbursed_amount)}</div></div>
-            <div class="kpi-card"><div class="kpi-label">New Applications</div><div class="kpi-val">${s.new_applications}</div></div>
-            <div class="kpi-card"><div class="kpi-label">Loans Released</div><div class="kpi-val">${s.new_loans}</div></div>
-        </div>
-        <div class="two-col">
-            <div class="card">
-                <div class="card-header"><span class="material-symbols-rounded ms">donut_small</span><h3>Loan Portfolio Status</h3></div>
-                <div style="padding:4px 0;">
-                    ${(s.loan_status_breakdown || []).map(b => `
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--border);">
-                            <span style="display:flex;align-items:center;gap:8px;">${badge(b.loan_status)} ${b.loan_status}</span>
-                            <strong>${b.cnt}</strong>
-                        </div>`).join('') || '<p style="padding:20px;color:var(--muted);">No data.</p>'}
+            try {
+                const r = await fetch(API.dashboard + `?action=reports&period=${period}`);
+                const d = await r.json();
+                if (d.status !== 'success') { body.innerHTML = '<p style="color:var(--muted);padding:24px;">Could not load report data.</p>'; return; }
+                const rpt = d.data;
+                const sm = rpt.summary || {};
+                const daily = rpt.daily_summary || [];
+                const methods = rpt.method_breakdown || [];
+                const sources = rpt.source_breakdown || [];
+                const staff = rpt.staff_summary || [];
+                const clients = rpt.client_summary || [];
+                const recent = rpt.recent_transactions || [];
+
+                // — Bar chart helper (pure CSS) —
+                function miniBar(items, labelKey, valueKey, colorFn) {
+                    if (!items.length) return '<p style="padding:20px;color:var(--muted);font-size:.85rem;">No data for this period.</p>';
+                    const max = Math.max(...items.map(i => parseFloat(i[valueKey]) || 0), 1);
+                    return items.map(i => {
+                        const val = parseFloat(i[valueKey]) || 0;
+                        const pct = Math.round((val / max) * 100);
+                        const color = typeof colorFn === 'function' ? colorFn(i) : 'var(--brand)';
+                        return `<div style="padding:10px 20px;border-top:1px solid var(--border);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                <span style="font-size:.83rem;font-weight:500;">${escapeHtml(i[labelKey] || 'Unknown')}</span>
+                                <strong style="font-size:.83rem;">${fmt(val)}</strong>
+                            </div>
+                            <div style="height:6px;border-radius:99px;background:var(--border);overflow:hidden;">
+                                <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width .4s ease;"></div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+
+                // — Daily trend sparkline (pure CSS) —
+                function dailyTrend(days) {
+                    if (!days.length) return '<p style="padding:20px;color:var(--muted);font-size:.85rem;">No daily data available.</p>';
+                    const max = Math.max(...days.map(d => parseFloat(d.total_amount) || 0), 1);
+                    return `<div style="display:flex;align-items:flex-end;gap:3px;height:120px;padding:14px 20px 10px;">
+                        ${days.map(d => {
+                            const val = parseFloat(d.total_amount) || 0;
+                            const pct = Math.max(Math.round((val / max) * 100), 3);
+                            const label = d.transaction_day ? new Date(d.transaction_day).toLocaleDateString('en-PH', {month:'short', day:'numeric'}) : '?';
+                            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;" title="${label}: ${fmt(val)}">
+                                <div style="font-size:.6rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${fmt(val)}</div>
+                                <div style="width:100%;max-width:36px;height:${pct}%;background:var(--brand);border-radius:4px 4px 0 0;min-height:3px;transition:height .4s ease;"></div>
+                                <div style="font-size:.58rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${escapeHtml(label)}</div>
+                            </div>`;
+                        }).join('')}
+                    </div>`;
+                }
+
+                body.innerHTML = `
+            <!-- Range label -->
+            <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span class="badge badge-blue" style="font-size:.78rem;padding:4px 10px;">${escapeHtml(rpt.range_label || '')}</span>
+                <span style="font-size:.78rem;color:var(--muted);">${escapeHtml(rpt.summary_note || '')}</span>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="reports-kpi">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Collections</div>
+                    <div class="kpi-val" style="color:var(--brand);">${fmt(sm.total_amount)}</div>
+                    <div style="font-size:.72rem;color:var(--muted);margin-top:4px;">${sm.total_transactions} transaction${sm.total_transactions !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Staff Collections</div>
+                    <div class="kpi-val">${fmt(sm.staff_amount)}</div>
+                    <div style="font-size:.72rem;color:var(--muted);margin-top:4px;">${sm.staff_transactions} posted by staff</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Client App Payments</div>
+                    <div class="kpi-val">${fmt(sm.client_amount)}</div>
+                    <div style="font-size:.72rem;color:var(--muted);margin-top:4px;">${sm.client_transactions} via mobile</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Unique Clients</div>
+                    <div class="kpi-val">${sm.unique_clients}</div>
+                    <div style="font-size:.72rem;color:var(--muted);margin-top:4px;">${sm.active_staff} active staff</div>
                 </div>
             </div>
-            <div class="card">
-                <div class="card-header"><span class="material-symbols-rounded ms">format_list_numbered</span><h3>Application Pipeline</h3></div>
-                <div style="padding:4px 0;">
-                    ${(s.application_status_breakdown || []).map(b => `
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--border);">
-                            <span style="display:flex;align-items:center;gap:8px;">${badge(b.application_status)} ${b.application_status}</span>
-                            <strong>${b.cnt}</strong>
-                        </div>`).join('') || '<p style="padding:20px;color:var(--muted);">No data.</p>'}
+
+            <!-- Daily Collections Trend -->
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-header">
+                    <span class="material-symbols-rounded ms">show_chart</span>
+                    <h3>Daily Collections Trend</h3>
+                </div>
+                ${dailyTrend(daily)}
+            </div>
+
+            <!-- Source & Method Breakdown -->
+            <div class="two-col" style="margin-bottom:16px;">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="material-symbols-rounded ms">compare_arrows</span>
+                        <h3>By Collection Source</h3>
+                    </div>
+                    <div style="padding:4px 0;">
+                        ${sources.map(s => `
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border);">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span class="material-symbols-rounded ms" style="font-size:18px;color:${s.source_key === 'staff' ? '#6366f1' : '#10b981'};">${s.source_key === 'staff' ? 'badge' : 'phone_android'}</span>
+                                    <div>
+                                        <div style="font-size:.85rem;font-weight:600;">${escapeHtml(s.source_label)}</div>
+                                        <div style="font-size:.72rem;color:var(--muted);">${s.transaction_count} transaction${s.transaction_count !== 1 ? 's' : ''}</div>
+                                    </div>
+                                </div>
+                                <strong style="color:var(--brand);">${fmt(s.total_amount)}</strong>
+                            </div>`).join('') || '<p style="padding:20px;color:var(--muted);font-size:.85rem;">No data.</p>'}
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="material-symbols-rounded ms">account_balance_wallet</span>
+                        <h3>By Payment Method</h3>
+                    </div>
+                    <div style="padding:4px 0;">
+                        ${miniBar(methods, 'payment_method', 'total_amount', m => {
+                            const method = String(m.payment_method || '').toLowerCase();
+                            if (method.includes('cash')) return '#22c55e';
+                            if (method.includes('gcash') || method.includes('mobile')) return '#3b82f6';
+                            if (method.includes('bank') || method.includes('transfer')) return '#6366f1';
+                            if (method.includes('check')) return '#f59e0b';
+                            return 'var(--brand)';
+                        })}
+                    </div>
                 </div>
             </div>
-        </div>`;
+
+            <!-- Staff & Client Breakdown -->
+            <div class="two-col" style="margin-bottom:16px;">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="material-symbols-rounded ms">groups</span>
+                        <h3>Staff Performance</h3>
+                    </div>
+                    <div style="padding:4px 0;">
+                        ${staff.length ? staff.map(s => `
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border);">
+                                <div>
+                                    <div style="font-size:.85rem;font-weight:600;">${escapeHtml(s.staff_name)}</div>
+                                    <div style="font-size:.72rem;color:var(--muted);">${escapeHtml(s.staff_role)} · ${s.transaction_count} txn · ${s.unique_clients} client${s.unique_clients != 1 ? 's' : ''}</div>
+                                </div>
+                                <strong style="color:var(--brand);">${fmt(s.total_amount)}</strong>
+                            </div>`).join('') : '<p style="padding:20px;color:var(--muted);font-size:.85rem;">No staff collections this period.</p>'}
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="material-symbols-rounded ms">person</span>
+                        <h3>Top Paying Clients</h3>
+                    </div>
+                    <div style="padding:4px 0;">
+                        ${clients.length ? clients.map((c, i) => `
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--border);">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <span style="width:22px;height:22px;border-radius:50%;background:${i < 3 ? 'var(--brand)' : 'var(--border)'};color:${i < 3 ? '#fff' : 'var(--muted)'};display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0;">${i + 1}</span>
+                                    <div>
+                                        <div style="font-size:.83rem;font-weight:500;">${escapeHtml(c.client_name)}</div>
+                                        <div style="font-size:.72rem;color:var(--muted);">${c.transaction_count} payment${c.transaction_count != 1 ? 's' : ''}</div>
+                                    </div>
+                                </div>
+                                <strong style="font-size:.85rem;">${fmt(c.total_amount)}</strong>
+                            </div>`).join('') : '<p style="padding:20px;color:var(--muted);font-size:.85rem;">No client payments this period.</p>'}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Transactions Ledger -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="material-symbols-rounded ms">receipt_long</span>
+                    <h3>Recent Transactions</h3>
+                    <span class="badge badge-gray" style="font-size:.7rem;">${recent.length} shown</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr>
+                            <th>Reference</th><th>Client</th><th>Loan #</th>
+                            <th>Amount</th><th>Method</th><th>Source</th><th>Date</th><th>Status</th>
+                        </tr></thead>
+                        <tbody>
+                            ${recent.length ? recent.map(t => `<tr>
+                                <td class="td-mono" style="font-size:.78rem;">${escapeHtml(t.reference_no || t.receipt_number || '—')}</td>
+                                <td class="td-bold">${escapeHtml(t.client_name)}</td>
+                                <td class="td-muted">${escapeHtml(t.loan_number || '—')}</td>
+                                <td class="td-bold" style="color:var(--brand);">${fmt(t.amount)}</td>
+                                <td class="td-muted">${escapeHtml(t.payment_method || '—')}</td>
+                                <td>${t.source_key === 'staff'
+                                    ? '<span class="badge badge-blue" style="font-size:.68rem;">Staff</span>'
+                                    : '<span class="badge badge-green" style="font-size:.68rem;">App</span>'}</td>
+                                <td class="td-muted">${fmtDate(t.transaction_date)}</td>
+                                <td>${badge(t.transaction_status)}</td>
+                            </tr>`).join('') : '<tr class="empty-row"><td colspan="8">No transactions found for this period.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+            } catch (error) {
+                console.error(error);
+                body.innerHTML = '<p style="color:var(--muted);padding:24px;">Could not load report data.</p>';
+            }
         }
 
         // ── Users ──────────────────────────────────────────────────────
