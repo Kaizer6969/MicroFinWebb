@@ -46,7 +46,7 @@ try {
 
     // 2. Update loan
     $uStmt = $conn->prepare("UPDATE loans SET remaining_balance = ?, total_paid = ?, loan_status = ? WHERE loan_id = ?");
-    $uStmt->bind_param('ddss', $newBalance, $newPaid, $newStatus, $loanId);
+    $uStmt->bind_param('ddsi', $newBalance, $newPaid, $newStatus, $loanId);
     $uStmt->execute();
     $uStmt->close();
 
