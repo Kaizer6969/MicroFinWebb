@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/api_utils.php';
+require_once __DIR__ . '/loan_application_rules.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -49,6 +50,7 @@ if (!$tenantRow || trim((string) ($tenantRow['tenant_id'] ?? '')) === '') {
 }
 
 $tenantId = trim((string) $tenantRow['tenant_id']);
+$userId = (int) ($_GET['user_id'] ?? 0);
 
 $productSql = "
     SELECT
@@ -121,8 +123,28 @@ while ($row = $result->fetch_assoc()) {
 
 $productStmt->close();
 
-microfin_json_response([
+$creditSummary = null;
+$loanAccessState = null;
+
+if ($userId > 0) {
+    $clientProfile = microfin_find_client_loan_profile($conn, $userId, $tenantId);
+    $creditSummary = $clientProfile
+        ? microfin_build_client_loan_application_summary($conn, $clientProfile)
+        : microfin_loan_rules_default_summary($tenantId);
+
+    $products = microfin_annotate_loan_products($products, $creditSummary);
+    $loanAccessState = microfin_build_loan_access_state($products, $creditSummary);
+}
+
+$payload = [
     'success' => true,
     'tenant_id' => $tenantId,
     'products' => $products,
-]);
+];
+
+if ($creditSummary !== null) {
+    $payload['credit_summary'] = $creditSummary;
+    $payload['loan_access_state'] = $loanAccessState;
+}
+
+microfin_json_response($payload);

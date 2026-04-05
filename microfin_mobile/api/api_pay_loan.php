@@ -4,7 +4,9 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') { exit; }
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
+    exit;
+}
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Invalid Request']);
@@ -78,13 +80,13 @@ function microfin_fetch_payment_receipt_context(mysqli $conn, string $tenantId, 
     ];
 }
 
-$data = json_decode(file_get_contents("php://input"), true) ?? [];
-$userId = (int)($data['user_id'] ?? 0);
-$tenantId = trim((string)($data['tenant_id'] ?? ''));
-$loanId = (int)($data['loan_id'] ?? 0);
-$amount = (float)($data['amount'] ?? 0);
-$method = $data['payment_method'] ?? 'Online';
-$refNum = trim((string)($data['reference_number'] ?? ''));
+$data = json_decode(file_get_contents('php://input'), true) ?? [];
+$userId = (int) ($data['user_id'] ?? 0);
+$tenantId = trim((string) ($data['tenant_id'] ?? ''));
+$loanId = (int) ($data['loan_id'] ?? 0);
+$amount = (float) ($data['amount'] ?? 0);
+$method = trim((string) ($data['payment_method'] ?? 'Online'));
+$refNum = trim((string) ($data['reference_number'] ?? ''));
 if ($refNum === '') {
     $refNum = 'REF-' . time();
 }
@@ -95,7 +97,6 @@ if ($userId <= 0 || $tenantId === '' || $loanId <= 0 || $amount <= 0) {
 }
 
 try {
-    // If the same gateway source/reference is sent again, do not post the payment twice.
     $existingStmt = $conn->prepare("
         SELECT transaction_id, client_id, source_id, payment_date
         FROM payment_transactions
@@ -135,8 +136,13 @@ try {
 
     $conn->begin_transaction();
 
-    // 1. Verify loan exists
-    $lStmt = $conn->prepare("SELECT client_id, remaining_balance, principal_amount, total_paid FROM loans WHERE loan_id = ? AND tenant_id = ? FOR UPDATE");
+    $lStmt = $conn->prepare("
+        SELECT client_id, remaining_balance, principal_amount, total_paid
+        FROM loans
+        WHERE loan_id = ?
+          AND tenant_id = ?
+        FOR UPDATE
+    ");
     $lStmt->bind_param('is', $loanId, $tenantId);
     $lStmt->execute();
     $lRes = $lStmt->get_result();
@@ -144,73 +150,109 @@ try {
     $lStmt->close();
 
     if (!$loan) {
-        throw new Exception("Loan not found.");
+        throw new Exception('Loan not found.');
     }
 
-    $newBalance = max(0, $loan['remaining_balance'] - $amount);
-    $newPaid = $loan['total_paid'] + $amount;
+    $newBalance = max(0, (float) $loan['remaining_balance'] - $amount);
+    $newPaid = (float) $loan['total_paid'] + $amount;
     $newStatus = ($newBalance <= 0) ? 'Fully Paid' : 'Active';
 
-    // 2. Update loan
-    $uStmt = $conn->prepare("UPDATE loans SET remaining_balance = ?, total_paid = ?, loan_status = ? WHERE loan_id = ?");
+    $uStmt = $conn->prepare("
+        UPDATE loans
+        SET remaining_balance = ?, total_paid = ?, loan_status = ?
+        WHERE loan_id = ?
+    ");
     $uStmt->bind_param('ddsi', $newBalance, $newPaid, $newStatus, $loanId);
     $uStmt->execute();
     $uStmt->close();
 
-    // 3. Insert into payment_transactions (gateway-facing table, no employee FK needed)
-    $txRef = 'TXN-' . strtoupper(substr(md5(uniqid()), 0, 8)) . '-' . time();
-    $pStmt = $conn->prepare("INSERT INTO payment_transactions (transaction_ref, client_id, loan_id, tenant_id, source_id, amount, payment_method, payment_type, status, payment_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'regular', 'completed', NOW(), NOW())");
+    $txRef = 'TXN-' . strtoupper(substr(md5(uniqid('', true)), 0, 8)) . '-' . time();
+    $pStmt = $conn->prepare("
+        INSERT INTO payment_transactions (
+            transaction_ref,
+            client_id,
+            loan_id,
+            tenant_id,
+            source_id,
+            amount,
+            payment_method,
+            payment_type,
+            status,
+            payment_date,
+            created_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, 'regular', 'completed', NOW(), NOW()
+        )
+    ");
     $pStmt->bind_param('siissds', $txRef, $loan['client_id'], $loanId, $tenantId, $refNum, $amount, $method);
     $pStmt->execute();
     $pStmt->close();
 
-    // 4. Update schedules (naive FIFO allocation for simplicity)
-    $sStmt = $conn->prepare("SELECT schedule_id, total_payment AS total_due, amount_paid FROM amortization_schedule WHERE loan_id = ? AND payment_status != 'Paid' ORDER BY due_date ASC");
+    $sStmt = $conn->prepare("
+        SELECT schedule_id, total_payment AS total_due, amount_paid
+        FROM amortization_schedule
+        WHERE loan_id = ?
+          AND payment_status != 'Paid'
+        ORDER BY due_date ASC
+    ");
     $sStmt->bind_param('i', $loanId);
     $sStmt->execute();
     $sRes = $sStmt->get_result();
-    
+
     $remainingPayment = $amount;
     $schedUpdates = [];
-    while ($r = $sRes->fetch_assoc()) {
-        if ($remainingPayment <= 0) break;
-        
-        $due = floatval($r['total_due']);
-        $paid = floatval($r['amount_paid']);
+    while ($row = $sRes->fetch_assoc()) {
+        if ($remainingPayment <= 0) {
+            break;
+        }
+
+        $due = (float) ($row['total_due'] ?? 0);
+        $paid = (float) ($row['amount_paid'] ?? 0);
         $unpaid = $due - $paid;
-        
+
         if ($unpaid > 0) {
             $allocate = min($remainingPayment, $unpaid);
             $newSchedPaid = $paid + $allocate;
             $remainingPayment -= $allocate;
             $schedStatus = ($newSchedPaid >= $due) ? 'Paid' : 'Partially Paid';
-            
+
             $schedUpdates[] = [
-                'id' => $r['schedule_id'],
+                'id' => (int) ($row['schedule_id'] ?? 0),
                 'paid' => $newSchedPaid,
-                'status' => $schedStatus
+                'status' => $schedStatus,
             ];
         }
     }
     $sStmt->close();
 
-    $suStmt = $conn->prepare("UPDATE amortization_schedule SET amount_paid = ?, payment_status = ? WHERE schedule_id = ?");
-    foreach ($schedUpdates as $su) {
-        $suStmt->bind_param('dsi', $su['paid'], $su['status'], $su['id']);
+    $suStmt = $conn->prepare("
+        UPDATE amortization_schedule
+        SET amount_paid = ?, payment_status = ?
+        WHERE schedule_id = ?
+    ");
+    foreach ($schedUpdates as $schedule) {
+        $suStmt->bind_param('dsi', $schedule['paid'], $schedule['status'], $schedule['id']);
         $suStmt->execute();
     }
     $suStmt->close();
 
     $conn->commit();
 
-    // 5. Create payment notification for user
-    $notifTitle = 'Payment Received';
-    $notifMessage = "Your payment of ₱" . number_format($amount, 2) . " has been paid successfully.";
-    $nStmt = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, notification_type, title, message) VALUES (?, ?, 'Payment', ?, ?)");
-    if ($nStmt) {
-        $nStmt->bind_param('isss', $userId, $tenantId, $notifTitle, $notifMessage);
-        $nStmt->execute();
-        $nStmt->close();
+    // A notification problem should not turn a committed payment into a client-facing failure.
+    try {
+        $notifTitle = 'Payment Received';
+        $notifMessage = 'Your payment of PHP ' . number_format($amount, 2) . ' has been posted successfully.';
+        $nStmt = $conn->prepare("
+            INSERT INTO notifications (user_id, tenant_id, notification_type, title, message)
+            VALUES (?, ?, 'Payment Received', ?, ?)
+        ");
+        if ($nStmt) {
+            $nStmt->bind_param('isss', $userId, $tenantId, $notifTitle, $notifMessage);
+            $nStmt->execute();
+            $nStmt->close();
+        }
+    } catch (Throwable $notificationError) {
+        error_log('Payment notification insert failed: ' . $notificationError->getMessage());
     }
 
     $receiptContext = microfin_fetch_payment_receipt_context($conn, $tenantId, (int) $loan['client_id'], $loanId);
@@ -223,14 +265,14 @@ try {
         'client_name' => $receiptContext['client_name'],
         'tenant_name' => $receiptContext['tenant_name'],
         'loan_number' => $receiptContext['loan_number'],
-        'payment_date' => date('Y-m-d H:i:s')
+        'payment_date' => date('Y-m-d H:i:s'),
     ]);
-
 } catch (Throwable $e) {
     try {
         $conn->rollback();
     } catch (Throwable $ignore) {
     }
+
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }

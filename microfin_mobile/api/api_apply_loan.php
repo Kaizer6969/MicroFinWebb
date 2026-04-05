@@ -4,29 +4,30 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS')
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     exit;
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+}
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid Request']);
     exit;
 }
 
-require_once 'db.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/loan_application_rules.php';
 
-$data = json_decode(file_get_contents("php://input"), true);
+$data = json_decode(file_get_contents('php://input'), true) ?: [];
 
-// Required
-$user_id = $data['user_id'] ?? null;
-$tenant_id = $data['tenant_id'] ?? null;
-$product_id = $data['product_id'] ?? null;
-$amount = floatval($data['amount'] ?? 0);
-$term = intval($data['term'] ?? 0);
-$category = $data['purpose_category'] ?? '';
-$purpose = $data['purpose'] ?? '';
-$documents = $data['documents'] ?? [];
-$app_data = $data['app_data'] ?? '{}'; // JSON string for dynamic purpose fields
+$user_id = (int) ($data['user_id'] ?? 0);
+$tenant_id = trim((string) ($data['tenant_id'] ?? ''));
+$product_id = (int) ($data['product_id'] ?? 0);
+$amount = (float) ($data['amount'] ?? 0);
+$term = (int) ($data['term'] ?? 0);
+$category = trim((string) ($data['purpose_category'] ?? ''));
+$purpose = trim((string) ($data['purpose'] ?? ''));
+$documents = is_array($data['documents'] ?? null) ? $data['documents'] : [];
+$app_data = $data['app_data'] ?? '{}';
 
-if (empty($user_id) || empty($tenant_id) || empty($product_id) || $amount <= 0 || $term <= 0) {
+if ($user_id <= 0 || $tenant_id === '' || $product_id <= 0 || $amount <= 0 || $term <= 0) {
     echo json_encode(['success' => false, 'message' => 'Required application details are missing']);
     exit;
 }
@@ -34,141 +35,266 @@ if (empty($user_id) || empty($tenant_id) || empty($product_id) || $amount <= 0 |
 $conn->begin_transaction();
 
 try {
-    // 1. Get client info and verify status
-    $stmt = $conn->prepare("SELECT client_id, document_verification_status, credit_limit, comaker_name, comaker_relationship, comaker_contact, comaker_income, comaker_house_no, comaker_street, comaker_barangay, comaker_city, comaker_province, comaker_postal_code FROM clients WHERE user_id = ? AND tenant_id = ?");
-    $stmt->bind_param("is", $user_id, $tenant_id);
+    $stmt = $conn->prepare("
+        SELECT
+            client_id,
+            document_verification_status,
+            credit_limit,
+            comaker_name,
+            comaker_relationship,
+            comaker_contact,
+            comaker_income,
+            comaker_house_no,
+            comaker_street,
+            comaker_barangay,
+            comaker_city,
+            comaker_province,
+            comaker_postal_code
+        FROM clients
+        WHERE user_id = ?
+          AND tenant_id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param('is', $user_id, $tenant_id);
     $stmt->execute();
     $res = $stmt->get_result();
 
     if ($res->num_rows === 0) {
-        throw new Exception("Profile not verified. Please complete verification first.");
+        throw new Exception('Profile not verified. Please complete verification first.');
     }
 
     $client = $res->fetch_assoc();
-    $client_id = $client['client_id'];
-
-    // Check the admin-controlled verification_status (set when admin clicks "Verify Client")
-    if ($client['document_verification_status'] !== 'Approved' && $client['document_verification_status'] !== 'Verified') {
-        throw new Exception("Your profile must be Approved or Verified before applying for a loan.");
-    }
-
-    $credit_limit = floatval($client['credit_limit']);
-
     $stmt->close();
 
-
-    // 2. Credit limit check
-    $used_credit = 0;
-
-    // Active / Overdue / Restructured loans consume credit
-    $lStmt = $conn->prepare("SELECT COALESCE(SUM(principal_amount), 0) AS total FROM loans WHERE client_id = ? AND loan_status IN ('Active', 'Overdue', 'Restructured')");
-    $lStmt->bind_param("i", $client_id);
-    $lStmt->execute();
-    $lRes = $lStmt->get_result();
-    if ($lRow = $lRes->fetch_assoc())
-        $used_credit += floatval($lRow['total']);
-    $lStmt->close();
-
-    // Pending / in-review applications also consume credit
-    $aStmt = $conn->prepare("SELECT COALESCE(SUM(requested_amount), 0) AS total FROM loan_applications WHERE client_id = ? AND application_status IN ('Submitted', 'Pending', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval')");
-    $aStmt->bind_param("i", $client_id);
-    $aStmt->execute();
-    $aRes = $aStmt->get_result();
-    if ($aRow = $aRes->fetch_assoc())
-        $used_credit += floatval($aRow['total']);
-    $aStmt->close();
-
-    $available_credit = $credit_limit - $used_credit;
-    if ($credit_limit > 0 && $amount > $available_credit) {
-        throw new Exception("Requested amount (₱" . number_format($amount, 2) . ") exceeds your available credit limit of ₱" . number_format(max(0, $available_credit), 2) . ".");
+    $client_id = (int) ($client['client_id'] ?? 0);
+    $verificationStatus = trim((string) ($client['document_verification_status'] ?? ''));
+    if ($verificationStatus !== 'Approved' && $verificationStatus !== 'Verified') {
+        throw new Exception('Your profile must be Approved or Verified before applying for a loan.');
     }
 
+    $credit_limit = (float) ($client['credit_limit'] ?? 0);
+    $creditSummary = microfin_build_client_loan_application_summary($conn, [
+        'client_id' => $client_id,
+        'tenant_id' => $tenant_id,
+        'document_verification_status' => $verificationStatus,
+        'credit_limit' => $credit_limit,
+    ]);
 
+    $available_credit = (float) ($creditSummary['remaining_credit'] ?? 0);
+    if ($credit_limit <= 0) {
+        throw new Exception('No credit limit is currently available for your account.');
+    }
+    if ($amount > $available_credit) {
+        throw new Exception(
+            'Requested amount (PHP ' . number_format($amount, 2) .
+            ') exceeds your remaining credit limit of PHP ' . number_format(max(0, $available_credit), 2) . '.'
+        );
+    }
 
-    // 3. Get product settings and enforce product bounds
     $pStmt = $conn->prepare("
         SELECT
-            interest_rate, product_type, min_amount, max_amount, min_term_months, max_term_months
+            interest_rate,
+            product_type,
+            min_amount,
+            max_amount,
+            min_term_months,
+            max_term_months
         FROM loan_products
-        WHERE product_id = ? AND tenant_id = ? AND is_active = 1
+        WHERE product_id = ?
+          AND tenant_id = ?
+          AND is_active = 1
         LIMIT 1
     ");
-    $pStmt->bind_param("is", $product_id, $tenant_id);
+    $pStmt->bind_param('is', $product_id, $tenant_id);
     $pStmt->execute();
     $pRes = $pStmt->get_result();
-    if ($pRes->num_rows === 0)
-        throw new Exception("Selected loan product not found.");
+    if ($pRes->num_rows === 0) {
+        throw new Exception('Selected loan product not found.');
+    }
+
     $pRow = $pRes->fetch_assoc();
-    $interest_rate = floatval($pRow['interest_rate']);
-    $product_type = $pRow['product_type'];
-    $product_min_amount = floatval($pRow['min_amount'] ?? 0);
-    $product_max_amount = floatval($pRow['max_amount'] ?? 0);
-    $product_min_term = intval($pRow['min_term_months'] ?? 0);
-    $product_max_term = intval($pRow['max_term_months'] ?? 0);
     $pStmt->close();
 
+    $interest_rate = (float) ($pRow['interest_rate'] ?? 0);
+    $product_type = trim((string) ($pRow['product_type'] ?? 'Loan Product'));
+    $product_min_amount = (float) ($pRow['min_amount'] ?? 0);
+    $product_max_amount = (float) ($pRow['max_amount'] ?? 0);
+    $product_min_term = (int) ($pRow['min_term_months'] ?? 0);
+    $product_max_term = (int) ($pRow['max_term_months'] ?? 0);
+
+    $annotatedProducts = microfin_annotate_loan_products([[
+        'product_id' => $product_id,
+        'min_amount' => $product_min_amount,
+        'max_amount' => $product_max_amount,
+    ]], $creditSummary);
+    $productState = $annotatedProducts[0] ?? [];
+    $productIsAvailable = !empty($productState['is_available']);
+    $effectiveMaxAmount = (float) ($productState['effective_max_amount'] ?? 0);
+    $productReason = trim((string) ($productState['availability_reason'] ?? ''));
+
+    if (!$productIsAvailable) {
+        throw new Exception($productReason !== '' ? $productReason : 'This loan product is not available right now.');
+    }
     if ($product_min_amount > 0 && $amount < $product_min_amount) {
-        throw new Exception("Requested amount must be at least PHP " . number_format($product_min_amount, 2) . " for this loan product.");
+        throw new Exception('Requested amount must be at least PHP ' . number_format($product_min_amount, 2) . ' for this loan product.');
+    }
+    if ($effectiveMaxAmount > 0 && $amount > $effectiveMaxAmount) {
+        throw new Exception('Requested amount cannot exceed your remaining availability of PHP ' . number_format($effectiveMaxAmount, 2) . ' for this product.');
     }
     if ($product_max_amount > 0 && $amount > $product_max_amount) {
-        throw new Exception("Requested amount cannot exceed PHP " . number_format($product_max_amount, 2) . " for this loan product.");
+        throw new Exception('Requested amount cannot exceed PHP ' . number_format($product_max_amount, 2) . ' for this loan product.');
     }
     if ($product_min_term > 0 && $term < $product_min_term) {
-        throw new Exception("Loan term must be at least " . number_format($product_min_term) . " month(s) for this loan product.");
+        throw new Exception('Loan term must be at least ' . number_format($product_min_term) . ' month(s) for this loan product.');
     }
     if ($product_max_term > 0 && $term > $product_max_term) {
-        throw new Exception("Loan term cannot exceed " . number_format($product_max_term) . " month(s) for this loan product.");
+        throw new Exception('Loan term cannot exceed ' . number_format($product_max_term) . ' month(s) for this loan product.');
     }
 
-    // Check duplicate pending identical product type
-    $dupStmt = $conn->prepare("SELECT la.application_id FROM loan_applications la JOIN loan_products lp ON la.product_id = lp.product_id WHERE la.client_id = ? AND lp.product_type = ? AND la.application_status IN ('Submitted', 'Pending', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval')");
-    $dupStmt->bind_param("is", $client_id, $product_type);
+    $dupStmt = $conn->prepare("
+        SELECT la.application_id
+        FROM loan_applications la
+        LEFT JOIN loans linked_loan
+            ON linked_loan.application_id = la.application_id
+           AND linked_loan.tenant_id = la.tenant_id
+        WHERE la.client_id = ?
+          AND la.tenant_id = ?
+          AND la.product_id = ?
+          AND la.application_status IN ('Submitted', 'Pending', 'Pending Review', 'Under Review', 'Document Verification', 'Credit Investigation', 'For Approval', 'Approved')
+          AND linked_loan.loan_id IS NULL
+        LIMIT 1
+    ");
+    $dupStmt->bind_param('isi', $client_id, $tenant_id, $product_id);
     $dupStmt->execute();
-    if ($dupStmt->get_result()->num_rows > 0)
-        throw new Exception("You already have a pending application for this loan type.");
+    if ($dupStmt->get_result()->num_rows > 0) {
+        $dupStmt->close();
+        throw new Exception('You already have an active or pending application for this loan product.');
+    }
     $dupStmt->close();
 
-    // 4. Generate application number
-    $app_number = strtoupper($tenant_id) . '-' . date('YmdHi') . '-' . str_pad($client_id, 4, '0', STR_PAD_LEFT);
+    $activeLoanStmt = $conn->prepare("
+        SELECT loan_id
+        FROM loans
+        WHERE client_id = ?
+          AND tenant_id = ?
+          AND product_id = ?
+          AND loan_status IN ('Active', 'Overdue', 'Restructured')
+        LIMIT 1
+    ");
+    $activeLoanStmt->bind_param('isi', $client_id, $tenant_id, $product_id);
+    $activeLoanStmt->execute();
+    if ($activeLoanStmt->get_result()->num_rows > 0) {
+        $activeLoanStmt->close();
+        throw new Exception('You already have an active loan for this product.');
+    }
+    $activeLoanStmt->close();
 
-    // 5. Insert loan application
-    $co_name = $client['comaker_name'];
-    $has_co = !empty($co_name) ? 1 : 0;
-    $co_address = trim($client['comaker_house_no'] . ' ' . $client['comaker_street'] . ' ' . $client['comaker_barangay'] . ' ' . $client['comaker_city']);
+    $app_number = strtoupper($tenant_id) . '-' . date('YmdHi') . '-' . str_pad((string) $client_id, 4, '0', STR_PAD_LEFT);
 
-    $iaStmt = $conn->prepare("INSERT INTO loan_applications (application_number, client_id, tenant_id, product_id, requested_amount, loan_term_months, interest_rate, purpose_category, loan_purpose, application_data, application_status, submitted_date, has_comaker, comaker_name, comaker_relationship, comaker_contact, comaker_address, comaker_income) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', NOW(), ?, ?, ?, ?, ?, ?)");
-    $iaStmt->bind_param("sisidissssissssd", $app_number, $client_id, $tenant_id, $product_id, $amount, $term, $interest_rate, $category, $purpose, $app_data, $has_co, $co_name, $client['comaker_relationship'], $client['comaker_contact'], $co_address, $client['comaker_income']);
-    if (!$iaStmt->execute())
-        throw new Exception("Failed to save loan application: " . $iaStmt->error);
+    $co_name = trim((string) ($client['comaker_name'] ?? ''));
+    $has_co = $co_name !== '' ? 1 : 0;
+    $co_address = trim(
+        trim((string) ($client['comaker_house_no'] ?? '')) . ' ' .
+        trim((string) ($client['comaker_street'] ?? '')) . ' ' .
+        trim((string) ($client['comaker_barangay'] ?? '')) . ' ' .
+        trim((string) ($client['comaker_city'] ?? ''))
+    );
+
+    $iaStmt = $conn->prepare("
+        INSERT INTO loan_applications (
+            application_number,
+            client_id,
+            tenant_id,
+            product_id,
+            requested_amount,
+            loan_term_months,
+            interest_rate,
+            purpose_category,
+            loan_purpose,
+            application_data,
+            application_status,
+            submitted_date,
+            has_comaker,
+            comaker_name,
+            comaker_relationship,
+            comaker_contact,
+            comaker_address,
+            comaker_income
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', NOW(), ?, ?, ?, ?, ?, ?
+        )
+    ");
+    $iaStmt->bind_param(
+        'sisidissssissssd',
+        $app_number,
+        $client_id,
+        $tenant_id,
+        $product_id,
+        $amount,
+        $term,
+        $interest_rate,
+        $category,
+        $purpose,
+        $app_data,
+        $has_co,
+        $co_name,
+        $client['comaker_relationship'],
+        $client['comaker_contact'],
+        $co_address,
+        $client['comaker_income']
+    );
+    if (!$iaStmt->execute()) {
+        throw new Exception('Failed to save loan application: ' . $iaStmt->error);
+    }
+
     $application_id = $conn->insert_id;
     $iaStmt->close();
 
-    // 6. Insert Purpose-specific documents
     if (!empty($documents)) {
-        $dStmt = $conn->prepare("INSERT INTO application_documents (application_id, tenant_id, document_type_id, file_name, file_path) VALUES (?, ?, ?, ?, ?)");
+        $dStmt = $conn->prepare("
+            INSERT INTO application_documents (
+                application_id,
+                tenant_id,
+                document_type_id,
+                file_name,
+                file_path
+            ) VALUES (?, ?, ?, ?, ?)
+        ");
+
         foreach ($documents as $doc) {
-            $doc_type_id = $doc['document_type_id'];
-            $file_name = $doc['file_name'];
-            $file_path = $doc['file_path'];
-            $dStmt->bind_param("isiss", $application_id, $tenant_id, $doc_type_id, $file_name, $file_path);
+            $doc_type_id = (int) ($doc['document_type_id'] ?? 0);
+            $file_name = trim((string) ($doc['file_name'] ?? ''));
+            $file_path = trim((string) ($doc['file_path'] ?? ''));
+            $dStmt->bind_param('isiss', $application_id, $tenant_id, $doc_type_id, $file_name, $file_path);
             $dStmt->execute();
         }
+
         $dStmt->close();
     }
 
-    // 7. Insert notification for user
     $notif_title = 'Loan Application Submitted';
     $notif_message = "Your application $app_number for $product_type has been submitted and is under review.";
-    $nStmt = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, notification_type, title, message, priority) VALUES (?, ?, 'General', ?, ?, 'High')");
-    $nStmt->bind_param("isss", $user_id, $tenant_id, $notif_title, $notif_message);
+    $nStmt = $conn->prepare("
+        INSERT INTO notifications (user_id, tenant_id, notification_type, title, message, priority)
+        VALUES (?, ?, 'General', ?, ?, 'High')
+    ");
+    $nStmt->bind_param('isss', $user_id, $tenant_id, $notif_title, $notif_message);
     $nStmt->execute();
     $nStmt->close();
 
     $conn->commit();
-    echo json_encode(['success' => true, 'message' => 'Loan application submitted successfully!', 'application_id' => $application_id, 'application_number' => $app_number]);
+    echo json_encode([
+        'success' => true,
+        'message' => 'Loan application submitted successfully!',
+        'application_id' => $application_id,
+        'application_number' => $app_number,
+    ]);
+} catch (Throwable $e) {
+    try {
+        $conn->rollback();
+    } catch (Throwable $ignore) {
+    }
 
-} catch (Exception $e) {
-    $conn->rollback();
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
 ?>
