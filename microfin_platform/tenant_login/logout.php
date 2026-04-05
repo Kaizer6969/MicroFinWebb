@@ -9,6 +9,27 @@ $tenant_slug = $_SESSION['tenant_slug'] ?? '';
 $tenant_id = $_SESSION['tenant_id'] ?? '';
 $tenant_key = $_SESSION['tenant_key'] ?? '';
 
+if ($tenant_slug === '' && isset($_GET['s'])) {
+    $tenant_slug = trim($_GET['s']);
+}
+
+if ($tenant_slug === '' && !empty($_COOKIE['mf_backend_session_token'])) {
+    try {
+        $stmt = $pdo->prepare('
+            SELECT t.tenant_slug, t.tenant_id 
+            FROM user_sessions us 
+            JOIN tenants t ON us.tenant_id = t.tenant_id 
+            WHERE us.session_token = ?
+            LIMIT 1
+        ');
+        $stmt->execute([$_COOKIE['mf_backend_session_token']]);
+        if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $tenant_slug = $row['tenant_slug'];
+            if ($tenant_id === '') $tenant_id = $row['tenant_id'];
+        }
+    } catch (Throwable $e) {}
+}
+
 if (!empty($_SESSION['user_id']) && !empty($_SESSION['tenant_id']) && empty($_SESSION['super_admin_logged_in'])) {
     try {
         $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, description) VALUES (?, ?, 'STAFF_LOGOUT', 'user', 'Staff logged out of the system')")->execute([$_SESSION['user_id'], $_SESSION['tenant_id']]);

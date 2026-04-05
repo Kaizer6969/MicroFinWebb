@@ -2291,7 +2291,7 @@ async function loadCreditAccounts(filter='all', scoreFilter='all', btn=null, sea
                     </div>
                 </td>
                 <td>${renderCreditAccountRuleProgress(upgrade)}</td>
-                <td><button class="btn btn-sm btn-outline" onclick="viewClient(${account.client_id})">View Profile</button></td>
+                <td><button class="btn btn-sm btn-outline" onclick="viewClient(${account.client_id}, 'credit-accounts')">View Profile</button></td>
             </tr>`;
         }).join('');
     } catch (error) {
@@ -2318,7 +2318,7 @@ async function loadClients(search='') {
     </tr>`).join('');
 }
 
-async function viewClient(id) {
+async function viewClient(id, source = null) {
     openModal('clientDetailModal');
     document.getElementById('clientDetailBody').innerHTML = '<div style="text-align:center;padding:32px;"><span class="spinner"></span></div>';
     const r = await fetch(API.clients + `?action=view&client_id=${id}`);
@@ -2408,7 +2408,7 @@ async function loadClients(search='') {
     </tr>`).join('');
 }
 
-async function viewClient(id) {
+async function viewClient(id, source = null) {
     openModal('clientDetailModal');
     document.getElementById('clientDetailBody').innerHTML = '<div style="text-align:center;padding:32px;"><span class="spinner"></span></div>';
     const r = await fetch(API.clients + `?action=view&client_id=${id}`);
@@ -2432,7 +2432,7 @@ async function viewClient(id) {
     const footer = document.getElementById('clientDetailFooter');
     if (footer) {
         let footerHtml = `<button class="btn btn-outline" onclick="closeModal('clientDetailModal')">Close</button>`;
-        if (c.verification_status !== 'Approved') {
+        if (c.verification_status !== 'Approved' && source !== 'credit-accounts') {
             footerHtml += `<button class="btn btn-success" onclick="verifyClientFully(${c.client_id})"><span class="material-symbols-rounded ms">verified</span> Verify Client</button>`;
         }
         footer.innerHTML = footerHtml;
@@ -2508,7 +2508,7 @@ async function viewClient(id) {
                     <div class="detail-section-title">Credit Growth & Upgrade</div>
                 </div>
                 <div class="detail-grid">
-                    ${renderDetailItem('Workflow', escapeHtml(upgrade.workflow_label || 'Semi-Automatic'))}
+
                     ${renderDetailItem('Upgrade Status', upgradeStatusBadge(upgrade))}
                     ${renderDetailItem('Potential Upgraded Limit', formatUpgradeLimit(upgrade.potential_upgraded_limit))}
                     ${renderDetailItem('Completed Loans', escapeHtml(`${upgrade.completed_loans} / ${upgrade.min_completed_loans} required`))}
@@ -2879,3 +2879,4 @@ function statusBadgePHP($s) {
 ?>
 </body>
 </html>
+
