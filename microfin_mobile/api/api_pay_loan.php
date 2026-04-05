@@ -14,21 +14,127 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/email_service.php';
 
+function microfin_fetch_payment_receipt_context(mysqli $conn, string $tenantId, int $clientId, int $loanId): array
+{
+    $clientEmail = '';
+    $clientName = '';
+    $tenantName = 'MicroFin';
+    $loanNumber = '';
+
+    try {
+        $clientStmt = $conn->prepare("
+            SELECT email_address, first_name, last_name
+            FROM clients
+            WHERE client_id = ?
+            LIMIT 1
+        ");
+        $clientStmt->bind_param('i', $clientId);
+        $clientStmt->execute();
+        $clientRow = $clientStmt->get_result()->fetch_assoc() ?: [];
+        $clientStmt->close();
+
+        $clientEmail = (string) ($clientRow['email_address'] ?? '');
+        $clientName = trim((string) (($clientRow['first_name'] ?? '') . ' ' . ($clientRow['last_name'] ?? '')));
+    } catch (Throwable $ignore) {
+    }
+
+    try {
+        $tenantStmt = $conn->prepare("
+            SELECT tenant_name
+            FROM tenants
+            WHERE tenant_id = ?
+            LIMIT 1
+        ");
+        $tenantStmt->bind_param('s', $tenantId);
+        $tenantStmt->execute();
+        $tenantRow = $tenantStmt->get_result()->fetch_assoc() ?: [];
+        $tenantStmt->close();
+
+        $tenantName = trim((string) ($tenantRow['tenant_name'] ?? '')) ?: 'MicroFin';
+    } catch (Throwable $ignore) {
+    }
+
+    try {
+        $loanStmt = $conn->prepare("
+            SELECT loan_number
+            FROM loans
+            WHERE loan_id = ?
+            LIMIT 1
+        ");
+        $loanStmt->bind_param('i', $loanId);
+        $loanStmt->execute();
+        $loanRow = $loanStmt->get_result()->fetch_assoc() ?: [];
+        $loanStmt->close();
+
+        $loanNumber = (string) ($loanRow['loan_number'] ?? '');
+    } catch (Throwable $ignore) {
+    }
+
+    return [
+        'client_email' => $clientEmail,
+        'client_name' => $clientName,
+        'tenant_name' => $tenantName,
+        'loan_number' => $loanNumber,
+    ];
+}
+
 $data = json_decode(file_get_contents("php://input"), true) ?? [];
 $userId = (int)($data['user_id'] ?? 0);
 $tenantId = trim((string)($data['tenant_id'] ?? ''));
 $loanId = (int)($data['loan_id'] ?? 0);
 $amount = (float)($data['amount'] ?? 0);
 $method = $data['payment_method'] ?? 'Online';
-$refNum = $data['reference_number'] ?? 'REF-'.time();
+$refNum = trim((string)($data['reference_number'] ?? ''));
+if ($refNum === '') {
+    $refNum = 'REF-' . time();
+}
 
 if ($userId <= 0 || $tenantId === '' || $loanId <= 0 || $amount <= 0) {
     echo json_encode(['success' => false, 'message' => 'Invalid payment details.']);
     exit;
 }
 
-$conn->begin_transaction();
 try {
+    // If the same gateway source/reference is sent again, do not post the payment twice.
+    $existingStmt = $conn->prepare("
+        SELECT transaction_id, client_id, source_id, payment_date
+        FROM payment_transactions
+        WHERE tenant_id = ?
+          AND loan_id = ?
+          AND source_id = ?
+          AND LOWER(status) = 'completed'
+        ORDER BY transaction_id DESC
+        LIMIT 1
+    ");
+    $existingStmt->bind_param('sis', $tenantId, $loanId, $refNum);
+    $existingStmt->execute();
+    $existingPayment = $existingStmt->get_result()->fetch_assoc();
+    $existingStmt->close();
+
+    if (is_array($existingPayment)) {
+        $receiptContext = microfin_fetch_payment_receipt_context(
+            $conn,
+            $tenantId,
+            (int) ($existingPayment['client_id'] ?? 0),
+            $loanId
+        );
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Payment was already posted successfully.',
+            'payment_reference' => $refNum,
+            'client_email' => $receiptContext['client_email'],
+            'client_name' => $receiptContext['client_name'],
+            'tenant_name' => $receiptContext['tenant_name'],
+            'loan_number' => $receiptContext['loan_number'],
+            'payment_date' => (string) ($existingPayment['payment_date'] ?? date('Y-m-d H:i:s')),
+            'already_recorded' => true,
+        ]);
+        exit;
+    }
+
+    $conn->begin_transaction();
+
     // 1. Verify loan exists
     $lStmt = $conn->prepare("SELECT client_id, remaining_balance, principal_amount, total_paid FROM loans WHERE loan_id = ? AND tenant_id = ? FOR UPDATE");
     $lStmt->bind_param('is', $loanId, $tenantId);
@@ -97,57 +203,24 @@ try {
 
     $conn->commit();
 
-    // Fetch user details for email payload
-    // Fetch user details for email payload
-    $uStmt = $conn->prepare("SELECT email_address, first_name, last_name FROM clients WHERE client_id = ? LIMIT 1");
-    $uStmt->bind_param('i', $loan['client_id']);
-    $uStmt->execute();
-    $userRow = $uStmt->get_result()->fetch_assoc();
-    $clientEmail = $userRow['email_address'] ?? '';
-    $clientName = trim(($userRow['first_name'] ?? '') . ' ' . ($userRow['last_name'] ?? ''));
-    $uStmt->close();
-
-    // Fetch tenant details for email 
-    $tStmt = $conn->prepare("SELECT app_name FROM app_customization WHERE tenant_id = ? LIMIT 1");
-    $tStmt->bind_param('s', $tenantId);
-    $tStmt->execute();
-    $tenantName = $tStmt->get_result()->fetch_assoc()['app_name'] ?? 'MicroFin';
-    $tStmt->close();
-    
-    // Fetch loan number
-    $lnStmt = $conn->prepare("SELECT loan_number FROM loans WHERE loan_id = ? LIMIT 1");
-    $lnStmt->bind_param('i', $loanId);
-    $lnStmt->execute();
-    $loanNumber = $lnStmt->get_result()->fetch_assoc()['loan_number'] ?? '';
-    $lnStmt->close();
-
-    // Send the dynamic receipt email securely
-    if ($clientEmail !== '') {
-        microfin_send_receipt_email($conn, [
-            'tenant_id' => $tenantId,
-            'user_id' => $userId,
-            'tenant_name' => $tenantName,
-            'client_email' => $clientEmail,
-            'client_name' => $clientName,
-            'payment_reference' => $refNum,
-            'loan_number' => $loanNumber,
-            'payment_method' => $method,
-            'payment_date' => date('Y-m-d H:i:s'),
-            'amount' => $amount
-        ]);
-    }
+    $receiptContext = microfin_fetch_payment_receipt_context($conn, $tenantId, (int) $loan['client_id'], $loanId);
 
     echo json_encode([
         'success' => true,
         'message' => 'Payment posted successfully.',
         'payment_reference' => $refNum,
-        'client_email' => $clientEmail,
-        'client_name' => $clientName,
+        'client_email' => $receiptContext['client_email'],
+        'client_name' => $receiptContext['client_name'],
+        'tenant_name' => $receiptContext['tenant_name'],
+        'loan_number' => $receiptContext['loan_number'],
         'payment_date' => date('Y-m-d H:i:s')
     ]);
 
-} catch (Exception $e) {
-    $conn->rollback();
+} catch (Throwable $e) {
+    try {
+        $conn->rollback();
+    } catch (Throwable $ignore) {
+    }
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
