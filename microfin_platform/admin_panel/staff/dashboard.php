@@ -3772,11 +3772,11 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                 const result = await response.json();
                 
                 await showAlertPopup(result.message || 'Operation complete.', {
-                    title: result.status === 'success' ? 'Success' : 'Upgrade Failed',
-                    variant: result.status === 'success' ? 'success' : 'danger'
+                    title: result.status === 'success' ? 'Success' : (result.status === 'info' ? 'Update Info' : 'Upgrade Failed'),
+                    variant: result.status === 'success' ? 'success' : (result.status === 'info' ? 'warning' : 'danger')
                 });
 
-                if (result.status === 'success') {
+                if (result.status === 'success' || result.status === 'info') {
                     loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter());
                 }
             } catch (err) {

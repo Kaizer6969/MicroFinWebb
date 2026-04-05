@@ -517,22 +517,25 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
 // ─── POST: approve credit upgrade ────────────────────────────────────────────────
 if ($method === 'POST' && $action === 'approve_upgrade') {
     if (!has_perm('APPROVE_LOANS') && !has_perm('CREATE_CLIENTS') && !has_perm('VIEW_CREDIT_ACCOUNTS')) {
-        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
+        echo json_encode(['status' => 'error', 'message' => 'Permission denied. You do not have sufficient permissions to upgrade credit limits.']);
         exit;
     }
 
     $raw = file_get_contents('php://input');
     $payload = json_decode($raw, true);
-    if (!is_array($payload)) $payload = $_POST;
+    if (!is_array($payload)) {
+        $payload = $_POST;
+    }
 
     $client_ids = (array) ($payload['client_ids'] ?? []);
     if (empty($client_ids)) {
-        echo json_encode(['status' => 'error', 'message' => 'No clients selected for upgrade.']);
+        echo json_encode(['status' => 'error', 'message' => 'No borrowers selected for upgrade.']);
         exit;
     }
 
     $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
     $upgraded_count = 0;
+    $skipped_reasons = [];
 
     try {
         $pdo->beginTransaction();
@@ -544,13 +547,27 @@ if ($method === 'POST' && $action === 'approve_upgrade') {
             $stmt->execute([$client_id, $tenant_id]);
             $client = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$client) continue;
+            if (!$client) {
+                $skipped_reasons[] = "Client #$client_id not found.";
+                continue;
+            }
+
+            // Sync the client credit profile first, because some clients have dynamic rules applied
+            // that aren't materialized into the DB until accessed.
+            $profile = mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
+            if (array_key_exists('credit_limit', (array) ($profile['client'] ?? []))) {
+                $client['credit_limit'] = $profile['client']['credit_limit'];
+            }
 
             $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
             $upgrade = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
 
-            if (($upgrade['status'] ?? '') === 'eligible' && ($upgrade['potential_upgraded_limit'] ?? 0) > (($client['credit_limit'] ?? 0) > 0 ? $client['credit_limit'] : 0)) {
-                $new_limit = (float) $upgrade['potential_upgraded_limit'];
+            $current_limit = (float)($client['credit_limit'] ?? 0);
+            $potential_limit = (float)($upgrade['potential_upgraded_limit'] ?? 0);
+            $is_eligible = ($upgrade['status'] ?? '') === 'eligible';
+
+            if ($is_eligible && $potential_limit > ($current_limit + 0.01)) {
+                $new_limit = round($potential_limit, 2);
                 
                 $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
                     ->execute([$new_limit, $client_id, $tenant_id]);
@@ -558,19 +575,37 @@ if ($method === 'POST' && $action === 'approve_upgrade') {
                 mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
 
                 $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_UPGRADED', 'client', ?, ?)")
-                    ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit upgraded to limit {$new_limit}"]);
+                    ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit upgraded to {$new_limit} from {$current_limit}"]);
                     
                 $upgraded_count++;
+            } else {
+                if (!$is_eligible) {
+                    $skipped_reasons[] = $client['first_name'] . " " . $client['last_name'] . ": " . ($upgrade['status_note'] ?? 'Not eligible yet.');
+                } elseif ($potential_limit <= $current_limit + 0.01) {
+                    $skipped_reasons[] = $client['first_name'] . " " . $client['last_name'] . ": Recommended limit matches or is lower than current.";
+                }
             }
         }
         
         $pdo->commit();
-        echo json_encode(['status' => 'success', 'message' => "Successfully upgraded {$upgraded_count} client(s)."]);
+
+        if ($upgraded_count === 0 && !empty($skipped_reasons)) {
+            echo json_encode([
+                'status' => 'info',
+                'message' => 'No borrowers were upgraded. Reasons: ' . implode(' ', array_unique($skipped_reasons))
+            ]);
+        } else {
+            $msg = "Successfully upgraded {$upgraded_count} borrower(s).";
+            if (!empty($skipped_reasons)) {
+                $msg .= " Some were skipped: " . implode(' ', array_unique($skipped_reasons));
+            }
+            echo json_encode(['status' => 'success', 'message' => $msg]);
+        }
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        echo json_encode(['status' => 'error', 'message' => 'Unable to upgrade clients: ' . $e->getMessage()]);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to upgrade borrowers: ' . $e->getMessage()]);
     }
     exit;
 }
