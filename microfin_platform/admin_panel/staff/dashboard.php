@@ -1592,6 +1592,37 @@ function getActiveLoanFilter() {
     return document.querySelector('#loanFilterTabs .filter-tab.active')?.dataset?.status || 'all';
 }
 
+function getRequestErrorMessage(error, fallback='Something went wrong.') {
+    if (error && typeof error.message === 'string' && error.message.trim() !== '') {
+        return error.message.trim();
+    }
+    return fallback;
+}
+
+async function fetchJsonStrict(url, options = {}) {
+    const response = await fetch(url, options);
+    const raw = await response.text();
+    let payload = {};
+
+    if (raw.trim() !== '') {
+        try {
+            payload = JSON.parse(raw);
+        } catch (_) {
+            throw new Error('The server returned an invalid response. Please refresh and try again.');
+        }
+    }
+
+    if (!response.ok) {
+        throw new Error(payload.message || `Request failed with status ${response.status}.`);
+    }
+
+    if (!payload || typeof payload !== 'object') {
+        throw new Error('The server returned an empty response. Please refresh and try again.');
+    }
+
+    return payload;
+}
+
 function getCreditAccountFilter() {
     return 'all';
 }
@@ -1836,14 +1867,19 @@ async function loadApps(status='all', btn=null) {
     }
     const tbody = document.getElementById('appsTbody');
     tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
-    const r = await fetch(API.applications + '?action=list');
-    const d = await r.json();
-    const rows = (d.data || []).filter(application => matchesApplicationFilter(application.application_status, status));
-    if (!rows.length) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No applications found for this filter.</td></tr>';
-        return;
-    }
-    tbody.innerHTML = rows.map(a => `<tr>
+    try {
+        const d = await fetchJsonStrict(API.applications + '?action=list');
+        if (d.status !== 'success') {
+            throw new Error(d.message || 'Could not load applications.');
+        }
+
+        const rows = (d.data || []).filter(application => matchesApplicationFilter(application.application_status, status));
+        if (!rows.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No applications found for this filter.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(a => `<tr>
         <td class="td-mono td-bold">${escapeHtml(a.application_number)}</td>
         <td class="td-bold">${escapeHtml(a.first_name)} ${escapeHtml(a.last_name)}</td>
         <td class="td-muted">${escapeHtml(a.product_name)}</td>
@@ -1852,6 +1888,9 @@ async function loadApps(status='all', btn=null) {
         <td>${applicationMonitorBadge(a.application_status)}</td>
         <td><button class="icon-btn table-icon-btn" onclick="viewApplication(${a.application_id})" title="Open application" aria-label="Open application"><span class="material-symbols-rounded ms">visibility</span></button></td>
     </tr>`).join('');
+    } catch (error) {
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${escapeHtml(getRequestErrorMessage(error, 'Could not load applications.'))}</td></tr>`;
+    }
 }
 
 function filterApps(status, btn) { loadApps(status, btn); }
@@ -1930,10 +1969,15 @@ async function viewApplication(id) {
     openModal('appReviewModal');
     document.getElementById('appModalBody').innerHTML = '<div style="text-align:center;padding:32px;"><span class="spinner"></span></div>';
     document.getElementById('appModalFooter').innerHTML = '<button class="btn btn-outline" onclick="closeModal(\'appReviewModal\')">Close</button>';
-    const r = await fetch(API.applications + `?action=view&id=${id}`);
-    const d = await r.json();
+    let d;
+    try {
+        d = await fetchJsonStrict(API.applications + `?action=view&id=${id}`);
+    } catch (error) {
+        document.getElementById('appModalBody').innerHTML = `<p style="color:#ef4444;">${escapeHtml(getRequestErrorMessage(error, 'Could not load this application.'))}</p>`;
+        return;
+    }
     if (d.status !== 'success') {
-        document.getElementById('appModalBody').innerHTML = `<p style="color:#ef4444;">${d.message}</p>`;
+        document.getElementById('appModalBody').innerHTML = `<p style="color:#ef4444;">${escapeHtml(d.message || 'Could not load this application.')}</p>`;
         return;
     }
 
@@ -2056,17 +2100,20 @@ async function appAction(id, action, needsAmount=false) {
         payload.approved_amount = approved;
     }
 
-    const r = await fetch(API.applications, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-    });
-    const d = await r.json();
-    alert(d.message);
-    if (d.status === 'success') {
-        closeModal('appReviewModal');
-        loadApps(getActiveAppFilter());
-        loadDashboardStats();
+    try {
+        const d = await fetchJsonStrict(API.applications, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        alert(d.message || 'Application updated.');
+        if (d.status === 'success') {
+            closeModal('appReviewModal');
+            loadApps(getActiveAppFilter());
+            loadDashboardStats();
+        }
+    } catch (error) {
+        alert(getRequestErrorMessage(error, 'Could not update the application.'));
     }
 }
 

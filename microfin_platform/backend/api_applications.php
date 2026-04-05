@@ -1,5 +1,69 @@
 ﻿<?php
 header('Content-Type: application/json');
+ob_start();
+
+$mf_api_applications_responded = false;
+
+function api_applications_respond($payload, int $status = 200): void
+{
+    global $mf_api_applications_responded;
+
+    $mf_api_applications_responded = true;
+
+    if (!headers_sent()) {
+        http_response_code($status);
+        header('Content-Type: application/json');
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    echo json_encode($payload);
+    exit;
+}
+
+set_exception_handler(static function (Throwable $e): void {
+    error_log('api_applications exception: ' . $e->getMessage());
+    api_applications_respond([
+        'status' => 'error',
+        'message' => 'The applications service failed to process the request.',
+    ], 500);
+});
+
+register_shutdown_function(static function (): void {
+    global $mf_api_applications_responded;
+
+    if ($mf_api_applications_responded) {
+        return;
+    }
+
+    $error = error_get_last();
+    if (!$error) {
+        return;
+    }
+
+    $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR];
+    if (!in_array((int) ($error['type'] ?? 0), $fatalTypes, true)) {
+        return;
+    }
+
+    error_log('api_applications fatal: ' . ($error['message'] ?? 'Unknown fatal error'));
+
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json');
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'The applications service failed to process the request.',
+    ]);
+});
 require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
@@ -15,8 +79,7 @@ $tenant_id      = (string) ($_SESSION['tenant_id'] ?? '');
 $session_user_id = (int) ($_SESSION['user_id'] ?? 0);
 
 if ($tenant_id === '') {
-    echo json_encode(['status' => 'error', 'message' => 'Missing tenant context.']);
-    exit;
+    api_applications_respond(['status' => 'error', 'message' => 'Missing tenant context.'], 400);
 }
 
 // Load permissions
@@ -38,8 +101,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 // ─── GET: list ───────────────────────────────────────────────────────────────
 if ($method === 'GET' && ($action === 'list' || $action === '')) {
     if (!has_perm('VIEW_APPLICATIONS') && !has_perm('MANAGE_APPLICATIONS')) {
-        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Permission denied.'], 403);
     }
 
     $status_filter = trim((string) ($_GET['status'] ?? ''));
@@ -71,21 +133,18 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    echo json_encode(['status' => 'success', 'data' => $rows]);
-    exit;
+    api_applications_respond(['status' => 'success', 'data' => $rows]);
 }
 
 // ─── GET: view single ────────────────────────────────────────────────────────
 if ($method === 'GET' && $action === 'view') {
     if (!has_perm('VIEW_APPLICATIONS') && !has_perm('MANAGE_APPLICATIONS')) {
-        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Permission denied.'], 403);
     }
 
     $application_id = (int) ($_GET['id'] ?? 0);
     if ($application_id <= 0) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid application ID.']);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Invalid application ID.'], 400);
     }
 
     $stmt = $pdo->prepare("
@@ -145,8 +204,7 @@ if ($method === 'GET' && $action === 'view') {
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$row) {
-        echo json_encode(['status' => 'error', 'message' => 'Application not found.']);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Application not found.'], 404);
     }
 
     // Decode JSON data
@@ -188,15 +246,13 @@ if ($method === 'GET' && $action === 'view') {
     $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, (int) ($row['client_id'] ?? 0));
     $row['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $row, $upgrade_metrics);
 
-    echo json_encode(['status' => 'success', 'data' => $row]);
-    exit;
+    api_applications_respond(['status' => 'success', 'data' => $row]);
 }
 
 // ─── POST: update status ─────────────────────────────────────────────────────
 if ($method === 'POST') {
     if (!has_perm('MANAGE_APPLICATIONS')) {
-        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Permission denied.'], 403);
     }
 
     $raw = file_get_contents('php://input');
@@ -211,8 +267,7 @@ if ($method === 'POST') {
     $approved_amount = isset($payload['approved_amount']) ? (float) $payload['approved_amount'] : null;
 
     if ($application_id <= 0) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid application ID.']);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Invalid application ID.'], 400);
     }
 
     // Fetch current app
@@ -229,8 +284,7 @@ if ($method === 'POST') {
     $current = $cur_stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$current) {
-        echo json_encode(['status' => 'error', 'message' => 'Application not found.']);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Application not found.'], 404);
     }
 
     // Get employee_id for the logged-in user
@@ -244,8 +298,7 @@ if ($method === 'POST') {
 
     if ($new_action === 'evaluate_policy') {
         if (in_array($cur_status, ['Approved', 'Rejected', 'Cancelled', 'Withdrawn'], true)) {
-            echo json_encode(['status' => 'error', 'message' => "Cannot run credit policy on application with status '$cur_status'."]);
-            exit;
+            api_applications_respond(['status' => 'error', 'message' => "Cannot run credit policy on application with status '$cur_status'."], 400);
         }
 
         try {
@@ -256,14 +309,13 @@ if ($method === 'POST') {
             ]);
             $pdo->commit();
 
-            echo json_encode($policyResult);
+            api_applications_respond($policyResult);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+            api_applications_respond(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
-        exit;
     }
 
     $allowed_transitions = [
@@ -285,13 +337,11 @@ if ($method === 'POST') {
     ];
 
     if (!isset($allowed_transitions[$new_action])) {
-        echo json_encode(['status' => 'error', 'message' => 'Unknown action: ' . $new_action]);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => 'Unknown action: ' . $new_action], 400);
     }
 
     if (!isset($allowed_transitions[$new_action][$cur_status])) {
-        echo json_encode(['status' => 'error', 'message' => "Cannot perform '$new_action' on application with status '$cur_status'."]);
-        exit;
+        api_applications_respond(['status' => 'error', 'message' => "Cannot perform '$new_action' on application with status '$cur_status'."], 400);
     }
 
     $new_status = $allowed_transitions[$new_action][$cur_status];
@@ -431,13 +481,12 @@ if ($method === 'POST') {
         } catch (Throwable $notifErr) {
             error_log("Notification insert failed: " . $notifErr->getMessage());
         }
-        echo json_encode(['status' => 'success', 'message' => $responseMessage, 'new_status' => $new_status]);
+        api_applications_respond(['status' => 'success', 'message' => $responseMessage, 'new_status' => $new_status]);
 
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        api_applications_respond(['status' => 'error', 'message' => $e->getMessage()], 500);
     }
-    exit;
 }
 
-echo json_encode(['status' => 'error', 'message' => 'Invalid request.']);
+api_applications_respond(['status' => 'error', 'message' => 'Invalid request.'], 400);
