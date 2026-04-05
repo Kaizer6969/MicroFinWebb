@@ -122,8 +122,8 @@ if (!is_string($tenantKey) || $tenantKey === '') {
     $tenantKey = 'tenant';
 }
 
-$uploadRelativeDir = 'microfin_mobile/uploads/client_documents/' . $tenantKey . '/' . date('Y') . '/' . date('m');
-$uploadAbsoluteDir = dirname(__DIR__) . '/uploads/client_documents/' . $tenantKey . '/' . date('Y') . '/' . date('m');
+$uploadRelativeDir = 'uploads/client_documents/' . $tenantKey . '/' . date('Y') . '/' . date('m');
+$uploadAbsoluteDir = dirname(__DIR__, 2) . '/uploads/client_documents/' . $tenantKey . '/' . date('Y') . '/' . date('m');
 
 if (!is_dir($uploadAbsoluteDir) && !mkdir($uploadAbsoluteDir, 0775, true) && !is_dir($uploadAbsoluteDir)) {
     http_response_code(500);
