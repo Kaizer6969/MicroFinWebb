@@ -2385,48 +2385,12 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                     <input type="hidden" name="walk_in_action" id="walkInAction" value="draft">
                     <div class="form-grid">
                         <div class="section-label">Personal Information</div>
-                        <div class="form-group"><label>First Name *</label><input type="text" name="first_name"
-                                required></div>
-                        <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" required>
-                        </div>
-                        <div class="form-group"><label>Email Address *</label><input type="email" name="email" required>
-                        </div>
+                        <div class="form-group"><label>First Name *</label><input type="text" name="first_name" required></div>
+                        <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" required></div>
+                        <div class="form-group"><label>Email Address *</label><input type="email" name="email" required></div>
                         <div class="form-group"><label>Phone Number</label><input type="tel" name="phone_number"></div>
-                        <div class="form-group"><label>Date of Birth *</label><input type="date" name="date_of_birth"
-                                required></div>
-                        <div class="form-group"><label>Physical Address</label><input type="text" name="address"></div>
-                        <div class="form-group"><label>Password (App Login) *</label><input type="password"
-                                name="password" minlength="8" required>
-                            <p class="form-hint">Minimum 8 characters.</p>
-                        </div>
-                        <div class="form-group"><label>Confirm Password *</label><input type="password"
-                                name="confirm_password" minlength="8" required></div>
-
-                        <hr class="section-sep">
-                        <div class="section-label">Loan Request</div>
-                        <div class="form-group form-full">
-                            <label>Loan Product *</label>
-                            <select name="product_id" id="walkInProduct" required>
-                                <option value="">Select a product…</option>
-                                <?php foreach ($loan_products as $p): ?>
-                                    <option value="<?php echo (int) $p['product_id']; ?>"
-                                        data-min="<?php echo $p['min_amount']; ?>"
-                                        data-max="<?php echo $p['max_amount']; ?>"
-                                        data-min-term="<?php echo $p['min_term_months']; ?>"
-                                        data-max-term="<?php echo $p['max_term_months']; ?>">
-                                        <?php echo htmlspecialchars($p['product_name'] . ' (' . $p['product_type'] . ')'); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="form-group"><label>Requested Amount (PHP) *</label><input type="number"
-                                name="requested_amount" min="0.01" step="0.01" required></div>
-                        <div class="form-group"><label>Loan Term (Months) *</label><input type="number"
-                                name="loan_term_months" min="1" step="1" required></div>
-                        <div class="form-group"><label>Monthly Income (PHP) *</label><input type="number"
-                                name="monthly_income" min="0.01" step="0.01" required></div>
-                        <div class="form-group form-full"><label>Loan Purpose</label><textarea name="loan_purpose"
-                                placeholder="Purpose of the loan request…"></textarea></div>
+                        <div class="form-group"><label>Date of Birth *</label><input type="date" name="date_of_birth" required></div>
+                        <div class="form-group form-full"><label>Physical Address</label><input type="text" name="address"></div>
 
                         <hr class="section-sep">
                         <div class="section-label">Document Submission</div>
