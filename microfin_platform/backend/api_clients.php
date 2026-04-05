@@ -86,7 +86,7 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
 
     $stmt = $pdo->prepare("
         SELECT c.client_id, c.first_name, c.last_name, c.email_address,
-               c.contact_number, c.client_status, c.registration_date,
+               c.contact_number, c.client_status, c.document_verification_status, c.registration_date,
                c.credit_limit, c.date_of_birth, c.occupation, c.monthly_income,
                c.present_city, c.present_province, u.user_type,
                COUNT(DISTINCT la.application_id) AS total_applications,
