@@ -3393,16 +3393,8 @@ function hexToRgb($hex) {
                     $active_view = 'loan_products';
                 } elseif (in_array($_GET['tab'], ['credit_settings', 'credit_control_policy'], true)) {
                     $active_view = 'credit_settings';
-                } elseif ($_GET['tab'] === 'credit_control_overview') {
-                    $active_view = 'credit_control_overview';
-                } elseif ($_GET['tab'] === 'credit_control_policies') {
-                    $active_view = 'credit_control_policies';
-                } elseif ($_GET['tab'] === 'credit_control_rules_terms') {
-                    $active_view = 'credit_control_rules_terms';
-                } elseif ($_GET['tab'] === 'credit_control_approvals_holds') {
-                    $active_view = 'credit_control_approvals_holds';
-                } elseif ($_GET['tab'] === 'credit_control_overrides') {
-                    $active_view = 'credit_control_overrides';
+                } elseif (in_array($_GET['tab'], ['credit_control_overview', 'credit_control_policies', 'credit_control_rules_terms', 'credit_control_approvals_holds', 'credit_control_overrides'], true)) {
+                    $active_view = 'credit_settings';
                 }
             }
             if (!$can_manage_billing && in_array((string)($_GET['tab'] ?? ''), ['billing', 'payment_info', 'statements'], true)) {
@@ -3418,23 +3410,24 @@ function hexToRgb($hex) {
                 'payment_info' => 'Payment Info',
                 'statements' => 'Receipts',
                 'loan_products' => 'Loan Products Settings',
-                'credit_settings' => 'Credit Policy',
-                'credit_control_overview' => 'Overview',
-                'credit_control_policies' => 'Policies',
-                'credit_control_rules_terms' => 'Rules & Terms',
-                'credit_control_approvals_holds' => 'Approvals & Holds',
-                'credit_control_overrides' => 'Overrides'
+                'credit_settings' => 'Credit Policy'
             ];
             $page_title = $page_titles[$active_view] ?? 'Dashboard';
-            $credit_control_views = [
-                'credit_settings',
-                'credit_control_overview',
-                'credit_control_policies',
-                'credit_control_rules_terms',
-                'credit_control_approvals_holds',
-                'credit_control_overrides',
-            ];
+            $credit_control_views = ['credit_settings'];
             $credit_control_is_active = in_array($active_view, $credit_control_views, true);
+            $credit_policy_allowed_tabs = ['eligibility', 'score', 'limit'];
+            $credit_policy_subtab_requested = trim((string)($_GET['credit_policy_tab'] ?? ''));
+            if ($credit_policy_subtab_requested === '' && isset($_GET['tab'])) {
+                $legacy_credit_tab_map = [
+                    'credit_control_policies' => 'eligibility',
+                    'credit_control_rules_terms' => 'score',
+                    'credit_control_approvals_holds' => 'limit',
+                    'credit_control_overrides' => 'limit',
+                ];
+                $credit_policy_subtab_requested = $legacy_credit_tab_map[(string)$_GET['tab']] ?? '';
+            }
+            $credit_policy_has_explicit_subtab = in_array($credit_policy_subtab_requested, $credit_policy_allowed_tabs, true);
+            $credit_policy_subtab = $credit_policy_has_explicit_subtab ? $credit_policy_subtab_requested : 'score';
             $team_is_active = $active_view === 'staff';
             $team_tab = (string)($_GET['tab'] ?? 'staff-list');
             $team_staff_is_active = $team_is_active && $team_tab !== 'roles-list';
@@ -3480,23 +3473,17 @@ function hexToRgb($hex) {
                         <span class="material-symbols-rounded sidebar-dropdown-icon">expand_more</span>
                     </summary>
                     <div class="sidebar-dropdown-items">
-                        <a href="admin.php?tab=credit_control_policy" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Policy">
-                            <span>Credit Policy</span>
+                        <a href="admin.php?tab=credit_control_policy" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && !$credit_policy_has_explicit_subtab ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Policy">
+                            <span>Policy Builder</span>
                         </a>
-                        <a href="admin.php?tab=credit_control_overview" class="nav-item nav-item-child <?php echo $active_view === 'credit_control_overview' ? 'active' : ''; ?>" data-target="credit_control_overview" data-title="Overview">
-                            <span>Overview</span>
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=eligibility" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'eligibility' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Borrower Eligibility">
+                            <span>Borrower Eligibility</span>
                         </a>
-                        <a href="admin.php?tab=credit_control_policies" class="nav-item nav-item-child <?php echo $active_view === 'credit_control_policies' ? 'active' : ''; ?>" data-target="credit_control_policies" data-title="Policies">
-                            <span>Policies</span>
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=score" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'score' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Score Classification">
+                            <span>Score Classification</span>
                         </a>
-                        <a href="admin.php?tab=credit_control_rules_terms" class="nav-item nav-item-child <?php echo $active_view === 'credit_control_rules_terms' ? 'active' : ''; ?>" data-target="credit_control_rules_terms" data-title="Rules &amp; Terms">
-                            <span>Rules &amp; Terms</span>
-                        </a>
-                        <a href="admin.php?tab=credit_control_approvals_holds" class="nav-item nav-item-child <?php echo $active_view === 'credit_control_approvals_holds' ? 'active' : ''; ?>" data-target="credit_control_approvals_holds" data-title="Approvals &amp; Holds">
-                            <span>Approvals &amp; Holds</span>
-                        </a>
-                        <a href="admin.php?tab=credit_control_overrides" class="nav-item nav-item-child <?php echo $active_view === 'credit_control_overrides' ? 'active' : ''; ?>" data-target="credit_control_overrides" data-title="Overrides">
-                            <span>Overrides</span>
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=limit" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'limit' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Limit Engine">
+                            <span>Limit Engine</span>
                         </a>
                     </div>
                 </details>
@@ -5911,25 +5898,25 @@ function hexToRgb($hex) {
                             <div class="credit-engine-header credit-policy-engine-header">
                                 <div>
                                     <h3>Policy Builder</h3>
-                                    <p class="text-muted">Focus on borrower eligibility, score thresholds, and credit limit rules.</p>
+                                    <p class="text-muted">Organize your policy around borrower eligibility, score classification, and the limit engine.</p>
                                 </div>
                             </div>
 
                             <div class="credit-policy-tab-nav" id="credit-policy-tab-nav">
                                 <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="eligibility">
                                     <span class="material-symbols-rounded">verified_user</span>
-                                    Eligibility
-                                    <small>Who can qualify</small>
+                                    Borrower Eligibility
+                                    <small>Who can move forward</small>
                                 </button>
-                                <button type="button" class="credit-policy-tab-btn is-active" data-credit-policy-tab="score">
+                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="score">
                                     <span class="material-symbols-rounded">query_stats</span>
-                                    Score Rules
+                                    Score Classification
                                     <small>Classify and route</small>
                                 </button>
                                 <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="limit">
                                     <span class="material-symbols-rounded">payments</span>
-                                    Credit Limit
-                                    <small>Estimated offer</small>
+                                    Limit Engine
+                                    <small>Offers and guardrails</small>
                                 </button>
                             </div>
 
@@ -6387,40 +6374,6 @@ function hexToRgb($hex) {
                     </div>
                 </section>
 
-                <section id="credit_control_overview" class="view-section <?php echo $active_view === 'credit_control_overview' ? 'active' : ''; ?>">
-                    <div class="section-intro">
-                        <h2>Overview</h2>
-                        <p class="text-muted">No content yet.</p>
-                    </div>
-                </section>
-
-                <section id="credit_control_policies" class="view-section <?php echo $active_view === 'credit_control_policies' ? 'active' : ''; ?>">
-                    <div class="section-intro">
-                        <h2>Policies</h2>
-                        <p class="text-muted">No content yet.</p>
-                    </div>
-                </section>
-
-                <section id="credit_control_rules_terms" class="view-section <?php echo $active_view === 'credit_control_rules_terms' ? 'active' : ''; ?>">
-                    <div class="section-intro">
-                        <h2>Rules &amp; Terms</h2>
-                        <p class="text-muted">No content yet.</p>
-                    </div>
-                </section>
-
-                <section id="credit_control_approvals_holds" class="view-section <?php echo $active_view === 'credit_control_approvals_holds' ? 'active' : ''; ?>">
-                    <div class="section-intro">
-                        <h2>Approvals &amp; Holds</h2>
-                        <p class="text-muted">No content yet.</p>
-                    </div>
-                </section>
-
-                <section id="credit_control_overrides" class="view-section <?php echo $active_view === 'credit_control_overrides' ? 'active' : ''; ?>">
-                    <div class="section-intro">
-                        <h2>Overrides</h2>
-                        <p class="text-muted">No content yet.</p>
-                    </div>
-                </section>
             </div>
         </main>
     </div>
@@ -7512,7 +7465,7 @@ function hexToRgb($hex) {
         });
 
         syncCreditPolicyUI();
-        setPolicyTab('score');
+        setPolicyTab(<?php echo json_encode($credit_policy_subtab, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>);
     })();
     </script>
     <script src="admin.js?v=<?php echo filemtime(__DIR__ . '/admin.js'); ?>"></script>
