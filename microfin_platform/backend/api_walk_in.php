@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 require_once 'session_auth.php';
 mf_start_backend_session();
 require_once 'db_connect.php';
+require_once 'credit_policy.php';
 
 mf_require_tenant_session($pdo, [
     'response' => 'json',
@@ -294,6 +295,17 @@ try {
 
     $pdo->commit();
 
+    // Sync credit profile to compute and persist credit limit
+    $credit_profile = null;
+    $computed_credit_limit = 0;
+    try {
+        $credit_profile = mf_sync_client_credit_profile($pdo, $tenant_id, $new_client_id);
+        $computed_credit_limit = (float) ($credit_profile['client']['credit_limit'] ?? 0);
+    } catch (Throwable $e) {
+        // Non-fatal - credit limit can be synced later
+        error_log("Walk-in credit sync failed for client $new_client_id: " . $e->getMessage());
+    }
+
     $tenant_slug = (string) ($_SESSION['tenant_slug'] ?? $tenant_id);
     
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
@@ -332,6 +344,7 @@ try {
         'client_id' => $new_client_id,
         'client_status' => 'Active',
         'verification_status' => 'Verified',
+        'credit_limit' => $computed_credit_limit,
         'uploaded_document_count' => $uploaded_count,
         'email_status' => $email_result
     ]);
