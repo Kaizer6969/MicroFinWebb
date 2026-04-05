@@ -57,9 +57,14 @@ try {
     }
     $schedStmt->close();
 
-    // Fetch transactions
-    $txStmt = $conn->prepare("SELECT payment_id AS transaction_id, payment_date, payment_amount AS amount_paid, payment_method, payment_status AS status FROM payments WHERE loan_id = ? AND tenant_id = ? ORDER BY payment_date DESC, payment_id DESC");
-    $txStmt->bind_param('is', $loan['loan_id'], $tenantId);
+    // Fetch transactions (from both admin-entered payments and mobile gateway transactions)
+    $txStmt = $conn->prepare("
+        (SELECT payment_id AS transaction_id, payment_date, payment_amount AS amount_paid, payment_method, payment_status AS status FROM payments WHERE loan_id = ? AND tenant_id = ?)
+        UNION ALL
+        (SELECT transaction_id, payment_date, amount AS amount_paid, payment_method, status FROM payment_transactions WHERE loan_id = ? AND tenant_id = ?)
+        ORDER BY payment_date DESC
+    ");
+    $txStmt->bind_param('isis', $loan['loan_id'], $tenantId, $loan['loan_id'], $tenantId);
     $txStmt->execute();
     $txRes = $txStmt->get_result();
     $transactions = [];
