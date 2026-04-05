@@ -968,9 +968,6 @@ tbody tr:hover { background: var(--brand-light); }
                             <td>
                                 <?php 
                                     $disp_status = $c['client_status'];
-                                    if (($c['document_verification_status'] ?? '') !== 'Verified' && $disp_status === 'Active') {
-                                        $disp_status = 'Inactive';
-                                    }
                                     echo statusBadgePHP($disp_status); 
                                 ?>
                             </td>
@@ -2625,7 +2622,7 @@ async function loadClients(search='') {
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? c.contact_number : '—'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${c.user_type === 'Client' ? '<span class="badge badge-blue">📱 App</span>' : '<span class="badge badge-gray">🏢 Walk-in</span>'}</td>
-        <td>${badge(c.document_verification_status !== 'Verified' && c.client_status === 'Active' ? 'Inactive' : c.client_status)}</td>
+        <td>${badge(c.client_status)}</td>
         <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
     </tr>`).join('');
 }
@@ -2715,7 +2712,7 @@ async function loadClients(search='') {
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : 'â€”'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${sourceBadge(c.user_type)}</td>
-        <td>${badge(c.document_verification_status !== 'Verified' && c.client_status === 'Active' ? 'Inactive' : c.client_status)}</td>
+        <td>${badge(c.client_status)}</td>
         <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
     </tr>`).join('');
 }
@@ -2918,7 +2915,7 @@ async function loadClients(search='') {
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : '-'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${sourceBadge(c.user_type)}</td>
-        <td>${badge(c.document_verification_status !== 'Verified' && c.client_status === 'Active' ? 'Inactive' : c.client_status)}</td>
+        <td>${badge(c.client_status)}</td>
         <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
     </tr>`).join('');
 }
