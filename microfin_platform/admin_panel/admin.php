@@ -3436,6 +3436,9 @@ function hexToRgb($hex) {
             ];
             $credit_control_is_active = in_array($active_view, $credit_control_views, true);
             $team_is_active = $active_view === 'staff';
+            $team_tab = (string)($_GET['tab'] ?? 'staff-list');
+            $team_staff_is_active = $team_is_active && $team_tab !== 'roles-list';
+            $team_roles_is_active = $team_is_active && $team_tab === 'roles-list';
             ?>
             <nav class="sidebar-nav">
                 <span class="sidebar-section-title">Dashboard</span>
@@ -3454,10 +3457,10 @@ function hexToRgb($hex) {
                         <span class="material-symbols-rounded sidebar-dropdown-icon">expand_more</span>
                     </summary>
                     <div class="sidebar-dropdown-items">
-                        <a href="admin.php?tab=staff-list" class="nav-item nav-item-child" data-target="staff" data-subtab="staff-list" data-title="Staff Accounts">
+                        <a href="admin.php?tab=staff-list" class="nav-item nav-item-child <?php echo $team_staff_is_active ? 'active' : ''; ?>" data-target="staff" data-subtab="staff-list" data-title="Staff Accounts">
                             <span>Staff Accounts</span>
                         </a>
-                        <a href="admin.php?tab=roles-list" class="nav-item nav-item-child" data-target="staff" data-subtab="roles-list" data-title="Roles &amp; Permissions">
+                        <a href="admin.php?tab=roles-list" class="nav-item nav-item-child <?php echo $team_roles_is_active ? 'active' : ''; ?>" data-target="staff" data-subtab="roles-list" data-title="Roles &amp; Permissions">
                             <span>Roles &amp; Permissions</span>
                         </a>
                     </div>
