@@ -12869,15 +12869,15 @@ function hexToRgb($hex)
                                                 ],
                                                 'good' => [
                                                     'label' => 'Good Credit Scenario',
-                                                    'score' => max((int)$credit_policy_recommended_from, (int) floor((((int)$credit_policy_recommended_from) + ((int)$credit_policy_recommended_end)) / 2)),
+                                                    'score' => max((int)$credit_policy_recommended_from, (int) round((((int)$credit_policy_recommended_from) + ((int)$credit_policy_recommended_end)) / 2)),
                                                 ],
                                                 'standard' => [
                                                     'label' => 'Standard Credit Scenario',
-                                                    'score' => max((int)$credit_policy_conditional_from, (int) floor((((int)$credit_policy_conditional_from) + ((int)$credit_policy_conditional_end)) / 2)),
+                                                    'score' => max((int)$credit_policy_conditional_from, (int) round((((int)$credit_policy_conditional_from) + ((int)$credit_policy_conditional_end)) / 2)),
                                                 ],
                                                 'fair' => [
                                                     'label' => 'Fair Credit Scenario',
-                                                    'score' => max((int)$credit_policy_not_recommended_from, (int) floor((((int)$credit_policy_not_recommended_from) + ((int)$credit_policy_not_recommended_end)) / 2)),
+                                                    'score' => max((int)$credit_policy_not_recommended_from, (int) round((((int)$credit_policy_not_recommended_from) + ((int)$credit_policy_not_recommended_end)) / 2)),
                                                 ],
                                                 'at_risk' => [
                                                     'label' => 'At-Risk Credit Scenario',
@@ -13293,7 +13293,7 @@ function hexToRgb($hex)
 
                                                         <span class="credit-input-prefix">&#8369;</span>
 
-                                                        <input type="number" class="form-control" id="cp-min-monthly-income" name="cp_min_monthly_income" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($credit_policy['eligibility']['min_monthly_income'] ?? 0)); ?>">
+                                                        <input type="number" class="form-control" id="cp-min-monthly-income" name="cp_min_monthly_income" min="0" step="0.01" value="<?php echo htmlspecialchars((string)(!empty($credit_policy['eligibility']['allow_no_minimum_income']) ? 0 : ($credit_policy['eligibility']['min_monthly_income'] ?? 0))); ?>" <?php echo !empty($credit_policy['eligibility']['allow_no_minimum_income']) ? 'disabled aria-disabled="true"' : ''; ?>>
 
                                                     </div>
 
@@ -16625,6 +16625,20 @@ function hexToRgb($hex)
                 var defaultScoreRaw = Math.max(0, getInt('cp-new-client-default-score'));
                 var minMonthlyIncome = Math.max(0, getNumber('cp-min-monthly-income'));
                 var allowNoMinimumIncome = !!(byId('cp-allow-no-minimum-income') && byId('cp-allow-no-minimum-income').checked);
+                var incomeFloorInput = byId('cp-min-monthly-income');
+                if (incomeFloorInput) {
+                    if (allowNoMinimumIncome) {
+                        incomeFloorInput.value = '0';
+                        incomeFloorInput.disabled = true;
+                        incomeFloorInput.readOnly = true;
+                        incomeFloorInput.setAttribute('aria-disabled', 'true');
+                    } else {
+                        incomeFloorInput.disabled = false;
+                        incomeFloorInput.readOnly = false;
+                        incomeFloorInput.removeAttribute('aria-disabled');
+                    }
+                }
+                minMonthlyIncome = allowNoMinimumIncome ? 0 : Math.max(0, getNumber('cp-min-monthly-income'));
                 var verifiedDocumentsBonus = Math.max(0, getInt('cp-verified-documents-bonus'));
                 var completedLoanBonus = Math.max(0, getInt('cp-completed-loan-bonus'));
                 var onTimePaymentBonus = Math.max(0, getInt('cp-on-time-payment-bonus'));
@@ -16745,7 +16759,7 @@ function hexToRgb($hex)
                 var incomeFloorHint = byId('credit-policy-income-floor-hint');
                 if (incomeFloorHint) {
                     incomeFloorHint.textContent = allowNoMinimumIncome ?
-                        'No minimum income is enforced right now. The value below is kept for later use but ignored while this toggle is on.' :
+                        'No minimum income is enforced right now. Minimum Monthly Income is locked to 0 while this toggle is on.' :
                         'Applications below this amount are filtered out before the offer is estimated.';
                 }
 
@@ -16846,22 +16860,16 @@ function hexToRgb($hex)
                 var scenarios = getLimitCalculatorScenarios(thresholds);
 
                 var selectedScenarioKey = scenarioSelect ? scenarioSelect.value : 'custom';
-
-                var currentScenarioScore = Math.max(0, getNumber('credit-policy-limit-calc-score'));
-
-                if (scenarios[selectedScenarioKey] && Math.abs(currentScenarioScore - scenarios[selectedScenarioKey].score) > 0.5) {
-
-                    selectedScenarioKey = 'custom';
-
-                    if (scenarioSelect) {
-
-                        scenarioSelect.value = 'custom';
-
+                var scoreInput = byId('credit-policy-limit-calc-score');
+                var selectedScenario = scenarios[selectedScenarioKey] || null;
+                if (selectedScenario && scoreInput) {
+                    var scenarioScore = Math.max(0, Number(selectedScenario.score || 0));
+                    if (Math.abs(Math.max(0, getNumber('credit-policy-limit-calc-score')) - scenarioScore) > 0.5) {
+                        scoreInput.value = String(scenarioScore);
                     }
-
                 }
 
-                var scenarioLabel = scenarios[selectedScenarioKey] ? scenarios[selectedScenarioKey].label : 'Custom Scenario';
+                var scenarioLabel = selectedScenario ? selectedScenario.label : 'Custom Scenario';
 
                 var initialMultiplier = Math.max(0, getNumber('cp-income-multiplier'));
 

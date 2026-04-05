@@ -226,6 +226,9 @@ if (!function_exists('mf_credit_policy_normalize')) {
         $allowNoMinimumIncome = array_key_exists('allow_no_minimum_income', $eligibility)
             ? mf_credit_policy_truthy($eligibility['allow_no_minimum_income'])
             : ($minMonthlyIncome <= 0);
+        if ($allowNoMinimumIncome) {
+            $minMonthlyIncome = 0.0;
+        }
 
         $newClientDefaultScore = mf_credit_policy_normalize_score_value(
             $scoreThresholds['new_client_default_score'] ?? $defaults['score_thresholds']['new_client_default_score'],
