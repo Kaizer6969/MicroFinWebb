@@ -3741,8 +3741,8 @@ function hexToRgb($hex) {
                         <span class="material-symbols-rounded sidebar-dropdown-icon">expand_more</span>
                     </summary>
                     <div class="sidebar-dropdown-items">
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=builder" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'builder' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="builder" data-title="Policy Builder">
-                            <span>Policy Builder</span>
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=overview" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'overview' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="overview" data-title="Overview">
+                            <span>Overview</span>
                         </a>
                         <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=eligibility" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'eligibility' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="eligibility" data-title="Borrower Eligibility">
                             <span>Borrower Eligibility</span>
