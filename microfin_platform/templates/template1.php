@@ -459,7 +459,7 @@ if (is_string($show_download_val))
             contenteditable="true"><?php echo $e($download_description ?? 'Track your loans easily.'); ?></div>
         <a href="<?php echo $e($download_href); ?>" 
             class="btn btn-outline-light rounded-pill px-5 py-3 fw-bold text-decoration-none" 
-            download contenteditable="false">Download APK (<?php echo $e($company_name ?? ''); ?>)</a>
+            contenteditable="false">Download APK (<?php echo $e($company_name ?? ''); ?>)</a>
       </div>
 </section>
 

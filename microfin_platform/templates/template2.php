@@ -291,7 +291,7 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
             <p class="fs-5 mb-4 opacity-75 mx-auto text-white" style="max-width: 600px;" contenteditable="true" data-edit="app_promo_desc"><?php echo $e($app_promo_desc); ?></p>
             <div class="d-flex gap-3 justify-content-center">
                 <a href="<?php echo $e($download_href); ?>" 
-                   download class="btn btn-light fw-bold px-4 py-3 d-flex align-items-center gap-2 text-decoration-none" 
+                   class="btn btn-light fw-bold px-4 py-3 d-flex align-items-center gap-2 text-decoration-none" 
                     style="border-radius: var(--radius); color: #000;" contenteditable="false">
                     <span class="material-symbols-rounded">download</span> Download APK (<?php echo $e($company_name ?? ''); ?>)
                 </a>
