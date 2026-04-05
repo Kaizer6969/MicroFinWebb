@@ -82,7 +82,8 @@ if (has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')) {
         $clients_stmt = $pdo->prepare("
             SELECT c.client_id, c.first_name, c.last_name, c.email_address,
                    c.contact_number, c.client_status, c.document_verification_status, c.registration_date,
-                   u.user_type
+                   u.user_type,
+                   (SELECT COUNT(*) FROM loans l WHERE l.client_id = c.client_id AND l.tenant_id = c.tenant_id) as total_loans
             FROM clients c
             JOIN users u ON c.user_id = u.user_id
             WHERE c.tenant_id = ?
@@ -968,6 +969,11 @@ tbody tr:hover { background: var(--brand-light); }
                             <td>
                                 <?php 
                                     $disp_status = $c['client_status'];
+                                    $has_loans = ($c['total_loans'] ?? 0) > 0;
+                                    $doc_status = $c['document_verification_status'] ?? '';
+                                    if ($doc_status !== 'Verified' && $doc_status !== 'Approved' && $disp_status === 'Active' && !$has_loans) {
+                                        $disp_status = 'Inactive';
+                                    }
                                     echo statusBadgePHP($disp_status); 
                                 ?>
                             </td>
@@ -2622,7 +2628,7 @@ async function loadClients(search='') {
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? c.contact_number : '—'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${c.user_type === 'Client' ? '<span class="badge badge-blue">📱 App</span>' : '<span class="badge badge-gray">🏢 Walk-in</span>'}</td>
-        <td>${badge(c.client_status)}</td>
+        <td>${badge((c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active' && (!c.total_loans || c.total_loans == 0)) ? 'Inactive' : c.client_status)}</td>
         <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
     </tr>`).join('');
 }
@@ -2712,7 +2718,7 @@ async function loadClients(search='') {
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : 'â€”'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${sourceBadge(c.user_type)}</td>
-        <td>${badge(c.client_status)}</td>
+        <td>${badge((c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active' && (!c.total_loans || c.total_loans == 0)) ? 'Inactive' : c.client_status)}</td>
         <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
     </tr>`).join('');
 }
@@ -2915,7 +2921,7 @@ async function loadClients(search='') {
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : '-'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${sourceBadge(c.user_type)}</td>
-        <td>${badge(c.client_status)}</td>
+        <td>${badge((c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active' && (!c.total_loans || c.total_loans == 0)) ? 'Inactive' : c.client_status)}</td>
         <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
     </tr>`).join('');
 }
