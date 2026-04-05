@@ -3541,13 +3541,21 @@ function hexToRgb($hex) {
         }
 
         @media (max-width: 1100px) {
+            .credit-policy-builder-hero,
+            .credit-policy-builder-detail-grid,
+            .credit-policy-builder-grid,
             .credit-policy-glance-grid,
             .credit-policy-ci-columns,
+            .credit-policy-limit-groups,
             .credit-policy-mini-grid,
             .credit-policy-overview-grid,
             .credit-policy-output-grid,
+            .credit-policy-score-shell,
             .credit-policy-simulator-grid,
             .credit-policy-simulator-metrics,
+            .credit-policy-builder-snapshot,
+            .credit-policy-config-grid,
+            .credit-policy-eligibility-stat-grid,
             .credit-policy-threshold-grid,
             .credit-policy-threshold-support-grid {
                 grid-template-columns: 1fr;
@@ -3598,7 +3606,8 @@ function hexToRgb($hex) {
 
             .credit-policy-head-main,
             .credit-policy-panel-headline,
-            .credit-policy-subhead {
+            .credit-policy-subhead,
+            .credit-policy-subpanel-header {
                 flex-direction: column;
                 align-items: stretch;
             }
