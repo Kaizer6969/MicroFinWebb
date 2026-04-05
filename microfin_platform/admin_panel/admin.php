@@ -6159,6 +6159,11 @@ function hexToRgb($hex) {
                             </div>
 
                             <div class="credit-policy-tab-nav" id="credit-policy-tab-nav">
+                                <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="builder">
+                                    <span class="material-symbols-rounded">dashboard_customize</span>
+                                    Policy Builder
+                                    <small>Overview and flow</small>
+                                </button>
                                 <button type="button" class="credit-policy-tab-btn" data-credit-policy-tab="eligibility">
                                     <span class="material-symbols-rounded">verified_user</span>
                                     Borrower Eligibility
@@ -6177,6 +6182,141 @@ function hexToRgb($hex) {
                             </div>
 
                             <div class="credit-policy-tab-panels">
+                                <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="builder" hidden>
+                                    <div class="credit-engine-panel credit-engine-panel-span-2 credit-policy-panel" id="credit-policy-builder">
+                                        <div class="credit-engine-panel-head credit-policy-panel-headline">
+                                            <div class="credit-policy-head-main">
+                                                <div class="credit-policy-head-icon"><span class="material-symbols-rounded">dashboard_customize</span></div>
+                                                <div class="credit-policy-panel-title">
+                                                    <span class="credit-policy-section-step">Workspace</span>
+                                                    <h4>Policy Builder</h4>
+                                                    <p class="text-muted">Use this overview to shape the full borrower flow before you fine-tune each rule set.</p>
+                                                </div>
+                                            </div>
+                                            <div class="credit-policy-section-meta">
+                                                <span class="badge badge-gray">Overview</span>
+                                                <span class="badge badge-blue">Live policy snapshot</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="credit-policy-builder-shell">
+                                            <div class="credit-policy-builder-hero">
+                                                <div class="credit-policy-builder-copy">
+                                                    <h4>Build the policy in the same order the app evaluates borrowers.</h4>
+                                                    <p>Start with borrower eligibility, define how scores are classified, then shape the recommended offer with the limit engine. The simulator stays available on the right as your final confidence check before saving.</p>
+                                                    <div class="credit-policy-inline-actions">
+                                                        <button type="button" class="btn btn-outline" data-credit-policy-nav-action="eligibility">
+                                                            <span class="material-symbols-rounded">verified_user</span>
+                                                            Open Borrower Eligibility
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline" data-credit-policy-nav-action="score">
+                                                            <span class="material-symbols-rounded">query_stats</span>
+                                                            Open Score Classification
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline" data-credit-policy-nav-action="limit">
+                                                            <span class="material-symbols-rounded">payments</span>
+                                                            Open Limit Engine
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div class="credit-policy-builder-snapshot">
+                                                    <div class="credit-policy-builder-stat">
+                                                        <span>Income Floor</span>
+                                                        <strong id="credit-policy-builder-income-floor"><?php echo '&#8369;' . number_format((float)($credit_policy['eligibility']['min_monthly_income'] ?? 0), 2); ?></strong>
+                                                    </div>
+                                                    <div class="credit-policy-builder-stat">
+                                                        <span>New Client Score</span>
+                                                        <strong id="credit-policy-builder-default-score"><?php echo (int)($credit_policy['score_thresholds']['new_client_default_score'] ?? 500); ?></strong>
+                                                    </div>
+                                                    <div class="credit-policy-builder-stat">
+                                                        <span>Approval Starts</span>
+                                                        <strong id="credit-policy-builder-approval-start"><?php echo (int)$credit_policy_recommended_from; ?> and above</strong>
+                                                    </div>
+                                                    <div class="credit-policy-builder-stat">
+                                                        <span>Offer Ceiling</span>
+                                                        <strong id="credit-policy-builder-cap"><?php echo ((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0) > 0) ? '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2) : 'No cap'; ?></strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="credit-policy-builder-grid">
+                                                <div class="credit-policy-builder-step">
+                                                    <div class="credit-policy-builder-step-head">
+                                                        <div class="credit-policy-builder-step-icon"><span class="material-symbols-rounded">verified_user</span></div>
+                                                        <div class="credit-policy-builder-step-copy">
+                                                            <strong>Borrower Eligibility</strong>
+                                                            <p>Decide who can continue before score-based classification and offer sizing even begin.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-policy-builder-step-summary">
+                                                        <span>Current Rule</span>
+                                                        <strong id="credit-policy-builder-eligibility-summary">Minimum income and employment checks are active.</strong>
+                                                    </div>
+                                                    <button type="button" class="btn btn-outline" data-credit-policy-nav-action="eligibility">Edit Eligibility Rules</button>
+                                                </div>
+
+                                                <div class="credit-policy-builder-step">
+                                                    <div class="credit-policy-builder-step-head">
+                                                        <div class="credit-policy-builder-step-icon"><span class="material-symbols-rounded">query_stats</span></div>
+                                                        <div class="credit-policy-builder-step-copy">
+                                                            <strong>Score Classification</strong>
+                                                            <p>Map the running score into clear borrower classes and the routing outcome they trigger.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-policy-builder-step-summary">
+                                                        <span>Current Rule</span>
+                                                        <strong id="credit-policy-builder-score-summary">At-Risk, Fair, Standard, Good, and High bands define the score ladder.</strong>
+                                                    </div>
+                                                    <button type="button" class="btn btn-outline" data-credit-policy-nav-action="score">Edit Score Bands</button>
+                                                </div>
+
+                                                <div class="credit-policy-builder-step">
+                                                    <div class="credit-policy-builder-step-head">
+                                                        <div class="credit-policy-builder-step-icon"><span class="material-symbols-rounded">payments</span></div>
+                                                        <div class="credit-policy-builder-step-copy">
+                                                            <strong>Limit Engine</strong>
+                                                            <p>Shape the recommended offer using income, score strength, classification multipliers, and guardrails.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="credit-policy-builder-step-summary">
+                                                        <span>Current Rule</span>
+                                                        <strong id="credit-policy-builder-limit-summary">Income multiplier, band multipliers, cap, and rounding shape the estimate.</strong>
+                                                    </div>
+                                                    <button type="button" class="btn btn-outline" data-credit-policy-nav-action="limit">Edit Limit Logic</button>
+                                                </div>
+                                            </div>
+
+                                            <div class="credit-policy-builder-detail-grid">
+                                                <div class="credit-policy-subpanel">
+                                                    <div class="credit-policy-subpanel-header">
+                                                        <div>
+                                                            <strong>Current Decision Routing</strong>
+                                                            <p>The app still routes applications separately from score classification labels.</p>
+                                                        </div>
+                                                        <span class="badge badge-blue">Routing</span>
+                                                    </div>
+                                                    <div class="credit-policy-note-card">
+                                                        <strong id="credit-policy-builder-routing-summary">Below <?php echo (int)$credit_policy_conditional_from; ?> = Reject, <?php echo (int)$credit_policy_conditional_from; ?>-<?php echo (int)$credit_policy_conditional_end; ?> = Manual Review, <?php echo (int)$credit_policy_recommended_from; ?>+ = Approval Candidate.</strong>
+                                                    </div>
+                                                </div>
+                                                <div class="credit-policy-subpanel">
+                                                    <div class="credit-policy-subpanel-header">
+                                                        <div>
+                                                            <strong>Current Offer Logic</strong>
+                                                            <p>This is the formula the limit engine will use when the borrower reaches offer sizing.</p>
+                                                        </div>
+                                                        <span class="badge badge-gray">Estimate</span>
+                                                    </div>
+                                                    <div class="credit-policy-note-card">
+                                                        <strong id="credit-policy-builder-offer-summary">Start with monthly income x <?php echo htmlspecialchars((string)($credit_policy['credit_limit']['income_multiplier'] ?? 0)); ?> x score strength x classification multiplier.</strong>
+                                                        <p class="credit-policy-field-hint" id="credit-policy-builder-rounding-summary" style="margin: 0;">Maximum offer <?php echo ((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0) > 0) ? '&#8369;' . number_format((float)($credit_policy['credit_limit']['max_credit_limit_cap'] ?? 0), 2) : 'No cap'; ?>. Rounded to nearest <?php echo ((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0) > 0) ? '&#8369;' . number_format((float)($credit_policy['credit_limit']['round_to_nearest'] ?? 0), 2) : 'No rounding'; ?>.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="credit-policy-tab-panel" data-credit-policy-tab-panel="eligibility" hidden>
                                     <div class="credit-engine-panel credit-engine-panel-span-2 credit-policy-panel" id="credit-policy-eligibility">
                                     <div class="credit-engine-panel-head credit-policy-panel-headline">
