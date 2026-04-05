@@ -571,8 +571,6 @@ if ($method === 'POST' && $action === 'approve_upgrade') {
                 
                 $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
                     ->execute([$new_limit, $client_id, $tenant_id]);
-                
-                mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
 
                 $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_UPGRADED', 'client', ?, ?)")
                     ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit upgraded to {$new_limit} from {$current_limit}"]);

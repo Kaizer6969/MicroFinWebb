@@ -1258,6 +1258,22 @@ if (!function_exists('mf_sync_client_credit_profile')) {
             : 0.0;
         $currentLimit = (float) ($client['credit_limit'] ?? 0);
 
+        // If staff has manually upgraded this client, never lower the limit below their last upgrade
+        $lastUpgradeStmt = $pdo->prepare("
+            SELECT description FROM audit_logs
+            WHERE tenant_id = ? AND entity_type = 'client' AND entity_id = ? AND action_type = 'CREDIT_LIMIT_UPGRADED'
+            ORDER BY created_at DESC LIMIT 1
+        ");
+        $lastUpgradeStmt->execute([$tenantId, $clientId]);
+        $lastUpgradeDesc = $lastUpgradeStmt->fetchColumn();
+        if ($lastUpgradeDesc) {
+            // Extract the upgraded-to amount from "Credit limit upgraded to 4800 from 4000"
+            if (preg_match('/upgraded to ([\d.]+)/', $lastUpgradeDesc, $m)) {
+                $staffUpgradedLimit = (float) $m[1];
+                $newLimit = max($newLimit, $staffUpgradedLimit);
+            }
+        }
+
         if (abs($newLimit - $currentLimit) > 0.009) {
             $update = $pdo->prepare("
                 UPDATE clients
