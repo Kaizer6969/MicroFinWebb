@@ -50,9 +50,10 @@ try {
     $uStmt->execute();
     $uStmt->close();
 
-    // 3. Insert into payments (principal/interest parsed loosely for simplicity here)
-    $pStmt = $conn->prepare("INSERT INTO payments (loan_id, client_id, tenant_id, payment_amount, principal_paid, interest_paid, payment_date, payment_method, payment_reference, payment_status, received_by) VALUES (?, ?, ?, ?, ?, 0, NOW(), ?, ?, 'Verified', ?)");
-    $pStmt->bind_param('iisddssi', $loanId, $loan['client_id'], $tenantId, $amount, $amount, $method, $refNum, $userId);
+    // 3. Insert into payment_transactions (gateway-facing table, no employee FK needed)
+    $txRef = 'TXN-' . strtoupper(substr(md5(uniqid()), 0, 8)) . '-' . time();
+    $pStmt = $conn->prepare("INSERT INTO payment_transactions (transaction_ref, client_id, loan_id, tenant_id, source_id, amount, payment_method, payment_type, status, payment_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'regular', 'completed', NOW(), NOW())");
+    $pStmt->bind_param('siissds', $txRef, $loan['client_id'], $loanId, $tenantId, $refNum, $amount, $method);
     $pStmt->execute();
     $pStmt->close();
 
