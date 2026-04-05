@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 header('Content-Type: application/json');
 require_once 'session_auth.php';
 mf_start_backend_session();
@@ -391,6 +391,46 @@ if ($method === 'POST') {
         }
 
         $pdo->commit();
+
+        // -- Create notification for the client (after commit so main flow is safe) --
+        try {
+            $clientUserStmt = $pdo->prepare("
+                SELECT c.user_id, la.application_number
+                FROM loan_applications la
+                JOIN clients c ON c.client_id = la.client_id
+                WHERE la.application_id = ? AND la.tenant_id = ?
+                LIMIT 1
+            ");
+            $clientUserStmt->execute([$application_id, $tenant_id]);
+            $clientInfo = $clientUserStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($clientInfo && !empty($clientInfo['user_id'])) {
+                $clientUserId = (int) $clientInfo['user_id'];
+                $appNumber = $clientInfo['application_number'] ?? '';
+                $notifType = 'General';
+                $notifTitle = 'Application Update';
+                $notifMessage = "Your loan application #{$appNumber} status has been updated to: {$new_status}.";
+                $notifPriority = 'Medium';
+
+                if ($new_action === 'approve') {
+                    $notifType = 'Loan Approved';
+                    $notifTitle = 'Congratulations! Loan Approved';
+                    $approvedAmt = number_format($finalApprovedAmount ?? 0, 2);
+                    $notifMessage = "Your application #{$appNumber} for PHP {$approvedAmt} has been approved!";
+                    $notifPriority = 'High';
+                } elseif ($new_action === 'reject') {
+                    $notifType = 'Loan Rejected';
+                    $notifTitle = 'Application Rejected';
+                    $notifMessage = "Your application #{$appNumber} has been rejected. Reason: {$notes}";
+                    $notifPriority = 'High';
+                }
+
+                $nStmt = $pdo->prepare("INSERT INTO notifications (user_id, tenant_id, notification_type, title, message, priority) VALUES (?, ?, ?, ?, ?, ?)");
+                $nStmt->execute([$clientUserId, $tenant_id, $notifType, $notifTitle, $notifMessage, $notifPriority]);
+            }
+        } catch (Throwable $notifErr) {
+            error_log("Notification insert failed: " . $notifErr->getMessage());
+        }
         echo json_encode(['status' => 'success', 'message' => $responseMessage, 'new_status' => $new_status]);
 
     } catch (Throwable $e) {
