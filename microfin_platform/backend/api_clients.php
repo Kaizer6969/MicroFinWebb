@@ -140,7 +140,7 @@ if ($method === 'GET' && $action === 'credit_accounts') {
 
     $stmt = $pdo->prepare("
         SELECT c.client_id, c.first_name, c.last_name, c.email_address,
-               c.contact_number, c.client_status, c.registration_date,
+               c.contact_number, c.client_status, c.document_verification_status, c.registration_date,
                c.credit_limit, c.last_seen_credit_limit, c.monthly_income,
                c.occupation, c.employment_status, u.user_type
         FROM clients c
