@@ -1079,6 +1079,10 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
             display: flex;
         }
 
+        #dashboardPopupModal {
+            z-index: 1050 !important;
+        }
+
         .modal-backdrop.top {
             align-items: flex-start;
             padding-top: 48px;
@@ -1769,8 +1773,16 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                         <div class="search-input-wrap">
                             <span class="material-symbols-rounded ms">search</span>
                             <input type="text" id="clientSearch" placeholder="Search by name, email, phone…"
-                                oninput="debounce(() => loadClients(this.value), 350)()">
+                                oninput="debounce(() => loadClients(document.getElementById('clientSearch').value), 350)()">
                         </div>
+                    </div>
+                    <div class="filter-tabs" id="clientFilterTabs">
+                        <button class="filter-tab active" data-client-filter="all" onclick="loadClients(document.getElementById('clientSearch').value, 'all', this)">All</button>
+                        <button class="filter-tab" data-client-filter="Active" onclick="loadClients(document.getElementById('clientSearch').value, 'Active', this)">Active</button>
+                        <button class="filter-tab" data-client-filter="Inactive" onclick="loadClients(document.getElementById('clientSearch').value, 'Inactive', this)">Inactive</button>
+                        <button class="filter-tab" data-client-filter="Pending" onclick="loadClients(document.getElementById('clientSearch').value, 'Pending', this)">Pending</button>
+                        <button class="filter-tab" data-client-filter="app" onclick="loadClients(document.getElementById('clientSearch').value, 'app', this)">📱 App</button>
+                        <button class="filter-tab" data-client-filter="walkin" onclick="loadClients(document.getElementById('clientSearch').value, 'walkin', this)">🏢 Walk-in</button>
                     </div>
                     <div class="card">
                         <div class="table-wrap">
@@ -2593,6 +2605,19 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
 
         function getActiveLoanFilter() {
             return document.querySelector('#loanFilterTabs .filter-tab.active')?.dataset?.status || 'all';
+        }
+
+        function getActiveClientFilter() {
+            return document.querySelector('#clientFilterTabs .filter-tab.active')?.dataset?.clientFilter || 'all';
+        }
+
+        function matchesClientFilter(c, filter) {
+            if (!filter || filter === 'all') return true;
+            if (filter === 'app') return c.user_type === 'Client';
+            if (filter === 'walkin') return c.user_type !== 'Client';
+            // Status-based — derive display status the same way the badge does
+            const dispStatus = (c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active') ? 'Inactive' : c.client_status;
+            return dispStatus === filter;
         }
 
         function getRequestErrorMessage(error, fallback = 'Something went wrong.') {
@@ -3589,17 +3614,25 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
             }
         }
 
-        async function loadClients(search = '') {
+        async function loadClients(search = '', filter = null, btn = null) {
+            const activeFilter = filter !== null ? filter : getActiveClientFilter();
+            const filterTabs = Array.from(document.querySelectorAll('#clientFilterTabs .filter-tab'));
+            const activeBtn = btn || filterTabs.find(t => t.dataset.clientFilter === activeFilter);
+            if (activeBtn) {
+                filterTabs.forEach(t => t.classList.remove('active'));
+                activeBtn.classList.add('active');
+            }
             const tbody = document.getElementById('clientsTbody');
             if (!tbody) return;
             tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
             const r = await fetch(API.clients + '?action=list' + (search ? '&search=' + encodeURIComponent(search) : ''));
             const d = await r.json();
-            if (!d.data || !d.data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found.</td></tr>'; return; }
-            tbody.innerHTML = d.data.map(c => `<tr>
+            const rows = (d.data || []).filter(c => matchesClientFilter(c, activeFilter));
+            if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found for this filter.</td></tr>'; return; }
+            tbody.innerHTML = rows.map(c => `<tr>
         <td class="td-bold">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</td>
-        <td class="td-muted">${c.email_address && c.email_address.trim() ? c.email_address : '—'}</td>
-        <td class="td-muted">${c.contact_number && c.contact_number.trim() ? c.contact_number : '—'}</td>
+        <td class="td-muted">${c.email_address && c.email_address.trim() ? escapeHtml(c.email_address) : '—'}</td>
+        <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : '—'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${c.user_type === 'Client' ? '<span class="badge badge-blue">📱 App</span>' : '<span class="badge badge-gray">🏢 Walk-in</span>'}</td>
         <td>${badge((c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active') ? 'Inactive' : c.client_status)}</td>
@@ -3676,20 +3709,28 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
         </tr></thead><tbody>${loansHtml}</tbody></table></div>`;
         }
 
-        async function loadClients(search = '') {
+        async function loadClients(search = '', filter = null, btn = null) {
+            const activeFilter = filter !== null ? filter : getActiveClientFilter();
+            const filterTabs = Array.from(document.querySelectorAll('#clientFilterTabs .filter-tab'));
+            const activeBtn = btn || filterTabs.find(t => t.dataset.clientFilter === activeFilter);
+            if (activeBtn) {
+                filterTabs.forEach(t => t.classList.remove('active'));
+                activeBtn.classList.add('active');
+            }
             const tbody = document.getElementById('clientsTbody');
             if (!tbody) return;
             tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
             const r = await fetch(API.clients + '?action=list' + (search ? '&search=' + encodeURIComponent(search) : ''));
             const d = await r.json();
-            if (!d.data || !d.data.length) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found.</td></tr>';
+            const rows = (d.data || []).filter(c => matchesClientFilter(c, activeFilter));
+            if (!rows.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found for this filter.</td></tr>';
                 return;
             }
-            tbody.innerHTML = d.data.map(c => `<tr>
+            tbody.innerHTML = rows.map(c => `<tr>
         <td class="td-bold">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</td>
-        <td class="td-muted">${c.email_address && c.email_address.trim() ? escapeHtml(c.email_address) : 'â€”'}</td>
-        <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : 'â€”'}</td>
+        <td class="td-muted">${c.email_address && c.email_address.trim() ? escapeHtml(c.email_address) : '—'}</td>
+        <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : '—'}</td>
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${sourceBadge(c.user_type)}</td>
         <td>${badge((c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active') ? 'Inactive' : c.client_status)}</td>
@@ -3879,17 +3920,25 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
         </div>`;
         }
 
-        async function loadClients(search = '') {
+        async function loadClients(search = '', filter = null, btn = null) {
+            const activeFilter = filter !== null ? filter : getActiveClientFilter();
+            const filterTabs = Array.from(document.querySelectorAll('#clientFilterTabs .filter-tab'));
+            const activeBtn = btn || filterTabs.find(t => t.dataset.clientFilter === activeFilter);
+            if (activeBtn) {
+                filterTabs.forEach(t => t.classList.remove('active'));
+                activeBtn.classList.add('active');
+            }
             const tbody = document.getElementById('clientsTbody');
             if (!tbody) return;
             tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr>';
             const r = await fetch(API.clients + '?action=list' + (search ? '&search=' + encodeURIComponent(search) : ''));
             const d = await r.json();
-            if (!d.data || !d.data.length) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found.</td></tr>';
+            const rows = (d.data || []).filter(c => matchesClientFilter(c, activeFilter));
+            if (!rows.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No clients found for this filter.</td></tr>';
                 return;
             }
-            tbody.innerHTML = d.data.map(c => `<tr>
+            tbody.innerHTML = rows.map(c => `<tr>
         <td class="td-bold">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</td>
         <td class="td-muted">${c.email_address && c.email_address.trim() ? escapeHtml(c.email_address) : '-'}</td>
         <td class="td-muted">${c.contact_number && c.contact_number.trim() ? escapeHtml(c.contact_number) : '-'}</td>
