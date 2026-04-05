@@ -12,6 +12,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 }
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/email_service.php';
 
 $data = json_decode(file_get_contents("php://input"), true) ?? [];
 $userId = (int)($data['user_id'] ?? 0);
