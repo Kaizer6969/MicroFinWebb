@@ -260,7 +260,44 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function activateCreditPolicySubtab(tabId) {
+        if (!tabId || typeof window.setCreditPolicyTab !== 'function') {
+            return;
+        }
+
+        window.setCreditPolicyTab(tabId);
+    }
+
+    function getCreditPolicySubtabFromItem(item, href = '') {
+        if (!item) {
+            return '';
+        }
+
+        const explicitTab = item.getAttribute('data-credit-policy-subtab');
+        if (explicitTab) {
+            return explicitTab;
+        }
+
+        if (!href) {
+            return '';
+        }
+
+        try {
+            const targetUrl = new URL(href, window.location.href);
+            return targetUrl.searchParams.get('credit_policy_tab') || '';
+        } catch (error) {
+            return '';
+        }
+    }
+
     function findPreferredNavItem(targetId, subTabId = '') {
+        if (targetId === 'credit_settings' && subTabId !== '') {
+            const creditPolicyNav = document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"][data-credit-policy-subtab="${subTabId}"]`);
+            if (creditPolicyNav) {
+                return creditPolicyNav;
+            }
+        }
+
         if (subTabId !== '') {
             const exactNav = document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"][data-subtab="${subTabId}"]`);
             if (exactNav) {
@@ -268,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        return document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"]:not([data-subtab])`)
+        return document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"]:not([data-subtab]):not([data-credit-policy-subtab])`)
             || document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"]`);
     }
 
@@ -398,6 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sectionParam = urlParams.get('section') || '';
     const tabParam = urlParams.get('tab') || '';
     const subParam = urlParams.get('sub') || '';
+    const creditPolicyTabParam = urlParams.get('credit_policy_tab') || '';
 
     let initialRoute = null;
     if (hashTarget && document.getElementById(hashTarget)) {
@@ -413,7 +451,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (tabParam && sectionRouteMap[tabParam]) {
         initialRoute = {
             sectionId: sectionRouteMap[tabParam].sectionId,
-            subTabId: tabParam === 'billing' && billingSubtabMap[subParam]
+            subTabId: sectionRouteMap[tabParam].sectionId === 'credit_settings'
+                ? creditPolicyTabParam
+                : tabParam === 'billing' && billingSubtabMap[subParam]
                 ? billingSubtabMap[subParam]
                 : (sectionRouteMap[tabParam].subTabId || ''),
         };
@@ -423,6 +463,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (initialRoute && initialRoute.sectionId) {
         activateSection(initialRoute.sectionId, { subTabId: initialRoute.subTabId || '' });
+        if (initialRoute.sectionId === 'credit_settings' && initialRoute.subTabId) {
+            activateCreditPolicySubtab(initialRoute.subTabId);
+        }
     }
 
     window.addEventListener('pageshow', () => {
