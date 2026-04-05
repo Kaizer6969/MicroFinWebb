@@ -167,7 +167,7 @@ try {
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     
     // Construct the actual URL to the reset password page for this tenant
-    $reset_url = $protocol . $host . "/tenant_login/reset_password.php?token=" . $reset_token . "&slug=" . urlencode($tenant_slug);
+    $reset_url = $protocol . $host . "/microfin_platform/tenant_login/reset_password.php?token=" . $reset_token . "&slug=" . urlencode($tenant_slug);
     
     $tenant_name = htmlspecialchars((string) ($_SESSION['tenant_name'] ?? 'Microfin Partner'));
     
