@@ -36,6 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -94,4 +95,16 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add microfin_mobile/microfin_app.apk
           git commit -m "chore(apk): rebuild generic internal microfin_app.apk"
-          git push
+
+          TARGET_REF="${GITHUB_REF_NAME:-main}"
+          for attempt in 1 2 3; do
+            git fetch origin "${TARGET_REF}"
+            git rebase "origin/${TARGET_REF}"
+            if git push origin "HEAD:${TARGET_REF}"; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+
+          echo "Failed to push generic APK after multiple attempts."
+          exit 1
