@@ -240,11 +240,11 @@ try {
         $id_type,
         $registered_by,
         'Active',
-        'Unverified',
+        'Verified',
     ];
 
     if ($client_has_verification_status) {
-        $client_params[] = 'Pending';
+        $client_params[] = 'Verified';
     }
 
     $client_insert->execute($client_params);
@@ -280,7 +280,7 @@ try {
         }
     }
 
-    $audit_description = 'Walk-in client registered as Active with document verification pending.';
+    $audit_description = 'Walk-in client registered, verified, and activated by staff.';
     $audit_description .= $documents_complete ? ' Staff marked the document set as complete.' : ' Staff marked the document set as incomplete.';
     if ($missing_documents_notes !== '') {
         $audit_description .= ' Notes: ' . $missing_documents_notes;
@@ -328,10 +328,10 @@ try {
 
     echo json_encode([
         'status' => 'success',
-        'message' => 'Walk-in client registered successfully. A password setup email has been sent to ' . htmlspecialchars($email) . '.',
+        'message' => 'Walk-in client registered and verified successfully. A password setup email has been sent to ' . htmlspecialchars($email) . '.',
         'client_id' => $new_client_id,
         'client_status' => 'Active',
-        'verification_status' => 'Pending',
+        'verification_status' => 'Verified',
         'uploaded_document_count' => $uploaded_count,
         'email_status' => $email_result
     ]);
