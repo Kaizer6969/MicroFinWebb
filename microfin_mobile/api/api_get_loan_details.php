@@ -73,6 +73,16 @@ try {
     }
     $txStmt->close();
 
+    // Compute a fallback for next_payment_due if it happens to be missing in the DB
+    if (empty($loan['next_payment_due']) && !empty($schedules)) {
+        foreach ($schedules as $s) {
+            if ($s['payment_status'] !== 'Paid' && $s['payment_status'] !== 'Fully Paid') {
+                $loan['next_payment_due'] = $s['due_date'];
+                break;
+            }
+        }
+    }
+
     // Pass the full loan row directly — the Dart code expects raw column names
     // (e.g. total_loan_amount, loan_status, interest_rate, release_date, etc.)
     $loan['product_name'] = $loan['product_name'] ?? 'Term Loan';
