@@ -2,6 +2,7 @@
 require_once "../../backend/session_auth.php";
 mf_start_backend_session();
 require_once "../../backend/db_connect.php";
+require_once "../../backend/credit_policy.php";
 mf_require_tenant_session($pdo, [
     'response' => 'redirect',
     'redirect' => '../../tenant_login/login.php',
@@ -106,6 +107,28 @@ $loan_products = $loan_products_stmt->fetchAll(PDO::FETCH_ASSOC);
 $document_types = [];
 $document_types_stmt = $pdo->query("SELECT document_type_id, document_name, loan_purpose, is_required FROM document_types WHERE is_active = 1 ORDER BY is_required DESC, document_name ASC");
 $document_types = $document_types_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$walk_in_policy = mf_get_tenant_credit_policy($pdo, $tenant_id);
+$walk_in_employment_statuses = array_values(array_filter(array_map(
+    static fn($value): string => trim((string) $value),
+    (array) ($walk_in_policy['eligibility']['allowed_employment_statuses'] ?? [])
+)));
+if (!$walk_in_employment_statuses) {
+    $walk_in_employment_statuses = ['Employed', 'Self-Employed', 'Retired'];
+}
+
+$walk_in_gender_options = ['Male', 'Female', 'Other'];
+$walk_in_civil_status_options = ['Single', 'Married', 'Widowed', 'Divorced', 'Separated'];
+$walk_in_id_types = [
+    ['value' => 'philsys', 'label' => 'National ID (PhilSys)'],
+    ['value' => 'passport', 'label' => 'Passport'],
+    ['value' => 'dl', 'label' => "Driver's License"],
+    ['value' => 'umid', 'label' => 'UMID'],
+    ['value' => 'sss', 'label' => 'SSS ID'],
+    ['value' => 'prc', 'label' => 'PRC ID'],
+    ['value' => 'postal', 'label' => 'Philippine Postal ID'],
+    ['value' => 'pagibig', 'label' => 'Pag-IBIG Loyalty Plus'],
+];
 
 // Fetch tenant branding
 $brand_stmt = $pdo->prepare('SELECT theme_primary_color, theme_secondary_color, theme_text_main, theme_text_muted, theme_bg_body, theme_bg_card, font_family, logo_path FROM tenant_branding WHERE tenant_id = ?');
@@ -2375,12 +2398,90 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                     <input type="hidden" name="walk_in_action" id="walkInAction" value="draft">
                     <div class="form-grid">
                         <div class="section-label">Personal Information</div>
+                        <div class="form-group form-full">
+                            <p class="form-hint">Walk-in clients start as inactive until their verification is approved. No co-maker is required in this staff flow.</p>
+                        </div>
                         <div class="form-group"><label>First Name *</label><input type="text" name="first_name" required></div>
                         <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" required></div>
                         <div class="form-group"><label>Email Address *</label><input type="email" name="email" required></div>
-                        <div class="form-group"><label>Phone Number</label><input type="tel" name="phone_number"></div>
+                        <div class="form-group"><label>Phone Number *</label><input type="tel" name="phone_number" required></div>
                         <div class="form-group"><label>Date of Birth *</label><input type="date" name="date_of_birth" required></div>
-                        <div class="form-group form-full"><label>Physical Address</label><input type="text" name="address"></div>
+                        <div class="form-group">
+                            <label>Gender</label>
+                            <select name="gender">
+                                <option value="">Select gender</option>
+                                <?php foreach ($walk_in_gender_options as $gender_option): ?>
+                                    <option value="<?php echo htmlspecialchars($gender_option); ?>">
+                                        <?php echo htmlspecialchars($gender_option); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Civil Status</label>
+                            <select name="civil_status">
+                                <?php foreach ($walk_in_civil_status_options as $civil_status_option): ?>
+                                    <option value="<?php echo htmlspecialchars($civil_status_option); ?>">
+                                        <?php echo htmlspecialchars($civil_status_option); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>ID Type *</label>
+                            <select name="id_type" required>
+                                <option value="">Select ID type</option>
+                                <?php foreach ($walk_in_id_types as $id_type_option): ?>
+                                    <option value="<?php echo htmlspecialchars($id_type_option['value']); ?>">
+                                        <?php echo htmlspecialchars($id_type_option['label']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <hr class="section-sep">
+                        <div class="section-label">Present Address</div>
+                        <div class="form-group"><label>House / Unit No.</label><input type="text" name="house_no"></div>
+                        <div class="form-group"><label>Street</label><input type="text" name="street"></div>
+                        <div class="form-group"><label>Barangay</label><input type="text" name="barangay"></div>
+                        <div class="form-group"><label>City / Municipality</label><input type="text" name="city"></div>
+                        <div class="form-group"><label>Province</label><input type="text" name="province"></div>
+                        <div class="form-group"><label>Postal Code</label><input type="text" name="postal_code"></div>
+
+                        <hr class="section-sep">
+                        <div class="section-label">Permanent Address</div>
+                        <div class="form-group form-full">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" name="same_as_present" id="walkInSameAsPresent" value="1"
+                                    checked style="width:auto;accent-color:var(--brand);">
+                                Permanent address is the same as the present address
+                            </label>
+                        </div>
+                        <div class="form-grid form-full" id="walkInPermanentFields">
+                            <div class="form-group"><label>House / Unit No.</label><input type="text" name="perm_house_no"></div>
+                            <div class="form-group"><label>Street</label><input type="text" name="perm_street"></div>
+                            <div class="form-group"><label>Barangay</label><input type="text" name="perm_barangay"></div>
+                            <div class="form-group"><label>City / Municipality</label><input type="text" name="perm_city"></div>
+                            <div class="form-group"><label>Province</label><input type="text" name="perm_province"></div>
+                            <div class="form-group"><label>Postal Code</label><input type="text" name="perm_postal_code"></div>
+                        </div>
+
+                        <hr class="section-sep">
+                        <div class="section-label">Employment &amp; Income</div>
+                        <div class="form-group">
+                            <label>Employment Status</label>
+                            <select name="employment_status">
+                                <?php foreach ($walk_in_employment_statuses as $employment_status_option): ?>
+                                    <option value="<?php echo htmlspecialchars($employment_status_option); ?>">
+                                        <?php echo htmlspecialchars($employment_status_option); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Occupation / Job Title</label><input type="text" name="occupation"></div>
+                        <div class="form-group"><label>Employer / Business Name</label><input type="text" name="employer_name"></div>
+                        <div class="form-group"><label>Employer Contact Number</label><input type="tel" name="employer_contact"></div>
+                        <div class="form-group"><label>Monthly Income (PHP) *</label><input type="number" name="monthly_income" min="0" step="0.01" required></div>
 
                         <hr class="section-sep">
                         <div class="section-label">Document Submission</div>
@@ -2736,8 +2837,41 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
             debounce(() => loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter(), null, input?.value || ''), 350)();
         }
 
-        function openModal(id) { document.getElementById(id).classList.add('open'); }
-        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        function syncWalkInPermanentFields() {
+            const sameAsPresent = document.getElementById('walkInSameAsPresent');
+            const permanentFields = document.getElementById('walkInPermanentFields');
+            if (!sameAsPresent || !permanentFields) return;
+
+            const hideFields = sameAsPresent.checked;
+            permanentFields.style.display = hideFields ? 'none' : 'grid';
+            permanentFields.querySelectorAll('input, select, textarea').forEach(field => {
+                field.disabled = hideFields;
+            });
+        }
+
+        function resetWalkInForm() {
+            const form = document.getElementById('walkInForm');
+            if (!form) return;
+
+            form.reset();
+            const actionInput = document.getElementById('walkInAction');
+            if (actionInput) actionInput.value = 'draft';
+            syncWalkInPermanentFields();
+        }
+
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            if (id === 'walkInModal') resetWalkInForm();
+            modal.classList.add('open');
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            modal.classList.remove('open');
+            if (id === 'walkInModal') resetWalkInForm();
+        }
 
         let dashboardPopupResolver = null;
         let dashboardPopupState = {
@@ -2999,6 +3133,11 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                     }
                 });
             });
+            const walkInSameAsPresent = document.getElementById('walkInSameAsPresent');
+            if (walkInSameAsPresent) {
+                walkInSameAsPresent.addEventListener('change', syncWalkInPermanentFields);
+            }
+            syncWalkInPermanentFields();
 
             loadDashboardStats();
         });
@@ -3713,7 +3852,8 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
             const presentAddress = joinAddress([c.present_street, c.present_barangay, c.present_city, c.present_province, c.present_postal_code]);
             const permanentAddress = joinAddress([c.permanent_street, c.permanent_barangay, c.permanent_city, c.permanent_province, c.permanent_postal_code]);
             const coMakerAddress = joinAddress([c.comaker_house_no, c.comaker_street, c.comaker_barangay, c.comaker_city, c.comaker_province, c.comaker_postal_code]);
-            const verificationBadge = badge(c.verification_status || c.document_verification_status || 'Pending');
+            const verificationStatus = c.verification_status || c.document_verification_status || 'Pending';
+            const verificationBadge = badge(verificationStatus);
             const accountEmail = !isBlank(c.email_address) ? escapeHtml(c.email_address) : formatTextValue(c.user_email);
             const upgrade = c.credit_upgrade || null;
 
@@ -3722,7 +3862,9 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
             const footer = document.getElementById('clientDetailFooter');
             if (footer) {
                 let footerHtml = `<button class="btn btn-outline" onclick="closeModal('clientDetailModal')">Close</button>`;
-                if (c.verification_status !== 'Approved' && source !== 'credit-accounts') {
+                if (c.client_status === 'Inactive' && verificationStatus === 'Approved') {
+                    footerHtml += `<button class="btn btn-brand" onclick="updateClientStatus(${c.client_id}, 'Active')"><span class="material-symbols-rounded ms">toggle_on</span> Activate Client</button>`;
+                } else if (verificationStatus !== 'Approved' && source !== 'credit-accounts') {
                     footerHtml += `<button class="btn btn-success" onclick="verifyClientFully(${c.client_id})"><span class="material-symbols-rounded ms">verified</span> Verify Client</button>`;
                 }
                 footer.innerHTML = footerHtml;
@@ -3994,6 +4136,50 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
         }
 
         // ── Payments ──────────────────────────────────────────────────
+        async function updateClientStatus(client_id, status) {
+            const actionLabel = status === 'Active' ? 'activate' : `set to ${status.toLowerCase()}`;
+            const confirmed = await showConfirmPopup(`Are you sure you want to ${actionLabel} this client?`, {
+                title: 'Update Client Status',
+                variant: status === 'Blacklisted' ? 'danger' : 'warning',
+                confirmText: status === 'Active' ? 'Activate Client' : 'Confirm'
+            });
+            if (!confirmed) return;
+
+            try {
+                const payload = { client_id: client_id, status: status };
+                const res = await fetch(API.clients + '?action=update_status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const raw = await res.text();
+                let result;
+                try {
+                    result = JSON.parse(raw);
+                } catch (_) {
+                    result = {
+                        status: 'error',
+                        message: raw && !raw.trim().startsWith('<')
+                            ? raw.trim()
+                            : `Unable to update client status (HTTP ${res.status}).`
+                    };
+                }
+                await showAlertPopup(result.message, {
+                    title: result.status === 'success' ? 'Success' : 'Unable to Update Client Status',
+                    variant: result.status === 'success' ? 'success' : 'danger'
+                });
+                if (result.status === 'success') {
+                    viewClient(client_id);
+                    loadClients();
+                }
+            } catch (err) {
+                await showAlertPopup('An error occurred while updating the client status.', {
+                    title: 'Unable to Update Client Status',
+                    variant: 'danger'
+                });
+            }
+        }
+
         async function loadPayments() {
             const tbody = document.getElementById('paymentsTbody');
             if (!tbody) return;
@@ -4401,7 +4587,7 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                     dismissDashboardPopup();
                     return;
                 }
-                bd.classList.remove('open');
+                closeModal(bd.id);
             });
         });
     </script>

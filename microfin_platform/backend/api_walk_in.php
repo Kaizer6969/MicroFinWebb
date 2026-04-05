@@ -28,21 +28,87 @@ if ($is_json_payload) {
     $data = $_POST;
 }
 
+$walk_in_action = strtolower(trim((string) ($data['walk_in_action'] ?? 'draft')));
 $first_name = trim((string) ($data['first_name'] ?? ''));
 $last_name = trim((string) ($data['last_name'] ?? ''));
 $email = trim((string) ($data['email'] ?? ''));
 $phone = trim((string) ($data['phone_number'] ?? ''));
 $dob = trim((string) ($data['date_of_birth'] ?? ''));
+$gender = trim((string) ($data['gender'] ?? ''));
+$civil_status = trim((string) ($data['civil_status'] ?? ''));
+$employment_status = trim((string) ($data['employment_status'] ?? ''));
+$occupation = trim((string) ($data['occupation'] ?? ''));
+$employer_name = trim((string) ($data['employer_name'] ?? ''));
+$employer_contact = trim((string) ($data['employer_contact'] ?? ''));
+$id_type = trim((string) ($data['id_type'] ?? ''));
 $address = trim((string) ($data['address'] ?? ''));
+$house_no = trim((string) ($data['house_no'] ?? ''));
+$street = trim((string) ($data['street'] ?? ''));
+$barangay = trim((string) ($data['barangay'] ?? ''));
+$city = trim((string) ($data['city'] ?? ''));
+$province = trim((string) ($data['province'] ?? ''));
+$postal_code = trim((string) ($data['postal_code'] ?? $data['postal'] ?? ''));
+$same_as_present = ((string) ($data['same_as_present'] ?? $data['same_as_permanent'] ?? '0')) === '1';
+$perm_house_no = trim((string) ($data['perm_house_no'] ?? ''));
+$perm_street = trim((string) ($data['perm_street'] ?? ''));
+$perm_barangay = trim((string) ($data['perm_barangay'] ?? ''));
+$perm_city = trim((string) ($data['perm_city'] ?? ''));
+$perm_province = trim((string) ($data['perm_province'] ?? ''));
+$perm_postal_code = trim((string) ($data['perm_postal_code'] ?? $data['perm_postal'] ?? ''));
+$monthly_income_raw = trim((string) ($data['monthly_income'] ?? ''));
+$documents_complete = ((string) ($data['documents_complete'] ?? '0')) === '1';
+$missing_documents_notes = trim((string) ($data['missing_documents_notes'] ?? ''));
 
-if ($first_name === '' || $last_name === '' || $email === '' || $dob === '') {
-    echo json_encode(['status' => 'error', 'message' => 'Please fill in all required account fields.']);
+if ($street === '' && $address !== '') {
+    $street = $address;
+}
+
+if ($same_as_present) {
+    $perm_house_no = $house_no;
+    $perm_street = $street;
+    $perm_barangay = $barangay;
+    $perm_city = $city;
+    $perm_province = $province;
+    $perm_postal_code = $postal_code;
+}
+
+if ($first_name === '' || $last_name === '' || $email === '' || $phone === '' || $dob === '' || $id_type === '' || $monthly_income_raw === '') {
+    echo json_encode(['status' => 'error', 'message' => 'Please complete the required walk-in registration fields.']);
     exit;
 }
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     echo json_encode(['status' => 'error', 'message' => 'Please provide a valid email address.']);
     exit;
+}
+
+$monthly_income = (float) str_replace([',', ' '], '', $monthly_income_raw);
+if ($monthly_income <= 0) {
+    echo json_encode(['status' => 'error', 'message' => 'Monthly income must be greater than zero.']);
+    exit;
+}
+
+function walk_in_client_table_has_column(PDO $pdo, string $column_name): bool
+{
+    static $cache = [];
+
+    $cache_key = strtolower($column_name);
+    if (array_key_exists($cache_key, $cache)) {
+        return $cache[$cache_key];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+          AND COLUMN_NAME = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$column_name]);
+    $cache[$cache_key] = (bool) $stmt->fetchColumn();
+
+    return $cache[$cache_key];
 }
 
 function generateUniqueUsername(PDO $pdo, string $tenant_id, string $first_name, string $last_name): string {
@@ -109,21 +175,79 @@ try {
     $employee_stmt->execute([$session_user_id, $tenant_id]);
     $registered_by = $employee_stmt->fetchColumn() ?: null;
 
-    $client_insert = $pdo->prepare('
+    $client_has_verification_status = walk_in_client_table_has_column($pdo, 'verification_status');
+    $client_insert_sql = '
         INSERT INTO clients (
             tenant_id, user_id, first_name, last_name,
-            date_of_birth, contact_number, present_street, email_address,
+            date_of_birth, gender, civil_status, contact_number, email_address,
+            present_house_no, present_street, present_barangay, present_city, present_province, present_postal_code,
+            permanent_house_no, permanent_street, permanent_barangay, permanent_city, permanent_province, permanent_postal_code,
+            same_as_present, employment_status, occupation, employer_name, employer_contact, monthly_income, id_type,
             registration_date, registered_by, client_status, document_verification_status
+    ';
+
+    if ($client_has_verification_status) {
+        $client_insert_sql .= ', verification_status';
+    }
+
+    $client_insert_sql .= '
         ) VALUES (
             ?, ?, ?, ?,
-            ?, ?, ?, ?,
-            CURDATE(), ?, \'Active\', \'Verified\'
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
+            CURDATE(), ?, ?, ?
+    ';
+
+    if ($client_has_verification_status) {
+        $client_insert_sql .= ', ?';
+    }
+
+    $client_insert_sql .= '
         )
-    ');
-    $client_insert->execute([
-        $tenant_id, $new_user_id, $first_name, $last_name, $dob,
-        ($phone !== '' ? $phone : null), ($address !== '' ? $address : null), $email, $registered_by
-    ]);
+    ';
+
+    $client_insert = $pdo->prepare($client_insert_sql);
+    $client_params = [
+        $tenant_id,
+        $new_user_id,
+        $first_name,
+        $last_name,
+        $dob,
+        ($gender !== '' ? $gender : null),
+        ($civil_status !== '' ? $civil_status : null),
+        $phone,
+        $email,
+        ($house_no !== '' ? $house_no : null),
+        ($street !== '' ? $street : null),
+        ($barangay !== '' ? $barangay : null),
+        ($city !== '' ? $city : null),
+        ($province !== '' ? $province : null),
+        ($postal_code !== '' ? $postal_code : null),
+        ($perm_house_no !== '' ? $perm_house_no : null),
+        ($perm_street !== '' ? $perm_street : null),
+        ($perm_barangay !== '' ? $perm_barangay : null),
+        ($perm_city !== '' ? $perm_city : null),
+        ($perm_province !== '' ? $perm_province : null),
+        ($perm_postal_code !== '' ? $perm_postal_code : null),
+        $same_as_present ? 1 : 0,
+        ($employment_status !== '' ? $employment_status : null),
+        ($occupation !== '' ? $occupation : null),
+        ($employer_name !== '' ? $employer_name : null),
+        ($employer_contact !== '' ? $employer_contact : null),
+        $monthly_income,
+        $id_type,
+        $registered_by,
+        'Inactive',
+        'Unverified',
+    ];
+
+    if ($client_has_verification_status) {
+        $client_params[] = 'Pending';
+    }
+
+    $client_insert->execute($client_params);
     
     $new_client_id = (int) $pdo->lastInsertId();
 
@@ -148,7 +272,7 @@ try {
                 
                 if (move_uploaded_file($tmp_name, $dest_path)) {
                     $rel_path = 'uploads/walk_in_documents/' . $tenant_upload_key . '/' . date('Y/m') . '/' . $stored_name;
-                    $doc_stmt = $pdo->prepare('INSERT INTO client_documents (client_id, tenant_id, document_type_id, file_name, file_path, verification_status) VALUES (?, ?, ?, ?, ?, \'Verified\')');
+                    $doc_stmt = $pdo->prepare('INSERT INTO client_documents (client_id, tenant_id, document_type_id, file_name, file_path, verification_status) VALUES (?, ?, ?, ?, ?, \'Pending\')');
                     $doc_stmt->execute([$new_client_id, $tenant_id, $doc_type_id, $original_name, $rel_path]);
                     $uploaded_count++;
                 }
@@ -156,8 +280,17 @@ try {
         }
     }
 
-    $audit_stmt = $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'WALK_IN_REGISTERED', 'client', ?, 'Walk-in client registered and marked as Active/Verified')");
-    $audit_stmt->execute([$session_user_id > 0 ? $session_user_id : null, $tenant_id, $new_client_id]);
+    $audit_description = 'Walk-in client registered as Inactive with verification pending.';
+    $audit_description .= $documents_complete ? ' Staff marked the document set as complete.' : ' Staff marked the document set as incomplete.';
+    if ($missing_documents_notes !== '') {
+        $audit_description .= ' Notes: ' . $missing_documents_notes;
+    }
+    if ($walk_in_action === 'draft') {
+        $audit_description .= ' Saved through the draft action.';
+    }
+
+    $audit_stmt = $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'WALK_IN_REGISTERED', 'client', ?, ?)");
+    $audit_stmt->execute([$session_user_id > 0 ? $session_user_id : null, $tenant_id, $new_client_id, $audit_description]);
 
     $pdo->commit();
 
@@ -195,8 +328,10 @@ try {
 
     echo json_encode([
         'status' => 'success',
-        'message' => 'Client account created instantly (Active & Verified). An email has been sent to ' . htmlspecialchars($email) . ' for password setup.',
+        'message' => 'Walk-in client registered successfully. The account is inactive until verification is approved. A password setup email has been sent to ' . htmlspecialchars($email) . '.',
         'client_id' => $new_client_id,
+        'client_status' => 'Inactive',
+        'verification_status' => 'Pending',
         'uploaded_document_count' => $uploaded_count,
         'email_status' => $email_result
     ]);

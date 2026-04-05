@@ -461,6 +461,10 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
     try {
         $pdo->beginTransaction();
 
+        $client_status_stmt = $pdo->prepare("SELECT client_status FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
+        $client_status_stmt->execute([$client_id, $tenant_id]);
+        $current_client_status = (string) $client_status_stmt->fetchColumn();
+
         // Resolve employee_id from user_id (verified_by is a FK to employees)
         $emp_row2 = $pdo->prepare("SELECT employee_id FROM employees WHERE user_id = ? AND tenant_id = ? LIMIT 1");
         $emp_row2->execute([$session_user_id, $tenant_id]);
@@ -474,6 +478,7 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
         $client_verify_sql = "
             UPDATE clients
             SET document_verification_status = 'Approved',
+                client_status = CASE WHEN client_status = 'Inactive' THEN 'Active' ELSE client_status END,
                 updated_at = NOW()
             WHERE client_id = ? AND tenant_id = ?
         ";
@@ -482,6 +487,7 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
             $client_verify_sql = "
                 UPDATE clients
                 SET document_verification_status = 'Approved',
+                    client_status = CASE WHEN client_status = 'Inactive' THEN 'Active' ELSE client_status END,
                     verification_status = 'Approved',
                     updated_at = NOW()
                 WHERE client_id = ? AND tenant_id = ?
@@ -495,7 +501,10 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
             ->execute([$session_user_id, $tenant_id, $client_id]);
 
         $pdo->commit();
-        echo json_encode(['status' => 'success', 'message' => "Client fully verified and approved!"]);
+        $success_message = $current_client_status === 'Inactive'
+            ? 'Client fully verified, approved, and activated.'
+            : 'Client fully verified and approved!';
+        echo json_encode(['status' => 'success', 'message' => $success_message]);
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
