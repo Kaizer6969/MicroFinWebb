@@ -58,7 +58,7 @@ try {
     $schedStmt->close();
 
     // Fetch transactions
-    $txStmt = $conn->prepare("SELECT transaction_id, payment_date, amount_paid, payment_method, status FROM payments WHERE loan_id = ? AND tenant_id = ? ORDER BY payment_date DESC, payment_id DESC");
+    $txStmt = $conn->prepare("SELECT payment_id AS transaction_id, payment_date, amount_paid, payment_method, payment_status AS status FROM payments WHERE loan_id = ? AND tenant_id = ? ORDER BY payment_date DESC, payment_id DESC");
     $txStmt->bind_param('is', $loan['loan_id'], $tenantId);
     $txStmt->execute();
     $txRes = $txStmt->get_result();
