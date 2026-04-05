@@ -47,7 +47,7 @@ try {
     $progress = $total > 0 ? min(1, $paid / $total) : 0;
 
     // Fetch schedules
-    $schedStmt = $conn->prepare("SELECT schedule_id, due_date, status, total_due, amount_paid, is_overdue FROM loan_schedules WHERE loan_id = ? ORDER BY due_date ASC");
+    $schedStmt = $conn->prepare("SELECT schedule_id, due_date, payment_status AS status, total_payment AS total_due, amount_paid, IF(payment_status='Overdue', 1, 0) AS is_overdue FROM amortization_schedule WHERE loan_id = ? ORDER BY due_date ASC");
     $schedStmt->bind_param('i', $loan['loan_id']);
     $schedStmt->execute();
     $schedRes = $schedStmt->get_result();
