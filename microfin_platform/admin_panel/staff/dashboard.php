@@ -172,6 +172,8 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <link rel="stylesheet" href="../admin.css">
+    <!-- html2pdf for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         /* ── CSS Variables (tenant-driven) ── */
         :root {
@@ -2143,10 +2145,15 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                             <h1>Reports & Analytics</h1>
                             <p>Financial performance and portfolio overview.</p>
                         </div>
-                        <div class="page-header-actions">
-                            <button class="filter-tab active" onclick="loadReports('week');setActiveTab(this)">Week</button>
-                            <button class="filter-tab" onclick="loadReports('month');setActiveTab(this)">Month</button>
-                            <button class="filter-tab" onclick="loadReports('year');setActiveTab(this)">Year</button>
+                        <div class="page-header-actions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <div>
+                                <button class="filter-tab active" onclick="loadReports('week');setActiveTab(this)">Week</button>
+                                <button class="filter-tab" onclick="loadReports('month');setActiveTab(this)">Month</button>
+                                <button class="filter-tab" onclick="loadReports('year');setActiveTab(this)">Year</button>
+                            </div>
+                            <button class="btn btn-outline btn-sm" onclick="exportReportsPDF()" style="height:32px;">
+                                <span class="material-symbols-rounded ms" style="font-size:18px;">download</span> Export PDF
+                            </button>
                         </div>
                     </div>
                     <div id="reportsBody">
@@ -4359,6 +4366,21 @@ $initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? s
                 console.error(error);
                 body.innerHTML = '<p style="color:var(--muted);padding:24px;">Could not load report data.</p>';
             }
+        }
+
+        function exportReportsPDF() {
+            const element = document.getElementById('reportsBody');
+            if (!element) return;
+            
+            const opt = {
+                margin:       [10, 10, 10, 10],
+                filename:     'Reports_Analytics.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            
+            html2pdf().set(opt).from(element).save();
         }
 
         // ── Users ──────────────────────────────────────────────────────
