@@ -76,17 +76,23 @@ jobs:
           tenants = []
           seen_slugs = set()
           for raw in payload.get("tenants", []):
+              tenant_id = str(raw.get("tenant_id") or raw.get("id") or "").strip()
               slug_source = str(
                   raw.get("tenant_slug") or raw.get("tenant_id") or ""
               ).strip().lower()
               slug = re.sub(r"[^a-z0-9_-]+", "_", slug_source).strip("_")
               app_name = str(raw.get("tenant_name") or raw.get("appName") or slug).strip()
+              tenant_lock_id = tenant_id or slug
 
               if not slug or slug in seen_slugs:
                   continue
 
               seen_slugs.add(slug)
-              tenants.append({"slug": slug, "app_name": app_name or slug})
+              tenants.append({
+                  "slug": slug,
+                  "tenant_lock_id": tenant_lock_id,
+                  "app_name": app_name or slug,
+              })
 
           if not tenants:
               raise SystemExit("No active tenants were returned by the API.")
@@ -98,6 +104,7 @@ jobs:
 
           for tenant in tenants:
               slug = tenant["slug"]
+              tenant_lock_id = tenant["tenant_lock_id"]
               app_name = tenant["app_name"]
               print(f"Building tenant APK for {slug} ({app_name})")
               subprocess.run(
@@ -108,7 +115,7 @@ jobs:
                       "--release",
                       "--no-tree-shake-icons",
                       f"--dart-define=APP_NAME={app_name}",
-                      f"--dart-define=TENANT_ID={slug}",
+                      f"--dart-define=TENANT_ID={tenant_lock_id}",
                   ],
                   cwd="microfin_mobile",
                   check=True,

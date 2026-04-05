@@ -6,6 +6,9 @@ on:
       tenant_slug:
         description: Tenant slug to lock into the APK
         required: true
+      tenant_id:
+        description: Immutable tenant ID to lock into the APK
+        required: false
       app_name:
         description: Android app label shown to users
         required: true
@@ -57,7 +60,14 @@ jobs:
             exit 1
           fi
 
+          TENANT_LOCK_ID="${{ github.event.inputs.tenant_id }}"
+          TENANT_LOCK_ID="$(printf '%s' "$TENANT_LOCK_ID" | sed 's/^ *//; s/ *$//')"
+          if [ -z "$TENANT_LOCK_ID" ]; then
+            TENANT_LOCK_ID="$TENANT_SLUG"
+          fi
+
           echo "tenant_slug=$TENANT_SLUG" >> "$GITHUB_OUTPUT"
+          echo "tenant_lock_id=$TENANT_LOCK_ID" >> "$GITHUB_OUTPUT"
           echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
@@ -68,11 +78,11 @@ jobs:
         working-directory: microfin_mobile
         env:
           APP_NAME: ${{ steps.vars.outputs.app_name }}
-          TENANT_SLUG: ${{ steps.vars.outputs.tenant_slug }}
+          TENANT_LOCK_ID: ${{ steps.vars.outputs.tenant_lock_id }}
         run: |
           flutter build apk --release --no-tree-shake-icons \
             --dart-define=APP_NAME="$APP_NAME" \
-            --dart-define=TENANT_ID="$TENANT_SLUG"
+            --dart-define=TENANT_ID="$TENANT_LOCK_ID"
 
       - name: Store tenant APK
         env:

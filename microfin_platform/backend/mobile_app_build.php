@@ -339,6 +339,7 @@ function mf_mobile_app_dispatch_tenant_build(PDO $pdo, string $tenantId, string 
         'ref' => $ref,
         'inputs' => [
             'tenant_slug' => $slug,
+            'tenant_id' => $tenantId,
             'app_name' => $resolvedAppName,
         ],
     ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

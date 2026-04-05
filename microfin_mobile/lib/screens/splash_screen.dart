@@ -230,22 +230,22 @@ class _SplashScreenState extends State<SplashScreen>
         }
       }
       if (matchingTenant != null) {
-        _selectedTenant = matchingTenant;
-        activeTenant.value =
-            TenantBranding.fromTenantId(_selectedTenant!.slug) ??
-            _selectedTenant!;
-        setState(() {
-          _startupErrorTitle = null;
-          _startupErrorMessage = null;
-          _showWelcomePanel = true;
-        });
-        _welcomeController.forward(from: 0);
+        _activateStartupTenant(matchingTenant);
         return;
       }
     }
 
     // 6. Single tenant or release fallback → auto-select first
     if (_isLockedTenantBuild) {
+      if (_tryUseSingleTenantFallback()) {
+        return;
+      }
+
+      await TenantBranding.loadTenants();
+      if (_tryUseSingleTenantFallback()) {
+        return;
+      }
+
       await prefs.remove('locked_tenant_id');
       _showStartupError(
         title: 'Tenant Lock Failed',
@@ -262,16 +262,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (TenantBranding.lastLoadSucceeded &&
         TenantBranding.tenants.length == 1 &&
         TenantBranding.tenants.first.id != TenantBranding.defaultTenant.id) {
-      _selectedTenant = TenantBranding.tenants.first;
-      activeTenant.value =
-          TenantBranding.fromTenantId(_selectedTenant!.slug) ??
-          _selectedTenant!;
-      setState(() {
-        _startupErrorTitle = null;
-        _startupErrorMessage = null;
-        _showWelcomePanel = true;
-      });
-      _welcomeController.forward(from: 0);
+      _activateStartupTenant(TenantBranding.tenants.first);
       return;
     }
 
@@ -280,6 +271,32 @@ class _SplashScreenState extends State<SplashScreen>
         _showTenantPicker(context);
       }
     });
+  }
+
+  void _activateStartupTenant(TenantBranding tenant) {
+    _selectedTenant = tenant;
+    activeTenant.value = TenantBranding.fromTenantId(tenant.slug) ?? tenant;
+    setState(() {
+      _startupErrorTitle = null;
+      _startupErrorMessage = null;
+      _showWelcomePanel = true;
+    });
+    _welcomeController.forward(from: 0);
+  }
+
+  bool _tryUseSingleTenantFallback() {
+    if (!TenantBranding.lastLoadSucceeded ||
+        TenantBranding.tenants.length != 1) {
+      return false;
+    }
+
+    final tenant = TenantBranding.tenants.first;
+    if (tenant.id == TenantBranding.defaultTenant.id) {
+      return false;
+    }
+
+    _activateStartupTenant(tenant);
+    return true;
   }
 
   void _showStartupError({required String title, required String message}) {
