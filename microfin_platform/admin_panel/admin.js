@@ -260,7 +260,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function normalizeCreditPolicySubtab(tabId) {
+        if (tabId === 'builder') {
+            return 'overview';
+        }
+        return tabId || '';
+    }
+
     function activateCreditPolicySubtab(tabId) {
+        tabId = normalizeCreditPolicySubtab(tabId);
         if (!tabId || typeof window.setCreditPolicyTab !== 'function') {
             return;
         }
@@ -273,7 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return '';
         }
 
-        const explicitTab = item.getAttribute('data-credit-policy-subtab');
+        const explicitTab = normalizeCreditPolicySubtab(item.getAttribute('data-credit-policy-subtab'));
         if (explicitTab) {
             return explicitTab;
         }
@@ -284,13 +292,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const targetUrl = new URL(href, window.location.href);
-            return targetUrl.searchParams.get('credit_policy_tab') || '';
+            return normalizeCreditPolicySubtab(targetUrl.searchParams.get('credit_policy_tab') || '');
         } catch (error) {
             return '';
         }
     }
 
     function findPreferredNavItem(targetId, subTabId = '') {
+        subTabId = normalizeCreditPolicySubtab(subTabId);
         if (targetId === 'credit_settings' && subTabId !== '') {
             const creditPolicyNav = document.querySelector(`.sidebar-nav .nav-item[data-target="${targetId}"][data-credit-policy-subtab="${subTabId}"]`);
             if (creditPolicyNav) {
@@ -439,7 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sectionParam = urlParams.get('section') || '';
     const tabParam = urlParams.get('tab') || '';
     const subParam = urlParams.get('sub') || '';
-    const creditPolicyTabParam = urlParams.get('credit_policy_tab') || '';
+    const creditPolicyTabParam = normalizeCreditPolicySubtab(urlParams.get('credit_policy_tab') || '');
 
     let initialRoute = null;
     if (hashTarget && document.getElementById(hashTarget)) {
