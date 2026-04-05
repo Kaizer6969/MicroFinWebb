@@ -3476,13 +3476,13 @@ function hexToRgb($hex) {
                         <a href="admin.php?tab=credit_control_policy" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && !$credit_policy_has_explicit_subtab ? 'active' : ''; ?>" data-target="credit_settings" data-title="Credit Policy">
                             <span>Policy Builder</span>
                         </a>
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=eligibility" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'eligibility' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Borrower Eligibility">
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=eligibility" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'eligibility' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="eligibility" data-title="Borrower Eligibility">
                             <span>Borrower Eligibility</span>
                         </a>
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=score" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'score' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Score Classification">
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=score" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'score' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="score" data-title="Score Classification">
                             <span>Score Classification</span>
                         </a>
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=limit" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'limit' ? 'active' : ''; ?>" data-target="credit_settings" data-title="Limit Engine">
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=limit" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'limit' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="limit" data-title="Limit Engine">
                             <span>Limit Engine</span>
                         </a>
                     </div>
@@ -7031,6 +7031,7 @@ function hexToRgb($hex) {
                 panel.hidden = panel.getAttribute('data-credit-policy-tab-panel') !== activeTab;
             });
         }
+        window.setCreditPolicyTab = setPolicyTab;
 
         function applyDefaults() {
             if (!defaults || typeof defaults !== 'object') return;
