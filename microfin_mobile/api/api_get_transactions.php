@@ -32,14 +32,20 @@ try {
     $clientId = $client['client_id'];
 
     $tStmt = $conn->prepare("
-        SELECT 
+        (SELECT 
             payment_id AS transaction_id, loan_id, payment_amount AS amount, payment_date AS date,
             payment_method AS type, payment_status AS status, payment_reference AS reference_number
         FROM payments
-        WHERE client_id = ? AND tenant_id = ?
-        ORDER BY payment_date DESC, payment_id DESC
+        WHERE client_id = ? AND tenant_id = ?)
+        UNION ALL
+        (SELECT 
+            transaction_id, loan_id, amount, payment_date AS date,
+            payment_method AS type, status, transaction_ref AS reference_number
+        FROM payment_transactions
+        WHERE client_id = ? AND tenant_id = ?)
+        ORDER BY date DESC
     ");
-    $tStmt->bind_param('is', $clientId, $tenantId);
+    $tStmt->bind_param('isis', $clientId, $tenantId, $clientId, $tenantId);
     $tStmt->execute();
     $res = $tStmt->get_result();
     
