@@ -6163,10 +6163,19 @@ function hexToRgb($hex) {
                         <form method="POST" action="admin.php" class="card credit-scoring-card credit-policy-form-card" id="credit-policy-form" data-credit-policy-defaults="<?php echo $credit_policy_defaults_json; ?>">
                             <input type="hidden" name="action" value="save_credit_policy">
 
+                            <?php
+                            $credit_policy_header_map = [
+                                'overview' => ['Overview', 'Review the full credit policy flow and use the sidebar to open each section.'],
+                                'eligibility' => ['Borrower Eligibility', 'Define the first-pass borrower requirements before score classification begins.'],
+                                'score' => ['Score Classification', 'Set the credit score bands and review how they route applications.'],
+                                'limit' => ['Limit Engine', 'Configure the formula and guardrails used for recommended offers.'],
+                            ];
+                            $credit_policy_header = $credit_policy_header_map[$credit_policy_subtab] ?? $credit_policy_header_map['overview'];
+                            ?>
                             <div class="credit-engine-header credit-policy-engine-header">
                                 <div>
-                                    <h3>Policy Builder</h3>
-                                    <p class="text-muted">Organize your policy around borrower eligibility, score classification, and the limit engine.</p>
+                                    <h3><?php echo htmlspecialchars($credit_policy_header[0]); ?></h3>
+                                    <p class="text-muted"><?php echo htmlspecialchars($credit_policy_header[1]); ?></p>
                                 </div>
                             </div>
 
