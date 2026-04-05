@@ -6324,13 +6324,24 @@ function hexToRgb($hex) {
                                             <div class="credit-policy-head-icon"><span class="material-symbols-rounded">verified_user</span></div>
                                             <div class="credit-policy-panel-title">
                                                 <span class="credit-policy-section-step">Section 1</span>
-                                                <h4>Eligibility Rules</h4>
-                                                <p class="text-muted">Use these checks to decide who can move forward before scoring and offer sizing.</p>
+                                                <h4>Borrower Eligibility</h4>
+                                                <p class="text-muted">Set the first-pass requirements that determine which borrowers can move forward into score classification and offer sizing.</p>
                                             </div>
                                         </div>
                                         <div class="credit-policy-section-meta">
                                             <span class="badge badge-gray">Borrower checks</span>
                                             <span class="badge badge-blue" id="credit-policy-employment-count-badge"><?php echo (int)$credit_policy_allowed_employment_count; ?> statuses enabled</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="credit-policy-eligibility-stat-grid">
+                                        <div class="credit-policy-stat">
+                                            <span>Income Floor</span>
+                                            <strong id="credit-policy-eligibility-income-stat"><?php echo '&#8369;' . number_format((float)($credit_policy['eligibility']['min_monthly_income'] ?? 0), 2); ?></strong>
+                                        </div>
+                                        <div class="credit-policy-stat">
+                                            <span>Employment Coverage</span>
+                                            <strong id="credit-policy-eligibility-status-stat"><?php echo (int)$credit_policy_allowed_employment_count; ?> statuses currently allowed</strong>
                                         </div>
                                     </div>
 
@@ -6346,9 +6357,9 @@ function hexToRgb($hex) {
                                         <div class="credit-policy-note-card">
                                             <strong>What this section controls</strong>
                                             <ul>
-                                                <li>Uses borrower income, employment, and document status.</li>
-                                                <li>Stops obviously ineligible borrowers before score or product checks run.</li>
-                                                <li>Works best when at least one employment status stays enabled.</li>
+                                                <li>Uses borrower income and allowed employment types as the entry gate.</li>
+                                                <li>Stops ineligible borrowers before score classification or limit calculation runs.</li>
+                                                <li>Works best when at least one employment status remains enabled.</li>
                                             </ul>
                                         </div>
                                     </div>
