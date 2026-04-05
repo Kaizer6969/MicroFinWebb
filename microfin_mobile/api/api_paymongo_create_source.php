@@ -30,7 +30,8 @@ if (empty($secretKey)) {
     
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $scheme = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-    $checkoutUrl = "$scheme://$host/admin-draft/microfin_mobile/api/api_paymongo_mock_portal.php?source=$sourceId&amount=$amount&method=$method";
+    $baseUrl = $scheme . '://' . $host . dirname($_SERVER['PHP_SELF']);
+    $checkoutUrl = "$baseUrl/api_paymongo_mock_portal.php?source=$sourceId&amount=$amount&method=$method";
 
     echo json_encode([
         'success' => true,
@@ -44,8 +45,9 @@ if (empty($secretKey)) {
 // Proceed with real PayMongo API
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $scheme = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-$successUrl = "$scheme://$host/admin-draft/microfin_mobile/api/api_paymongo_mock_portal.php?status=success&amount=$amount";
-$failedUrl  = "$scheme://$host/admin-draft/microfin_mobile/api/api_paymongo_mock_portal.php?status=failed&amount=$amount";
+$baseUrl = $scheme . '://' . $host . dirname($_SERVER['PHP_SELF']);
+$successUrl = "$baseUrl/api_paymongo_mock_portal.php?status=success&amount=$amount";
+$failedUrl  = "$baseUrl/api_paymongo_mock_portal.php?status=failed&amount=$amount";
 
 $payload = [
     'data' => [
