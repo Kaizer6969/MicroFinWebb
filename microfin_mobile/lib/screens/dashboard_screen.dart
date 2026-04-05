@@ -41,17 +41,20 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   double get _usedCredit {
     if (_activeLoan != null) {
-      return double.tryParse(_activeLoan!['total_loan_amount']?.toString() ?? '0') ?? 0.0;
+      return double.tryParse(
+            _activeLoan!['total_loan_amount']?.toString() ?? '0',
+          ) ??
+          0.0;
     }
     return 0.0;
   }
-
 
   double get _remainingCredit => _creditLimit - _usedCredit;
 
   @override
   void initState() {
     super.initState();
+    activeScreenRefreshTick.addListener(_handleExternalRefresh);
     _animController = AnimationController(
       duration: const Duration(milliseconds: 700),
       vsync: this,
@@ -59,7 +62,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
 
     _sliderTimer = Timer.periodic(const Duration(seconds: 4), (Timer timer) {
-      if (_featuredProducts.isNotEmpty && _pageController.hasClients && _pageController.positions.length == 1) {
+      if (_featuredProducts.isNotEmpty &&
+          _pageController.hasClients &&
+          _pageController.positions.length == 1) {
         if (_currentPage < _featuredProducts.length - 1) {
           _currentPage++;
         } else {
@@ -78,10 +83,16 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   void dispose() {
+    activeScreenRefreshTick.removeListener(_handleExternalRefresh);
     _sliderTimer?.cancel();
     _pageController.dispose();
     _animController.dispose();
     super.dispose();
+  }
+
+  void _handleExternalRefresh() {
+    if (!mounted || currentMainTabIndex.value != 0) return;
+    _fetchDashboard();
   }
 
   Future<void> _fetchDashboard() async {
@@ -127,12 +138,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             _isProfileComplete = data['is_profile_complete'] ?? false;
             _verificationStatus = data['verification_status'] ?? 'Unverified';
             currentUser.value?['verification_status'] = _verificationStatus;
-            
+
             // Safely parse credit limit whether it comes as string or int or double
             final rawLimit = data['credit_limit'];
             _creditLimit = double.tryParse(rawLimit?.toString() ?? '0') ?? 0.0;
             currentUser.value?['credit_limit'] = _creditLimit;
-            
+
             _isLoading = false;
           });
           _animController.forward();
@@ -141,17 +152,20 @@ class _DashboardScreenState extends State<DashboardScreen>
         // Automatically logout if the account was deleted from the server
         if (mounted) {
           currentUser.value = null;
-          SharedPreferences.getInstance().then((prefs) => prefs.remove('user_data'));
+          SharedPreferences.getInstance().then(
+            (prefs) => prefs.remove('user_data'),
+          );
           setState(() => _isLoading = false);
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const SplashScreen())
+            MaterialPageRoute(builder: (_) => const SplashScreen()),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _animController.forward(); // Ensure content becomes visible even if some data parsing fails!
+        _animController
+            .forward(); // Ensure content becomes visible even if some data parsing fails!
       }
     }
   }
@@ -176,77 +190,81 @@ class _DashboardScreenState extends State<DashboardScreen>
                 color: primary,
                 onRefresh: _fetchDashboard,
                 child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                  slivers: [
-                  SliverToBoxAdapter(child: _buildHeader()),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        FadeTransition(
-                          opacity: _fadeAnim,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Verification banner
-                              _buildVerificationBanner(primary),
-                              const SizedBox(height: 12),
-
-                              if (_activeLoan != null) ...[
-                                _buildActivePortfolioCard(primary),
-                                const SizedBox(height: 16),
-                                _buildMakePaymentButton(primary),
-                                const SizedBox(height: 24),
-                              ] else if (_creditLimit > 0 || _verificationStatus == 'Approved' || _verificationStatus == 'Verified') ...[
-                                _buildCreditLimitCard(primary),
-                                const SizedBox(height: 24),
-                              ] else ...[
-                                _buildApplyNewCard(primary),
-                                const SizedBox(height: 24),
-                              ],
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildActionCard(
-                                      primary,
-                                      Icons.history_rounded,
-                                      'Loan History',
-                                      'Review past activity',
-                                      MyLoansScreen(),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: _buildActionCard(
-                                      primary,
-                                      Icons.add_card_rounded,
-                                      'Apply New',
-                                      'Pre-approved limits',
-                                      LoanApplicationScreen(),
-                                      isLightBlue: true,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 32),
-                              if (_featuredProducts.isNotEmpty) ...[
-                                _buildFeaturedProductsSlider(primary),
-                                const SizedBox(height: 32),
-                              ],
-                              _buildRecentActivityTitle(),
-                              const SizedBox(height: 16),
-                              _buildRecentActivityList(primary),
-                              const SizedBox(height: 24),
-                              _buildNeedAssistanceCard(primary),
-                            ],
-                          ),
-                        ),
-                      ]),
-                    ),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
                   ),
-                ],
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildHeader()),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          FadeTransition(
+                            opacity: _fadeAnim,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Verification banner
+                                _buildVerificationBanner(primary),
+                                const SizedBox(height: 12),
+
+                                if (_activeLoan != null) ...[
+                                  _buildActivePortfolioCard(primary),
+                                  const SizedBox(height: 16),
+                                  _buildMakePaymentButton(primary),
+                                  const SizedBox(height: 24),
+                                ] else if (_creditLimit > 0 ||
+                                    _verificationStatus == 'Approved' ||
+                                    _verificationStatus == 'Verified') ...[
+                                  _buildCreditLimitCard(primary),
+                                  const SizedBox(height: 24),
+                                ] else ...[
+                                  _buildApplyNewCard(primary),
+                                  const SizedBox(height: 24),
+                                ],
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildActionCard(
+                                        primary,
+                                        Icons.history_rounded,
+                                        'Loan History',
+                                        'Review past activity',
+                                        MyLoansScreen(),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: _buildActionCard(
+                                        primary,
+                                        Icons.add_card_rounded,
+                                        'Apply New',
+                                        'Pre-approved limits',
+                                        LoanApplicationScreen(),
+                                        isLightBlue: true,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 32),
+                                if (_featuredProducts.isNotEmpty) ...[
+                                  _buildFeaturedProductsSlider(primary),
+                                  const SizedBox(height: 32),
+                                ],
+                                _buildRecentActivityTitle(),
+                                const SizedBox(height: 16),
+                                _buildRecentActivityList(primary),
+                                const SizedBox(height: 24),
+                                _buildNeedAssistanceCard(primary),
+                              ],
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
       ),
     );
   }
@@ -328,7 +346,10 @@ class _DashboardScreenState extends State<DashboardScreen>
             builder: (context, notifs, _) => Stack(
               children: [
                 IconButton(
-                  onPressed: () => AppDialogs.showNotifications(context, tenant.themePrimaryColor),
+                  onPressed: () => AppDialogs.showNotifications(
+                    context,
+                    tenant.themePrimaryColor,
+                  ),
                   icon: const Icon(
                     Icons.notifications_rounded,
                     color: Color(0xFF0F292B),
@@ -359,14 +380,15 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildActivePortfolioCard(Color primary) {
     final loan = _activeLoan!;
     double getNum(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0.0;
-    
+
     final progress = getNum(loan['progress']);
-    final remaining = '₱${getNum(loan['remaining_balance']).toStringAsFixed(2)}';
+    final remaining =
+        '₱${getNum(loan['remaining_balance']).toStringAsFixed(2)}';
     final total = '₱${getNum(loan['total_loan_amount']).toStringAsFixed(2)}';
     final paid = '₱${getNum(loan['total_paid']).toStringAsFixed(2)}';
-    final nextAmt = '₱${getNum(loan['monthly_amortization']).toStringAsFixed(2)}';
+    final nextAmt =
+        '₱${getNum(loan['monthly_amortization']).toStringAsFixed(2)}';
     final dueDate = loan['next_payment_due'] ?? 'N/A';
-
 
     // Convert dueDate like "2024-10-24" -> "Oct 24"
     String shortDueDate = dueDate;
@@ -647,7 +669,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
               ),
               Icon(Icons.verified, color: primary, size: 16),
-            ]
+            ],
           ),
           const SizedBox(height: 8),
           const Text(
@@ -708,7 +730,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                 ],
               ),
-            ]
+            ],
           ),
           const SizedBox(height: 24),
           SizedBox(
@@ -723,8 +745,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildApplyNewButton(Color primary, {bool isDarkCard = false}) {
     return ElevatedButton(
       onPressed: () async {
-        if (_verificationStatus != 'Approved' && _verificationStatus != 'Verified') {
-          AppDialogs.showVerificationRequired(context, primary, status: _verificationStatus);
+        if (_verificationStatus != 'Approved' &&
+            _verificationStatus != 'Verified') {
+          AppDialogs.showVerificationRequired(
+            context,
+            primary,
+            status: _verificationStatus,
+          );
         } else {
           await Navigator.push(
             context,
@@ -796,14 +823,24 @@ class _DashboardScreenState extends State<DashboardScreen>
     bool isLightBlue = false,
   }) {
     // If not approved, show lock on Application
-    bool isLocked = title == 'Apply New' && (_verificationStatus != 'Approved' && _verificationStatus != 'Verified');
+    bool isLocked =
+        title == 'Apply New' &&
+        (_verificationStatus != 'Approved' &&
+            _verificationStatus != 'Verified');
 
     return GestureDetector(
       onTap: () async {
         if (isLocked) {
-          AppDialogs.showVerificationRequired(context, primary, status: _verificationStatus);
+          AppDialogs.showVerificationRequired(
+            context,
+            primary,
+            status: _verificationStatus,
+          );
         } else {
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => screen),
+          );
           _fetchDashboard();
         }
       },
@@ -871,7 +908,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
         GestureDetector(
           onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionHistoryScreen()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const TransactionHistoryScreen(),
+              ),
+            );
           },
           child: const Text(
             'View All',
@@ -900,11 +942,15 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     return Column(
       children: _notifications.take(3).map((n) {
-        bool isPayment = n['notification_type'] == 'Payment Received' || n['notification_type'] == 'Payment';
+        bool isPayment =
+            n['notification_type'] == 'Payment Received' ||
+            n['notification_type'] == 'Payment';
         String amountText = '';
         if (isPayment && n['message'].toString().contains('paid')) {
           // crude extraction of amount for visual similarity
-          final match = RegExp(r'[\u20b1$P]?\s?(\d[\d,]*(?:\.\d+)?)').firstMatch(n['message']);
+          final match = RegExp(
+            r'[\u20b1$P]?\s?(\d[\d,]*(?:\.\d+)?)',
+          ).firstMatch(n['message']);
           if (match != null) {
             amountText = '-\$${match.group(1)}';
           }
@@ -979,7 +1025,10 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildNeedAssistanceCard(Color primary) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportCenterScreen())),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SupportCenterScreen()),
+      ),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -1029,7 +1078,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildVerificationBanner(Color primary) {
-    if (_verificationStatus == 'Approved' || _verificationStatus == 'Verified') return const SizedBox.shrink();
+    if (_verificationStatus == 'Approved' || _verificationStatus == 'Verified')
+      return const SizedBox.shrink();
 
     String title = 'Verify Identity';
     Color bgColor = const Color(0xFFFEF3C7);
@@ -1164,202 +1214,212 @@ class _DashboardScreenState extends State<DashboardScreen>
             itemBuilder: (context, index) {
               final product = _featuredProducts[index];
               final String name = product['product_name'] ?? 'Product';
-              final double amount = double.tryParse(product['max_amount']?.toString() ?? '0') ?? 0.0;
-              final double rate = double.tryParse(product['interest_rate']?.toString() ?? '0') ?? 0.0;
+              final double amount =
+                  double.tryParse(product['max_amount']?.toString() ?? '0') ??
+                  0.0;
+              final double rate =
+                  double.tryParse(
+                    product['interest_rate']?.toString() ?? '0',
+                  ) ??
+                  0.0;
 
               return Container(
-                  margin: EdgeInsets.zero,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF6366F1).withOpacity(0.25),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
+                margin: EdgeInsets.zero,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withOpacity(0.25),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [primary, primary.withOpacity(0.8)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: Stack(
-                      children: [
-                        Container(
+                      // Decorative large circles for sleek design
+                      Positioned(
+                        right: -20,
+                        top: -20,
+                        child: Container(
+                          width: 100,
+                          height: 100,
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [primary, primary.withOpacity(0.8)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.1),
                           ),
                         ),
-                        // Decorative large circles for sleek design
-                        Positioned(
-                          right: -20,
-                          top: -20,
-                          child: Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.1),
-                            ),
+                      ),
+                      Positioned(
+                        left: -30,
+                        bottom: -30,
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.05),
                           ),
                         ),
-                        Positioned(
-                          left: -30,
-                          bottom: -30,
-                          child: Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.05),
-                            ),
-                          ),
-                        ),
-                        // Content
-                        Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(
-                                      Icons.rocket_launch_rounded,
-                                      color: Colors.white,
-                                      size: 24,
-                                    ),
+                      ),
+                      // Content
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w800,
-                                            color: Colors.white,
-                                            letterSpacing: -0.5,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Container(
-                                          margin: const EdgeInsets.only(
-                                            top: 4,
-                                          ), // ✅ correct
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(
-                                              0.15,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '${rate.toStringAsFixed(1)}% Interest',
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  child: const Icon(
+                                    Icons.rocket_launch_rounded,
+                                    color: Colors.white,
+                                    size: 24,
                                   ),
-                                ],
-                              ),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Column(
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Eligible Up To',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white.withOpacity(0.8),
-                                        ),
-                                      ),
-                                      Text(
-                                        '₱${amount.toStringAsFixed(2)}',
+                                        name,
                                         style: const TextStyle(
-                                          fontSize: 22,
+                                          fontSize: 18,
                                           fontWeight: FontWeight.w800,
                                           color: Colors.white,
                                           letterSpacing: -0.5,
                                         ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Container(
+                                        margin: const EdgeInsets.only(
+                                          top: 4,
+                                        ), // ✅ correct
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${rate.toStringAsFixed(1)}% Interest',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ),
-                                  GestureDetector(
-                                    onTap: () async {
-                                      if (_verificationStatus != 'Approved' && _verificationStatus != 'Verified') {
-                                        AppDialogs.showVerificationRequired(context, primary, status: _verificationStatus);
-                                      } else {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (_) => const LoanApplicationScreen()),
-                                        );
-                                        _fetchDashboard();
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 8,
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Eligible Up To',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white.withOpacity(0.8),
                                       ),
-                                      decoration: BoxDecoration(
+                                    ),
+                                    Text(
+                                      '₱${amount.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
                                         color: Colors.white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.1),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
+                                        letterSpacing: -0.5,
                                       ),
-                                      child: Text(
-                                        'Apply',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          color: primary,
+                                    ),
+                                  ],
+                                ),
+                                GestureDetector(
+                                  onTap: () async {
+                                    if (_verificationStatus != 'Approved' &&
+                                        _verificationStatus != 'Verified') {
+                                      AppDialogs.showVerificationRequired(
+                                        context,
+                                        primary,
+                                        status: _verificationStatus,
+                                      );
+                                    } else {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const LoanApplicationScreen(),
                                         ),
+                                      );
+                                      _fetchDashboard();
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      'Apply',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                        color: primary,
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ],
-                          ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
               );
             },
           ),

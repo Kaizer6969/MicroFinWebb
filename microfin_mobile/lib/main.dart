@@ -5,8 +5,9 @@ import 'screens/splash_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // Global active tenant — drives all UI theming across the app
-final ValueNotifier<TenantBranding> activeTenant =
-    ValueNotifier(TenantBranding.defaultTenant);
+final ValueNotifier<TenantBranding> activeTenant = ValueNotifier(
+  TenantBranding.defaultTenant,
+);
 
 // Global current user — tracks logged in state
 final ValueNotifier<Map<String, dynamic>?> currentUser = ValueNotifier(null);
@@ -14,6 +15,13 @@ final ValueNotifier<Map<String, dynamic>?> currentUser = ValueNotifier(null);
 // Global notifications — tracks notification lists for unread indicators and popups
 final ValueNotifier<List<dynamic>> globalNotifications = ValueNotifier([]);
 
+// Global main-tab state — lets kept-alive tabs know when they should refresh.
+final ValueNotifier<int> currentMainTabIndex = ValueNotifier(0);
+final ValueNotifier<int> activeScreenRefreshTick = ValueNotifier(0);
+
+void requestActiveScreenRefresh() {
+  activeScreenRefreshTick.value = activeScreenRefreshTick.value + 1;
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,8 +110,7 @@ class MicroFinApp extends StatelessWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: tenant.themeBgCard,
-        contentPadding:
-            EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: tenant.themeBorderColor),
@@ -128,5 +135,3 @@ class MicroFinApp extends StatelessWidget {
     );
   }
 }
-
-

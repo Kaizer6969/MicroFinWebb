@@ -143,6 +143,7 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
   @override
   void initState() {
     super.initState();
+    activeScreenRefreshTick.addListener(_handleExternalRefresh);
     _amountCtrl.addListener(() => setState(() {}));
     _fetchProducts();
     _fetchDocTypes();
@@ -150,10 +151,17 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
 
   @override
   void dispose() {
+    activeScreenRefreshTick.removeListener(_handleExternalRefresh);
     _amountCtrl.dispose();
     _purposeDescCtrl.dispose();
     for (final c in _appDataCtrls.values) c.dispose();
     super.dispose();
+  }
+
+  void _handleExternalRefresh() {
+    if (!mounted || currentMainTabIndex.value != 2) return;
+    _fetchProducts();
+    _fetchDocTypes();
   }
 
   TextEditingController _ctrl(String key) {
@@ -228,8 +236,8 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
 
     try {
       final query = user != null
-          ? 'api_get_products.php?tenant_id=${activeTenant.value.id}&user_id=${user['user_id']}'
-          : 'api_get_products.php?tenant_id=${activeTenant.value.id}';
+          ? 'api_get_products.php?tenant_id=${activeTenant.value.id}&user_id=${user['user_id']}&t=${DateTime.now().millisecondsSinceEpoch}'
+          : 'api_get_products.php?tenant_id=${activeTenant.value.id}&t=${DateTime.now().millisecondsSinceEpoch}';
       final resp = await http.get(Uri.parse(ApiConfig.getUrl(query)));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
@@ -281,7 +289,11 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
   Future<void> _fetchDocTypes() async {
     try {
       final resp = await http.get(
-        Uri.parse(ApiConfig.getUrl('api_get_doc_types.php')),
+        Uri.parse(
+          ApiConfig.getUrl(
+            'api_get_doc_types.php?t=${DateTime.now().millisecondsSinceEpoch}',
+          ),
+        ),
       );
       final data = jsonDecode(resp.body);
       if (data['success'] == true && mounted) {

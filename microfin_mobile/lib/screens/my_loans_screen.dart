@@ -24,7 +24,8 @@ class _MyLoansScreenState extends State<MyLoansScreen>
     double total = 0;
     for (var l in _loans) {
       if (l['loan_status'] == 'Active') {
-        total += double.tryParse(l['remaining_balance']?.toString() ?? '0') ?? 0.0;
+        total +=
+            double.tryParse(l['remaining_balance']?.toString() ?? '0') ?? 0.0;
       }
     }
     return total;
@@ -41,18 +42,24 @@ class _MyLoansScreenState extends State<MyLoansScreen>
     return total;
   }
 
-
   @override
   void initState() {
     super.initState();
+    activeScreenRefreshTick.addListener(_handleExternalRefresh);
     _tabController = TabController(length: 2, vsync: this);
     _fetchLoans();
   }
 
   @override
   void dispose() {
+    activeScreenRefreshTick.removeListener(_handleExternalRefresh);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _handleExternalRefresh() {
+    if (!mounted || currentMainTabIndex.value != 1) return;
+    _fetchLoans();
   }
 
   Future<void> _fetchLoans() async {
@@ -61,8 +68,11 @@ class _MyLoansScreenState extends State<MyLoansScreen>
       return;
     }
     try {
-      final url = Uri.parse(ApiConfig.getUrl(
-          'api_get_my_loans.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}'));
+      final url = Uri.parse(
+        ApiConfig.getUrl(
+          'api_get_my_loans.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}&t=${DateTime.now().millisecondsSinceEpoch}',
+        ),
+      );
       final response = await http.get(url);
       final data = jsonDecode(response.body);
       if (data['success'] == true) {
@@ -90,13 +100,19 @@ class _MyLoansScreenState extends State<MyLoansScreen>
         bottom: false,
         child: _isLoading
             ? Center(
-                child: CircularProgressIndicator(color: primary, strokeWidth: 3))
+                child: CircularProgressIndicator(
+                  color: primary,
+                  strokeWidth: 3,
+                ),
+              )
             : CustomScrollView(
                 // ✅ Matches Dashboard scroll physics
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   // ✅ Same SliverToBoxAdapter header pattern as Dashboard
-                  SliverToBoxAdapter(child: _buildHeader(context, tenant, primary)),
+                  SliverToBoxAdapter(
+                    child: _buildHeader(context, tenant, primary),
+                  ),
                   SliverPadding(
                     // ✅ Same padding as Dashboard SliverPadding
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
@@ -106,49 +122,93 @@ class _MyLoansScreenState extends State<MyLoansScreen>
                         const SizedBox(height: 28),
                         _sectionLabel('Active Loans', primary),
                         const SizedBox(height: 14),
-                        if (_loans.where((l) => l['loan_status'] == 'Active').isEmpty)
-                          _emptyState('No active loans.',
-                              Icons.account_balance_wallet_outlined, primary)
+                        if (_loans
+                            .where((l) => l['loan_status'] == 'Active')
+                            .isEmpty)
+                          _emptyState(
+                            'No active loans.',
+                            Icons.account_balance_wallet_outlined,
+                            primary,
+                          )
                         else
                           ..._loans
                               .where((l) => l['loan_status'] == 'Active')
-                              .map((l) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 14),
-                                    child: _loanCard(
-                                      context,
-                                      name: l['product_name'],
-                                      loanNo: l['loan_number'],
-                                      balance: double.tryParse(l['remaining_balance']?.toString() ?? '0') ?? 0.0,
-                                      nextDue: double.tryParse(l['monthly_amortization']?.toString() ?? '0') ?? 0.0,
-                                      dueDate: l['next_payment_due'] ?? 'N/A',
-                                      progress: double.tryParse(l['progress']?.toString() ?? '0') ?? 0,
-                                      status: l['loan_status'],
-                                      primary: primary,
-                                    ),
-                                  )),
+                              .map(
+                                (l) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 14),
+                                  child: _loanCard(
+                                    context,
+                                    name: l['product_name'],
+                                    loanNo: l['loan_number'],
+                                    balance:
+                                        double.tryParse(
+                                          l['remaining_balance']?.toString() ??
+                                              '0',
+                                        ) ??
+                                        0.0,
+                                    nextDue:
+                                        double.tryParse(
+                                          l['monthly_amortization']
+                                                  ?.toString() ??
+                                              '0',
+                                        ) ??
+                                        0.0,
+                                    dueDate: l['next_payment_due'] ?? 'N/A',
+                                    progress:
+                                        double.tryParse(
+                                          l['progress']?.toString() ?? '0',
+                                        ) ??
+                                        0,
+                                    status: l['loan_status'],
+                                    primary: primary,
+                                  ),
+                                ),
+                              ),
                         const SizedBox(height: 32),
                         _sectionLabel('Loan History', primary),
                         const SizedBox(height: 14),
-                        if (_loans.where((l) => l['loan_status'] != 'Active').isEmpty)
-                          _emptyState('No past loans.', Icons.history_rounded, primary)
+                        if (_loans
+                            .where((l) => l['loan_status'] != 'Active')
+                            .isEmpty)
+                          _emptyState(
+                            'No past loans.',
+                            Icons.history_rounded,
+                            primary,
+                          )
                         else
                           ..._loans
                               .where((l) => l['loan_status'] != 'Active')
-                              .map((l) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 14),
-                                    child: _loanCard(
-                                      context,
-                                      name: l['product_name'],
-                                      loanNo: l['loan_number'],
-                                      balance: double.tryParse(l['remaining_balance']?.toString() ?? '0') ?? 0.0,
-                                      nextDue: double.tryParse(l['monthly_amortization']?.toString() ?? '0') ?? 0.0,
-                                      dueDate: l['next_payment_due'] ?? '—',
-                                      progress: double.tryParse(l['progress']?.toString() ?? '0') ?? 0,
-                                      status: l['loan_status'],
-                                      primary: primary,
-                                    ),
-                                  )),
-
+                              .map(
+                                (l) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 14),
+                                  child: _loanCard(
+                                    context,
+                                    name: l['product_name'],
+                                    loanNo: l['loan_number'],
+                                    balance:
+                                        double.tryParse(
+                                          l['remaining_balance']?.toString() ??
+                                              '0',
+                                        ) ??
+                                        0.0,
+                                    nextDue:
+                                        double.tryParse(
+                                          l['monthly_amortization']
+                                                  ?.toString() ??
+                                              '0',
+                                        ) ??
+                                        0.0,
+                                    dueDate: l['next_payment_due'] ?? '—',
+                                    progress:
+                                        double.tryParse(
+                                          l['progress']?.toString() ?? '0',
+                                        ) ??
+                                        0,
+                                    status: l['loan_status'],
+                                    primary: primary,
+                                  ),
+                                ),
+                              ),
                       ]),
                     ),
                   ),
@@ -157,7 +217,6 @@ class _MyLoansScreenState extends State<MyLoansScreen>
       ),
     );
   }
-
 
   // ============================================================
   // ✅ HEADER — exact copy of Dashboard _buildHeader()
@@ -216,7 +275,8 @@ class _MyLoansScreenState extends State<MyLoansScreen>
             builder: (context, notifs, _) => Stack(
               children: [
                 IconButton(
-                  onPressed: () => AppDialogs.showNotifications(context, primary),
+                  onPressed: () =>
+                      AppDialogs.showNotifications(context, primary),
                   icon: const Icon(
                     Icons.notifications_rounded,
                     color: Color(0xFF0F292B),
@@ -417,7 +477,8 @@ class _MyLoansScreenState extends State<MyLoansScreen>
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) => LoanDetailsScreen(loanNumber: loanNo)),
+          builder: (_) => LoanDetailsScreen(loanNumber: loanNo),
+        ),
       ),
       child: Container(
         decoration: BoxDecoration(
@@ -481,7 +542,10 @@ class _MyLoansScreenState extends State<MyLoansScreen>
                   ),
                   // ✅ Same pill badge style as Dashboard "IN PROGRESS" badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: statusBg,
                       borderRadius: BorderRadius.circular(20),
@@ -510,10 +574,16 @@ class _MyLoansScreenState extends State<MyLoansScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _loanStatItem('BALANCE',
-                          '₱${balance.toStringAsFixed(2)}', statusColor),
-                      _loanStatItem('MONTHLY',
-                          '₱${nextDue.toStringAsFixed(2)}', const Color(0xFF111827)),
+                      _loanStatItem(
+                        'BALANCE',
+                        '₱${balance.toStringAsFixed(2)}',
+                        statusColor,
+                      ),
+                      _loanStatItem(
+                        'MONTHLY',
+                        '₱${nextDue.toStringAsFixed(2)}',
+                        const Color(0xFF111827),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 18),
@@ -531,7 +601,9 @@ class _MyLoansScreenState extends State<MyLoansScreen>
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: statusColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
@@ -561,8 +633,11 @@ class _MyLoansScreenState extends State<MyLoansScreen>
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.event_outlined,
-                          size: 14, color: Color(0xFF6B7280)),
+                      const Icon(
+                        Icons.event_outlined,
+                        size: 14,
+                        color: Color(0xFF6B7280),
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'Next Due: $dueDate',
@@ -590,7 +665,8 @@ class _MyLoansScreenState extends State<MyLoansScreen>
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => LoanDetailsScreen(loanNumber: loanNo)),
+                        builder: (_) => LoanDetailsScreen(loanNumber: loanNo),
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: statusColor,

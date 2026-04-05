@@ -16,7 +16,8 @@ class MainLayout extends StatefulWidget {
   State<MainLayout> createState() => _MainLayoutState();
 }
 
-class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
+class _MainLayoutState extends State<MainLayout>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   int _selectedIndex = 0;
   late AnimationController _navAnimController;
 
@@ -30,6 +31,8 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    currentMainTabIndex.value = _selectedIndex;
     _navAnimController = AnimationController(
       duration: Duration(milliseconds: 300),
       vsync: this,
@@ -38,25 +41,36 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _navAnimController.dispose();
     super.dispose();
   }
 
-
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      requestActiveScreenRefresh();
+    }
+  }
 
   void _onNavTap(int index) {
     HapticFeedback.selectionClick();
 
     if (index == 1 || index == 2) {
-      final vStatus =
-          currentUser.value?['verification_status'] ?? 'Unverified';
+      final vStatus = currentUser.value?['verification_status'] ?? 'Unverified';
       if (vStatus != 'Approved' && vStatus != 'Verified') {
-        AppDialogs.showVerificationRequired(context, activeTenant.value.themePrimaryColor, status: vStatus);
+        AppDialogs.showVerificationRequired(
+          context,
+          activeTenant.value.themePrimaryColor,
+          status: vStatus,
+        );
         return;
       }
     }
 
     setState(() => _selectedIndex = index);
+    currentMainTabIndex.value = index;
+    requestActiveScreenRefresh();
   }
 
   @override
@@ -72,10 +86,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
       child: Scaffold(
         backgroundColor: AppColors.bg,
         extendBody: true,
-        body: IndexedStack(
-          index: _selectedIndex,
-          children: _screens,
-        ),
+        body: IndexedStack(index: _selectedIndex, children: _screens),
         bottomNavigationBar: _buildBottomNav(primary),
       ),
     );
@@ -187,10 +198,8 @@ class _NavItem extends StatelessWidget {
           children: [
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, animation) => ScaleTransition(
-                scale: animation,
-                child: child,
-              ),
+              transitionBuilder: (child, animation) =>
+                  ScaleTransition(scale: animation, child: child),
               child: isSelected
                   ? Container(
                       key: const ValueKey('selected'),
@@ -203,14 +212,10 @@ class _NavItem extends StatelessWidget {
                             color: primary.withOpacity(0.35),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
-                          )
+                          ),
                         ],
                       ),
-                      child: Icon(
-                        selectedIcon,
-                        size: 20,
-                        color: Colors.white,
-                      ),
+                      child: Icon(selectedIcon, size: 20, color: Colors.white),
                     )
                   : Padding(
                       key: const ValueKey('unselected'),
@@ -233,7 +238,7 @@ class _NavItem extends StatelessWidget {
                   letterSpacing: 0.5,
                 ),
               ),
-            ]
+            ],
           ],
         ),
       ),

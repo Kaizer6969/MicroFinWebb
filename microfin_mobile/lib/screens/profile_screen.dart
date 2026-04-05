@@ -32,6 +32,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    activeScreenRefreshTick.addListener(_handleExternalRefresh);
+    _fetchAccountSummary();
+  }
+
+  @override
+  void dispose() {
+    activeScreenRefreshTick.removeListener(_handleExternalRefresh);
+    super.dispose();
+  }
+
+  void _handleExternalRefresh() {
+    if (!mounted || currentMainTabIndex.value != 3) return;
     _fetchAccountSummary();
   }
 
@@ -40,7 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final url = Uri.parse(
         ApiConfig.getUrl(
-          'api_get_my_loans.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}',
+          'api_get_my_loans.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}&t=${DateTime.now().millisecondsSinceEpoch}',
         ),
       );
       final resp = await http.get(url);
@@ -58,7 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final appUrl = Uri.parse(
         ApiConfig.getUrl(
-          'api_get_my_applications.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}',
+          'api_get_my_applications.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}&t=${DateTime.now().millisecondsSinceEpoch}',
         ),
       );
       final appResp = await http.get(appUrl);
@@ -73,7 +85,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final pUrl = Uri.parse(
         ApiConfig.getUrl(
-          'api_get_profile.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}',
+          'api_get_profile.php?user_id=${currentUser.value!['user_id']}&tenant_id=${activeTenant.value.id}&t=${DateTime.now().millisecondsSinceEpoch}',
         ),
       );
       final pResp = await http.get(pUrl);
@@ -158,11 +170,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _sectionLabel('Settings & Security', primary),
                   const SizedBox(height: 14),
                   _card([
-                    _navRow(Icons.person_outline_rounded, 'Manage Profile', primary, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageProfileScreen()))),
+                    _navRow(
+                      Icons.person_outline_rounded,
+                      'Manage Profile',
+                      primary,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManageProfileScreen(),
+                        ),
+                      ),
+                    ),
                     _divider(),
-                    _switchRow(Icons.notifications_outlined, 'Push Notifications', _notificationsOn, (v) => setState(() => _notificationsOn = v), primary),
+                    _switchRow(
+                      Icons.notifications_outlined,
+                      'Push Notifications',
+                      _notificationsOn,
+                      (v) => setState(() => _notificationsOn = v),
+                      primary,
+                    ),
                     _divider(),
-                    _navRow(Icons.lock_outline_rounded, 'Change Password', primary, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()))),
+                    _navRow(
+                      Icons.lock_outline_rounded,
+                      'Change Password',
+                      primary,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ChangePasswordScreen(),
+                        ),
+                      ),
+                    ),
                   ], primary),
                   const SizedBox(height: 28),
 
@@ -170,11 +208,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _sectionLabel('Help & Support', primary),
                   const SizedBox(height: 14),
                   _card([
-                    _navRow(Icons.help_outline_rounded, 'FAQ & Help Center', primary, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportCenterScreen()))),
+                    _navRow(
+                      Icons.help_outline_rounded,
+                      'FAQ & Help Center',
+                      primary,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SupportCenterScreen(),
+                        ),
+                      ),
+                    ),
                     _divider(),
-                    _navRow(Icons.headset_mic_outlined, 'Contact Support', primary, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportCenterScreen()))),
+                    _navRow(
+                      Icons.headset_mic_outlined,
+                      'Contact Support',
+                      primary,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SupportCenterScreen(),
+                        ),
+                      ),
+                    ),
                     _divider(),
-                    _navRow(Icons.policy_outlined, 'Terms & Privacy Policy', primary, () {}),
+                    _navRow(
+                      Icons.policy_outlined,
+                      'Terms & Privacy Policy',
+                      primary,
+                      () {},
+                    ),
                   ], primary),
                   const SizedBox(height: 28),
 
@@ -189,7 +252,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.2)),
+                        border: Border.all(
+                          color: const Color(0xFFEF4444).withOpacity(0.2),
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: const Color(0xFFEF4444).withOpacity(0.05),
@@ -201,7 +266,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
+                          Icon(
+                            Icons.logout_rounded,
+                            color: Color(0xFFEF4444),
+                            size: 20,
+                          ),
                           SizedBox(width: 10),
                           Text(
                             'Log Out',
@@ -284,7 +353,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             builder: (context, notifs, _) => Stack(
               children: [
                 IconButton(
-                  onPressed: () => AppDialogs.showNotifications(context, primary),
+                  onPressed: () =>
+                      AppDialogs.showNotifications(context, primary),
                   icon: const Icon(
                     Icons.notifications_rounded,
                     color: Color(0xFF0F292B),
@@ -333,7 +403,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Positioned(
             right: -20,
             top: -20,
-            child: Icon(Icons.person_rounded, size: 140, color: Colors.white.withOpacity(0.06)),
+            child: Icon(
+              Icons.person_rounded,
+              size: 140,
+              color: Colors.white.withOpacity(0.06),
+            ),
           ),
           Column(
             children: [
@@ -344,7 +418,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.white.withOpacity(0.15),
-                  border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 2,
+                  ),
                 ),
                 child: Center(
                   child: Text(
@@ -370,7 +447,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                _clientCode.isNotEmpty ? 'Member Code: $_clientCode' : 'Active Member',
+                _clientCode.isNotEmpty
+                    ? 'Member Code: $_clientCode'
+                    : 'Active Member',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.8),
                   fontSize: 14,
@@ -492,7 +571,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _sectionLabel(String title, Color primary) {
     return Row(
       children: [
-        Container(width: 4, height: 20, decoration: BoxDecoration(color: primary, borderRadius: BorderRadius.circular(2))),
+        Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            color: primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
         const SizedBox(width: 10),
         Text(
           title,
@@ -525,7 +611,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _divider() => const Divider(height: 1, indent: 64, endIndent: 20, color: Color(0xFFF3F4F6));
+  Widget _divider() => const Divider(
+    height: 1,
+    indent: 64,
+    endIndent: 20,
+    color: Color(0xFFF3F4F6),
+  );
 
   Widget _infoRow(IconData icon, String label, String value, Color primary) {
     return Padding(
@@ -566,7 +657,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          Icon(Icons.chevron_right_rounded, color: const Color(0xFFE5E7EB), size: 18),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: const Color(0xFFE5E7EB),
+            size: 18,
+          ),
         ],
       ),
     );
@@ -860,20 +955,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE5E7EB), borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 32),
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: const Color(0xFFEF4444).withOpacity(0.1), shape: BoxShape.circle),
-              child: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 32),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Color(0xFFEF4444),
+                size: 32,
+              ),
             ),
             const SizedBox(height: 24),
-            const Text('Log Out Account', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF111827), letterSpacing: -0.5)),
+            const Text(
+              'Log Out Account',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF111827),
+                letterSpacing: -0.5,
+              ),
+            ),
             const SizedBox(height: 8),
             const Text(
               'Are you sure you want to log out? You will need to re-authenticate to access your account.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Color(0xFF6B7280), height: 1.5, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF6B7280),
+                height: 1.5,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const SizedBox(height: 32),
             Row(
@@ -884,9 +1006,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       side: const BorderSide(color: Color(0xFFE5E7EB)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
-                    child: const Text('Cancel', style: TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Color(0xFF111827),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -905,9 +1035,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
-                    child: const Text('Yes, Log Out', style: TextStyle(fontWeight: FontWeight.w800)),
+                    child: const Text(
+                      'Yes, Log Out',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ),
               ],
