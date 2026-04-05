@@ -534,7 +534,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           'id_extracted_address': _idExtractedAddress ?? '',
           'documents': [
             if (_idPath != null && _idPath!.isNotEmpty) 
-              {'document_type_id': '21', 'file_name': 'Scanned_ID', 'file_path': _idPath},
+              {'document_type_id': 'scanned_id', 'file_name': 'Scanned_ID', 'file_path': _idPath},
             ..._selectedDocs.entries.map((e) => {'document_type_id': e.key.toString(), 'file_name': 'Document_${e.key}', 'file_path': e.value ?? ''})
           ],
         }),

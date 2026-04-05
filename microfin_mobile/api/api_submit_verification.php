@@ -129,11 +129,68 @@ function microfin_normalize_date(?string $value): ?string
     return date('Y-m-d', strtotime((string) $value));
 }
 
-function microfin_build_document_note(array $data, int $documentTypeId): string
+/**
+ * Resolve a document type identifier to its actual ID.
+ * Handles the special 'scanned_id' marker from mobile app.
+ * 
+ * @param mysqli $conn Database connection
+ * @param string|int $identifier Document type ID or special marker
+ * @return int|null The resolved document type ID, or null if not found
+ */
+function microfin_resolve_document_type_id(mysqli $conn, $identifier): ?int
+{
+    // If it's already a numeric ID, return it
+    if (is_numeric($identifier) && (int) $identifier > 0) {
+        return (int) $identifier;
+    }
+
+    // Handle special markers
+    if ($identifier === 'scanned_id') {
+        // Look for "Scanned ID", "Valid ID Front", or similar document types
+        $stmt = $conn->prepare("
+            SELECT document_type_id FROM document_types 
+            WHERE is_active = 1 
+              AND (LOWER(document_name) LIKE '%scanned id%' 
+                   OR LOWER(document_name) LIKE '%valid id front%'
+                   OR LOWER(document_name) = 'valid government id')
+            ORDER BY 
+                CASE 
+                    WHEN LOWER(document_name) LIKE '%scanned id%' THEN 1
+                    WHEN LOWER(document_name) LIKE '%valid id front%' THEN 2
+                    ELSE 3
+                END
+            LIMIT 1
+        ");
+        if ($stmt) {
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $stmt->close();
+            if ($row) {
+                return (int) $row['document_type_id'];
+            }
+        }
+        return null;
+    }
+
+    return null;
+}
+
+/**
+ * Check if a document type identifier represents a scanned ID document.
+ * Used to apply special handling (extracting ID number, expiry, etc.)
+ */
+function microfin_is_scanned_id_document($identifier): bool
+{
+    return $identifier === 'scanned_id' || $identifier === '21' || (int) $identifier === 21;
+}
+
+function microfin_build_document_note(array $data, int $documentTypeId, bool $isScannedId = false): string
 {
     $notes = ['Submitted from the mobile verification flow.'];
 
-    if ($documentTypeId === 21) {
+    // Use isScannedId flag instead of hardcoded ID check
+    if ($isScannedId) {
         $idType = microfin_clean_string($data['id_type'] ?? '');
         $idNumber = microfin_clean_string($data['id_number'] ?? '');
         $idExtractedName = microfin_clean_string($data['id_extracted_name'] ?? '');
@@ -400,11 +457,26 @@ try {
             continue;
         }
 
-        $documentTypeId = (int) ($document['document_type_id'] ?? 0);
+        $rawDocumentTypeId = $document['document_type_id'] ?? 0;
         $filePath = microfin_clean_string($document['file_path'] ?? '');
         $fileName = microfin_clean_string($document['file_name'] ?? '');
 
-        if ($documentTypeId <= 0 || $filePath === '') {
+        if ($filePath === '') {
+            continue;
+        }
+
+        // Check if this is a scanned ID document (before resolving the ID)
+        $isScannedId = microfin_is_scanned_id_document($rawDocumentTypeId);
+
+        // Resolve the document type ID (handles 'scanned_id' marker)
+        $documentTypeId = microfin_resolve_document_type_id($conn, $rawDocumentTypeId);
+
+        if ($documentTypeId === null || $documentTypeId <= 0) {
+            // If we couldn't resolve it, try the old numeric approach
+            $documentTypeId = (int) $rawDocumentTypeId;
+        }
+
+        if ($documentTypeId <= 0) {
             continue;
         }
 
@@ -413,15 +485,15 @@ try {
         $docTypeExists = $docTypeStmt->get_result()->num_rows === 1;
 
         if (!$docTypeExists) {
-            throw new RuntimeException('One of the selected document types is invalid.');
+            throw new RuntimeException('One of the selected document types is invalid. (ID: ' . $rawDocumentTypeId . ')');
         }
 
         $absoluteFilePath = dirname(__DIR__) . '/../' . ltrim($filePath, '/\\');
         $fileSize = is_file($absoluteFilePath) ? filesize($absoluteFilePath) : null;
         $fileType = is_file($absoluteFilePath) ? (mime_content_type($absoluteFilePath) ?: null) : null;
-        $documentNumber = $documentTypeId === 21 ? $idNumber : null;
-        $documentExpiry = $documentTypeId === 21 ? $expiryDate : null;
-        $documentNote = microfin_build_document_note($data, $documentTypeId);
+        $documentNumber = $isScannedId ? $idNumber : null;
+        $documentExpiry = $isScannedId ? $expiryDate : null;
+        $documentNote = microfin_build_document_note($data, $documentTypeId, $isScannedId);
         $resolvedFileName = $fileName !== '' ? $fileName : basename($filePath);
 
         $existingDocStmt->bind_param('isi', $client['client_id'], $tenantId, $documentTypeId);
