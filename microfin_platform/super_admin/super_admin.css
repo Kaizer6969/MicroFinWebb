@@ -1831,3 +1831,220 @@ input:checked + .slider:before { transform: translateX(22px); }
     font-size: 24px;
     margin-top: 2px;
 }
+
+/* ============================================================ */
+/* Theme Precision Pass                                         */
+/* ============================================================ */
+.subscription-overview-card {
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.subscription-overview-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(var(--interaction-rgb), 0.28);
+    box-shadow: var(--shadow-sm);
+}
+
+.subscription-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.plan-pill,
+.subscription-cycle-chip {
+    transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.subscription-table tbody tr:hover .plan-pill,
+.subscription-table tbody tr:hover .subscription-cycle-chip {
+    border-color: rgba(var(--interaction-rgb), 0.3);
+}
+
+[data-theme="dark"] body {
+    background:
+        radial-gradient(circle at 18% 0%, rgba(var(--primary-rgb), 0.18), transparent 28%),
+        radial-gradient(circle at 88% 14%, rgba(var(--secondary-rgb), 0.18), transparent 24%),
+        radial-gradient(circle at 50% 100%, rgba(var(--accent-magenta-rgb), 0.12), transparent 38%),
+        linear-gradient(180deg, #050712 0%, #0a1020 54%, #0f1630 100%);
+}
+
+[data-theme="dark"] .sidebar {
+    background: linear-gradient(180deg, rgba(12, 16, 32, 0.98) 0%, rgba(9, 13, 26, 0.98) 52%, rgba(7, 10, 22, 0.99) 100%);
+    border-right-color: rgba(var(--secondary-rgb), 0.12);
+}
+
+[data-theme="dark"] .sidebar-header,
+[data-theme="dark"] .sidebar-footer,
+[data-theme="dark"] .top-header {
+    border-color: rgba(var(--secondary-rgb), 0.1);
+}
+
+[data-theme="dark"] .logo-circle {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    box-shadow: 0 14px 28px -18px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .sidebar-header:hover .logo-circle {
+    box-shadow: 0 18px 30px -18px rgba(0, 0, 0, 0.76), inset 0 0 0 1px rgba(var(--secondary-rgb), 0.22);
+}
+
+[data-theme="dark"] .nav-item {
+    border: 1px solid transparent;
+}
+
+[data-theme="dark"] .nav-item::before {
+    background-color: var(--secondary-color);
+}
+
+[data-theme="dark"] .nav-item:hover {
+    background: linear-gradient(90deg, rgba(var(--secondary-rgb), 0.14) 0%, rgba(var(--primary-rgb), 0.1) 100%);
+    border-color: rgba(var(--secondary-rgb), 0.18);
+    color: #ffffff;
+}
+
+[data-theme="dark"] .nav-item.active {
+    background: linear-gradient(90deg, rgba(var(--secondary-rgb), 0.16) 0%, rgba(var(--primary-rgb), 0.16) 100%);
+    border-color: rgba(var(--secondary-rgb), 0.22);
+    box-shadow: inset 0 0 0 1px rgba(var(--secondary-rgb), 0.08);
+}
+
+[data-theme="dark"] .top-header {
+    background: linear-gradient(180deg, rgba(18, 24, 43, 0.9) 0%, rgba(11, 16, 31, 0.84) 100%);
+    backdrop-filter: blur(14px);
+}
+
+[data-theme="dark"] .icon-btn {
+    border: 1px solid transparent;
+}
+
+[data-theme="dark"] .icon-btn:hover {
+    background-color: rgba(var(--secondary-rgb), 0.12);
+    border-color: rgba(var(--secondary-rgb), 0.18);
+    color: #ffffff;
+}
+
+[data-theme="dark"] .admin-profile,
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .card,
+[data-theme="dark"] .billing-tabs {
+    background:
+        linear-gradient(180deg, rgba(18, 24, 43, 0.97) 0%, rgba(11, 16, 31, 0.95) 100%);
+    border-color: rgba(var(--secondary-rgb), 0.12);
+}
+
+[data-theme="dark"] .admin-profile:hover,
+[data-theme="dark"] .stat-card:hover,
+[data-theme="dark"] .card:hover {
+    border-color: rgba(var(--secondary-rgb), 0.2);
+}
+
+[data-theme="dark"] .admin-profile:hover {
+    box-shadow: 0 18px 32px -24px rgba(0, 0, 0, 0.76);
+}
+
+[data-theme="dark"] .subscription-hero-card {
+    background:
+        radial-gradient(980px 260px at 100% 0, rgba(var(--secondary-rgb), 0.18), transparent 42%),
+        radial-gradient(760px 220px at 0 0, rgba(var(--primary-rgb), 0.2), transparent 50%),
+        radial-gradient(540px 180px at 50% 100%, rgba(var(--accent-magenta-rgb), 0.12), transparent 48%),
+        linear-gradient(180deg, rgba(21, 27, 48, 0.98) 0%, rgba(11, 16, 31, 0.97) 100%);
+}
+
+[data-theme="dark"] .subscription-overview-card {
+    border-color: rgba(var(--secondary-rgb), 0.16);
+    background: linear-gradient(160deg, rgba(var(--primary-rgb), 0.12) 0%, rgba(12, 18, 34, 0.98) 78%);
+}
+
+[data-theme="dark"] .subscription-overview-card:hover {
+    border-color: rgba(var(--secondary-rgb), 0.28);
+    background: linear-gradient(160deg, rgba(var(--secondary-rgb), 0.14) 0%, rgba(12, 18, 34, 0.99) 78%);
+}
+
+[data-theme="dark"] .subscription-overview-icon {
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.2) 0%, rgba(var(--secondary-rgb), 0.18) 100%);
+    color: #f5f7ff;
+}
+
+[data-theme="dark"] .subscription-table thead th {
+    background: rgba(var(--secondary-rgb), 0.1);
+    border-bottom-color: rgba(var(--secondary-rgb), 0.18);
+}
+
+[data-theme="dark"] .subscription-table tbody tr td {
+    border-bottom-color: rgba(148, 163, 184, 0.1);
+}
+
+[data-theme="dark"] .subscription-table tbody tr:hover {
+    background: linear-gradient(90deg, rgba(var(--secondary-rgb), 0.08) 0%, rgba(var(--primary-rgb), 0.06) 100%);
+}
+
+[data-theme="dark"] .usage-meter {
+    background: rgba(var(--neutral-rgb), 0.16);
+}
+
+[data-theme="dark"] .usage-meter > span {
+    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.96) 0%, rgba(var(--secondary-rgb), 0.92) 100%);
+}
+
+[data-theme="dark"] .btn-primary {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    border: 1px solid rgba(var(--primary-rgb), 0.32);
+    box-shadow: 0 16px 28px -22px rgba(0, 0, 0, 0.62);
+}
+
+[data-theme="dark"] .btn-primary:hover {
+    background: linear-gradient(135deg, var(--primary-hover) 0%, var(--interaction-hover) 100%);
+    border-color: rgba(var(--secondary-rgb), 0.32);
+    box-shadow: 0 20px 34px -24px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="dark"] .btn-primary:focus {
+    box-shadow: 0 0 0 4px rgba(var(--interaction-rgb), 0.18), 0 16px 28px -22px rgba(0, 0, 0, 0.62);
+}
+
+[data-theme="dark"] .btn-outline:hover,
+[data-theme="dark"] .btn-outline-primary:hover {
+    border-color: rgba(var(--secondary-rgb), 0.28);
+    background: rgba(var(--secondary-rgb), 0.12);
+    color: #ffffff;
+}
+
+[data-theme="dark"] .form-control:focus {
+    border-color: var(--interaction-color);
+    box-shadow: 0 0 0 4px rgba(var(--interaction-rgb), 0.16);
+}
+
+[data-theme="dark"] .billing-tabs {
+    border-color: rgba(var(--secondary-rgb), 0.14);
+    box-shadow: none;
+}
+
+[data-theme="dark"] .billing-tab {
+    border: 1px solid transparent;
+}
+
+[data-theme="dark"] .billing-tab:hover {
+    background: rgba(var(--secondary-rgb), 0.1);
+    border-color: rgba(var(--secondary-rgb), 0.18);
+    color: #ffffff;
+}
+
+[data-theme="dark"] .billing-tab.active {
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.96) 0%, rgba(var(--secondary-rgb), 0.9) 100%);
+    border: 1px solid rgba(var(--secondary-rgb), 0.24);
+    box-shadow: none;
+}
+
+[data-theme="dark"] .welcome-banner {
+    background:
+        radial-gradient(circle at top right, rgba(var(--secondary-rgb), 0.16), transparent 34%),
+        radial-gradient(circle at left center, rgba(var(--primary-rgb), 0.14), transparent 42%),
+        linear-gradient(135deg, rgba(18, 24, 44, 0.98) 0%, rgba(11, 16, 31, 0.98) 100%);
+    border-color: rgba(var(--secondary-rgb), 0.14);
+    box-shadow: 0 24px 48px -34px rgba(0, 0, 0, 0.72);
+}
+
+[data-theme="dark"] .profile-summary-avatar,
+[data-theme="dark"] .recent-tenant-avatar {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    box-shadow: 0 12px 24px -18px rgba(0, 0, 0, 0.62);
+}

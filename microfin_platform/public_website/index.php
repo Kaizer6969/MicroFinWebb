@@ -102,7 +102,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/style.css')); ?>">
 </head>
 <body>
 

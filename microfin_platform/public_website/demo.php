@@ -810,38 +810,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
         
         /* Dark Mode Extensions */
-        body.dark-mode { background: #0B0F1A; color: #f8fafc; }
+        body.dark-mode { background: var(--page-bg); color: var(--text-dark); }
         body.dark-mode::before {
-            background: radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.15) 0%, transparent 46%),
-                        radial-gradient(circle at 86% 6%, rgba(139, 92, 246, 0.12) 0%, transparent 42%),
-                        radial-gradient(circle at 70% 88%, rgba(59, 130, 246, 0.08) 0%, transparent 45%);
+            background: radial-gradient(circle at 12% 18%, rgba(var(--primary-rgb), 0.2) 0%, transparent 46%),
+                        radial-gradient(circle at 86% 6%, rgba(var(--secondary-rgb), 0.16) 0%, transparent 42%),
+                        radial-gradient(circle at 70% 88%, rgba(var(--secondary-rgb), 0.1) 0%, transparent 45%);
         }
-        body.dark-mode .back-btn, body.dark-mode .dark-mode-toggle { background: #121826; border-color: rgba(255, 255, 255, 0.1); color: #f8fafc; }
-        body.dark-mode .back-btn:hover, body.dark-mode .dark-mode-toggle:hover { background: #1a2235; border-color: rgba(255, 255, 255, 0.2); }
-        body.dark-mode .demo-card { background: #121826; border-color: rgba(255, 255, 255, 0.1); }
-        body.dark-mode .demo-card h2, body.dark-mode .demo-card label, body.dark-mode .plan-name { color: #f8fafc; }
-        body.dark-mode .demo-card .subtitle, body.dark-mode .plan-capacity { color: #94a3b8; }
-        body.dark-mode .input-field { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); color: #f8fafc; }
-        body.dark-mode .input-field:focus { border-color: var(--primary); background: #1e293b; }
-        body.dark-mode .location-suggestions, body.dark-mode .location-suggestion-empty { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); }
-        body.dark-mode .location-suggestion { border-bottom-color: rgba(255, 255, 255, 0.1); background: transparent; }
-        body.dark-mode .location-suggestion:hover { background: #1e293b; }
-        body.dark-mode .location-suggestion-title { color: #f8fafc; }
-        body.dark-mode .plan-card-content { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); }
-        body.dark-mode .plan-card-content::after { background: #121826; border-color: rgba(255, 255, 255, 0.2); }
-        body.dark-mode .btn-outline { background: #1a2235; border-color: rgba(255, 255, 255, 0.2); color: #f8fafc; }
-        body.dark-mode .btn-outline:hover { background: #1e293b; border-color: rgba(255, 255, 255, 0.3); }
-        body.dark-mode .location-map-actions { background: #1a2235; border-color: rgba(255, 255, 255, 0.15); }
-        body.dark-mode .location-map-status { color: #cbd5e1; }
-        body.dark-mode .plan-option input:checked + .plan-card-content { background: #1e293b; }
+        body.dark-mode .back-btn, body.dark-mode .dark-mode-toggle { background: var(--card-bg); border-color: var(--card-border); color: var(--text-dark); }
+        body.dark-mode .back-btn:hover, body.dark-mode .dark-mode-toggle:hover { background: var(--surface-soft); border-color: var(--surface-border); }
+        body.dark-mode .demo-card { background: var(--card-bg); border-color: var(--card-border); }
+        body.dark-mode .demo-card h2, body.dark-mode .demo-card label, body.dark-mode .plan-name { color: var(--text-dark); }
+        body.dark-mode .demo-card .subtitle, body.dark-mode .plan-capacity { color: var(--text-muted); }
+        body.dark-mode .input-field { background: var(--field-bg); border-color: var(--field-border); color: var(--text-dark); }
+        body.dark-mode .input-field:focus { border-color: var(--secondary); background: rgba(14, 20, 36, 0.98); }
+        body.dark-mode .location-suggestions, body.dark-mode .location-suggestion-empty { background: var(--surface-soft); border-color: var(--card-border); }
+        body.dark-mode .location-suggestion { border-bottom-color: rgba(var(--secondary-rgb), 0.12); background: transparent; }
+        body.dark-mode .location-suggestion:hover { background: rgba(var(--secondary-rgb), 0.12); }
+        body.dark-mode .location-suggestion-title { color: var(--text-dark); }
+        body.dark-mode .plan-card-content { background: var(--surface-soft); border-color: var(--card-border); }
+        body.dark-mode .plan-card-content::after { background: var(--card-bg); border-color: rgba(var(--secondary-rgb), 0.2); }
+        body.dark-mode .btn-outline { background: var(--surface-soft); border-color: rgba(var(--secondary-rgb), 0.2); color: var(--text-dark); }
+        body.dark-mode .btn-outline:hover { background: rgba(var(--secondary-rgb), 0.12); border-color: rgba(var(--secondary-rgb), 0.3); }
+        body.dark-mode .location-map-actions { background: var(--surface-soft); border-color: var(--card-border); }
+        body.dark-mode .location-map-status { color: var(--text-muted); }
+        body.dark-mode .plan-option input:checked + .plan-card-content { background: rgba(18, 26, 48, 0.96); }
         body.dark-mode .plan-option.plan-starter input:checked + .plan-card-content { background: rgba(22, 163, 74, 0.1); border-color: #16a34a; }
-        body.dark-mode .plan-option.plan-pro input:checked + .plan-card-content { background: rgba(37, 99, 235, 0.1); border-color: #2563eb; }
-        body.dark-mode .plan-option.plan-enterprise input:checked + .plan-card-content { background: rgba(217, 119, 6, 0.1); border-color: #d97706; }
-        body.dark-mode .plan-option.plan-unlimited input:checked + .plan-card-content { background: rgba(139, 92, 246, 0.1); border-color: #8b5cf6; }
-        body.dark-mode .success-view h3 { color: #f8fafc; }
-        body.dark-mode .otp-group { background: #1a2235; border-color: rgba(255, 255, 255, 0.1); }
+        body.dark-mode .plan-option.plan-pro input:checked + .plan-card-content { background: rgba(53, 84, 171, 0.18); border-color: var(--secondary); }
+        body.dark-mode .plan-option.plan-enterprise input:checked + .plan-card-content { background: rgba(53, 84, 171, 0.16); border-color: var(--secondary); }
+        body.dark-mode .plan-option.plan-unlimited input:checked + .plan-card-content { background: rgba(123, 97, 255, 0.16); border-color: var(--primary); }
+        body.dark-mode .success-view h3 { color: var(--text-dark); }
+        body.dark-mode .otp-group { background: var(--surface-soft); border-color: var(--card-border); }
     </style>
-    <link rel="stylesheet" href="demo.css">
+    <link rel="stylesheet" href="demo.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/demo.css')); ?>">
 </head>
 <body>
 

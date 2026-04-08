@@ -317,10 +317,11 @@ $current_year = (int) date('Y');
         .plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
         .plan-option { position: relative; }
         .plan-option input { position: absolute; opacity: 0; pointer-events: none; }
-        .plan-card { display: block; height: 100%; border: 1px solid #dbe7f3; border-radius: 18px; padding: 18px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; position: relative; }
-        .plan-card:hover { transform: translateY(-2px); border-color: rgba(2,132,199,0.35); box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08); }
-        .plan-option input:checked + .plan-card { border-color: <?php echo htmlspecialchars($accent); ?>; box-shadow: 0 18px 36px rgba(2,132,199,0.18); background: linear-gradient(180deg, rgba(2,132,199,0.08) 0%, rgba(255,255,255,1) 100%); }
-        .plan-card-current { border-color: rgba(245, 158, 11, 0.45); box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18); }
+        .plan-card { display: block; height: 100%; border: 1px solid #dbe7f3; border-radius: 18px; padding: 18px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; position: relative; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.04); }
+        .plan-card:hover { transform: translateY(-2px); border-color: rgba(2,132,199,0.32); box-shadow: 0 14px 24px rgba(15, 23, 42, 0.06); }
+        .plan-option input:focus + .plan-card { border-color: <?php echo htmlspecialchars($accent); ?>; box-shadow: 0 0 0 3px rgba(2,132,199,0.1); }
+        .plan-option input:checked + .plan-card { border-color: <?php echo htmlspecialchars($accent); ?>; box-shadow: 0 16px 28px rgba(15, 23, 42, 0.06); background: linear-gradient(180deg, rgba(2,132,199,0.06) 0%, rgba(255,255,255,1) 100%); }
+        .plan-card-current { border-color: rgba(245, 158, 11, 0.45); box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.16); }
         .plan-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
         .plan-name { font-size: 1.05rem; font-weight: 700; color: <?php echo htmlspecialchars($t_text); ?>; }
         .plan-description { margin-top: 6px; color: <?php echo htmlspecialchars($t_muted); ?>; font-size: 0.82rem; line-height: 1.5; }
