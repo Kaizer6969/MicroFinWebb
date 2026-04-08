@@ -1350,3 +1350,400 @@ body.dark-mode .footer {
         flex-direction: column;
     }
 }
+
+/* =========================================
+   2026 Public Theme Refinement
+   ========================================= */
+#features.showcase-features-section {
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 14% 18%, rgba(var(--primary-rgb), 0.18), transparent 20%),
+        radial-gradient(circle at 82% 14%, rgba(var(--accent-rgb), 0.14), transparent 18%),
+        radial-gradient(circle at 74% 82%, rgba(141, 99, 255, 0.24), transparent 28%),
+        linear-gradient(135deg, #090611 0%, #151024 48%, #2a1557 100%);
+}
+
+#features.showcase-features-section::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0.16) 1px, transparent 1.5px),
+        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 72px 72px, 34px 34px, 34px 34px;
+    background-position: center center;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.84), transparent 96%);
+    opacity: 0.35;
+}
+
+#features.showcase-features-section .container {
+    position: relative;
+    z-index: 1;
+}
+
+#features.showcase-features-section .section-header p {
+    color: #d8d1f1;
+}
+
+#features.showcase-features-section .showcase-feature-grid {
+    gap: 24px;
+}
+
+#features.showcase-features-section .feature-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(170, 151, 223, 0.2);
+    box-shadow: 0 24px 50px -28px rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(12px);
+}
+
+#features.showcase-features-section .feature-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    border-radius: 24px 24px 0 0;
+}
+
+#features.showcase-features-section .feature-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.08), transparent 34%);
+    opacity: 0;
+    transition: opacity 0.24s ease;
+    pointer-events: none;
+}
+
+#features.showcase-features-section .feature-card:hover {
+    transform: translateY(-10px);
+    border-color: rgba(215, 200, 255, 0.32);
+    box-shadow: 0 30px 56px -24px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+#features.showcase-features-section .feature-card:hover::after {
+    opacity: 1;
+}
+
+#features.showcase-features-section .showcase-feature-grid .feature-card-cosmos {
+    background: linear-gradient(180deg, rgba(11, 10, 23, 0.96), rgba(18, 19, 34, 0.94));
+}
+
+#features.showcase-features-section .showcase-feature-grid .feature-card-guidance {
+    background: linear-gradient(180deg, rgba(18, 14, 29, 0.96), rgba(28, 20, 43, 0.94));
+}
+
+#features.showcase-features-section .showcase-feature-grid .feature-card-vault {
+    background: linear-gradient(180deg, rgba(17, 12, 31, 0.96), rgba(23, 17, 49, 0.94));
+}
+
+#features.showcase-features-section .feature-card-cosmos::before {
+    background: linear-gradient(90deg, #1f8a5a, #7fe0ae);
+}
+
+#features.showcase-features-section .feature-card-guidance::before {
+    background: linear-gradient(90deg, #d8a62a, #f6df95);
+}
+
+#features.showcase-features-section .feature-card-vault::before {
+    background: linear-gradient(90deg, #8d63ff, #d2c0ff);
+}
+
+#features.showcase-features-section .feature-card-cosmos .feature-icon {
+    background: rgba(var(--primary-rgb), 0.16);
+    color: #87e7b2;
+}
+
+#features.showcase-features-section .feature-card-guidance .feature-icon {
+    background: rgba(var(--accent-rgb), 0.18);
+    color: #f6d882;
+}
+
+#features.showcase-features-section .feature-card-vault .feature-icon {
+    background: rgba(141, 99, 255, 0.16);
+    color: #d7c8ff;
+}
+
+#pricing .pricing-card {
+    position: relative;
+    overflow: visible;
+    border-width: 1px;
+    box-shadow: 0 18px 42px -28px rgba(39, 28, 10, 0.28);
+}
+
+#pricing .pricing-card::after {
+    content: "";
+    position: absolute;
+    inset: -20px;
+    border-radius: 34px;
+    z-index: -1;
+    filter: blur(20px);
+    opacity: 0.48;
+    transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+#pricing .pricing-card-starter::after {
+    background: radial-gradient(circle at 50% 0%, rgba(31, 138, 90, 0.28), transparent 62%);
+}
+
+#pricing .pricing-card-pro::after {
+    background: radial-gradient(circle at 50% 0%, rgba(141, 99, 255, 0.34), transparent 62%);
+}
+
+#pricing .pricing-card-enterprise::after {
+    background: radial-gradient(circle at 50% 0%, rgba(216, 166, 42, 0.3), transparent 62%);
+}
+
+#pricing .pricing-card-unlimited::after {
+    background:
+        radial-gradient(circle at 50% 0%, rgba(141, 99, 255, 0.28), transparent 60%),
+        radial-gradient(circle at 18% 100%, rgba(31, 138, 90, 0.22), transparent 56%);
+}
+
+#pricing .pricing-card:hover {
+    border-color: rgba(var(--primary-rgb), 0.34) !important;
+    box-shadow: 0 26px 50px -24px rgba(31, 138, 90, 0.18), 0 0 0 1px rgba(var(--primary-rgb), 0.08) inset;
+}
+
+#pricing .pricing-card:hover::after {
+    opacity: 0.92;
+    transform: scale(1.02);
+}
+
+#pricing .pricing-card.popular {
+    border-color: rgba(141, 99, 255, 0.42) !important;
+    box-shadow: 0 30px 54px -24px rgba(141, 99, 255, 0.26), 0 0 0 1px rgba(141, 99, 255, 0.08) inset;
+}
+
+#pricing .popular-badge {
+    box-shadow: 0 14px 26px -14px rgba(141, 99, 255, 0.74);
+    letter-spacing: 0.06em;
+}
+
+#security.security-trust-section {
+    background: linear-gradient(180deg, rgba(255, 253, 247, 1), rgba(244, 238, 222, 0.82));
+}
+
+#security.security-trust-section .security-shell {
+    align-items: stretch;
+}
+
+#security.security-trust-section .security-panel {
+    background: rgba(255, 253, 247, 0.74);
+    border: 1px solid rgba(208, 196, 174, 0.52);
+    border-radius: 28px;
+    padding: 34px;
+    box-shadow: var(--shadow-md);
+}
+
+#security.security-trust-section .security-vault-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 18px;
+    min-height: 100%;
+    background: linear-gradient(140deg, #133225 0%, #1e6a47 55%, #9f7a18 140%) !important;
+    border: 1px solid rgba(242, 217, 153, 0.34) !important;
+    box-shadow: 0 36px 72px -34px rgba(31, 138, 90, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important;
+    overflow: hidden;
+}
+
+#security.security-trust-section .security-vault-card::before {
+    content: "";
+    position: absolute;
+    inset: auto -12% -40% auto;
+    width: 260px;
+    height: 260px;
+    background: radial-gradient(circle, rgba(255, 239, 183, 0.34), transparent 60%);
+}
+
+#security.security-trust-section .security-vault-card::after {
+    content: "";
+    position: absolute;
+    inset: -18% auto auto -18%;
+    width: 220px;
+    height: 220px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 58%);
+}
+
+#security.security-trust-section .security-image-badge {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255, 248, 222, 0.12);
+    border: 1px solid rgba(255, 240, 190, 0.24);
+    color: #fff2bc;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+#security.security-trust-section .security-vault-card .material-symbols-rounded {
+    position: relative;
+    z-index: 1;
+    font-size: 148px;
+    color: #fff6cf;
+    filter: drop-shadow(0 0 28px rgba(255, 240, 190, 0.24));
+}
+
+#security.security-trust-section .security-vault-card div {
+    position: relative;
+    z-index: 1;
+    max-width: 280px;
+    color: #f6efe0;
+    text-align: center;
+}
+
+.contact-cta-section {
+    border-top: 1px solid rgba(200, 173, 255, 0.14);
+    border-bottom: 1px solid rgba(200, 173, 255, 0.14);
+}
+
+.contact-cta-section::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.15) 0, rgba(255, 255, 255, 0.15) 1px, transparent 1.5px);
+    background-size: 24px 24px;
+    opacity: 0.16;
+}
+
+.contact-cta-section .contact-cta-container {
+    max-width: 860px;
+    padding: 56px 52px;
+    border-radius: 32px;
+    background: rgba(10, 7, 18, 0.36);
+    border: 1px solid rgba(200, 173, 255, 0.16);
+    box-shadow: 0 34px 72px -40px rgba(0, 0, 0, 0.54), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(14px);
+}
+
+.contact-cta-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: rgba(255, 236, 180, 0.12);
+    border: 1px solid rgba(255, 236, 180, 0.22);
+    color: #ffe7a1;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.contact-cta-section .contact-cta-subtitle {
+    max-width: 620px;
+    margin-left: auto;
+    margin-right: auto;
+    color: #dcd2f8;
+}
+
+.contact-cta-section .contact-cta-buttons .btn-primary {
+    box-shadow: 0 22px 36px -22px rgba(141, 99, 255, 0.45);
+}
+
+.contact-cta-section .contact-cta-buttons .btn-outline {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.footer.footer-galaxy {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, #150d26 0%, #08040e 100%);
+    border-top: 1px solid rgba(190, 175, 235, 0.12);
+}
+
+.footer.footer-galaxy::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 14% 0%, rgba(var(--primary-rgb), 0.16), transparent 26%),
+        radial-gradient(circle at 86% 0%, rgba(141, 99, 255, 0.22), transparent 28%);
+}
+
+.footer.footer-galaxy .container {
+    position: relative;
+    z-index: 1;
+}
+
+.footer-top-line {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), 0.42), rgba(141, 99, 255, 0.7), transparent);
+    box-shadow: 0 0 18px rgba(141, 99, 255, 0.22);
+}
+
+.footer.footer-galaxy .footer-grid {
+    gap: 36px;
+}
+
+.footer.footer-galaxy .footer-brand p,
+.footer.footer-galaxy .footer-links a,
+.footer.footer-galaxy .footer-bottom {
+    color: #c3b9dd;
+}
+
+.footer.footer-galaxy .footer-links a {
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.footer.footer-galaxy .footer-links a:hover {
+    color: #ffffff;
+    transform: translateX(3px);
+}
+
+.footer.footer-galaxy .footer-bottom {
+    border-top-color: rgba(190, 175, 235, 0.12);
+}
+
+body.dark-mode #security.security-trust-section {
+    background: transparent;
+}
+
+body.dark-mode #security.security-trust-section .security-panel {
+    background: rgba(18, 13, 32, 0.82);
+    border-color: rgba(190, 175, 235, 0.14);
+}
+
+body.dark-mode #security.security-trust-section .security-vault-card {
+    background: linear-gradient(140deg, #120b20 0%, #251442 50%, #442087 100%) !important;
+    border-color: rgba(200, 173, 255, 0.28) !important;
+    box-shadow: 0 36px 78px -34px rgba(141, 99, 255, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.05) inset !important;
+}
+
+body.dark-mode #security.security-trust-section .security-image-badge {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(215, 200, 255, 0.2);
+    color: #eadfff;
+}
+
+body.dark-mode .contact-cta-section .contact-cta-container {
+    background: rgba(16, 10, 29, 0.52);
+    border-color: rgba(215, 200, 255, 0.18);
+}
+
+body.dark-mode .footer.footer-galaxy {
+    background: linear-gradient(180deg, #12091f 0%, #06030b 100%);
+}
+
+@media (max-width: 768px) {
+    .contact-cta-section .contact-cta-container {
+        padding: 40px 24px;
+    }
+
+    #security.security-trust-section .security-panel {
+        padding: 28px 24px;
+    }
+}

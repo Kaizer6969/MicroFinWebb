@@ -167,28 +167,28 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     </header>
 
     <!-- Features Grid -->
-    <section id="features" class="section bg-light">
+    <section id="features" class="section bg-light showcase-features-section">
         <div class="container">
             <div class="section-header text-center">
                 <h2>Built for Scale, Designed for Security</h2>
                 <p>Everything your cooperative needs to operate digitally, out of the box.</p>
             </div>
             
-            <div class="grid-3">
+            <div class="grid-3 showcase-feature-grid">
                 <!-- Feature 1 -->
-                <div class="feature-card">
+                <div class="feature-card feature-card-cosmos">
                     <div class="feature-icon"><span class="material-symbols-rounded">dns</span></div>
                     <h3>Multi-Tenant Architecture</h3>
                     <p>Your data is perfectly isolated. Experience enterprise-grade security where your institution's records are completely separated from others.</p>
                 </div>
                 <!-- Feature 2 -->
-                <div class="feature-card">
+                <div class="feature-card feature-card-guidance">
                     <div class="feature-icon"><span class="material-symbols-rounded">palette</span></div>
                     <h3>Fully Whitelabeled</h3>
                     <p>It's your brand. Upload your logo, change your color themes, and instantly transform the dashboard to look like your own proprietary software.</p>
                 </div>
                 <!-- Feature 3 -->
-                <div class="feature-card">
+                <div class="feature-card feature-card-vault">
                     <div class="feature-icon"><span class="material-symbols-rounded">account_balance</span></div>
                     <h3>Core Banking Engine</h3>
                     <p>Automated loan origination, savings management, and real-time interest calculation baked directly into the platform core.</p>
@@ -235,10 +235,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             
             <div class="pricing-grid">
                 <!-- Starter -->
-                <div class="pricing-card">
+                <div class="pricing-card pricing-card-starter">
                     <div class="pricing-header">
                         <h3>Starter</h3>
-                        <div class="price">₱4,999<span>/mo</span></div>
+                        <div class="price">&#8369;4,999<span>/mo</span></div>
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>1,000</strong> Max Clients</li>
@@ -247,11 +247,11 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 </div>
                 
                 <!-- Pro -->
-                <div class="pricing-card popular">
+                <div class="pricing-card pricing-card-pro popular">
                     <div class="popular-badge">Most Chosen</div>
                     <div class="pricing-header">
                         <h3>Pro</h3>
-                        <div class="price">₱14,999<span>/mo</span></div>
+                        <div class="price">&#8369;14,999<span>/mo</span></div>
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>5,000</strong> Max Clients</li>
@@ -260,10 +260,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 </div>
 
                 <!-- Enterprise -->
-                <div class="pricing-card">
+                <div class="pricing-card pricing-card-enterprise">
                     <div class="pricing-header">
                         <h3>Enterprise</h3>
-                        <div class="price">₱19,999<span>/mo</span></div>
+                        <div class="price">&#8369;19,999<span>/mo</span></div>
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>10,000</strong> Max Clients</li>
@@ -272,10 +272,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 </div>
 
                 <!-- Unlimited -->
-                <div class="pricing-card">
+                <div class="pricing-card pricing-card-unlimited">
                     <div class="pricing-header">
                         <h3>Unlimited</h3>
-                        <div class="price">₱29,999<span>/mo</span></div>
+                        <div class="price">&#8369;29,999<span>/mo</span></div>
                     </div>
                     <ul class="pricing-features">
                         <li><span class="material-symbols-rounded">check_circle</span> <strong>Unlimited</strong> Clients</li>
@@ -323,9 +323,9 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     </section>
 
     <!-- Security Section -->
-    <section id="security" class="section bg-white">
-        <div class="container container-flex">
-            <div class="security-content">
+    <section id="security" class="section bg-white security-trust-section">
+        <div class="container container-flex security-shell">
+            <div class="security-content security-panel">
                 <span class="badge-pill badge-pill-accent">Bank-Grade Security</span>
                 <h2 class="security-title">Your data is encrypted, isolated, and continuously backed up.</h2>
                 <ul class="security-list">
@@ -353,7 +353,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 </ul>
                 <a href="#contact" class="btn btn-outline security-cta">Read our Security Whitepaper</a>
             </div>
-            <div class="security-image">
+            <div class="security-image security-vault-card">
+                <span class="security-image-badge">Always-on resilience</span>
                 <span class="material-symbols-rounded">gpp_good</span>
                 <div>ISO 27001 & PCI-DSS Compliant Infrastructure</div>
             </div>
@@ -364,6 +365,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <section id="contact" class="section text-white contact-cta-section">
         <div class="contact-cta-glow"></div>
         <div class="container contact-cta-container">
+            <span class="contact-cta-badge">MicroFin Cloud Onboarding</span>
             <h2>Ready to modernize your cooperative?</h2>
             <p class="contact-cta-subtitle">Leave legacy desktop software behind. Let our team migrate your data to the cloud seamlessly.</p>
             <div class="contact-cta-buttons">
@@ -380,7 +382,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     </section>
 
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="footer footer-galaxy">
+        <div class="footer-top-line"></div>
         <div class="container footer-grid">
             <div class="footer-brand">
                 <div class="logo">
