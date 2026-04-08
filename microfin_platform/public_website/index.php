@@ -8,7 +8,7 @@ $renderUnavailable = static function (string $title, string $message): void {
     header('Content-Type: text/html; charset=UTF-8');
     echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>'
         . htmlspecialchars($title, ENT_QUOTES, 'UTF-8')
-        . '</title></head><body style="font-family: Inter, Arial, sans-serif; background:#f8fafc; color:#0f172a; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;"><div style="max-width:420px; background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:32px; text-align:center; box-shadow:0 12px 32px rgba(15,23,42,0.08);"><h1 style="margin:0 0 12px; font-size:1.5rem;">'
+        . '</title></head><body style="font-family: \'Plus Jakarta Sans\', Arial, sans-serif; background:#f7f3e8; color:#1f2d25; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;"><div style="max-width:420px; background:#fffdf7; border:1px solid #d7cfbf; border-radius:18px; padding:32px; text-align:center; box-shadow:0 18px 40px rgba(54,43,12,0.12);"><h1 style="margin:0 0 12px; font-size:1.5rem;">'
         . htmlspecialchars($title, ENT_QUOTES, 'UTF-8')
         . '</h1><p style="margin:0; color:#475569; line-height:1.6;">'
         . htmlspecialchars($message, ENT_QUOTES, 'UTF-8')
@@ -96,7 +96,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <!-- Material Symbols -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
@@ -122,7 +122,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             </div>
             
             <div class="nav-cta">
-                <a href="javascript:void(0)" id="darkModeToggle" class="nav-btn-link material-symbols-rounded" style="font-size: 24px; text-decoration: none; color: var(--text-gray); margin-right: 12px; cursor: pointer;" aria-label="Toggle Dark Mode">dark_mode</a>
+                <a href="javascript:void(0)" id="darkModeToggle" class="nav-btn-link material-symbols-rounded" aria-label="Toggle Dark Mode">dark_mode</a>
                 <a href="../super_admin/login.php" class="btn btn-login">Platform Login</a>
                 <a href="demo.php" class="btn btn-primary">Apply Now</a>
             </div>
@@ -247,7 +247,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 </div>
                 
                 <!-- Pro -->
-                <div class="pricing-card">
+                <div class="pricing-card popular">
+                    <div class="popular-badge">Most Chosen</div>
                     <div class="pricing-header">
                         <h3>Pro</h3>
                         <div class="price">₱14,999<span>/mo</span></div>
@@ -322,55 +323,55 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     </section>
 
     <!-- Security Section -->
-    <section id="security" class="section bg-white" style="border: none;">
+    <section id="security" class="section bg-white">
         <div class="container container-flex">
             <div class="security-content">
-                <span class="badge-pill" style="background: #fce7f3; color: #9333ea; margin-bottom: 16px;">Bank-Grade Security</span>
-                <h2 style="font-size: 2.5rem; margin-bottom: 24px; color: var(--primary);">Your data is encrypted, isolated, and continuously backed up.</h2>
-                <ul class="security-list" style="list-style: none; padding: 0; margin-bottom: 32px;">
-                    <li style="margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px;">
-                        <span class="material-symbols-rounded" style="color: #10b981;">check_circle</span>
-                        <div>
-                            <strong style="display: block; color: var(--text-dark);">Strict Tenant Isolation</strong>
-                            <span style="color: var(--text-gray); font-size: 0.95rem;">Every institution has its own dedicated database schema. Commingling of records is impossible.</span>
+                <span class="badge-pill badge-pill-accent">Bank-Grade Security</span>
+                <h2 class="security-title">Your data is encrypted, isolated, and continuously backed up.</h2>
+                <ul class="security-list">
+                    <li>
+                        <span class="material-symbols-rounded">check_circle</span>
+                        <div class="security-copy">
+                            <strong>Strict Tenant Isolation</strong>
+                            <span>Every institution has its own dedicated database schema. Commingling of records is impossible.</span>
                         </div>
                     </li>
-                    <li style="margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px;">
-                        <span class="material-symbols-rounded" style="color: #10b981;">check_circle</span>
-                        <div>
-                            <strong style="display: block; color: var(--text-dark);">End-to-End Encryption</strong>
-                            <span style="color: var(--text-gray); font-size: 0.95rem;">All data in transit and at rest is secured using AES-256 and TLS 1.3 standards.</span>
+                    <li>
+                        <span class="material-symbols-rounded">check_circle</span>
+                        <div class="security-copy">
+                            <strong>End-to-End Encryption</strong>
+                            <span>All data in transit and at rest is secured using AES-256 and TLS 1.3 standards.</span>
                         </div>
                     </li>
-                    <li style="display: flex; align-items: flex-start; gap: 12px;">
-                        <span class="material-symbols-rounded" style="color: #10b981;">check_circle</span>
-                        <div>
-                            <strong style="display: block; color: var(--text-dark);">Automated Backups & Redundancy</strong>
-                            <span style="color: var(--text-gray); font-size: 0.95rem;">Multi-region data replication ensures you never lose a single transaction record, even in hardware failure events.</span>
+                    <li>
+                        <span class="material-symbols-rounded">check_circle</span>
+                        <div class="security-copy">
+                            <strong>Automated Backups & Redundancy</strong>
+                            <span>Multi-region data replication ensures you never lose a single transaction record, even in hardware failure events.</span>
                         </div>
                     </li>
                 </ul>
-                <a href="#contact" class="btn btn-outline">Read our Security Whitepaper</a>
+                <a href="#contact" class="btn btn-outline security-cta">Read our Security Whitepaper</a>
             </div>
-            <div class="security-image" style="flex: 1; text-align: center; padding: 40px; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border-radius: 24px;">
-                <span class="material-symbols-rounded" style="font-size: 140px; color: #1e293b; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1));">gpp_good</span>
-                <div style="margin-top: 24px; font-weight: 600; color: #475569; font-size: 1.1rem;">ISO 27001 & PCI-DSS Compliant Infrastructure</div>
+            <div class="security-image">
+                <span class="material-symbols-rounded">gpp_good</span>
+                <div>ISO 27001 & PCI-DSS Compliant Infrastructure</div>
             </div>
         </div>
     </section>
 
     <!-- CTA Section -->
-    <section id="contact" class="section text-white" style="position: relative; overflow: hidden; background: linear-gradient(135deg, #0b1220 0%, #172554 52%, #1e3a8a 100%); border: none;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 80% -20%, rgba(96,165,250,0.28) 0%, transparent 52%); z-index: 0;"></div>
-        <div class="container" style="text-align: center; max-width: 700px; position: relative; z-index: 1;">
-            <h2 style="font-size: 2.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 20px; letter-spacing: -1px;">Ready to modernize your cooperative?</h2>
-            <p style="font-size: 1.1rem; margin-bottom: 36px; color: #dbeafe;">Leave legacy desktop software behind. Let our team migrate your data to the cloud seamlessly.</p>
-            <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">
-                <a href="demo.php" class="btn btn-primary btn-lg" style="padding: 16px 36px; font-size: 1.1rem;">
+    <section id="contact" class="section text-white contact-cta-section">
+        <div class="contact-cta-glow"></div>
+        <div class="container contact-cta-container">
+            <h2>Ready to modernize your cooperative?</h2>
+            <p class="contact-cta-subtitle">Leave legacy desktop software behind. Let our team migrate your data to the cloud seamlessly.</p>
+            <div class="contact-cta-buttons">
+                <a href="demo.php" class="btn btn-primary btn-lg">
                     <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">calendar_month</span>
                     Apply Now
                 </a>
-                <a href="demo.php?mode=talk-to-staff" class="btn btn-outline btn-lg" style="padding: 16px 36px; font-size: 1.1rem; border-color: rgba(147,197,253,0.65); color: #dbeafe;">
+                <a href="demo.php?mode=talk-to-staff" class="btn btn-outline btn-lg">
                     <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">support_agent</span>
                     Talk to Staff
                 </a>

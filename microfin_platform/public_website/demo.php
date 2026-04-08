@@ -373,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     
@@ -841,6 +841,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         body.dark-mode .success-view h3 { color: #f8fafc; }
         body.dark-mode .otp-group { background: #1a2235; border-color: rgba(255, 255, 255, 0.1); }
     </style>
+    <link rel="stylesheet" href="demo.css">
 </head>
 <body>
 
@@ -953,7 +954,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <?php if ($is_talk_to_expert): ?>
                     <div class="form-group">
                         <label>Category of Concern <span class="text-danger">*</span></label>
-                        <select class="input-field" name="concern_category" required style="appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=%22%23475569%22 height=%2224%22 viewBox=%220 0 24 24%22 width=%2224%22 xmlns=%22http://www.w3.org/2000/svg%22><path d=%22M7 10l5 5 5-5z%22/></svg>'); background-repeat: no-repeat; background-position-x: 98%; background-position-y: center;">
+                        <select class="input-field select-field" name="concern_category" required>
                             <option value="" disabled selected>Select a category</option>
                             <option value="General Inquiry">General Inquiry</option>
                             <option value="Pricing & Billing">Pricing & Billing</option>
@@ -1022,43 +1023,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <label>Business Email <span class="text-danger">*</span></label>
                         <div class="email-row">
                             <input type="email" class="input-field" name="company_email" id="work_email" placeholder="ceo@institution.com" required>
-                            <button type="button" id="btn-send-otp" class="btn btn-outline" style="padding: 0 15px; white-space: nowrap;">Send OTP</button>
+                            <button type="button" id="btn-send-otp" class="btn btn-outline otp-action-btn">Send OTP</button>
                         </div>
-                        <small id="email-help-text" style="color: #64748b; font-size: 0.8rem; margin-top: 6px; display:block;">Requires verification before submission.</small>
+                        <small id="email-help-text" class="form-helper-text">Requires verification before submission.</small>
                     </div>
 
                     <div class="otp-group" id="otp-group">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <label style="font-weight:600; font-size:0.85rem; color:#334155; margin:0;">Enter 6-Digit OTP <span class="text-danger">*</span></label>
-                            <span id="otp-countdown" style="font-size: 0.8rem; font-weight: 600; color: #b45309;"></span>
+                        <div class="otp-group-header">
+                            <label class="otp-label">Enter 6-Digit OTP <span class="text-danger">*</span></label>
+                            <span id="otp-countdown" class="otp-countdown"></span>
                         </div>
                         <div class="otp-row">
                             <input type="text" class="input-field" name="otp_code" id="otp_code" placeholder="123456" maxlength="6">
-                            <button type="button" id="btn-verify-otp" class="btn btn-primary" style="padding: 0 15px;">Verify</button>
+                            <button type="button" id="btn-verify-otp" class="btn btn-primary otp-action-btn">Verify</button>
                         </div>
-                        <div id="otp-status-msg" style="font-size: 0.85rem; margin-top: 8px; font-weight: 500;"></div>
+                        <div id="otp-status-msg" class="otp-status-msg"></div>
                         <input type="hidden" name="is_otp_verified" id="is_otp_verified" value="0">
                     </div>
 
                     <?php if (!$is_talk_to_expert): ?>
                     <div class="form-group">
                         <label>Proof of Legitimacy Documents <span class="text-danger">*</span></label>
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_1" id="legitimacy_document_1" data-slot="1" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff;" required>
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_2" id="legitimacy_document_2" data-slot="2" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_3" id="legitimacy_document_3" data-slot="3" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_4" id="legitimacy_document_4" data-slot="4" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
-                        <input type="file" class="input-field legitimacy-slot" name="legitimacy_document_5" id="legitimacy_document_5" data-slot="5" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="padding: 8px; background: #ffffff; margin-top: 8px; display: none;">
-                        <small style="color: #64748b; font-size: 0.8rem; margin-top: 6px; display:block;">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
+                        <input type="file" class="input-field legitimacy-slot legitimacy-file-input" name="legitimacy_document_1" id="legitimacy_document_1" data-slot="1" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" required>
+                        <input type="file" class="input-field legitimacy-slot legitimacy-file-input" name="legitimacy_document_2" id="legitimacy_document_2" data-slot="2" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="display: none;">
+                        <input type="file" class="input-field legitimacy-slot legitimacy-file-input" name="legitimacy_document_3" id="legitimacy_document_3" data-slot="3" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="display: none;">
+                        <input type="file" class="input-field legitimacy-slot legitimacy-file-input" name="legitimacy_document_4" id="legitimacy_document_4" data-slot="4" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="display: none;">
+                        <input type="file" class="input-field legitimacy-slot legitimacy-file-input" name="legitimacy_document_5" id="legitimacy_document_5" data-slot="5" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" style="display: none;">
+                        <small class="form-helper-text">Upload 1 to 5 files (business permit, DTI, SEC, and related proof).</small>
                     </div>
                     <?php endif; ?>
 
-                    <div class="form-group" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
-                        <label style="display: flex; gap: 10px; cursor: pointer; align-items: flex-start;">
+                    <div class="form-group policy-consent-group">
+                        <label class="policy-consent-label">
                             <input type="checkbox" name="agree_terms" required style="margin-top: 4px; accent-color: var(--primary);">
-                            <span style="font-weight: 400; font-size: 0.85rem; color: #475569; line-height: 1.5;">
+                            <span class="policy-copy">
                                 By submitting this request, I agree to the
-                                <a href="#" id="open-tos-modal" style="color: #3b82f6; text-decoration: underline;">Terms of Service</a>
-                                and <a href="#" id="open-pp-modal" style="color: #3b82f6; text-decoration: underline;">Privacy Policy</a>.
+                                <a href="#" id="open-tos-modal" class="policy-link">Terms of Service</a>
+                                and <a href="#" id="open-pp-modal" class="policy-link">Privacy Policy</a>.
                                 I understand that my information will be handled securely and according to these policies.
                             </span>
                         </label>
@@ -1073,17 +1074,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </div>
 
     <div id="tos-modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index:9999; overflow-y:auto; padding:40px 20px;">
-        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:18px; max-width:680px; margin:0 auto; padding:40px; color:#334155; line-height:1.7; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+        <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:18px; max-width:680px; margin:0 auto; padding:40px; color:var(--text-muted); line-height:1.7; box-shadow: var(--card-shadow);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-                <h2 style="margin:0; font-size:1.4rem; color:#0f172a; font-weight: 800;">Terms of Service &amp; Refund Policy</h2>
-                <button id="close-tos-modal" style="background:none; border:none; color:#64748b; cursor:pointer; font-size:1.8rem; line-height:1; transition: color 0.2s;">&times;</button>
+                <h2 style="margin:0; font-size:1.4rem; color:var(--text-dark); font-weight: 800;">Terms of Service &amp; Refund Policy</h2>
+                <button id="close-tos-modal" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.8rem; line-height:1; transition: color 0.2s;">&times;</button>
             </div>
-            <p style="color:#64748b; font-size:0.85rem; margin-bottom:24px;">Effective Date: <?php echo date('F d, Y'); ?> &mdash; MicroFin Platform</p>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:24px;">Effective Date: <?php echo date('F d, Y'); ?> &mdash; MicroFin Platform</p>
 
-            <h3 style="color:#0f172a; font-size:1rem; margin:20px 0 8px;">1. Acceptance of Terms</h3>
+            <h3 style="color:var(--text-dark); font-size:1rem; margin:20px 0 8px;">1. Acceptance of Terms</h3>
             <p style="font-size:0.9rem;">By submitting an application to use the MicroFin platform, you agree to be bound by these Terms of Service. If you do not agree, do not proceed with your application.</p>
 
-            <h3 style="color:#0f172a; font-size:1rem; margin:24px 0 8px;">2. Subscription &amp; Payment Rules</h3>
+            <h3 style="color:var(--text-dark); font-size:1rem; margin:24px 0 8px;">2. Subscription &amp; Payment Rules</h3>
             <p style="font-size:0.9rem;">Upon approval and completion of your billing setup, the following payment rules apply:</p>
             <ul style="font-size:0.9rem; padding-left:20px; margin-top:8px;">
                 <li><strong>Initial Activation Charge:</strong> Your first charge is the full monthly subscription fee paid immediately when your account is activated.</li>
@@ -1094,7 +1095,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <li><strong>Billing Disputes:</strong> Any billing disputes must be raised within 30 days of the charge date by contacting MicroFin support.</li>
             </ul>
 
-            <h3 style="color:#b91c1c; font-size:1rem; margin:24px 0 8px;">3. No-Refund Policy</h3>
+            <h3 style="color:var(--danger); font-size:1rem; margin:24px 0 8px;">3. No-Refund Policy</h3>
             <p style="font-size:0.9rem;">All subscription fees paid to MicroFin are <strong>strictly non-refundable</strong>. This includes, but is not limited to:</p>
             <ul style="font-size:0.9rem; padding-left:20px; margin-top:8px;">
                 <li>Initial activation charges upon account activation.</li>
@@ -1104,14 +1105,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </ul>
             <p style="font-size:0.9rem; margin-top:8px;">We encourage you to evaluate the platform thoroughly during any trial or demo period before committing to a paid subscription.</p>
 
-            <h3 style="color:#0f172a; font-size:1rem; margin:24px 0 8px;">4. Account Termination</h3>
+            <h3 style="color:var(--text-dark); font-size:1rem; margin:24px 0 8px;">4. Account Termination</h3>
             <p style="font-size:0.9rem;">MicroFin reserves the right to terminate or suspend any account that violates these terms, fails to pay subscription fees, or engages in fraudulent activity. Termination does not entitle the tenant to a refund of any previously paid fees.</p>
 
-            <h3 style="color:#0f172a; font-size:1rem; margin:24px 0 8px;">5. Data &amp; Privacy</h3>
+            <h3 style="color:var(--text-dark); font-size:1rem; margin:24px 0 8px;">5. Data &amp; Privacy</h3>
             <p style="font-size:0.9rem;">Your data is stored in an isolated tenant environment. MicroFin will not share or sell your data to third parties. Card details are encrypted using AES-256 and CVV is never stored. All transactions are logged for compliance and audit purposes.</p>
 
-            <div style="margin-top:32px; text-align:right; border-top: 1px solid #e2e8f0; padding-top: 24px;">
-                <button id="close-tos-modal-btn" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6); color:#fff; border:none; border-radius:8px; padding:12px 28px; font-weight:600; cursor:pointer; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);">I Understand</button>
+            <div style="margin-top:32px; text-align:right; border-top: 1px solid var(--card-border); padding-top: 24px;">
+                <button id="close-tos-modal-btn" style="background:linear-gradient(135deg,var(--primary),var(--purple-core)); color:#fff; border:none; border-radius:999px; padding:12px 28px; font-weight:600; cursor:pointer; box-shadow: 0 12px 24px -18px rgba(var(--primary-rgb), 0.38);">I Understand</button>
             </div>
         </div>
     </div>
