@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <p>We received a request to reset your MicroFin platform owner password.</p>
                         <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
                         <div style='text-align: center; margin: 30px 0;'>
-                            <a href='" . htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8') . "' style='background-color: #0f172a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Reset Password</a>
+                            <a href='" . htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8') . "' style='background-color: #1f8a5a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Reset Password</a>
                         </div>
                         <hr style='border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;' />
                         <p style='font-size: 12px; color: #94a3b8;'>If you did not request a password reset, you can safely ignore this email.</p>
@@ -104,114 +104,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MicroFin - Forgot Password</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --brand-color: #0f172a;
-            --bg-color: #f8fafc;
-            --surface-color: #ffffff;
-            --text-primary: #0f172a;
-            --text-secondary: #64748b;
-            --border-color: #e2e8f0;
-        }
-
-        * { box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            color: var(--text-primary);
-            padding: 20px;
-        }
-
-        .card {
-            background: var(--surface-color);
-            width: 100%;
-            max-width: 430px;
-            padding: 3rem 2.5rem;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
-        }
-
-        h1 {
-            margin: 0 0 0.5rem;
-            font-size: 1.5rem;
-        }
-
-        p {
-            margin: 0 0 1.5rem;
-            color: var(--text-secondary);
-            line-height: 1.6;
-        }
-
-        label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-        }
-
-        input {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 1rem;
-            font-family: inherit;
-            margin-bottom: 1rem;
-        }
-
-        input:focus {
-            outline: none;
-            border-color: var(--brand-color);
-            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1);
-        }
-
-        .btn-submit {
-            width: 100%;
-            padding: 0.875rem;
-            background-color: var(--brand-color);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .alert {
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
-        }
-
-        .alert-success {
-            background: #f0fdf4;
-            color: #15803d;
-            border: 1px solid #bbf7d0;
-        }
-
-        .alert-error {
-            background: #fef2f2;
-            color: #b91c1c;
-            border: 1px solid #fecaca;
-        }
-
-        .back-link {
-            display: inline-block;
-            margin-top: 1.25rem;
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.9rem;
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="super_admin_theme.css">
+    <link rel="stylesheet" href="super_admin_auth.css">
 </head>
-<body>
+<body class="platform-auth auth-compact">
     <div class="card">
         <h1>Forgot Password?</h1>
         <p>Enter your super admin email address and we'll check the account, verify its status, and send you a reset link.</p>

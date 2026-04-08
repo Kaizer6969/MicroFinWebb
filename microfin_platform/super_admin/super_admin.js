@@ -44,6 +44,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     const themeToggleBtn = document.getElementById('theme-toggle');
     const htmlElement = document.documentElement;
+    let latestDashboardData = null;
+    let latestSalesData = null;
+    let chartUserGrowth = null;
+    let chartTenantActivity = null;
+    let chartSalesTrends = null;
+    let chartRevenue = null;
 
     function applyTheme(theme) {
         htmlElement.setAttribute('data-theme', theme);
@@ -71,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
             const newTheme = currentTheme === 'light' ? 'dark' : 'light';
             applyTheme(newTheme);
+            requestAnimationFrame(refreshThemedCharts);
             persistTheme(newTheme);
         });
     }
@@ -326,29 +333,76 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     // DASHBOARD: Charts + Polling
     // ============================================================
-    let chartUserGrowth = null;
-    let chartTenantActivity = null;
-    let chartSalesTrends = null;
+    function readCssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
 
-    const chartColors = {
-        primary: '#0284c7',
-        primaryLight: 'rgba(2, 132, 199, 0.2)',
-        green: '#10b981',
-        greenLight: 'rgba(16, 185, 129, 0.2)',
-        purple: '#8b5cf6',
-        purpleLight: 'rgba(139, 92, 246, 0.2)',
-    };
+    function rgbaFromVar(name, alpha) {
+        return `rgba(${readCssVar(name)}, ${alpha})`;
+    }
+
+    function getChartTheme() {
+        return {
+            primary: readCssVar('--primary-color'),
+            primaryLight: rgbaFromVar('--primary-rgb', 0.22),
+            primaryAlt: readCssVar('--tone-primary-text'),
+            success: readCssVar('--success-color'),
+            successLight: rgbaFromVar('--success-rgb', 0.22),
+            secondary: readCssVar('--secondary-color'),
+            secondaryLight: rgbaFromVar('--secondary-rgb', 0.22),
+            secondaryAlt: readCssVar('--tone-secondary-text'),
+            warning: readCssVar('--warning-color'),
+            warningLight: rgbaFromVar('--warning-rgb', 0.18),
+            error: readCssVar('--error-color'),
+            errorLight: rgbaFromVar('--error-rgb', 0.18),
+            neutral: readCssVar('--text-muted'),
+            grid: readCssVar('--chart-grid'),
+            ticks: readCssVar('--chart-ticks')
+        };
+    }
 
     function buildTenantPalette(count) {
+        const theme = getChartTheme();
         const base = [
-            '#0284c7', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6',
-            '#f97316', '#6366f1', '#84cc16', '#ec4899', '#0ea5e9', '#22c55e'
+            theme.primary,
+            theme.secondary,
+            theme.success,
+            theme.warning,
+            theme.error,
+            theme.primaryAlt,
+            theme.secondaryAlt,
+            theme.neutral
         ];
         const colors = [];
         for (let i = 0; i < count; i++) {
             colors.push(base[i % base.length]);
         }
         return colors;
+    }
+
+    function buildChartDefaults() {
+        const theme = getChartTheme();
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false,
+                    labels: { color: theme.ticks, font: { family: 'Outfit' } }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: theme.grid },
+                    ticks: { color: theme.ticks, font: { family: 'Outfit' } }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: theme.grid },
+                    ticks: { color: theme.ticks, font: { family: 'Outfit' } }
+                }
+            }
+        };
     }
 
     function toYmd(dateObj) {
@@ -413,23 +467,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const userGrowthCtx = document.getElementById('chart-user-growth');
         const tenantActivityCtx = document.getElementById('chart-tenant-activity');
         const salesTrendsCtx = document.getElementById('chart-sales-trends');
+        const theme = getChartTheme();
+        const defaultOptions = buildChartDefaults();
 
-        const defaultOptions = {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: {
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#a1a1aa', font: { family: 'Outfit' } }
-                },
-                y: {
-                    beginAtZero: true,
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#a1a1aa', font: { family: 'Outfit' } }
-                }
-            }
-        };
+        if (chartUserGrowth) {
+            chartUserGrowth.destroy();
+            chartUserGrowth = null;
+        }
+        if (chartTenantActivity) {
+            chartTenantActivity.destroy();
+            chartTenantActivity = null;
+        }
+        if (chartSalesTrends) {
+            chartSalesTrends.destroy();
+            chartSalesTrends = null;
+        }
 
         const integerTickFormatter = (value) => {
             const numeric = Number(value);
@@ -455,7 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     plugins: {
                         legend: {
                             display: true,
-                            labels: { color: '#a1a1aa', font: { family: 'Outfit' } }
+                            labels: { color: theme.ticks, font: { family: 'Outfit' } }
                         },
                         tooltip: {
                             callbacks: {
@@ -491,21 +543,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         {
                             label: 'Active',
                             data: (data.tenant_activity_chart || []).map(d => Number(d.active_count || 0)),
-                            backgroundColor: chartColors.green,
+                            backgroundColor: theme.success,
                             borderRadius: 4,
                             maxBarThickness: 40
                         },
                         {
                             label: 'Pending Application',
                             data: (data.tenant_activity_chart || []).map(d => Number(d.pending_count || 0)),
-                            backgroundColor: '#f59e0b',
+                            backgroundColor: theme.warning,
                             borderRadius: 4,
                             maxBarThickness: 40
                         },
                         {
                             label: 'Inactive',
                             data: (data.tenant_activity_chart || []).map(d => Number(d.inactive_count || 0)),
-                            backgroundColor: '#ef4444',
+                            backgroundColor: theme.error,
                             borderRadius: 4,
                             maxBarThickness: 40
                         }
@@ -516,24 +568,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     plugins: {
                         legend: {
                             display: true,
-                            labels: { color: '#a1a1aa', font: { family: 'Outfit' } }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#a1a1aa', font: { family: 'Outfit' } },
-                            stacked: true
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#a1a1aa', font: { family: 'Outfit' } },
-                            stacked: true
+                            labels: { color: theme.ticks, font: { family: 'Outfit' } }
                         }
                     }
                 }
             });
+            chartTenantActivity.options.scales.x.stacked = true;
+            chartTenantActivity.options.scales.y.stacked = true;
         }
 
         if (salesTrendsCtx) {
@@ -544,12 +585,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     datasets: [{
                         label: 'Revenue',
                         data: (data.sales_trends_chart || []).map(d => parseFloat(d.total)),
-                        borderColor: chartColors.green,
-                        backgroundColor: chartColors.greenLight,
+                        borderColor: theme.primary,
+                        backgroundColor: theme.primaryLight,
                         fill: true,
                         tension: 0.4,
                         pointRadius: 4,
-                        pointBackgroundColor: chartColors.green
+                        pointBackgroundColor: theme.primary
                     }]
                 },
                 options: defaultOptions
@@ -626,6 +667,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('api_dashboard_stats.php?' + buildDashboardQueryString());
             if (!res.ok) return;
             const data = await res.json();
+            latestDashboardData = data;
 
             const fromEl = document.getElementById('user-growth-date-from');
             const toEl = document.getElementById('user-growth-date-to');
@@ -664,6 +706,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(async () => {
         await loadDashboardStats(false);
     }, 5000);
+
+    function refreshThemedCharts() {
+        if (latestDashboardData) {
+            initDashboardCharts(latestDashboardData);
+        }
+        if (latestSalesData) {
+            renderSalesReport(latestSalesData);
+        }
+    }
 
     // ============================================================
     // TENANT MANAGEMENT: Filter + Search
@@ -955,7 +1006,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     // SALES REPORT: Load via AJAX
     // ============================================================
-    let chartRevenue = null;
     const revenuePeriodFilter = document.getElementById('revenue-period-filter');
     
     function loadSalesData() {
@@ -979,6 +1029,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderSalesReport(data) {
+        latestSalesData = data;
+        const theme = getChartTheme();
+
         // Update Stat Cards
         const el = (id, val) => {
             const e = document.getElementById(id);
@@ -1016,8 +1069,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     datasets: [{
                         label: 'Revenue',
                         data: (data.revenue_chart || []).map(d => parseFloat(d.total)),
-                        borderColor: chartColors.green,
-                        backgroundColor: chartColors.greenLight,
+                        borderColor: theme.primary,
+                        backgroundColor: theme.primaryLight,
                         borderWidth: 3,
                         showLine: true,
                         spanGaps: true,
@@ -1025,7 +1078,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         tension: 0.4,
                         pointRadius: 3,
                         pointHoverRadius: 5,
-                        pointBackgroundColor: chartColors.green
+                        pointBackgroundColor: theme.primary
                     }]
                 },
                 options: {
@@ -1033,8 +1086,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { family: 'Outfit' } } },
-                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { family: 'Outfit' } } }
+                        x: { grid: { color: theme.grid }, ticks: { color: theme.ticks, font: { family: 'Outfit' } } },
+                        y: { beginAtZero: true, grid: { color: theme.grid }, ticks: { color: theme.ticks, font: { family: 'Outfit' } } }
                     }
                 }
             });

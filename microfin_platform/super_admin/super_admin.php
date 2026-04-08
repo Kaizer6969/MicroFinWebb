@@ -26,6 +26,7 @@ if (!$superAdminState) {
 
 sa_sync_super_admin_session_from_state($superAdminState);
 $ui_theme = sa_super_admin_theme($superAdminState);
+$avatarBackground = $ui_theme === 'dark' ? '8D63FF' : '1F8A5A';
 
 if (!empty($_SESSION['super_admin_force_password_change'])) {
     header('Location: force_change_password.php');
@@ -1520,6 +1521,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="super_admin_theme.css">
     <link rel="stylesheet" href="super_admin.css">
     <style>
         @media (min-width: 1024px) {
@@ -1624,7 +1626,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                         <span class="material-symbols-rounded"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
                     </button>
                     <div class="admin-profile">
-                        <img src="https://ui-avatars.com/api/?name=System+Host&background=0284c7&color=fff" alt="Admin Avatar" class="avatar">
+                        <img src="https://ui-avatars.com/api/?name=System+Host&background=<?php echo $avatarBackground; ?>&color=fff" alt="Admin Avatar" class="avatar">
                         <div class="admin-info">
                             <span class="admin-name"><?php echo htmlspecialchars($_SESSION['super_admin_username'] ?? 'Admin'); ?></span>
                             <span class="admin-role">Admin</span>
@@ -1634,13 +1636,13 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
             </header>
 
             <?php if ($provision_error !== ''): ?>
-            <div class="site-alert site-alert-error" style="margin: 1rem 2rem 0; padding: 0.75rem 1rem; border-radius: 8px; background: #fee2e2; color: #b91c1c; font-weight: 500;">
+            <div class="site-alert site-alert-error">
                 <?php echo htmlspecialchars($provision_error); ?>
             </div>
             <?php endif; ?>
 
             <?php if ($provision_success !== ''): ?>
-            <div class="site-alert site-alert-success" style="margin: 1rem 2rem 0; padding: 0.75rem 1rem; border-radius: 8px; background: #dcfce7; color: #166534; font-weight: 500;">
+            <div class="site-alert site-alert-success">
                 <?php echo htmlspecialchars($provision_success); ?>
             </div>
             <?php endif; ?>
@@ -1978,7 +1980,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <?php echo htmlspecialchars($t['tenant_name']); ?><br>
                                             <small class="text-muted">ID: <?php echo htmlspecialchars($t['tenant_id'] ?? '—'); ?></small>
                                             <?php if (($t['request_type'] ?? '') === 'talk_to_expert' && !empty($t['concern_category'])): ?>
-                                                <br><small style="color: #8b5cf6; font-weight:500; font-size: 0.8rem;">Concern: <?php echo htmlspecialchars($t['concern_category']); ?></small>
+                                                <br><small class="concern-note">Concern: <?php echo htmlspecialchars($t['concern_category']); ?></small>
                                             <?php endif; ?>
                                         </td>
                                         <td>
@@ -2000,7 +2002,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             $status = $t['status'];
                                             $request_type = (string)($t['request_type'] ?? 'tenant_application');
                                             $badge_class = '';
-                                            $badge_style = '';
                                             $normalized_status = $status;
                                             if ($request_type === 'talk_to_expert') {
                                                 if (in_array($status, ['Pending', 'New'], true)) {
@@ -2027,26 +2028,26 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                     $badge_class = 'badge-green';
                                                     break;
                                                 case 'Suspended':
-                                                    $badge_style = 'background:#fee2e2; color:#b91c1c;';
+                                                    $badge_class = 'badge-red';
                                                     break;
                                                 case 'Rejected':
-                                                    $badge_style = 'background:#fee2e2; color:#991b1b;';
+                                                    $badge_class = 'badge-red';
                                                     break;
                                                 case 'New':
-                                                    $badge_style = 'background:#dbeafe; color:#1e3a8a;';
+                                                    $badge_class = 'badge-amber';
                                                     break;
                                                 case 'In Contact':
-                                                    $badge_style = 'background:#fef3c7; color:#b45309;';
+                                                    $badge_class = 'status-badge-contact';
                                                     break;
                                                 case 'Closed':
-                                                    $badge_style = 'background:#e5e7eb; color:#374151;';
+                                                    $badge_class = 'status-badge-closed';
                                                     break;
                                                 default:
-                                                    $badge_style = 'background:#fef08a; color:#b45309;';
+                                                    $badge_class = 'status-badge-pending';
                                                     break;
                                             }
                                             ?>
-                                            <span class="badge <?php echo $badge_class; ?>" <?php if ($badge_style) echo "style=\"{$badge_style}\""; ?>>
+                                            <span class="badge <?php echo $badge_class; ?>">
                                                 <?php echo htmlspecialchars($normalized_status); ?>
                                             </span>
                                         </td>
@@ -2092,8 +2093,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                     $startup_username = trim((string)($t['owner_username'] ?? ''));
                                                     $startup_user_label = $startup_username !== '' ? ('@' . $startup_username) : 'No startup user yet';
                                                     ?>
-                                                    <button class="btn btn-sm btn-provision-from-demo"
-                                                        style="background:#10b981; color:#fff; border:none; border-radius:10px; padding:6px 12px; font-weight:600; display:inline-flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(16,185,129,0.3);"
+                                                    <button class="btn btn-primary btn-sm btn-provision btn-provision-from-demo"
                                                         data-tenant-name="<?php echo htmlspecialchars($t['tenant_name']); ?>"
                                                         data-company-email="<?php echo htmlspecialchars($t['owner_email'] ?? ''); ?>"
                                                         data-plan-tier="<?php echo htmlspecialchars($t['plan_tier'] ?? 'Starter'); ?>"
@@ -2110,7 +2110,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                     <form method="POST" style="display:inline;">
                                                         <input type="hidden" name="action" value="reject_tenant">
                                                         <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($t['tenant_id']); ?>">
-                                                        <button type="submit" class="btn btn-outline btn-sm" style="color:#b91c1c; border-color:#fca5a5;" title="Reject">
+                                                        <button type="submit" class="btn btn-outline btn-sm btn-outline-danger" title="Reject">
                                                             <span class="material-symbols-rounded" style="font-size:16px;">close</span> Reject
                                                         </button>
                                                     </form>
@@ -2118,19 +2118,18 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                     <!-- View Website -->
                                                     <?php $site_url = sa_build_tenant_login_url((string)$t['tenant_slug']); ?>
                                                     <?php if (!empty($t['setup_completed'])): ?>
-                                                        <a href="<?php echo htmlspecialchars($site_url); ?>" target="_blank" class="btn btn-outline btn-sm" style="color:#0284c7; border-color:#7dd3fc; text-decoration:none;" title="View Website">
+                                                        <a href="<?php echo htmlspecialchars($site_url); ?>" target="_blank" class="btn btn-outline btn-sm btn-outline-primary" style="text-decoration:none;" title="View Website">
                                                             <span class="material-symbols-rounded" style="font-size:16px;">language</span> View Site
                                                         </a>
                                                     <?php else: ?>
-                                                        <button type="button" class="btn btn-outline btn-sm" style="color:#94a3b8; border-color:#cbd5e1; cursor:not-allowed;" title="Setup Incomplete">
+                                                        <button type="button" class="btn btn-outline btn-sm btn-disabled" title="Setup Incomplete">
                                                             <span class="material-symbols-rounded" style="font-size:16px;">language</span> View Site
                                                         </button>
                                                     <?php endif; ?>
 
                                                     <!-- Suspend -->
                                                     <button type="button"
-                                                        class="btn btn-outline btn-sm btn-tenant-deactivate"
-                                                        style="color:#b91c1c; border-color:#fca5a5;"
+                                                        class="btn btn-outline btn-sm btn-outline-danger btn-tenant-deactivate"
                                                         title="Deactivate Tenant"
                                                         data-tenant-id="<?php echo htmlspecialchars($t['tenant_id']); ?>"
                                                         data-tenant-name="<?php echo htmlspecialchars($t['tenant_name']); ?>">
@@ -2142,7 +2141,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                                         <input type="hidden" name="action" value="toggle_status">
                                                         <input type="hidden" name="tenant_id" value="<?php echo htmlspecialchars($t['tenant_id']); ?>">
                                                         <input type="hidden" name="new_status" value="Active">
-                                                        <button type="submit" class="btn btn-outline btn-sm" style="color:#166534; border-color:#86efac;" title="Reactivate Tenant">
+                                                        <button type="submit" class="btn btn-outline btn-sm btn-outline-success" title="Reactivate Tenant">
                                                             <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span> Reactivate
                                                         </button>
                                                     </form>
@@ -2210,13 +2209,13 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                         $iq_status = (string)($iq['status'] ?? 'Pending');
                                         if (in_array($iq_status, ['Pending', 'New'], true)) {
                                             $iq_normalized = 'New';
-                                            $iq_badge_style = 'background:#dbeafe; color:#1e3a8a;';
+                                            $iq_badge_class = 'badge-amber';
                                         } elseif (in_array($iq_status, ['Contacted', 'In Contact'], true)) {
                                             $iq_normalized = 'In Contact';
-                                            $iq_badge_style = 'background:#fef3c7; color:#b45309;';
+                                            $iq_badge_class = 'status-badge-contact';
                                         } else {
                                             $iq_normalized = 'Closed';
-                                            $iq_badge_style = 'background:#e5e7eb; color:#374151;';
+                                            $iq_badge_class = 'status-badge-closed';
                                         }
                                         $iq_data_status = $iq_normalized === 'New' ? 'new' : ($iq_normalized === 'In Contact' ? 'in_contact' : 'closed');
                                     ?>
@@ -2234,7 +2233,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                                             <small class="text-muted"><?php echo htmlspecialchars($iq['owner_phone'] ?? '—'); ?></small>
                                         </td>
                                         <td>
-                                            <span class="badge" style="<?php echo $iq_badge_style; ?>">
+                                            <span class="badge <?php echo $iq_badge_class; ?>">
                                                 <?php echo htmlspecialchars($iq_normalized); ?>
                                             </span>
                                         </td>
@@ -2844,9 +2843,9 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                             </table>
                         </div>
                     </div>
-                    <div class="card" style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.15);">
+                    <div class="card backup-tip-card">
                         <div style="display:flex; gap:12px; align-items:flex-start;">
-                            <span class="material-symbols-rounded" style="color:#f59e0b; font-size:24px; margin-top:2px;">info</span>
+                            <span class="material-symbols-rounded backup-tip-icon">info</span>
                             <div>
                                 <h3 style="margin:0 0 4px; font-size:1rem;">How to Restore a Backup</h3>
                                 <p class="text-muted" style="margin:0; line-height:1.6;">
@@ -3428,7 +3427,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline" id="cancel-tenant-status-modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary" style="background:#b91c1c; border-color:#b91c1c;">Deactivate Tenant</button>
+                    <button type="submit" class="btn btn-danger">Deactivate Tenant</button>
                 </div>
             </form>
         </div>

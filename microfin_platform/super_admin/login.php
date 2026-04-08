@@ -97,161 +97,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MicroFin - Super Admin Login</title>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
-    
-    <style>
-        :root {
-            --brand-color: #0f172a; /* Slate 900 for Super Admin */
-            --bg-color: #f8fafc;
-            --surface-color: #ffffff;
-            --text-primary: #0f172a;
-            --text-secondary: #64748b;
-            --border-color: #e2e8f0;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            color: var(--text-primary);
-        }
-
-        .login-container {
-            background-color: var(--surface-color);
-            padding: 3rem 2.5rem;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
-
-        .logo-header {
-            margin-bottom: 2rem;
-        }
-
-        .logo-icon {
-            font-size: 3rem;
-            color: var(--brand-color);
-            margin-bottom: 0.5rem;
-        }
-
-        .company-name {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--brand-color);
-            margin: 0 0 0.25rem 0;
-        }
-
-        .subtitle {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin: 0;
-        }
-
-        .form-group {
-            margin-bottom: 1.25rem;
-            text-align: left;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 1rem;
-            font-family: inherit;
-            box-sizing: border-box;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--brand-color);
-            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1);
-        }
-
-        .btn-submit {
-            width: 100%;
-            padding: 0.875rem;
-            background-color: var(--brand-color);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            margin-top: 1rem;
-        }
-
-        .btn-submit:hover {
-            background-color: #000000;
-        }
-
-        .btn-submit:disabled,
-        .form-input:disabled {
-            cursor: not-allowed;
-            opacity: 0.65;
-        }
-
-        /* Loader Overlay */
-        .loader-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.9);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s;
-        }
-
-        .loader-overlay.active {
-            opacity: 1;
-            pointer-events: all;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid var(--border-color);
-            border-top-color: var(--brand-color);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-    </style>
+    <link rel="stylesheet" href="super_admin_theme.css">
+    <link rel="stylesheet" href="super_admin_auth.css">
 </head>
-<body>
+<body class="platform-auth auth-compact">
 
     <div class="loader-overlay" id="loader">
         <div class="spinner"></div>
-        <p style="margin-top: 1rem; color: var(--text-secondary); font-weight: 500;">Authenticating...</p>
+        <p class="loader-message">Authenticating...</p>
     </div>
 
     <div class="login-container">
@@ -263,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form id="login-form" method="POST" action=""<?php echo $browser_session_block_message !== '' ? ' onsubmit="return false;"' : ''; ?>>
             <?php if ($error_msg !== ''): ?>
-            <div style="background-color: #fee2e2; color: #b91c1c; padding: 0.75rem; border-radius: 8px; font-size: 0.875rem; margin-bottom: 1rem; text-align: left;">
+            <div class="auth-alert auth-alert-error">
                 <?php echo htmlspecialchars($error_msg); ?>
             </div>
             <?php endif; ?>
@@ -279,12 +134,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <div style="text-align: right; margin-top: -0.5rem; margin-bottom: 0.5rem;">
-                <a href="forgot_password.php" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;">Forgot Password?</a>
+                <a href="forgot_password.php" class="forgot-link">Forgot Password?</a>
             </div>
 
             <button type="submit" class="btn-submit" id="submit-btn"<?php echo $browser_session_block_message !== '' ? ' disabled' : ''; ?>>Sign In to Dashboard</button>
             <div style="margin-top: 1.5rem; text-align: center;">
-                <a href="../public_website/index.php" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                <a href="../public_website/index.php" class="home-link" style="justify-content: center;">
                     <span class="material-symbols-outlined" style="font-size: 1rem;">arrow_back</span>
                     Back to Home
                 </a>
