@@ -14,6 +14,61 @@ if (!function_exists('mf_env_first')) {
     }
 }
 
+if (!function_exists('mf_load_local_db_config')) {
+    function mf_load_local_db_config(): array
+    {
+        static $config = null;
+        if ($config !== null) {
+            return $config;
+        }
+
+        $config = [];
+        $configPath = __DIR__ . DIRECTORY_SEPARATOR . 'local_db_config.php';
+        if (!is_file($configPath)) {
+            return $config;
+        }
+
+        $loadedConfig = require $configPath;
+        if (is_array($loadedConfig)) {
+            $config = $loadedConfig;
+        }
+
+        return $config;
+    }
+}
+
+if (!function_exists('mf_local_db_config_first')) {
+    function mf_local_db_config_first(array $keys): ?string
+    {
+        $config = mf_load_local_db_config();
+
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $config)) {
+                continue;
+            }
+
+            $value = trim((string) $config[$key]);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('mf_runtime_config_first')) {
+    function mf_runtime_config_first(array $keys): ?string
+    {
+        $envValue = mf_env_first($keys);
+        if ($envValue !== null) {
+            return $envValue;
+        }
+
+        return mf_local_db_config_first($keys);
+    }
+}
+
 if (!function_exists('mf_is_railway_runtime')) {
     function mf_is_railway_runtime(): bool
     {
@@ -31,6 +86,23 @@ if (!function_exists('mf_is_railway_runtime')) {
         }
 
         return false;
+    }
+}
+
+if (!function_exists('mf_runtime_db_mode')) {
+    function mf_runtime_db_mode(): string
+    {
+        $mode = strtolower(trim((string) (mf_runtime_config_first(['MF_DB_MODE']) ?? 'auto')));
+
+        if (in_array($mode, ['local', 'auto', 'remote'], true)) {
+            return $mode;
+        }
+
+        if (in_array($mode, ['public', 'remote-public', 'railway-public'], true)) {
+            return 'remote';
+        }
+
+        return 'auto';
     }
 }
 
@@ -58,6 +130,55 @@ if (!function_exists('mf_database_target_from_url')) {
         }
         if (!empty($parts['path'])) {
             $target['db'] = ltrim((string) $parts['path'], '/');
+        }
+
+        return $target;
+    }
+}
+
+if (!function_exists('mf_resolve_public_db_target')) {
+    function mf_resolve_public_db_target(): ?array
+    {
+        $target = [];
+
+        $publicDatabaseUrl = mf_runtime_config_first([
+            'MYSQL_PUBLIC_URL',
+            'PUBLIC_DATABASE_URL',
+            'PUBLIC_MYSQL_URL',
+            'REMOTE_DATABASE_URL',
+        ]);
+        if ($publicDatabaseUrl !== null) {
+            $parsedTarget = mf_database_target_from_url($publicDatabaseUrl);
+            if ($parsedTarget !== null) {
+                $target = array_merge($target, $parsedTarget);
+            }
+        }
+
+        $overrides = [
+            'host' => mf_runtime_config_first(['PUBLIC_DB_HOST', 'PUBLIC_MYSQL_HOST', 'REMOTE_DB_HOST']),
+            'port' => mf_runtime_config_first(['PUBLIC_DB_PORT', 'PUBLIC_MYSQL_PORT', 'REMOTE_DB_PORT']),
+            'db' => mf_runtime_config_first(['PUBLIC_DB_NAME', 'PUBLIC_MYSQL_DATABASE', 'REMOTE_DB_NAME']),
+            'user' => mf_runtime_config_first(['PUBLIC_DB_USER', 'PUBLIC_MYSQL_USER', 'REMOTE_DB_USER']),
+            'pass' => mf_runtime_config_first(['PUBLIC_DB_PASSWORD', 'PUBLIC_MYSQL_PASSWORD', 'REMOTE_DB_PASSWORD']),
+        ];
+
+        foreach ($overrides as $key => $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            $target[$key] = $key === 'port' ? (int) $value : $value;
+        }
+
+        if (empty($target['host']) || empty($target['db']) || !isset($target['user'])) {
+            return null;
+        }
+
+        if (!isset($target['port']) || (int) $target['port'] <= 0) {
+            $target['port'] = 3306;
+        }
+        if (!array_key_exists('pass', $target)) {
+            $target['pass'] = '';
         }
 
         return $target;
@@ -104,14 +225,23 @@ if (!function_exists('mf_resolve_db_targets')) {
             ];
         }
 
+        $dbMode = mf_runtime_db_mode();
+        $publicTarget = mf_resolve_public_db_target();
+        if ($dbMode !== 'local' && $publicTarget !== null) {
+            return [
+                'mode' => 'remote_public',
+                'targets' => [$publicTarget],
+            ];
+        }
+
         $baseLocalTarget = [
-            'host' => mf_env_first(['LOCAL_DB_HOST']) ?? 'localhost',
-            'port' => (int) (mf_env_first(['LOCAL_DB_PORT']) ?? 3306),
-            'db' => mf_env_first(['LOCAL_DB_NAME']) ?? 'microfin_db',
-            'user' => mf_env_first(['LOCAL_DB_USER']) ?? 'root',
+            'host' => mf_runtime_config_first(['LOCAL_DB_HOST']) ?? 'localhost',
+            'port' => (int) (mf_runtime_config_first(['LOCAL_DB_PORT']) ?? 3306),
+            'db' => mf_runtime_config_first(['LOCAL_DB_NAME']) ?? 'microfin_db',
+            'user' => mf_runtime_config_first(['LOCAL_DB_USER']) ?? 'root',
         ];
 
-        $explicitLocalPassword = mf_env_first(['LOCAL_DB_PASSWORD']);
+        $explicitLocalPassword = mf_runtime_config_first(['LOCAL_DB_PASSWORD']);
         $passwordCandidates = $explicitLocalPassword !== null
             ? [$explicitLocalPassword]
             : ['1234', ''];

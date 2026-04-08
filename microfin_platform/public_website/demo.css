@@ -16,8 +16,8 @@
     --page-bg: #f7f3e8;
     --page-bg-alt: #efe7d6;
     --card-bg: rgba(255, 253, 247, 0.96);
-    --card-border: #dacfb8;
-    --card-shadow: 0 34px 70px -36px rgba(39, 28, 10, 0.24);
+    --card-border: transparent;
+    --card-shadow: 0 16px 40px -20px rgba(39, 28, 10, 0.15);
     --text-dark: #1f2d25;
     --text-muted: #607063;
     --text-light: #7b887d;
@@ -25,22 +25,22 @@
     --field-border: #d1c7b4;
     --field-focus: rgba(31, 138, 90, 0.18);
     --surface-soft: rgba(255, 253, 247, 0.78);
-    --surface-border: rgba(208, 196, 174, 0.6);
-    --intro-bg: linear-gradient(155deg, #173120 0%, #102019 45%, #1e1835 100%);
-    --intro-border: rgba(31, 138, 90, 0.18);
+    --surface-border: transparent;
+    --intro-bg: linear-gradient(135deg, #173120 0%, #1e1835 100%);
+    --intro-border: transparent;
     --intro-text: #f7fbf8;
     --intro-muted: #cfe4d8;
     --intro-note: #f3d68b;
     --outline-bg: rgba(255, 253, 247, 0.72);
-    --outline-border: #cfc3ac;
+    --outline-border: transparent;
 }
 
 body {
     font-family: 'Plus Jakarta Sans', sans-serif;
     background:
-        radial-gradient(circle at 12% 16%, rgba(var(--primary-rgb), 0.12), transparent 26%),
-        radial-gradient(circle at 86% 8%, rgba(var(--secondary-rgb), 0.14), transparent 20%),
-        linear-gradient(180deg, #fbf8ef 0%, var(--page-bg) 42%, #fffdf7 100%);
+        radial-gradient(circle at 12% 16%, rgba(var(--primary-rgb), 0.08), transparent 40%),
+        radial-gradient(circle at 86% 8%, rgba(var(--secondary-rgb), 0.1), transparent 30%),
+        linear-gradient(180deg, #fbf8ef 0%, #fffdf7 100%);
     color: var(--text-dark);
 }
 
@@ -456,8 +456,8 @@ body.dark-mode {
     --page-bg: #090511;
     --page-bg-alt: #130d20;
     --card-bg: rgba(19, 16, 34, 0.96);
-    --card-border: #2f2449;
-    --card-shadow: 0 36px 76px -42px rgba(0, 0, 0, 0.64);
+    --card-border: transparent;
+    --card-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.4);
     --text-dark: #f5f1ff;
     --text-muted: #b1a8ca;
     --text-light: #958cad;
@@ -465,21 +465,21 @@ body.dark-mode {
     --field-border: #302448;
     --field-focus: rgba(141, 99, 255, 0.22);
     --surface-soft: rgba(19, 16, 34, 0.82);
-    --surface-border: rgba(190, 175, 235, 0.16);
-    --intro-bg: linear-gradient(155deg, #171125 0%, #241644 54%, #3b1f7c 100%);
-    --intro-border: rgba(141, 99, 255, 0.26);
+    --surface-border: transparent;
+    --intro-bg: linear-gradient(135deg, #171125 0%, #3b1f7c 100%);
+    --intro-border: transparent;
     --intro-text: #f5f1ff;
     --intro-muted: #d6cff0;
     --intro-note: #e7d6ff;
     --outline-bg: rgba(19, 16, 34, 0.72);
-    --outline-border: rgba(190, 175, 235, 0.18);
+    --outline-border: transparent;
 }
 
 body.dark-mode {
     background:
-        radial-gradient(circle at 12% 16%, rgba(var(--primary-rgb), 0.18), transparent 24%),
-        radial-gradient(circle at 84% 8%, rgba(var(--secondary-rgb), 0.12), transparent 18%),
-        linear-gradient(180deg, #07040d 0%, #0d0816 42%, #120a20 100%);
+        radial-gradient(circle at 12% 16%, rgba(var(--primary-rgb), 0.14), transparent 40%),
+        radial-gradient(circle at 84% 8%, rgba(var(--secondary-rgb), 0.1), transparent 30%),
+        linear-gradient(180deg, #07040d 0%, #120a20 100%);
 }
 
 body.dark-mode::before {

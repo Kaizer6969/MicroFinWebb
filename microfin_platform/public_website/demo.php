@@ -469,11 +469,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         /* Kept Left Side Dark for Premium Contrast */
         .demo-intro {
-            background: linear-gradient(170deg, #0B0F1A 0%, #121826 100%);
-            border: 1px solid rgba(147, 197, 253, 0.15);
+            background: linear-gradient(135deg, #0b0f1a 0%, #1e1b4b 100%);
+            border: transparent;
             border-radius: 18px;
             padding: 40px 32px;
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 20px 48px -20px rgba(0, 0, 0, 0.25);
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -489,7 +489,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .intro-badge {
             display: inline-flex; align-items: center; gap: 6px; width: fit-content;
-            border-radius: 999px; border: 1px solid rgba(147, 197, 253, 0.3);
+            border-radius: 999px; border: transparent;
             background: rgba(30, 64, 175, 0.2); color: #bfdbfe;
             font-size: 0.75rem; font-weight: 700; letter-spacing: 0.4px;
             text-transform: uppercase; padding: 7px 10px;
@@ -507,16 +507,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         .intro-note {
             margin-top: auto; font-size: 0.82rem; color: #93c5fd;
-            border-top: 1px solid rgba(147, 197, 253, 0.2); padding-top: 14px;
+            border-top: transparent; padding-top: 14px;
         }
 
         /* Updated Form Card to Crisp Light Theme */
         .demo-card {
             background: #ffffff;
-            border: 1px solid #e2e8f0;
+            border: transparent;
             border-radius: 18px;
             padding: 40px;
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.1);
         }
 
         .demo-card h2 { font-size: 1.55rem; font-weight: 800; color: var(--text-dark); margin-bottom: 4px; letter-spacing: -0.4px; }

@@ -17,6 +17,50 @@ body.platform-auth {
         linear-gradient(180deg, var(--bg-body), var(--bg-elevated));
 }
 
+body.platform-auth .auth-theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 30;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0.7rem 0.95rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-card-glass);
+    color: var(--text-main);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(10px);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+body.platform-auth .auth-theme-toggle:hover {
+    transform: translateY(-1px);
+    border-color: var(--tone-primary-border);
+    color: var(--primary-color);
+    box-shadow: var(--shadow-lg);
+}
+
+body.platform-auth .auth-theme-toggle:focus-visible {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px var(--field-focus-ring), var(--shadow-md);
+}
+
+body.platform-auth .auth-theme-toggle-icon {
+    font-size: 1.15rem;
+}
+
+body.platform-auth .auth-theme-toggle-label {
+    line-height: 1;
+}
+
 body.platform-auth .login-container,
 body.platform-auth .card,
 body.platform-auth .panel {
@@ -328,6 +372,7 @@ body.platform-auth .loader-message {
 @media (max-width: 720px) {
     body.platform-auth {
         padding: 16px;
+        padding-top: 76px;
     }
 
     body.platform-auth .login-container,
@@ -341,5 +386,15 @@ body.platform-auth .loader-message {
 
     body.platform-auth .grid {
         grid-template-columns: 1fr;
+    }
+
+    body.platform-auth .auth-theme-toggle {
+        top: 14px;
+        right: 14px;
+        padding: 0.68rem 0.82rem;
+    }
+
+    body.platform-auth .auth-theme-toggle-label {
+        display: none;
     }
 }

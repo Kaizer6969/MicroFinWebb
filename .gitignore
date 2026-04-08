@@ -3,6 +3,7 @@
 
 # Local-only configuration
 /microfin_platform/backend/local_mail_config.php
+/microfin_platform/backend/local_db_config.php
 /microfin_mobile/api/local_config.php
 
 # Scratch and archived workspaces

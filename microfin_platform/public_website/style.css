@@ -1359,9 +1359,9 @@ body.dark-mode .footer {
     overflow: hidden;
     background:
         radial-gradient(circle at 14% 18%, rgba(var(--primary-rgb), 0.18), transparent 20%),
-        radial-gradient(circle at 82% 14%, rgba(var(--accent-rgb), 0.14), transparent 18%),
-        radial-gradient(circle at 74% 82%, rgba(141, 99, 255, 0.24), transparent 28%),
-        linear-gradient(135deg, #090611 0%, #151024 48%, #2a1557 100%);
+        radial-gradient(circle at 82% 14%, rgba(var(--accent-rgb), 0.16), transparent 18%),
+        radial-gradient(circle at 74% 82%, rgba(31, 138, 90, 0.18), transparent 28%),
+        linear-gradient(135deg, #0c1611 0%, #14241b 48%, #27442f 100%);
 }
 
 #features.showcase-features-section::before {
@@ -1384,7 +1384,7 @@ body.dark-mode .footer {
 }
 
 #features.showcase-features-section .section-header p {
-    color: #d8d1f1;
+    color: #dce9df;
 }
 
 #features.showcase-features-section .showcase-feature-grid {
@@ -1394,7 +1394,7 @@ body.dark-mode .footer {
 #features.showcase-features-section .feature-card {
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(170, 151, 223, 0.2);
+    border: 1px solid rgba(163, 193, 170, 0.18);
     box-shadow: 0 24px 50px -28px rgba(0, 0, 0, 0.58);
     backdrop-filter: blur(12px);
 }
@@ -1419,7 +1419,7 @@ body.dark-mode .footer {
 
 #features.showcase-features-section .feature-card:hover {
     transform: translateY(-10px);
-    border-color: rgba(215, 200, 255, 0.32);
+    border-color: rgba(230, 214, 168, 0.34);
     box-shadow: 0 30px 56px -24px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
@@ -1428,15 +1428,15 @@ body.dark-mode .footer {
 }
 
 #features.showcase-features-section .showcase-feature-grid .feature-card-cosmos {
-    background: linear-gradient(180deg, rgba(11, 10, 23, 0.96), rgba(18, 19, 34, 0.94));
+    background: linear-gradient(180deg, rgba(11, 26, 18, 0.96), rgba(15, 34, 23, 0.94));
 }
 
 #features.showcase-features-section .showcase-feature-grid .feature-card-guidance {
-    background: linear-gradient(180deg, rgba(18, 14, 29, 0.96), rgba(28, 20, 43, 0.94));
+    background: linear-gradient(180deg, rgba(24, 30, 17, 0.96), rgba(37, 42, 23, 0.94));
 }
 
 #features.showcase-features-section .showcase-feature-grid .feature-card-vault {
-    background: linear-gradient(180deg, rgba(17, 12, 31, 0.96), rgba(23, 17, 49, 0.94));
+    background: linear-gradient(180deg, rgba(17, 28, 22, 0.96), rgba(22, 40, 29, 0.94));
 }
 
 #features.showcase-features-section .feature-card-cosmos::before {
@@ -1448,7 +1448,7 @@ body.dark-mode .footer {
 }
 
 #features.showcase-features-section .feature-card-vault::before {
-    background: linear-gradient(90deg, #8d63ff, #d2c0ff);
+    background: linear-gradient(90deg, #1f8a5a, #d8a62a);
 }
 
 #features.showcase-features-section .feature-card-cosmos .feature-icon {
@@ -1462,8 +1462,8 @@ body.dark-mode .footer {
 }
 
 #features.showcase-features-section .feature-card-vault .feature-icon {
-    background: rgba(141, 99, 255, 0.16);
-    color: #d7c8ff;
+    background: rgba(31, 138, 90, 0.16);
+    color: #cde7d6;
 }
 
 #pricing .pricing-card {
@@ -1489,7 +1489,9 @@ body.dark-mode .footer {
 }
 
 #pricing .pricing-card-pro::after {
-    background: radial-gradient(circle at 50% 0%, rgba(141, 99, 255, 0.34), transparent 62%);
+    background:
+        radial-gradient(circle at 50% 0%, rgba(31, 138, 90, 0.28), transparent 60%),
+        radial-gradient(circle at 84% 12%, rgba(216, 166, 42, 0.18), transparent 42%);
 }
 
 #pricing .pricing-card-enterprise::after {
@@ -1498,8 +1500,8 @@ body.dark-mode .footer {
 
 #pricing .pricing-card-unlimited::after {
     background:
-        radial-gradient(circle at 50% 0%, rgba(141, 99, 255, 0.28), transparent 60%),
-        radial-gradient(circle at 18% 100%, rgba(31, 138, 90, 0.22), transparent 56%);
+        radial-gradient(circle at 50% 0%, rgba(31, 138, 90, 0.24), transparent 60%),
+        radial-gradient(circle at 18% 100%, rgba(216, 166, 42, 0.2), transparent 56%);
 }
 
 #pricing .pricing-card:hover {
@@ -1513,12 +1515,13 @@ body.dark-mode .footer {
 }
 
 #pricing .pricing-card.popular {
-    border-color: rgba(141, 99, 255, 0.42) !important;
-    box-shadow: 0 30px 54px -24px rgba(141, 99, 255, 0.26), 0 0 0 1px rgba(141, 99, 255, 0.08) inset;
+    border-color: rgba(31, 138, 90, 0.36) !important;
+    box-shadow: 0 30px 54px -24px rgba(31, 138, 90, 0.2), 0 0 0 1px rgba(216, 166, 42, 0.14) inset;
 }
 
 #pricing .popular-badge {
-    box-shadow: 0 14px 26px -14px rgba(141, 99, 255, 0.74);
+    background: linear-gradient(135deg, #1f8a5a 0%, #d8a62a 100%);
+    box-shadow: 0 14px 26px -14px rgba(31, 138, 90, 0.48);
     letter-spacing: 0.06em;
 }
 
@@ -1546,9 +1549,9 @@ body.dark-mode .footer {
     align-items: center;
     gap: 18px;
     min-height: 100%;
-    background: linear-gradient(140deg, #133225 0%, #1e6a47 55%, #9f7a18 140%) !important;
+    background: linear-gradient(140deg, #133225 0%, #1c5c3f 55%, #8d6a14 140%) !important;
     border: 1px solid rgba(242, 217, 153, 0.34) !important;
-    box-shadow: 0 36px 72px -34px rgba(31, 138, 90, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important;
+    box-shadow: 0 36px 72px -34px rgba(31, 138, 90, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important;
     overflow: hidden;
 }
 
@@ -1604,8 +1607,9 @@ body.dark-mode .footer {
 }
 
 .contact-cta-section {
-    border-top: 1px solid rgba(200, 173, 255, 0.14);
-    border-bottom: 1px solid rgba(200, 173, 255, 0.14);
+    border-top: 1px solid rgba(31, 138, 90, 0.14);
+    border-bottom: 1px solid rgba(31, 138, 90, 0.14);
+    background: linear-gradient(135deg, #112218 0%, #173322 50%, #254f34 100%);
 }
 
 .contact-cta-section::before {
@@ -1621,9 +1625,9 @@ body.dark-mode .footer {
     max-width: 860px;
     padding: 56px 52px;
     border-radius: 32px;
-    background: rgba(10, 7, 18, 0.36);
-    border: 1px solid rgba(200, 173, 255, 0.16);
-    box-shadow: 0 34px 72px -40px rgba(0, 0, 0, 0.54), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    background: rgba(15, 31, 21, 0.46);
+    border: 1px solid rgba(216, 166, 42, 0.16);
+    box-shadow: 0 34px 72px -40px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(14px);
 }
 
@@ -1634,9 +1638,9 @@ body.dark-mode .footer {
     margin-bottom: 18px;
     padding: 8px 16px;
     border-radius: 999px;
-    background: rgba(255, 236, 180, 0.12);
-    border: 1px solid rgba(255, 236, 180, 0.22);
-    color: #ffe7a1;
+    background: rgba(255, 236, 180, 0.14);
+    border: 1px solid rgba(255, 236, 180, 0.24);
+    color: #ffebaf;
     font-size: 0.82rem;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -1647,22 +1651,24 @@ body.dark-mode .footer {
     max-width: 620px;
     margin-left: auto;
     margin-right: auto;
-    color: #dcd2f8;
+    color: #dbe6dc;
 }
 
 .contact-cta-section .contact-cta-buttons .btn-primary {
-    box-shadow: 0 22px 36px -22px rgba(141, 99, 255, 0.45);
+    box-shadow: 0 22px 36px -22px rgba(31, 138, 90, 0.38);
 }
 
 .contact-cta-section .contact-cta-buttons .btn-outline {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 236, 180, 0.28);
+    color: #f6efe0;
 }
 
 .footer.footer-galaxy {
     position: relative;
     overflow: hidden;
-    background: linear-gradient(180deg, #150d26 0%, #08040e 100%);
-    border-top: 1px solid rgba(190, 175, 235, 0.12);
+    background: linear-gradient(180deg, #122116 0%, #0a120d 100%);
+    border-top: 1px solid rgba(216, 166, 42, 0.12);
 }
 
 .footer.footer-galaxy::before {
@@ -1671,7 +1677,7 @@ body.dark-mode .footer {
     inset: 0;
     background:
         radial-gradient(circle at 14% 0%, rgba(var(--primary-rgb), 0.16), transparent 26%),
-        radial-gradient(circle at 86% 0%, rgba(141, 99, 255, 0.22), transparent 28%);
+        radial-gradient(circle at 86% 0%, rgba(216, 166, 42, 0.16), transparent 28%);
 }
 
 .footer.footer-galaxy .container {
@@ -1681,8 +1687,8 @@ body.dark-mode .footer {
 
 .footer-top-line {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), 0.42), rgba(141, 99, 255, 0.7), transparent);
-    box-shadow: 0 0 18px rgba(141, 99, 255, 0.22);
+    background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), 0.42), rgba(216, 166, 42, 0.56), transparent);
+    box-shadow: 0 0 18px rgba(31, 138, 90, 0.18);
 }
 
 .footer.footer-galaxy .footer-grid {
@@ -1692,7 +1698,7 @@ body.dark-mode .footer {
 .footer.footer-galaxy .footer-brand p,
 .footer.footer-galaxy .footer-links a,
 .footer.footer-galaxy .footer-bottom {
-    color: #c3b9dd;
+    color: #c8d6ca;
 }
 
 .footer.footer-galaxy .footer-links a {
@@ -1705,11 +1711,67 @@ body.dark-mode .footer {
 }
 
 .footer.footer-galaxy .footer-bottom {
-    border-top-color: rgba(190, 175, 235, 0.12);
+    border-top-color: rgba(216, 166, 42, 0.12);
 }
 
 body.dark-mode #security.security-trust-section {
     background: transparent;
+}
+
+body.dark-mode #features.showcase-features-section {
+    background:
+        radial-gradient(circle at 14% 18%, rgba(141, 99, 255, 0.22), transparent 20%),
+        radial-gradient(circle at 82% 14%, rgba(200, 173, 255, 0.16), transparent 18%),
+        radial-gradient(circle at 74% 82%, rgba(141, 99, 255, 0.22), transparent 28%),
+        linear-gradient(135deg, #090611 0%, #151024 48%, #2a1557 100%);
+}
+
+body.dark-mode #features.showcase-features-section .section-header p {
+    color: #d8d1f1;
+}
+
+body.dark-mode #features.showcase-features-section .feature-card {
+    border-color: rgba(170, 151, 223, 0.22);
+}
+
+body.dark-mode #features.showcase-features-section .feature-card:hover {
+    border-color: rgba(215, 200, 255, 0.32);
+}
+
+body.dark-mode #features.showcase-features-section .showcase-feature-grid .feature-card-cosmos {
+    background: linear-gradient(180deg, rgba(11, 10, 23, 0.96), rgba(18, 19, 34, 0.94));
+}
+
+body.dark-mode #features.showcase-features-section .showcase-feature-grid .feature-card-guidance {
+    background: linear-gradient(180deg, rgba(18, 14, 29, 0.96), rgba(28, 20, 43, 0.94));
+}
+
+body.dark-mode #features.showcase-features-section .showcase-feature-grid .feature-card-vault {
+    background: linear-gradient(180deg, rgba(17, 12, 31, 0.96), rgba(23, 17, 49, 0.94));
+}
+
+body.dark-mode #features.showcase-features-section .feature-card-vault::before {
+    background: linear-gradient(90deg, #8d63ff, #d2c0ff);
+}
+
+body.dark-mode #features.showcase-features-section .feature-card-vault .feature-icon {
+    background: rgba(141, 99, 255, 0.16);
+    color: #d7c8ff;
+}
+
+body.dark-mode #pricing .pricing-card-pro::after,
+body.dark-mode #pricing .pricing-card-unlimited::after {
+    background: radial-gradient(circle at 50% 0%, rgba(141, 99, 255, 0.34), transparent 62%);
+}
+
+body.dark-mode #pricing .pricing-card.popular {
+    border-color: rgba(141, 99, 255, 0.42) !important;
+    box-shadow: 0 30px 54px -24px rgba(141, 99, 255, 0.26), 0 0 0 1px rgba(141, 99, 255, 0.08) inset;
+}
+
+body.dark-mode #pricing .popular-badge {
+    background: linear-gradient(135deg, #6e48da 0%, #8d63ff 100%);
+    box-shadow: 0 14px 26px -14px rgba(141, 99, 255, 0.74);
 }
 
 body.dark-mode #security.security-trust-section .security-panel {
@@ -1738,6 +1800,21 @@ body.dark-mode .footer.footer-galaxy {
     background: linear-gradient(180deg, #12091f 0%, #06030b 100%);
 }
 
+body.dark-mode .footer-top-line {
+    background: linear-gradient(90deg, transparent, rgba(141, 99, 255, 0.42), rgba(200, 173, 255, 0.7), transparent);
+    box-shadow: 0 0 18px rgba(141, 99, 255, 0.22);
+}
+
+body.dark-mode .footer.footer-galaxy .footer-brand p,
+body.dark-mode .footer.footer-galaxy .footer-links a,
+body.dark-mode .footer.footer-galaxy .footer-bottom {
+    color: #c3b9dd;
+}
+
+body.dark-mode .footer.footer-galaxy .footer-bottom {
+    border-top-color: rgba(190, 175, 235, 0.12);
+}
+
 @media (max-width: 768px) {
     .contact-cta-section .contact-cta-container {
         padding: 40px 24px;
@@ -1746,4 +1823,155 @@ body.dark-mode .footer.footer-galaxy {
     #security.security-trust-section .security-panel {
         padding: 28px 24px;
     }
+}
+
+/* =========================================
+   Dark Mode Cohesion Pass
+   ========================================= */
+body.dark-mode {
+    --dm-page-top: #05020a;
+    --dm-page-mid: #0a0712;
+    --dm-page-base: #120b1e;
+    --dm-surface-border: rgba(215, 200, 255, 0.08);
+    --dm-surface-border-strong: rgba(215, 200, 255, 0.18);
+    --dm-shadow: 0 28px 56px -34px rgba(0, 0, 0, 0.88);
+    background:
+        radial-gradient(circle at 18% -2%, rgba(141, 99, 255, 0.26), transparent 22%),
+        radial-gradient(circle at 84% 12%, rgba(96, 66, 196, 0.18), transparent 20%),
+        radial-gradient(circle at 50% 72%, rgba(52, 26, 130, 0.14), transparent 30%),
+        linear-gradient(180deg, var(--dm-page-top) 0%, var(--dm-page-mid) 42%, var(--dm-page-base) 100%);
+}
+
+body.dark-mode .navbar {
+    background: rgba(8, 5, 15, 0.76);
+    border-color: rgba(215, 200, 255, 0.05);
+}
+
+body.dark-mode .hero {
+    background:
+        radial-gradient(circle at 16% 22%, rgba(141, 99, 255, 0.18), transparent 26%),
+        radial-gradient(circle at 88% 14%, rgba(200, 173, 255, 0.08), transparent 18%),
+        linear-gradient(180deg, rgba(7, 4, 15, 0.96) 0%, rgba(12, 8, 22, 0.88) 48%, rgba(14, 10, 25, 0.74) 100%);
+}
+
+body.dark-mode .hero::after {
+    background: linear-gradient(180deg, rgba(20, 16, 34, 0) 0%, rgba(11, 8, 21, 0.84) 100%);
+}
+
+body.dark-mode .bg-light {
+    background: linear-gradient(180deg, rgba(16, 11, 29, 0.48) 0%, rgba(16, 11, 29, 0.18) 100%);
+    border-top: none;
+    border-bottom: none;
+}
+
+body.dark-mode #features.showcase-features-section {
+    border-top: none;
+    border-bottom: none;
+    background:
+        radial-gradient(circle at 14% 18%, rgba(141, 99, 255, 0.24), transparent 20%),
+        radial-gradient(circle at 82% 14%, rgba(200, 173, 255, 0.14), transparent 18%),
+        radial-gradient(circle at 74% 82%, rgba(120, 91, 220, 0.2), transparent 28%),
+        linear-gradient(160deg, #090611 0%, #151024 48%, #2a1557 100%);
+}
+
+body.dark-mode #features.showcase-features-section::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 132px;
+    background: linear-gradient(180deg, rgba(11, 8, 20, 0) 0%, rgba(10, 7, 19, 0.78) 100%);
+    pointer-events: none;
+}
+
+body.dark-mode #security.security-trust-section {
+    background: linear-gradient(180deg, rgba(16, 11, 29, 0.34) 0%, rgba(16, 11, 29, 0.08) 100%);
+}
+
+body.dark-mode .contact-cta-section {
+    border-top: none;
+    border-bottom: none;
+    background:
+        radial-gradient(circle at 18% 112%, rgba(141, 99, 255, 0.2), transparent 30%),
+        radial-gradient(circle at 82% -10%, rgba(200, 173, 255, 0.16), transparent 28%),
+        linear-gradient(135deg, #0a0612 0%, #181029 52%, #2d1763 100%);
+}
+
+body.dark-mode .footer.footer-galaxy {
+    border-top: none;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(141, 99, 255, 0.18), transparent 24%),
+        radial-gradient(circle at 86% 0%, rgba(200, 173, 255, 0.12), transparent 24%),
+        linear-gradient(180deg, #11091e 0%, #05030b 100%);
+}
+
+body.dark-mode .nav-btn-link,
+body.dark-mode .trusted-tenant-badge,
+body.dark-mode .mockup-window,
+body.dark-mode #capabilities .feature-card,
+body.dark-mode #pricing .pricing-card,
+body.dark-mode .timeline-content,
+body.dark-mode #security.security-trust-section .security-panel,
+body.dark-mode .contact-cta-section .contact-cta-container {
+    border: 1px solid transparent;
+    background: linear-gradient(180deg, rgba(20, 14, 37, 0.92), rgba(13, 9, 25, 0.84));
+    box-shadow: var(--dm-shadow), inset 0 0 0 1px var(--dm-surface-border);
+}
+
+body.dark-mode .nav-btn-link:hover,
+body.dark-mode .trusted-tenant-badge:hover,
+body.dark-mode #capabilities .feature-card:hover,
+body.dark-mode #pricing .pricing-card:hover,
+body.dark-mode .timeline-content:hover {
+    box-shadow: 0 34px 66px -36px rgba(0, 0, 0, 0.92), inset 0 0 0 1px var(--dm-surface-border-strong);
+}
+
+body.dark-mode .mockup-header {
+    background: linear-gradient(180deg, rgba(31, 22, 54, 0.9), rgba(22, 16, 41, 0.88));
+    border-bottom: none;
+    box-shadow: inset 0 -1px 0 rgba(215, 200, 255, 0.08);
+}
+
+body.dark-mode .timeline-content {
+    position: relative;
+    border-left: none;
+}
+
+body.dark-mode .timeline-content::before {
+    content: "";
+    position: absolute;
+    top: 18px;
+    bottom: 18px;
+    left: 0;
+    width: 3px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(141, 99, 255, 0.92), rgba(200, 173, 255, 0.24));
+}
+
+body.dark-mode .timeline-item:nth-child(even) .timeline-content::before {
+    background: linear-gradient(180deg, rgba(200, 173, 255, 0.94), rgba(141, 99, 255, 0.24));
+}
+
+body.dark-mode #features.showcase-features-section .feature-card {
+    border: 1px solid transparent;
+    box-shadow: 0 28px 54px -32px rgba(0, 0, 0, 0.78), inset 0 0 0 1px rgba(215, 200, 255, 0.14);
+}
+
+body.dark-mode #features.showcase-features-section .feature-card:hover {
+    border-color: transparent;
+    box-shadow: 0 34px 62px -28px rgba(0, 0, 0, 0.82), inset 0 0 0 1px rgba(215, 200, 255, 0.24);
+}
+
+body.dark-mode #pricing .pricing-card.popular {
+    border-color: transparent !important;
+    background: linear-gradient(180deg, rgba(92, 60, 191, 0.24), rgba(16, 11, 30, 0.94) 68%);
+    box-shadow: 0 30px 60px -28px rgba(141, 99, 255, 0.34), inset 0 0 0 1px rgba(215, 200, 255, 0.16);
+}
+
+body.dark-mode #security.security-trust-section .security-vault-card {
+    border: 1px solid transparent !important;
+    box-shadow: 0 36px 78px -34px rgba(141, 99, 255, 0.42), inset 0 0 0 1px rgba(215, 200, 255, 0.16) !important;
+}
+
+body.dark-mode .contact-cta-section .contact-cta-container {
+    background: linear-gradient(180deg, rgba(18, 12, 33, 0.78), rgba(12, 8, 23, 0.68));
 }

@@ -8,7 +8,7 @@ $renderUnavailable = static function (string $title, string $message): void {
     header('Content-Type: text/html; charset=UTF-8');
     echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>'
         . htmlspecialchars($title, ENT_QUOTES, 'UTF-8')
-        . '</title></head><body style="font-family: \'Plus Jakarta Sans\', Arial, sans-serif; background:#f7f3e8; color:#1f2d25; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;"><div style="max-width:420px; background:#fffdf7; border:1px solid #d7cfbf; border-radius:18px; padding:32px; text-align:center; box-shadow:0 18px 40px rgba(54,43,12,0.12);"><h1 style="margin:0 0 12px; font-size:1.5rem;">'
+        . '</title></head><body style="font-family: \'Plus Jakarta Sans\', Arial, sans-serif; background:#f7f3e8; color:#1f2d25; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;"><div style="max-width:420px; background:#fffdf7; border:transparent; border-radius:18px; padding:32px; text-align:center; box-shadow:0 18px 40px rgba(54,43,12,0.12);"><h1 style="margin:0 0 12px; font-size:1.5rem;">'
         . htmlspecialchars($title, ENT_QUOTES, 'UTF-8')
         . '</h1><p style="margin:0; color:#475569; line-height:1.6;">'
         . htmlspecialchars($message, ENT_QUOTES, 'UTF-8')
