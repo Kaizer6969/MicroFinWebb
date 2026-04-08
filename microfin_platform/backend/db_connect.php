@@ -190,28 +190,73 @@ function mf_send_brevo_email($toEmail, $subject, $htmlContent)
     return 'API Error: HTTP ' . $httpCode . ' - ' . (is_string($result) ? $result : '');
 }
 
-// PDO Options
-$options = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES => false,
-    PDO::ATTR_PERSISTENT => false,
-];
+function mf_db_is_retryable_disconnect(\Throwable $error): bool
+{
+    $message = (string) $error->getMessage();
 
-try {
-    $lastConnectionError = null;
-    $connectedTargetIndex = null;
+    foreach ([
+        'SQLSTATE[HY000] [2006]',
+        'SQLSTATE[HY000] [2013]',
+        'MySQL server has gone away',
+        'Lost connection to MySQL server',
+    ] as $needle) {
+        if (stripos($message, $needle) !== false) {
+            return true;
+        }
+    }
 
-    foreach ($mf_db_targets as $index => $candidateTarget) {
+    return false;
+}
+
+function mf_db_should_expose_debug(): bool
+{
+    $flag = mf_env_first(['MF_DB_DEBUG']);
+    if ($flag === null) {
+        return PHP_SAPI === 'cli';
+    }
+
+    return in_array(strtolower(trim($flag)), ['1', 'true', 'yes', 'on'], true);
+}
+
+function mf_db_request_context(): array
+{
+    return [
+        'method' => (string) ($_SERVER['REQUEST_METHOD'] ?? PHP_SAPI),
+        'uri' => (string) ($_SERVER['REQUEST_URI'] ?? ''),
+        'remote_addr' => (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+    ];
+}
+
+function mf_db_log_connection_failure(string $errorId, \Throwable $error, array $context = []): void
+{
+    $payload = array_merge(mf_db_request_context(), $context, [
+        'error_id' => $errorId,
+        'message' => $error->getMessage(),
+    ]);
+
+    $encodedPayload = json_encode($payload, JSON_UNESCAPED_SLASHES);
+    if ($encodedPayload === false) {
+        $encodedPayload = $error->getMessage();
+    }
+
+    error_log('Database Connection Failed: ' . $encodedPayload);
+}
+
+function mf_db_connect_target(array $candidateTarget, string $charset, array $options): array
+{
+    $targetDsn = sprintf(
+        'mysql:host=%s;port=%d;dbname=%s;charset=%s',
+        (string) $candidateTarget['host'],
+        (int) $candidateTarget['port'],
+        (string) $candidateTarget['db'],
+        $charset
+    );
+
+    $attempt = 0;
+    do {
+        $attempt++;
+
         try {
-            $targetDsn = sprintf(
-                'mysql:host=%s;port=%d;dbname=%s;charset=%s',
-                (string) $candidateTarget['host'],
-                (int) $candidateTarget['port'],
-                (string) $candidateTarget['db'],
-                $charset
-            );
-
             $pdo = new PDO(
                 $targetDsn,
                 (string) $candidateTarget['user'],
@@ -219,15 +264,59 @@ try {
                 $options
             );
 
+            return [
+                'pdo' => $pdo,
+                'attempts' => $attempt,
+                'dsn' => $targetDsn,
+            ];
+        } catch (\Throwable $connectionError) {
+            if ($attempt >= 2 || !mf_db_is_retryable_disconnect($connectionError)) {
+                throw $connectionError;
+            }
+
+            usleep(250000);
+        }
+    } while ($attempt < 2);
+
+    throw new RuntimeException('Unable to establish database connection.');
+}
+
+// PDO Options
+$options = [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_EMULATE_PREPARES => false,
+    PDO::ATTR_PERSISTENT => false,
+    PDO::ATTR_TIMEOUT => 10,
+];
+
+try {
+    $lastConnectionError = null;
+    $lastConnectionTarget = null;
+    $connectedTargetIndex = null;
+    $connectedTargetAttempts = 1;
+    $connectionFailures = [];
+
+    foreach ($mf_db_targets as $index => $candidateTarget) {
+        try {
+            $connectionResult = mf_db_connect_target($candidateTarget, $charset, $options);
+            $pdo = $connectionResult['pdo'];
+
             $host = (string) $candidateTarget['host'];
             $port = (int) $candidateTarget['port'];
             $db = (string) $candidateTarget['db'];
             $user = (string) $candidateTarget['user'];
             $pass = (string) $candidateTarget['pass'];
             $connectedTargetIndex = $index;
+            $connectedTargetAttempts = (int) ($connectionResult['attempts'] ?? 1);
             break;
         } catch (\Throwable $connectionError) {
             $lastConnectionError = $connectionError;
+            $lastConnectionTarget = $candidateTarget;
+            $connectionFailures[] = [
+                'target' => mf_db_target_signature($candidateTarget),
+                'message' => $connectionError->getMessage(),
+            ];
         }
     }
 
@@ -239,155 +328,48 @@ try {
         error_log('Primary localhost DB connection failed; using alternate local credentials.');
     }
 
-    // Proceed with schema guards and migrations inside the same main try block
-
-    // Schema guard for newer website customization flows.
-    // This keeps older databases compatible without a manual migration step.
-    try {
-        $pdo->exec("\n            CREATE TABLE IF NOT EXISTS tenant_website_content (\n                tenant_id VARCHAR(50) PRIMARY KEY,\n                layout_template ENUM('template1', 'template2', 'template3') DEFAULT 'template1',\n                hero_title VARCHAR(255) NULL,\n                hero_subtitle VARCHAR(255) NULL,\n                hero_description TEXT NULL,\n                hero_cta_text VARCHAR(100) DEFAULT 'Learn More',\n                hero_cta_url VARCHAR(255) DEFAULT '#about',\n                hero_image_path VARCHAR(500) NULL,\n                about_heading VARCHAR(255) DEFAULT 'About Us',\n                about_body TEXT NULL,\n                about_image_path VARCHAR(500) NULL,\n                services_heading VARCHAR(255) DEFAULT 'Our Services',\n                services_json LONGTEXT NULL,\n                contact_address TEXT NULL,\n                contact_phone VARCHAR(100) NULL,\n                contact_email VARCHAR(255) NULL,\n                contact_hours VARCHAR(255) NULL,\n                custom_css LONGTEXT NULL,\n                meta_description VARCHAR(255) NULL,\n                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n                CONSTRAINT fk_tenant_website_content_tenant\n                    FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE\n            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4\n        ");
-
-        // Add newer content columns used by the Website Editor publish workflow.
-        $websiteContentColumnMigrations = [
-            "ALTER TABLE tenant_website_content ADD COLUMN hero_badge_text VARCHAR(255) NULL AFTER hero_image_path",
-            "ALTER TABLE tenant_website_content ADD COLUMN stats_json LONGTEXT NULL AFTER services_json",
-            "ALTER TABLE tenant_website_content ADD COLUMN stats_heading VARCHAR(255) NULL AFTER stats_json",
-            "ALTER TABLE tenant_website_content ADD COLUMN stats_subheading VARCHAR(255) NULL AFTER stats_heading",
-            "ALTER TABLE tenant_website_content ADD COLUMN stats_image_path VARCHAR(500) NULL AFTER stats_subheading",
-            "ALTER TABLE tenant_website_content ADD COLUMN footer_description TEXT NULL AFTER contact_hours",
-            // JSON bucket for all page content (builder migration)
-            "ALTER TABLE tenant_website_content ADD COLUMN website_data JSON NULL COMMENT 'Stores hero, about, services, toggles, section_styles, and arrays' AFTER layout_template",
-        ];
-        foreach ($websiteContentColumnMigrations as $migrationSql) {
-            try {
-                $pdo->exec($migrationSql);
-            } catch (\PDOException $columnError) {
-                // Column already exists or DB flavor differs; safe to ignore.
-            }
-        }
-    } catch (\PDOException $migrationError) {
-        error_log('Schema guard warning (tenant_website_content): ' . $migrationError->getMessage());
-    }
-
-    // Migrate layout_template to flexible VARCHAR from old ENUM
-    try {
-        $pdo->exec("ALTER TABLE tenant_website_content MODIFY COLUMN layout_template VARCHAR(50) DEFAULT 'template1.php'");
-    } catch (\PDOException $e) {
-        // Already migrated or table does not exist yet.
-    }
-
-    // Add setup step tracking column for onboarding wizard
-    try {
-        $pdo->exec("ALTER TABLE tenants ADD COLUMN setup_current_step INT DEFAULT 0 COMMENT 'Onboarding step: 0=password_reset, 1=billing, 2=branding, 3=website, 4=done'");
-        // Backfill existing tenants based on their current progress
-        $pdo->exec("
-            UPDATE tenants t SET setup_current_step =
-                CASE
-                    WHEN t.setup_completed = TRUE THEN 4
-                    WHEN EXISTS (SELECT 1 FROM tenant_website_content w WHERE w.tenant_id = t.tenant_id) THEN 3
-                    WHEN EXISTS (SELECT 1 FROM tenant_branding br WHERE br.tenant_id = t.tenant_id) THEN 2
-                    WHEN EXISTS (SELECT 1 FROM tenant_billing_payment_methods b WHERE b.tenant_id = t.tenant_id) THEN 1
-                    ELSE 0
-                END
-        ");
-    } catch (\PDOException $migrationError) {
-        // Column already exists. Ignore.
-    }
-
-    // Add card style columns to tenant_branding
-    try {
-        $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN theme_border_color VARCHAR(10) DEFAULT '#e2e8f0' COMMENT 'Card border/divider color'");
-    } catch (\PDOException $e) {
-    }
-    try {
-        $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_border_width TINYINT DEFAULT 1 COMMENT 'Card border width in px (0-3)'");
-    } catch (\PDOException $e) {
-    }
-    try {
-        $pdo->exec("ALTER TABLE tenant_branding ADD COLUMN card_shadow VARCHAR(10) DEFAULT 'sm' COMMENT 'Card shadow: none, sm, md, lg'");
-    } catch (\PDOException $e) {
-    }
-
-    try {
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS mobile_install_attributions (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                tracking_token VARCHAR(64) NOT NULL UNIQUE,
-                tenant_id VARCHAR(50) NOT NULL,
-                tenant_slug VARCHAR(100) NOT NULL,
-                ip_address VARCHAR(45) NOT NULL,
-                user_agent_hash VARCHAR(64) NOT NULL,
-                user_agent TEXT NULL,
-                platform_hint VARCHAR(32) NOT NULL DEFAULT 'unknown',
-                referer_url VARCHAR(500) NULL,
-                claimed_at DATETIME NULL,
-                claimed_ip_address VARCHAR(45) NULL,
-                claimed_platform_hint VARCHAR(32) NULL,
-                claimed_user_agent TEXT NULL,
-                last_seen_at DATETIME NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                expires_at DATETIME NOT NULL,
-                INDEX idx_mobile_install_lookup (ip_address, platform_hint, claimed_at, expires_at, created_at),
-                INDEX idx_mobile_install_tenant (tenant_id, created_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
-
-        try {
-            $pdo->exec("ALTER TABLE mobile_install_attributions CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        } catch (\PDOException $ignore) {
-            // Safe to ignore on hosts where the table is already aligned or conversion is not needed.
-        }
-    } catch (\PDOException $e) {
-        error_log('Schema guard warning (mobile_install_attributions): ' . $e->getMessage());
-    }
-
-    try {
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS user_sessions (
-                session_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                tenant_id VARCHAR(50) NULL,
-                session_token VARCHAR(255) NOT NULL,
-                ip_address VARCHAR(45) NULL,
-                user_agent TEXT NULL,
-                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-                last_activity_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
-                expires_at DATETIME NOT NULL,
-                UNIQUE KEY uq_user_sessions_token (session_token),
-                KEY idx_user_sessions_user (user_id),
-                KEY idx_user_sessions_tenant (tenant_id),
-                KEY idx_user_sessions_expires (expires_at),
-                CONSTRAINT fk_user_sessions_user
-                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-                CONSTRAINT fk_user_sessions_tenant
-                    FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
-
-        $userSessionMigrations = [
-            "ALTER TABLE user_sessions MODIFY COLUMN tenant_id VARCHAR(50) NULL",
-            "ALTER TABLE user_sessions ADD COLUMN user_agent TEXT NULL AFTER ip_address",
-            "ALTER TABLE user_sessions ADD COLUMN last_activity_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP AFTER created_at",
-        ];
-
-        foreach ($userSessionMigrations as $migrationSql) {
-            try {
-                $pdo->exec($migrationSql);
-            } catch (\PDOException $ignore) {
-                // Safe to ignore when a column already exists or the DB flavor normalizes defaults differently.
-            }
-        }
-    } catch (\PDOException $e) {
-        error_log('Schema guard warning (user_sessions): ' . $e->getMessage());
+    if ($connectedTargetAttempts > 1) {
+        error_log(sprintf(
+            'Recovered transient DB connection after %d attempts for %s',
+            $connectedTargetAttempts,
+            mf_db_target_signature($mf_db_targets[$connectedTargetIndex] ?? [])
+        ));
     }
 } catch (\Throwable $e) {
-    error_log('Database Connection Failed: ' . $e->getMessage());
-    header('Content-Type: application/json');
-    http_response_code(500);
-    echo json_encode([
+    $errorId = bin2hex(random_bytes(4));
+
+    mf_db_log_connection_failure($errorId, $e, [
+        'db_mode' => $mf_db_mode ?? 'unknown',
+        'target' => isset($lastConnectionTarget) && is_array($lastConnectionTarget)
+            ? mf_db_target_signature($lastConnectionTarget)
+            : '',
+        'attempted_targets' => $connectionFailures ?? [],
+    ]);
+
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, 'Critical System Error [' . $errorId . ']: Unable to establish database connection.' . PHP_EOL);
+        if (mf_db_should_expose_debug()) {
+            fwrite(STDERR, $e->getMessage() . PHP_EOL);
+        }
+        exit(1);
+    }
+
+    if (!headers_sent()) {
+        header('Content-Type: application/json');
+        http_response_code(500);
+    }
+
+    $response = [
         'status' => 'error',
         'message' => 'Critical System Error: Unable to establish database connection.',
-        'debug' => $e->getMessage(),
-    ]);
+        'error_id' => $errorId,
+    ];
+
+    if (mf_db_should_expose_debug()) {
+        $response['debug'] = $e->getMessage();
+    }
+
+    echo json_encode($response);
     exit;
 }
 ?>
