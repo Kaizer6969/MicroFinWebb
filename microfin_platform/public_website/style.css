@@ -2927,3 +2927,23 @@ body.dark-mode .footer.footer-galaxy::after {
         padding: 24px 18px;
     }
 }
+
+/* Text Cursor Normalization */
+body h1,
+body h2,
+body h3,
+body h4,
+body p,
+body li,
+body strong,
+body small,
+.logo-text,
+.badge-pill,
+.price,
+.price span,
+.trust-marks,
+.trusted-tenant-badge,
+.contact-cta-badge,
+.security-image-badge {
+    cursor: default;
+}

@@ -748,3 +748,25 @@ body:not(.dark-mode) .location-suggestion {
         font-size: 1.25rem;
     }
 }
+
+/* Text Cursor Normalization */
+body h1,
+body h2,
+body h3,
+body h4,
+body p,
+body li,
+body strong,
+body small,
+.logo-text,
+.intro-badge,
+.intro-note,
+.plan-name,
+.plan-capacity,
+.plan-price,
+.otp-label,
+.otp-countdown,
+.otp-status-msg,
+.policy-copy {
+    cursor: default;
+}

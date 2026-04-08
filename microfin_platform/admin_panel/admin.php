@@ -2968,7 +2968,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             header('Location: admin.php?tab=staff-list');
 
             exit;
-        }        if ($action === 'create_staff') {
+        }
+        if ($action === 'create_staff') {
             $first_name = trim($_POST['first_name'] ?? '');
             $last_name = trim($_POST['last_name'] ?? '');
             $middle_name = trim($_POST['middle_name'] ?? '');
@@ -13954,7 +13955,7 @@ function hexToRgb($hex)
 
                                                                 <strong>Core Estimate Inputs</strong>
 
-                                                            <p>These values drive the main formula before the app checks the offer limits and rounding rules.</p>
+                                                                <p>These values drive the main formula before the app checks the offer limits and rounding rules.</p>
 
                                                             </div>
 
@@ -17075,8 +17076,6 @@ function hexToRgb($hex)
 
             });
 
-
-
             syncCreditPolicyUI();
 
             setPolicyTab(<?php echo json_encode($credit_policy_subtab, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>);
@@ -17087,7 +17086,5 @@ function hexToRgb($hex)
     <script src="admin.js?v=<?php echo filemtime(__DIR__ . '/admin.js'); ?>"></script>
 
 </body>
-
-
 
 </html>

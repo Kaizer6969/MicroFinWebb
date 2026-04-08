@@ -7,10 +7,8 @@ require_once '../backend/tenant_identity.php';
 $form_success = false;
 $form_error = '';
 
-$talk_mode_values = ['talk-to-staff', 'talk-to-an-expert', 'talk-to-expert'];
-$requested_mode = strtolower(trim((string)($_GET['mode'] ?? $_POST['flow_mode'] ?? '')));
-$is_talk_to_expert = in_array($requested_mode, $talk_mode_values, true);
-$request_type = $is_talk_to_expert ? 'talk_to_expert' : 'tenant_application';
+$is_talk_to_expert = false; // Sarah replaces the retired talk-to-staff flow.
+$request_type = 'tenant_application';
 
 function demo_column_exists(PDO $pdo, $table, $column)
 {
@@ -842,6 +840,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         body.dark-mode .otp-group { background: var(--surface-soft); border-color: var(--card-border); }
     </style>
     <link rel="stylesheet" href="demo.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/demo.css')); ?>">
+    <link rel="stylesheet" href="sarah-chatbot.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah-chatbot.css')); ?>">
 </head>
 <body>
 
@@ -1071,6 +1070,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <?php endif; ?>
             </div>
         </div>
+    </div>
+
+    <div class="sarah-chatbot" data-sarah-chatbot>
+        <section class="sarah-chatbot-window" id="sarah-chatbot-window" hidden aria-label="Sarah chatbot">
+            <div class="sarah-chatbot-header">
+                <div class="sarah-chatbot-header-copy">
+                    <div class="sarah-chatbot-avatar">S</div>
+                    <div>
+                        <strong>Sarah</strong>
+                        <span>MicroFin virtual assistant</span>
+                    </div>
+                </div>
+                <button type="button" class="sarah-chatbot-close" aria-label="Close Sarah chat">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="sarah-chatbot-messages" aria-live="polite"></div>
+            <div class="sarah-chatbot-actions">
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Pricing">Pricing</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Security">Security</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Setup time">Setup time</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Talk to an agent">Talk to an Agent</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Apply now">Apply now</button>
+            </div>
+            <form class="sarah-chatbot-form">
+                <input type="text" class="sarah-chatbot-input" aria-label="Message Sarah" placeholder="Ask Sarah a question" autocomplete="off">
+                <button type="submit" class="sarah-chatbot-send" aria-label="Send message">
+                    <span class="material-symbols-rounded">send</span>
+                </button>
+            </form>
+        </section>
+        <button type="button" class="sarah-chatbot-launcher" aria-controls="sarah-chatbot-window" aria-expanded="false">
+            <span class="material-symbols-rounded">smart_toy</span>
+            <span class="sarah-chatbot-launcher-copy">
+                <strong>Sarah</strong>
+                <span>Need help?</span>
+            </span>
+        </button>
     </div>
 
     <div id="tos-modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index:9999; overflow-y:auto; padding:40px 20px;">
@@ -1782,5 +1819,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     });
     </script>
+    <script src="sarah-chatbot.js?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah-chatbot.js')); ?>"></script>
 </body>
 </html>

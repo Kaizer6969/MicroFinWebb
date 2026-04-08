@@ -103,6 +103,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/style.css')); ?>">
+    <link rel="stylesheet" href="sarah-chatbot.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah-chatbot.css')); ?>">
 </head>
 <body>
 
@@ -139,7 +140,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 
                 <div class="hero-actions">
                     <a href="demo.php" class="btn btn-primary btn-lg">Apply Now</a>
-                    <a href="demo.php?mode=talk-to-staff" class="btn btn-outline btn-lg">Talk to an Expert</a>
+                    <button type="button" class="btn btn-outline btn-lg js-open-sarah-chat">Chat with Sarah</button>
                 </div>
                 <div class="trust-marks">
                     <span>Trusted by <?php echo $powered_by_count; ?> microfinance institutions <?php if($powered_by_count > 0) echo "including:"; ?></span>
@@ -373,10 +374,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">calendar_month</span>
                     Apply Now
                 </a>
-                <a href="demo.php?mode=talk-to-staff" class="btn btn-outline btn-lg">
-                    <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">support_agent</span>
-                    Talk to Staff
-                </a>
+                <button type="button" class="btn btn-outline btn-lg js-open-sarah-chat">
+                    <span class="material-symbols-rounded" style="font-size: 20px; margin-right: 8px; vertical-align: middle;">smart_toy</span>
+                    Chat with Sarah
+                </button>
             </div>
         </div>
     </section>
@@ -402,7 +403,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <h4>Company</h4>
                 <a href="#">About Us</a>
                 <a href="#">Careers</a>
-                <a href="#">Contact Support</a>
+                <a href="javascript:void(0)" class="js-open-sarah-chat">Chat with Sarah</a>
             </div>
         </div>
         <div class="container footer-bottom">
@@ -410,7 +411,46 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         </div>
     </footer>
 
+    <div class="sarah-chatbot" data-sarah-chatbot>
+        <section class="sarah-chatbot-window" id="sarah-chatbot-window" hidden aria-label="Sarah chatbot">
+            <div class="sarah-chatbot-header">
+                <div class="sarah-chatbot-header-copy">
+                    <div class="sarah-chatbot-avatar">S</div>
+                    <div>
+                        <strong>Sarah</strong>
+                        <span>MicroFin virtual assistant</span>
+                    </div>
+                </div>
+                <button type="button" class="sarah-chatbot-close" aria-label="Close Sarah chat">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            <div class="sarah-chatbot-messages" aria-live="polite"></div>
+            <div class="sarah-chatbot-actions">
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Pricing">Pricing</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Security">Security</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Setup time">Setup time</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Talk to an agent">Talk to an Agent</button>
+                <button type="button" class="sarah-chatbot-chip" data-prompt="Apply now">Apply now</button>
+            </div>
+            <form class="sarah-chatbot-form">
+                <input type="text" class="sarah-chatbot-input" aria-label="Message Sarah" placeholder="Ask Sarah a question" autocomplete="off">
+                <button type="submit" class="sarah-chatbot-send" aria-label="Send message">
+                    <span class="material-symbols-rounded">send</span>
+                </button>
+            </form>
+        </section>
+        <button type="button" class="sarah-chatbot-launcher" aria-controls="sarah-chatbot-window" aria-expanded="false">
+            <span class="material-symbols-rounded">smart_toy</span>
+            <span class="sarah-chatbot-launcher-copy">
+                <strong>Sarah</strong>
+                <span>Need help?</span>
+            </span>
+        </button>
+    </div>
+
     <script src="script.js"></script>
+    <script src="sarah-chatbot.js?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah-chatbot.js')); ?>"></script>
 </body>
 </html>
 
