@@ -642,3 +642,109 @@ body:not(.dark-mode) .location-suggestion {
         background-color 0.2s ease,
         color 0.2s ease !important;
 }
+
+/* Final Demo Mobile Polish */
+@media (max-width: 760px) {
+    body {
+        padding: 88px 14px 24px;
+        overflow-x: hidden;
+    }
+
+    .demo-wrapper {
+        max-width: 100%;
+    }
+
+    .demo-intro,
+    .demo-card {
+        padding: 24px 18px !important;
+        border-radius: 18px;
+    }
+
+    .intro-title {
+        font-size: 1.7rem;
+    }
+
+    .intro-sub,
+    .page-brand p,
+    .demo-card .subtitle {
+        font-size: 0.92rem;
+    }
+
+    .demo-card h2 {
+        font-size: 1.35rem;
+    }
+
+    .input-field,
+    .btn,
+    .otp-action-btn {
+        font-size: 16px;
+    }
+
+    .otp-action-btn,
+    .email-row .btn,
+    .otp-row .btn {
+        width: 100%;
+        min-height: 46px;
+    }
+
+    .plan-card-content {
+        min-height: auto;
+        padding: 16px 16px 16px 16px;
+    }
+
+    .plan-option.plan-option-wide {
+        grid-column: auto;
+    }
+
+    .location-map-frame {
+        height: 220px;
+    }
+
+    .policy-consent-label {
+        gap: 12px;
+    }
+
+    .policy-consent-label input {
+        flex-shrink: 0;
+    }
+
+    #tos-modal-backdrop {
+        padding: 20px 14px !important;
+    }
+
+    #tos-modal-backdrop > div {
+        padding: 24px 18px !important;
+        border-radius: 16px !important;
+    }
+}
+
+@media (max-width: 520px) {
+    .back-btn {
+        top: 12px;
+        left: 12px;
+        max-width: calc(100vw - 76px);
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+
+    .dark-mode-toggle {
+        top: 12px;
+        right: 12px;
+    }
+
+    .location-map-actions {
+        align-items: flex-start;
+    }
+
+    .otp-group {
+        padding: 16px;
+    }
+
+    .success-view .material-symbols-rounded {
+        font-size: 52px;
+    }
+
+    .success-view h3 {
+        font-size: 1.25rem;
+    }
+}
