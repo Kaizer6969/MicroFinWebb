@@ -14,10 +14,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const nextMode = theme === 'dark' ? 'light' : 'dark';
-        const label = nextMode === 'dark' ? 'Dark mode' : 'Light mode';
-        authThemeToggle.textContent = label;
+        const icon = authThemeToggle.querySelector('.auth-theme-icon');
         authThemeToggle.setAttribute('aria-label', `Switch to ${nextMode} mode`);
         authThemeToggle.setAttribute('title', `Switch to ${nextMode} mode`);
+        if (icon) {
+            icon.textContent = nextMode === 'dark' ? 'dark_mode' : 'light_mode';
+            return;
+        }
+
+        const label = nextMode === 'dark' ? 'Dark mode' : 'Light mode';
+        authThemeToggle.textContent = label;
     };
 
     const applyAuthTheme = (theme, persist = true) => {

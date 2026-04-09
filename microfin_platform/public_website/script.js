@@ -69,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const staticSrc = animatedLogo.getAttribute('data-logo-static-src')
             || (usesLayeredLogo ? (staticLogoLayer.getAttribute('src') || '') : (animatedLogo.getAttribute('src') || ''));
         const animatedSrc = animatedLogo.getAttribute('data-logo-animated-src') || '';
+        const animatedBlankSrc = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
         const idleDelayMs = Number(animatedLogo.getAttribute('data-logo-idle-delay') || 30000);
         const playDurationMs = Number(animatedLogo.getAttribute('data-logo-play-duration') || 3600);
         const preloadTimeoutMs = Number(animatedLogo.getAttribute('data-logo-preload-timeout') || 1250);
@@ -82,15 +83,12 @@ document.addEventListener('DOMContentLoaded', () => {
         let animationPlaying = false;
         let idleAnimationUnlocked = true;
         let lastPointerMoveAt = 0;
+        let animationRunId = 0;
 
         const setLogoState = (state) => {
             if (usesLayeredLogo) {
                 if (staticSrc && staticLogoLayer.getAttribute('src') !== staticSrc) {
                     staticLogoLayer.setAttribute('src', staticSrc);
-                }
-
-                if (animatedSrc && animatedLogoLayer.getAttribute('src') !== animatedSrc) {
-                    animatedLogoLayer.setAttribute('src', animatedSrc);
                 }
 
                 animatedLogo.setAttribute('data-logo-state', state);
@@ -120,6 +118,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+        const parkAnimatedLayer = () => {
+            if (!usesLayeredLogo || !animatedLogoLayer) {
+                return;
+            }
+
+            if (animatedLogoLayer.getAttribute('src') !== animatedBlankSrc) {
+                animatedLogoLayer.setAttribute('src', animatedBlankSrc);
+            }
+        };
+
         const clearIdleTimer = () => {
             if (idleTimerId) {
                 window.clearTimeout(idleTimerId);
@@ -145,12 +153,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 handoffTimerId = window.setTimeout(() => {
                     handoffTimerId = 0;
                     animatedLogo.removeAttribute('data-logo-transition');
+                    parkAnimatedLayer();
                 }, 170);
                 return;
             }
 
             clearHandoffTimer();
             setLogoState('static');
+            parkAnimatedLayer();
+        };
+
+        const buildAnimatedPlaybackSrc = () => {
+            if (!animatedSrc) {
+                return '';
+            }
+
+            return `${animatedSrc.split('#')[0]}#play=${++animationRunId}`;
         };
 
         const restartAnimatedLayer = () => {
@@ -159,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const freshLayer = animatedLogoLayer.cloneNode(true);
-            freshLayer.setAttribute('src', animatedSrc);
+            freshLayer.setAttribute('src', buildAnimatedPlaybackSrc());
             animatedLogoLayer.replaceWith(freshLayer);
             animatedLogoLayer = freshLayer;
         };
@@ -274,12 +292,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         setLogoState('static');
+        parkAnimatedLayer();
 
         preloadAnimatedLogo().then((ready) => {
             animationEnabled = ready;
 
             if (!animationEnabled) {
                 setLogoState('static');
+                parkAnimatedLayer();
                 return;
             }
 

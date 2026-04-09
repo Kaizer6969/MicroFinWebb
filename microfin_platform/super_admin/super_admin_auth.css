@@ -37,6 +37,20 @@ body.platform-auth .auth-theme-toggle {
     transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 
+body.platform-auth .auth-theme-toggle.auth-theme-toggle-icon-only {
+    width: 42px;
+    min-height: 42px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+body.platform-auth .auth-theme-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
 body.platform-auth .auth-theme-toggle:hover {
     transform: translateY(-1px);
     border-color: var(--primary-color);
@@ -383,6 +397,12 @@ body.platform-auth .loader-message {
         min-height: 38px;
         padding: 0.65rem 0.9rem;
         font-size: 0.8rem;
+    }
+
+    body.platform-auth .auth-theme-toggle.auth-theme-toggle-icon-only {
+        width: 38px;
+        min-height: 38px;
+        padding: 0;
     }
 
     body.platform-auth .login-container,

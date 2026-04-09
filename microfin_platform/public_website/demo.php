@@ -838,7 +838,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </a>
     <button type="button" class="theme-toggle-btn theme-toggle-floating" id="public-theme-toggle" aria-label="Switch to dark mode">
         <span class="material-symbols-rounded theme-toggle-icon">dark_mode</span>
-        <span class="theme-toggle-label">Dark</span>
     </button>
     <div class="demo-wrapper">
         <div class="demo-layout">

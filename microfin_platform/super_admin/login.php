@@ -108,7 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="super_admin_auth.css">
 </head>
 <body class="platform-auth auth-compact">
-    <button type="button" class="auth-theme-toggle" id="auth-theme-toggle" aria-label="Switch to dark mode">Dark mode</button>
+    <button type="button" class="auth-theme-toggle auth-theme-toggle-icon-only" id="auth-theme-toggle" aria-label="Switch to dark mode">
+        <span class="material-symbols-outlined auth-theme-icon">dark_mode</span>
+    </button>
 
     <div class="loader-overlay" id="loader">
         <div class="spinner"></div>

@@ -164,8 +164,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         .navbar .logo-mark-stack[data-animated-logo] {
             position: relative;
             display: block;
-            width: 60px;
-            height: 34px;
+            width: 68px;
+            height: 38px;
             flex-shrink: 0;
         }
 
@@ -191,17 +191,13 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
 
         .navbar .logo-mark-stack[data-animated-logo] .logo-mark-animated {
             opacity: 0;
-            transform: scale(1.18);
+            transform: scale(1.1);
             transition: opacity 80ms ease;
             will-change: opacity;
         }
 
         .navbar .logo-mark-stack[data-animated-logo][data-logo-state="animated"] .logo-mark-static {
             opacity: 0;
-        }
-
-        .navbar .logo-mark-stack[data-animated-logo][data-logo-transition="handoff"] .logo-mark-static {
-            transform: scale(1.18);
         }
 
         .navbar .logo-mark-stack[data-animated-logo][data-logo-transition="handoff"] .logo-mark-animated {
@@ -260,7 +256,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             <div class="nav-cta">
                 <button type="button" class="theme-toggle-btn js-public-theme-toggle" aria-label="Switch to dark mode">
                     <span class="material-symbols-rounded theme-toggle-icon">dark_mode</span>
-                    <span class="theme-toggle-label">Dark</span>
                 </button>
                 <a href="../super_admin/login.php" class="btn btn-login">Platform Login</a>
                 <a href="demo.php" class="btn btn-primary">Apply Now</a>
@@ -566,15 +561,26 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             var cycleToken = 0;
             var currentState = animatedLogo.getAttribute('data-logo-state') || 'static';
             var charNodes = [];
+            var revealTimerId = 0;
+            var revealStarted = false;
 
             if (!textTrack) {
                 return;
+            }
+
+            function clearRevealTimer() {
+                if (revealTimerId) {
+                    window.clearTimeout(revealTimerId);
+                    revealTimerId = 0;
+                }
             }
 
             function clearTimers() {
                 while (activeTimers.length > 0) {
                     window.clearTimeout(activeTimers.pop());
                 }
+
+                clearRevealTimer();
             }
 
             function queueStep(callback, delay) {
@@ -633,16 +639,13 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             function showAllCharactersInstant() {
                 clearTimers();
                 cycleToken++;
+                revealStarted = false;
                 charNodes.forEach(function (node) {
                     node.classList.remove('is-hidden');
                 });
             }
 
-            function runHideSequence() {
-                clearTimers();
-                cycleToken++;
-
-                var token = cycleToken;
+            function runHideSequence(token) {
                 var characterCount = charNodes.length;
 
                 if (!characterCount) {
@@ -650,6 +653,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 }
 
                 var hideStepDelay = 108;
+                revealStarted = false;
 
                 charNodes.forEach(function (node) {
                     node.classList.remove('is-hidden');
@@ -668,11 +672,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 });
             }
 
-            function runRevealSequence() {
+            function runRevealSequence(token) {
                 clearTimers();
-                cycleToken++;
+                revealStarted = true;
 
-                var token = cycleToken;
                 var reversedNodes = charNodes.slice().reverse();
                 var revealStepDelay = 102;
 
@@ -687,6 +690,28 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                         }, stepIndex * revealStepDelay);
                     }(node, index));
                 });
+            }
+
+            function startAnimatedTextCycle() {
+                clearTimers();
+                cycleToken++;
+
+                var token = cycleToken;
+                var totalDuration = Number(animatedLogo.getAttribute('data-logo-play-duration') || 9230);
+                var revealWindow = ((charNodes.length - 1) * 102) + 290 + 160;
+                var revealLeadIn = 220;
+                var revealStartDelay = Math.max(0, totalDuration - revealWindow - revealLeadIn);
+
+                runHideSequence(token);
+
+                revealTimerId = window.setTimeout(function () {
+                    revealTimerId = 0;
+                    if (token !== cycleToken) {
+                        return;
+                    }
+
+                    runRevealSequence(token);
+                }, revealStartDelay);
             }
 
             buildAnimatedLetters();
@@ -705,11 +730,20 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 currentState = nextState;
 
                 if (nextState === 'animated') {
-                    runHideSequence();
+                    startAnimatedTextCycle();
                     return;
                 }
 
-                runRevealSequence();
+                if (revealStarted) {
+                    return;
+                }
+
+                if (revealTimerId) {
+                    runRevealSequence(cycleToken);
+                    return;
+                }
+
+                showAllCharactersInstant();
             });
 
             observer.observe(animatedLogo, {
@@ -718,7 +752,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             });
 
             if (currentState === 'animated') {
-                runHideSequence();
+                startAnimatedTextCycle();
             } else {
                 showAllCharactersInstant();
             }
