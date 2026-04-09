@@ -48,6 +48,63 @@ String _buildLoginUsername(String baseUsername, String tenantSlug) {
   return '$cleanedBase@$cleanedSlug';
 }
 
+int _calculatePasswordStrength(String password) {
+  int strength = 0;
+  if (password.isNotEmpty) {
+    if (password.length >= 8) strength = 1;
+    if (password.length >= 8 &&
+        RegExp(r'[A-Za-z]').hasMatch(password) &&
+        RegExp(r'[0-9]').hasMatch(password)) {
+      strength = 2;
+    }
+    if (password.length >= 10 &&
+        RegExp(r'[A-Z]').hasMatch(password) &&
+        RegExp(r'[0-9]').hasMatch(password) &&
+        RegExp(r'[^a-zA-Z0-9]').hasMatch(password)) {
+      strength = 3;
+    }
+    if (password.length >= 12 &&
+        RegExp(r'[A-Z]').hasMatch(password) &&
+        RegExp(r'[a-z]').hasMatch(password) &&
+        RegExp(r'[0-9]').hasMatch(password) &&
+        RegExp(r'[^a-zA-Z0-9]').hasMatch(password)) {
+      strength = 4;
+    }
+  }
+  return strength;
+}
+
+Color _passwordStrengthColor(int strength, int index) {
+  if (index >= strength) {
+    return const Color(0xFFE2E8F0);
+  }
+  if (strength == 1) {
+    return AppColors.error;
+  }
+  if (strength == 2) {
+    return Colors.orange;
+  }
+  if (strength == 3) {
+    return Colors.amber;
+  }
+  return const Color(0xFF10B981);
+}
+
+String _passwordStrengthLabel(int strength) {
+  switch (strength) {
+    case 1:
+      return 'Weak';
+    case 2:
+      return 'Fair';
+    case 3:
+      return 'Good';
+    case 4:
+      return 'Strong';
+    default:
+      return '';
+  }
+}
+
 class LoginScreen extends StatefulWidget {
   final bool openRegistrationOnLoad;
 
@@ -198,6 +255,8 @@ class _LoginScreenState extends State<LoginScreen>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      isDismissible: false,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (_) => const _RegistrationModal(),
     );
@@ -249,221 +308,298 @@ class _LoginScreenState extends State<LoginScreen>
       builder: (context, tenant, _) {
         final primary = tenant.themePrimaryColor;
         final secondary = tenant.themeSecondaryColor;
+        final size = MediaQuery.of(context).size;
+        final headerHeight = size.height * 0.38;
 
         return Scaffold(
-          backgroundColor: AppColors.bg,
+          backgroundColor: Colors.white,
           body: Stack(
             children: [
-              Positioned.fill(
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: headerHeight,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        primary,
-                        Color.lerp(primary, secondary, 0.5) ?? secondary,
-                        secondary,
-                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color.lerp(primary, secondary, 0.15)!, primary],
                     ),
                   ),
                 ),
               ),
               SafeArea(
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(22, 18, 22, 32),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          IconButton(
-                            onPressed: _goBack,
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.14),
-                              foregroundColor: Colors.white,
-                            ),
-                            icon: const Icon(Icons.arrow_back_rounded),
-                          ),
-                          const SizedBox(height: 18),
-                          Text(
-                            tenant.id == TenantBranding.defaultTenant.id
-                                ? 'Sign in to the shared MicroFin app'
-                                : 'Sign in to ${tenant.appName}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              height: 1.05,
-                              letterSpacing: -0.7,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Use your exact login username in the format username@tenant_slug.',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: Colors.white.withOpacity(0.82),
-                              height: 1.6,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                        child: GestureDetector(
+                          onTap: _goBack,
+                          child: Container(
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.18),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_back_rounded,
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(28),
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                        child: Text(
+                          'Sign in',
+                          style: GoogleFonts.outfit(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: Container(
+                            width: double.infinity,
+                            margin: EdgeInsets.only(top: headerHeight * 0.14),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(32),
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.08),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 16),
+                                  color: Color(0x1A000000),
+                                  blurRadius: 30,
+                                  offset: Offset(0, -6),
                                 ),
                               ],
                             ),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: primary.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: primary.withOpacity(0.16),
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(28, 36, 28, 32),
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Center(
+                                      child: Container(
+                                        width: 44,
+                                        height: 4,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE2E8F0),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
                                       ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.badge_outlined,
+                                    const SizedBox(height: 28),
+                                    Text(
+                                      'Welcome Back',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF1A1A2E),
+                                        letterSpacing: -0.4,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      tenant.id ==
+                                              TenantBranding.defaultTenant.id
+                                          ? 'Sign in with your tenant-bound login username to continue.'
+                                          : 'Use your tenant-bound login username to continue in ${tenant.appName}.',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: primary.withOpacity(0.08),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: primary.withOpacity(0.16),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(
+                                            Icons.badge_outlined,
+                                            color: primary,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              'Use the exact format username@tenant_slug when signing in or recovering your password.',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12.5,
+                                                color: AppColors.textMain,
+                                                height: 1.45,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 28),
+                                    Text(
+                                      'Login Username',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _LegacyLoginField(
+                                      hint: 'username@tenant_slug',
+                                      controller: _loginUsernameController,
+                                      primary: primary,
+                                      keyboardType: TextInputType.emailAddress,
+                                      validator: (value) {
+                                        final text = value?.trim() ?? '';
+                                        if (text.isEmpty) {
+                                          return 'Enter your login username.';
+                                        }
+                                        if (!text.contains('@')) {
+                                          return 'Use the format username@tenant_slug.';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 20),
+                                    Text(
+                                      'Password',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _LegacyLoginField(
+                                      hint: 'Enter your password',
+                                      controller: _passwordController,
+                                      primary: primary,
+                                      obscureText: _obscurePassword,
+                                      suffixIcon: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _obscurePassword =
+                                                !_obscurePassword;
+                                          });
+                                        },
+                                        child: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility_off_rounded
+                                              : Icons.visibility_rounded,
                                           color: primary,
                                           size: 20,
                                         ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            tenant.id == TenantBranding.defaultTenant.id
-                                                ? 'Tenant context is resolved during registration or after successful login.'
-                                                : 'Active tenant styling loaded for ${tenant.appName}.',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 12.5,
-                                              color: AppColors.textMain,
-                                              height: 1.45,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  _AuthTextField(
-                                    label: 'Login Username',
-                                    hint: 'username@tenant_slug',
-                                    controller: _loginUsernameController,
-                                    keyboardType: TextInputType.emailAddress,
-                                    prefixIcon: Icons.alternate_email_rounded,
-                                    validator: (value) {
-                                      final text = value?.trim() ?? '';
-                                      if (text.isEmpty) {
-                                        return 'Enter your login username.';
-                                      }
-                                      if (!text.contains('@')) {
-                                        return 'Use the format username@tenant_slug.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _AuthTextField(
-                                    label: 'Password',
-                                    hint: 'Enter your password',
-                                    controller: _passwordController,
-                                    obscureText: _obscurePassword,
-                                    prefixIcon: Icons.lock_outline_rounded,
-                                    suffix: IconButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _obscurePassword =
-                                              !_obscurePassword;
-                                        });
+                                      ),
+                                      validator: (value) {
+                                        if ((value ?? '').isEmpty) {
+                                          return 'Enter your password.';
+                                        }
+                                        return null;
                                       },
-                                      icon: Icon(
-                                        _obscurePassword
-                                            ? Icons.visibility_off_outlined
-                                            : Icons.visibility_outlined,
-                                      ),
                                     ),
-                                    validator: (value) {
-                                      if ((value ?? '').isEmpty) {
-                                        return 'Enter your password.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: TextButton(
-                                      onPressed: _showForgotPasswordModal,
-                                      child: Text(
-                                        'Forgot Password or Username?',
-                                        style: GoogleFonts.inter(
-                                          color: primary,
-                                          fontWeight: FontWeight.w700,
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: TextButton(
+                                        onPressed: _showForgotPasswordModal,
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize
+                                                  .shrinkWrap,
                                         ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _PrimaryAuthButton(
-                                    label: 'Sign In',
-                                    isLoading: _isLoading,
-                                    onPressed: _handleLogin,
-                                  ),
-                                  const SizedBox(height: 18),
-                                  Center(
-                                    child: Wrap(
-                                      crossAxisAlignment:
-                                          WrapCrossAlignment.center,
-                                      spacing: 8,
-                                      children: [
-                                        Text(
-                                          'Need a tenant-bound account first?',
+                                        child: Text(
+                                          'Forgot Password or Username?',
                                           style: GoogleFonts.inter(
-                                            color: AppColors.textMuted,
-                                            fontSize: 13.5,
+                                            color: primary,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
-                                        TextButton(
-                                          onPressed: _showRegistrationModal,
-                                          child: Text(
-                                            'Create Account',
-                                            style: GoogleFonts.inter(
-                                              color: primary,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 20),
+                                    _PremiumButton(
+                                      label: 'Sign In',
+                                      isLoading: _isLoading,
+                                      primary: primary,
+                                      secondary: secondary,
+                                      onPressed: _handleLogin,
+                                    ),
+                                    const SizedBox(height: 32),
+                                    Center(
+                                      child: Text.rich(
+                                        TextSpan(
+                                          text: "Don't have an account? ",
+                                          style: GoogleFonts.inter(
+                                            fontSize: 14,
+                                            color: AppColors.textMuted,
+                                          ),
+                                          children: [
+                                            WidgetSpan(
+                                              alignment:
+                                                  PlaceholderAlignment.baseline,
+                                              baseline: TextBaseline.alphabetic,
+                                              child: GestureDetector(
+                                                onTap: _showRegistrationModal,
+                                                child: Text(
+                                                  'Sign up',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 14,
+                                                    color: primary,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -499,6 +635,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
   bool _obscureConfirmPassword = true;
   bool _ignoreReferralListener = false;
   int _step = 1;
+  int _passwordStrength = 0;
   String _finalLoginUsername = '';
   String? _errorMessage;
   String? _infoMessage;
@@ -507,6 +644,8 @@ class _RegistrationModalState extends State<_RegistrationModal> {
   void initState() {
     super.initState();
     _referralController.addListener(_handleReferralChange);
+    _passwordController.addListener(_handlePasswordStrengthChange);
+    _otpController.addListener(_handleOtpInputChange);
     _usernameController.addListener(() {
       if (mounted) {
         setState(() {});
@@ -530,6 +669,26 @@ class _RegistrationModalState extends State<_RegistrationModal> {
   }
 
   bool get _unlocked => _tenant != null && _step == 1;
+
+  void _handlePasswordStrengthChange() {
+    final strength = _calculatePasswordStrength(_passwordController.text);
+    if (_passwordStrength != strength && mounted) {
+      setState(() => _passwordStrength = strength);
+    }
+  }
+
+  void _handleOtpInputChange() {
+    if (_step != 2 || _isLoading) {
+      return;
+    }
+
+    final otp = _otpController.text.trim();
+    if (otp.length == 6) {
+      _verifyRegistrationCode();
+    } else if (_errorMessage != null && otp.isNotEmpty && mounted) {
+      setState(() => _errorMessage = null);
+    }
+  }
 
   void _handleReferralChange() {
     if (_ignoreReferralListener || _tenant == null || _step != 1) {
@@ -752,6 +911,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
         final returnedToken = _cleanString(data['tenant_context_token']);
         setState(() {
           _step = 2;
+          _otpController.clear();
           _finalLoginUsername = _cleanString(data['login_username']);
           _tenant = _ResolvedTenant(
             tenant: _tenant!.tenant,
@@ -760,7 +920,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
             slug: _tenant!.slug,
           );
           _infoMessage = _cleanString(data['message']).isEmpty
-              ? 'Verification code sent to your email.'
+              ? 'Verification code sent. Enter the 6-digit code below to finish creating your account.'
               : _cleanString(data['message']);
         });
       } else {
@@ -791,9 +951,10 @@ class _RegistrationModalState extends State<_RegistrationModal> {
       return;
     }
 
-    if (_otpController.text.trim().isEmpty) {
+    final otp = _otpController.text.trim();
+    if (otp.length != 6) {
       setState(() {
-        _errorMessage = 'Enter the verification code.';
+        _errorMessage = 'Enter the complete 6-digit verification code.';
         _infoMessage = null;
       });
       return;
@@ -812,7 +973,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'email': _emailController.text.trim(),
-              'otp': _otpController.text.trim(),
+              'otp': otp,
               'login_username': _finalLoginUsername,
               'tenant_context_token': _tenant!.token,
             }),
@@ -852,11 +1013,50 @@ class _RegistrationModalState extends State<_RegistrationModal> {
       ? ''
       : _buildLoginUsername(_usernameController.text.trim(), _tenant!.slug);
 
+  Future<bool> _confirmCloseIfVerificationPending(BuildContext context) async {
+    if (_step != 2) {
+      return true;
+    }
+
+    final shouldLeave = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('Leave verification?'),
+              content: Text(
+                'Your verification code is still pending for $_finalLoginUsername. You can stay here and enter the code, or leave for now and come back later.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Stay'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Leave'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+
+    return shouldLeave;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tenantBranding = _tenant?.tenant ?? activeTenant.value;
     final primary = tenantBranding.themePrimaryColor;
+    final secondary = tenantBranding.themeSecondaryColor;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return _buildLegacyRegistrationSheet(
+      context,
+      primary: primary,
+      secondary: secondary,
+      bottomInset: bottomInset,
+    );
 
     return Container(
       margin: const EdgeInsets.only(top: 44),
@@ -1115,6 +1315,773 @@ class _RegistrationModalState extends State<_RegistrationModal> {
       ),
     );
   }
+
+  Widget _buildLegacyRegistrationSheet(
+    BuildContext context, {
+    required Color primary,
+    required Color secondary,
+    required double bottomInset,
+  }) {
+    return WillPopScope(
+      onWillPop: () => _confirmCloseIfVerificationPending(context),
+      child: Container(
+        margin: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 20),
+        padding: EdgeInsets.only(bottom: bottomInset),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: CustomScrollView(
+            shrinkWrap: true,
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                  child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: List.generate(
+                        3,
+                        (index) => Container(
+                          width: index == (_step - 1) ? 24 : 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 6),
+                          decoration: BoxDecoration(
+                            color: index <= (_step - 1)
+                                ? primary
+                                : primary.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _step == 1
+                                    ? 'Create Account'
+                                    : _step == 2
+                                        ? 'Verify Email'
+                                        : 'Account Ready',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textMain,
+                                  letterSpacing: -0.6,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _step == 1
+                                    ? 'Validate your institution first, then complete the account form.'
+                                    : _step == 2
+                                        ? 'Enter the verification code sent to your real email address.'
+                                        : 'Use this exact login username the next time you sign in.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () async {
+                            if (await _confirmCloseIfVerificationPending(
+                              context,
+                            )) {
+                              if (mounted) {
+                                Navigator.pop(context);
+                              }
+                            }
+                          },
+                          icon: Icon(
+                            Icons.close_rounded,
+                            color: AppColors.textMuted,
+                            size: 26,
+                          ),
+                          splashRadius: 24,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    if (_errorMessage != null)
+                      _StatusBanner(message: _errorMessage!, isError: true),
+                    if (_infoMessage != null)
+                      _StatusBanner(message: _infoMessage!, isError: false),
+                    if (_step == 1 || _step == 2) ...[
+                      _TenantReferenceCard(
+                        referralController: _referralController,
+                        isLoading: _isLoading,
+                        tenant: _tenant,
+                        primary: primary,
+                        onResolveReferral: _resolveReferral,
+                        onScanQr: _scanQr,
+                        onUploadQr: _uploadQr,
+                        onChangeTenant: _step == 1
+                            ? () {
+                                setState(() {
+                                  _tenant = null;
+                                  _infoMessage = null;
+                                  _errorMessage = null;
+                                });
+                              }
+                            : null,
+                      ),
+                      const SizedBox(height: 20),
+                      AnimatedOpacity(
+                        opacity: _tenant != null ? 1 : 0.52,
+                        duration: const Duration(milliseconds: 180),
+                        child: Column(
+                          children: [
+                            IgnorePointer(
+                              ignoring: _tenant == null || _step == 2,
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _PremiumField(
+                                          label: 'First Name',
+                                          hint: 'First name',
+                                          icon: Icons.person_outline_rounded,
+                                          primary: primary,
+                                          controller: _firstNameController,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _PremiumField(
+                                          label: 'Last Name',
+                                          hint: 'Last name',
+                                          icon: Icons.badge_outlined,
+                                          primary: primary,
+                                          controller: _lastNameController,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _PremiumField(
+                                          label: 'Middle Name',
+                                          hint: 'Optional',
+                                          icon: Icons.short_text_rounded,
+                                          primary: primary,
+                                          controller: _middleNameController,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _PremiumField(
+                                          label: 'Suffix',
+                                          hint: 'Optional',
+                                          icon: Icons.verified_user_outlined,
+                                          primary: primary,
+                                          controller: _suffixController,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _PremiumField(
+                                    label: 'Real Email',
+                                    hint: 'name@example.com',
+                                    icon: Icons.email_outlined,
+                                    primary: primary,
+                                    controller: _emailController,
+                                    keyboardType: TextInputType.emailAddress,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _UsernameField(
+                                    controller: _usernameController,
+                                    tenantSuffix: _tenant?.slug ?? 'tenant',
+                                    primary: primary,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (_loginPreview.isNotEmpty)
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        'Final login username: $_loginPreview',
+                                        style: GoogleFonts.inter(
+                                          color: AppColors.textMuted,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(height: 16),
+                                  _PremiumField(
+                                    label: 'Password',
+                                    hint: 'Create password',
+                                    icon: Icons.lock_outline_rounded,
+                                    primary: primary,
+                                    controller: _passwordController,
+                                    obscureText: _obscurePassword,
+                                    suffixIcon: IconButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscurePassword = !_obscurePassword;
+                                        });
+                                      },
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+                                        color: AppColors.textMuted,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _PasswordStrengthMeter(
+                                    strength: _passwordStrength,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'At least 12 chars, mixed case, number and symbol for the strongest grade.',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _PremiumField(
+                                    label: 'Confirm Password',
+                                    hint: 'Confirm password',
+                                    icon: Icons.lock_reset_rounded,
+                                    primary: primary,
+                                    controller: _confirmPasswordController,
+                                    obscureText: _obscureConfirmPassword,
+                                    suffixIcon: IconButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscureConfirmPassword =
+                                              !_obscureConfirmPassword;
+                                        });
+                                      },
+                                      icon: Icon(
+                                        _obscureConfirmPassword
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+                                        color: AppColors.textMuted,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_step == 1) ...[
+                                    const SizedBox(height: 24),
+                                    _PremiumButton(
+                                      label: 'Create Account',
+                                      isLoading: _isLoading,
+                                      primary: primary,
+                                      secondary: secondary,
+                                      onPressed: _register,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (_step == 2) ...[
+                              const SizedBox(height: 24),
+                              _LoginUsernameCard(
+                                loginUsername: _finalLoginUsername,
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: primary.withOpacity(0.06),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: primary.withOpacity(0.14),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Verification Code',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textMain,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Enter the 6-digit code sent to ${_emailController.text.trim()}. Verification starts automatically after the 6th digit.',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        color: AppColors.textMuted,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    _PremiumField(
+                                      label: 'OTP',
+                                      hint: 'Enter 6-digit code',
+                                      icon: Icons.pin_outlined,
+                                      primary: primary,
+                                      controller: _otpController,
+                                      keyboardType: TextInputType.number,
+                                      enabled: !_isLoading,
+                                      maxLength: 6,
+                                      inputFormatters: const [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                    ),
+                                    if (_isLoading) ...[
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.2,
+                                              color: primary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            'Verifying code...',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textMain,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+                            Center(
+                              child: Text.rich(
+                                TextSpan(
+                                  text: 'Already have an account? ',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppColors.textMuted,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: 'Log In',
+                                      style: TextStyle(
+                                        color: primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      Center(
+                        child: Container(
+                          width: 78,
+                          height: 78,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          child: const Icon(
+                            Icons.check_circle_outline_rounded,
+                            color: Color(0xFF16A34A),
+                            size: 40,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      _LoginUsernameCard(loginUsername: _finalLoginUsername),
+                      const SizedBox(height: 24),
+                      _PremiumButton(
+                        label: 'Continue to Sign In',
+                        isLoading: false,
+                        primary: primary,
+                        secondary: secondary,
+                        onPressed: () {
+                          if (_tenant == null) {
+                            Navigator.of(context).pop();
+                            return;
+                          }
+                          Navigator.of(context).pop(
+                            _RegistrationCompletion(
+                              loginUsername: _finalLoginUsername,
+                              tenant: _tenant!.tenant,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegacyForgotPasswordSheet(
+    BuildContext context, {
+    required Color primary,
+    required Color secondary,
+    required double bottomInset,
+  }) {
+    final stepTitles = [
+      'Forgot Password',
+      'Verify Code',
+      'Reset Password',
+    ];
+    final stepSubs = [
+      'Enter your exact login username to receive a reset code.',
+      'Enter the 6-digit code sent to the real email linked to that username.',
+      'Choose a strong new password for this tenant-bound account.',
+    ];
+
+    return Container(
+      margin: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 100),
+      padding: EdgeInsets.fromLTRB(24, 20, 24, bottomInset + 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (!_showFindAccount) ...[
+                Row(
+                  children: List.generate(
+                    3,
+                    (index) => Container(
+                      width: index == (_step - 1) ? 24 : 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        color: index <= (_step - 1)
+                            ? primary
+                            : primary.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _showFindAccount
+                              ? 'Find My Account'
+                              : stepTitles[_step - 1],
+                          style: GoogleFonts.outfit(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textMain,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _showFindAccount
+                              ? 'Enter your real email and the app will email every linked login username.'
+                              : stepSubs[_step - 1],
+                          style: GoogleFonts.inter(
+                            color: AppColors.textMuted,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (_errorMessage != null)
+                _StatusBanner(message: _errorMessage!, isError: true),
+              if (_infoMessage != null)
+                _StatusBanner(message: _infoMessage!, isError: false),
+              if (_showFindAccount) ...[
+                _PremiumField(
+                  label: 'Real Email',
+                  hint: 'name@example.com',
+                  icon: Icons.email_outlined,
+                  primary: primary,
+                  controller: _recoveryEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 24),
+                _PremiumButton(
+                  label: 'Email My Login Usernames',
+                  isLoading: _isLoading,
+                  primary: primary,
+                  secondary: secondary,
+                  onPressed: _findAccounts,
+                ),
+                if (_accounts.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  ..._accounts.map((account) {
+                    final loginUsername =
+                        _cleanString(account['login_username']);
+                    final tenantName = _cleanString(account['tenant_name']);
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  loginUsername,
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textMain,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  tenantName,
+                                  style: GoogleFonts.inter(
+                                    color: AppColors.textMuted,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _useRecoveredUsername(loginUsername),
+                            child: Text(
+                              'Use this',
+                              style: TextStyle(
+                                color: primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+                const SizedBox(height: 4),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _showFindAccount = false;
+                        _errorMessage = null;
+                        _infoMessage = null;
+                        _accounts = <Map<String, dynamic>>[];
+                      });
+                    },
+                    child: Text(
+                      'I remember my username',
+                      style: TextStyle(
+                        color: primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else if (_step == 1) ...[
+                _PremiumField(
+                  label: 'Login Username',
+                  hint: 'username@tenant_slug',
+                  icon: Icons.alternate_email_rounded,
+                  primary: primary,
+                  controller: _loginUsernameController,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 24),
+                _PremiumButton(
+                  label: 'Send Reset Code',
+                  isLoading: _isLoading,
+                  primary: primary,
+                  secondary: secondary,
+                  onPressed: _sendResetCode,
+                ),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _showFindAccount = true;
+                        _errorMessage = null;
+                        _infoMessage = null;
+                      });
+                    },
+                    child: Text(
+                      'Forgot your username too?',
+                      style: TextStyle(
+                        color: primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else if (_step == 2) ...[
+                _LoginUsernameCard(
+                  loginUsername: _loginUsernameController.text.trim(),
+                ),
+                const SizedBox(height: 16),
+                _PremiumField(
+                  label: 'Reset Code',
+                  hint: 'Enter 6-digit code',
+                  icon: Icons.pin_outlined,
+                  primary: primary,
+                  controller: _codeController,
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 24),
+                _PremiumButton(
+                  label: 'Verify Code',
+                  isLoading: _isLoading,
+                  primary: primary,
+                  secondary: secondary,
+                  onPressed: _verifyResetCode,
+                ),
+              ] else ...[
+                _LoginUsernameCard(
+                  loginUsername: _loginUsernameController.text.trim(),
+                ),
+                const SizedBox(height: 16),
+                _PremiumField(
+                  label: 'New Password',
+                  hint: 'Enter new password',
+                  icon: Icons.lock_outline_rounded,
+                  primary: primary,
+                  controller: _newPasswordController,
+                  obscureText: _obscurePassword,
+                  suffixIcon: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: AppColors.textMuted,
+                      size: 20,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _PasswordStrengthMeter(strength: _passwordStrength),
+                const SizedBox(height: 6),
+                Text(
+                  'At least 12 chars, mixed case, number and symbol for the strongest grade.',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _PremiumField(
+                  label: 'Confirm Password',
+                  hint: 'Confirm new password',
+                  icon: Icons.lock_reset_rounded,
+                  primary: primary,
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirmPassword,
+                  suffixIcon: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _obscureConfirmPassword =
+                            !_obscureConfirmPassword;
+                      });
+                    },
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: AppColors.textMuted,
+                      size: 20,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _PremiumButton(
+                  label: 'Reset Password',
+                  isLoading: _isLoading,
+                  primary: primary,
+                  secondary: secondary,
+                  onPressed: _resetPassword,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ForgotPasswordModal extends StatefulWidget {
@@ -1136,9 +2103,23 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   int _step = 1;
+  int _passwordStrength = 0;
   String? _errorMessage;
   String? _infoMessage;
   List<Map<String, dynamic>> _accounts = <Map<String, dynamic>>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _newPasswordController.addListener(_handlePasswordStrengthChange);
+  }
+
+  void _handlePasswordStrengthChange() {
+    final strength = _calculatePasswordStrength(_newPasswordController.text);
+    if (_passwordStrength != strength && mounted) {
+      setState(() => _passwordStrength = strength);
+    }
+  }
 
   @override
   void dispose() {
@@ -1399,7 +2380,17 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
 
   @override
   Widget build(BuildContext context) {
+    final tenant = activeTenant.value;
+    final primary = tenant.themePrimaryColor;
+    final secondary = tenant.themeSecondaryColor;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return _buildLegacyForgotPasswordSheet(
+      context,
+      primary: primary,
+      secondary: secondary,
+      bottomInset: bottomInset,
+    );
 
     return Container(
       margin: const EdgeInsets.only(top: 64),
@@ -1768,6 +2759,399 @@ class _RegistrationCompletion {
   });
 }
 
+class _LegacyLoginField extends StatefulWidget {
+  final String hint;
+  final TextEditingController controller;
+  final Color primary;
+  final bool obscureText;
+  final Widget? suffixIcon;
+  final String? Function(String?)? validator;
+  final TextInputType? keyboardType;
+
+  const _LegacyLoginField({
+    required this.hint,
+    required this.controller,
+    required this.primary,
+    this.obscureText = false,
+    this.suffixIcon,
+    this.validator,
+    this.keyboardType,
+  });
+
+  @override
+  State<_LegacyLoginField> createState() => _LegacyLoginFieldState();
+}
+
+class _LegacyLoginFieldState extends State<_LegacyLoginField> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _focused
+                ? widget.primary.withOpacity(0.55)
+                : const Color(0xFFE8EDF3),
+            width: _focused ? 1.8 : 1.2,
+          ),
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: widget.primary.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : const [],
+        ),
+        child: TextFormField(
+          controller: widget.controller,
+          obscureText: widget.obscureText,
+          keyboardType: widget.keyboardType,
+          validator: widget.validator,
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: const Color(0xFF1A1A2E),
+          ),
+          decoration: InputDecoration(
+            hintText: widget.hint,
+            hintStyle: GoogleFonts.inter(
+              fontSize: 14,
+              color: const Color(0xFFADB5BD),
+            ),
+            suffixIcon: widget.suffixIcon != null
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 14),
+                    child: widget.suffixIcon,
+                  )
+                : null,
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 0,
+              minHeight: 0,
+            ),
+            filled: true,
+            fillColor: _focused
+                ? widget.primary.withOpacity(0.03)
+                : const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 18,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(
+                color: AppColors.error,
+                width: 1.2,
+              ),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(
+                color: AppColors.error,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PremiumField extends StatefulWidget {
+  final String label;
+  final String hint;
+  final IconData icon;
+  final Color primary;
+  final TextEditingController controller;
+  final bool enabled;
+  final bool obscureText;
+  final Widget? suffixIcon;
+  final String? Function(String?)? validator;
+  final TextInputType? keyboardType;
+  final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
+  final ValueChanged<String>? onChanged;
+
+  const _PremiumField({
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.primary,
+    required this.controller,
+    this.enabled = true,
+    this.obscureText = false,
+    this.suffixIcon,
+    this.validator,
+    this.keyboardType,
+    this.maxLength,
+    this.inputFormatters,
+    this.onChanged,
+  });
+
+  @override
+  State<_PremiumField> createState() => _PremiumFieldState();
+}
+
+class _PremiumFieldState extends State<_PremiumField> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.label,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: _focused
+                ? widget.primary
+                : AppColors.textMain.withOpacity(0.75),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Focus(
+          onFocusChange: (focused) => setState(() => _focused = focused),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _focused
+                    ? widget.primary.withOpacity(0.6)
+                    : const Color(0xFFE8EDF3),
+                width: _focused ? 1.8 : 1.2,
+              ),
+              boxShadow: _focused
+                  ? [
+                      BoxShadow(
+                        color: widget.primary.withOpacity(0.12),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: TextFormField(
+              controller: widget.controller,
+              enabled: widget.enabled,
+              obscureText: widget.obscureText,
+              keyboardType: widget.keyboardType,
+              validator: widget.validator,
+              maxLength: widget.maxLength,
+              inputFormatters: widget.inputFormatters,
+              onChanged: widget.onChanged,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textMain,
+              ),
+              decoration: InputDecoration(
+                hintText: widget.hint,
+                hintStyle: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: AppColors.textMuted.withOpacity(0.5),
+                ),
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.only(left: 14, right: 10),
+                  child: Icon(
+                    widget.icon,
+                    size: 20,
+                    color: _focused ? widget.primary : AppColors.textMuted,
+                  ),
+                ),
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: 0,
+                  minHeight: 0,
+                ),
+                suffixIcon: widget.suffixIcon,
+                filled: true,
+                fillColor: widget.enabled
+                    ? (_focused
+                        ? widget.primary.withOpacity(0.03)
+                        : const Color(0xFFF9FAFC))
+                    : const Color(0xFFF1F5F9),
+                counterText: widget.maxLength == null ? null : '',
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 18,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(
+                    color: AppColors.error,
+                    width: 1.2,
+                  ),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(
+                    color: AppColors.error,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PremiumButton extends StatefulWidget {
+  final String label;
+  final bool isLoading;
+  final Color primary;
+  final Color secondary;
+  final VoidCallback onPressed;
+
+  const _PremiumButton({
+    required this.label,
+    required this.isLoading,
+    required this.primary,
+    required this.secondary,
+    required this.onPressed,
+  });
+
+  @override
+  State<_PremiumButton> createState() => _PremiumButtonState();
+}
+
+class _PremiumButtonState extends State<_PremiumButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        if (!widget.isLoading) {
+          widget.onPressed();
+        }
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Container(
+          width: double.infinity,
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                widget.primary,
+                Color.lerp(widget.primary, widget.secondary, 0.6)!,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: widget.primary.withOpacity(0.38),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(
+            child: widget.isLoading
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : Text(
+                    widget.label,
+                    style: GoogleFonts.outfit(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PasswordStrengthMeter extends StatelessWidget {
+  final int strength;
+
+  const _PasswordStrengthMeter({required this.strength});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        ...List.generate(
+          4,
+          (index) => Expanded(
+            child: Container(
+              height: 4,
+              margin: EdgeInsets.only(right: index < 3 ? 4 : 0),
+              decoration: BoxDecoration(
+                color: _passwordStrengthColor(strength, index),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+        if (strength > 0) ...[
+          const SizedBox(width: 8),
+          Text(
+            _passwordStrengthLabel(strength),
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: _passwordStrengthColor(strength, strength - 1),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _StatusBanner extends StatelessWidget {
   final String message;
   final bool isError;
@@ -1935,7 +3319,7 @@ class _TenantReferenceCard extends StatelessWidget {
   final VoidCallback onResolveReferral;
   final VoidCallback onScanQr;
   final VoidCallback onUploadQr;
-  final VoidCallback onChangeTenant;
+  final VoidCallback? onChangeTenant;
 
   const _TenantReferenceCard({
     required this.referralController,
@@ -2020,7 +3404,7 @@ class _TenantReferenceCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: primary.withOpacity(0.16)),
               ),
-              child: Row(
+                    child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(Icons.verified_rounded, color: primary),
@@ -2048,10 +3432,11 @@ class _TenantReferenceCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  TextButton(
-                    onPressed: onChangeTenant,
-                    child: const Text('Change'),
-                  ),
+                  if (onChangeTenant != null)
+                    TextButton(
+                      onPressed: onChangeTenant,
+                      child: const Text('Change'),
+                    ),
                 ],
               ),
             ),
