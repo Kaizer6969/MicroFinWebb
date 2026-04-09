@@ -1,5 +1,7 @@
 <?php
 
+require_once dirname(__DIR__) . '/backend/mobile_identity.php';
+
 function mf_install_requested_route(): string
 {
     $route = trim((string)($_GET['route'] ?? ''));
@@ -64,15 +66,7 @@ function mf_install_slugify(string $value): string
 
 function mf_install_download_filename(array $tenant): string
 {
-    $name = trim((string)($tenant['tenant_name'] ?? $tenant['tenant_slug'] ?? $tenant['tenant_id'] ?? 'bank-app'));
-    $name = preg_replace('/[^A-Za-z0-9 _.-]+/', '', $name) ?? 'bank-app';
-    $name = trim($name);
-
-    if ($name === '') {
-        $name = 'bank-app';
-    }
-
-    return $name . '.apk';
+    return 'MicroFin Shared App.apk';
 }
 
 function mf_install_generic_apk_path(): string
@@ -106,8 +100,8 @@ function mf_install_resolve_generic_apk_asset(): array
     if (is_file($genericPath)) {
         return [
             'path' => $genericPath,
-            'filename' => 'MicroFin Generic.apk',
-            'variant' => 'generic',
+            'filename' => 'MicroFin Shared App.apk',
+            'variant' => 'shared',
         ];
     }
 
@@ -115,8 +109,8 @@ function mf_install_resolve_generic_apk_asset(): array
     if ($override !== '') {
         return [
             'url' => $override,
-            'filename' => 'MicroFin Generic.apk',
-            'variant' => 'remote-generic',
+            'filename' => 'MicroFin Shared App.apk',
+            'variant' => 'remote-shared',
         ];
     }
 
@@ -128,80 +122,26 @@ function mf_install_resolve_generic_apk_asset(): array
         if ($remoteUrl !== '' && mf_mobile_app_remote_asset_exists($remoteUrl)) {
             return [
                 'url' => $remoteUrl,
-                'filename' => 'MicroFin Generic.apk',
-                'variant' => 'github-generic',
+                'filename' => 'MicroFin Shared App.apk',
+                'variant' => 'github-shared',
             ];
         }
     }
 
     return [
         'url' => mf_install_generic_apk_url(),
-        'filename' => 'MicroFin Generic.apk',
-        'variant' => 'remote-generic',
+        'filename' => 'MicroFin Shared App.apk',
+        'variant' => 'remote-shared',
     ];
 }
 
 function mf_install_resolve_tenant_apk_asset(array $tenant): ?array
 {
-    $directory = mf_install_tenant_apk_directory();
-    $candidates = [];
-    $candidateSlugs = [];
-
-    $tenantSlug = mf_install_slugify((string)($tenant['tenant_slug'] ?? ''));
-    $tenantId = mf_install_slugify((string)($tenant['tenant_id'] ?? ''));
-
-    if ($tenantSlug !== '') {
-        $candidates[] = $directory . DIRECTORY_SEPARATOR . $tenantSlug . '.apk';
-        $candidateSlugs[] = $tenantSlug;
-    }
-    if ($tenantId !== '') {
-        $candidates[] = $directory . DIRECTORY_SEPARATOR . $tenantId . '.apk';
-        $candidateSlugs[] = $tenantId;
-    }
-
-    foreach ($candidates as $candidate) {
-        if (is_file($candidate)) {
-            return [
-                'path' => $candidate,
-                'filename' => mf_install_download_filename($tenant),
-                'variant' => 'tenant',
-            ];
-        }
-    }
-
-    if (
-        function_exists('mf_mobile_app_tenant_apk_remote_url')
-        && function_exists('mf_mobile_app_remote_asset_exists')
-    ) {
-        foreach (array_values(array_unique($candidateSlugs)) as $candidateSlug) {
-            $remoteUrl = mf_mobile_app_tenant_apk_remote_url($candidateSlug);
-            if ($remoteUrl !== '' && mf_mobile_app_remote_asset_exists($remoteUrl)) {
-                return [
-                    'url' => $remoteUrl,
-                    'filename' => mf_install_download_filename($tenant),
-                    'variant' => 'github-tenant',
-                ];
-            }
-        }
-    }
-
     return null;
 }
 
 function mf_install_resolve_apk_asset(array $tenant, bool $allowGenericFallback = true): array
 {
-    $tenantAsset = mf_install_resolve_tenant_apk_asset($tenant);
-    if ($tenantAsset !== null) {
-        return $tenantAsset;
-    }
-
-    if (!$allowGenericFallback) {
-        return [
-            'filename' => mf_install_download_filename($tenant),
-            'variant' => 'missing',
-        ];
-    }
-
     return mf_install_resolve_generic_apk_asset();
 }
 
@@ -369,6 +309,38 @@ function mf_install_format_tenant(array $tenant): array
         'card_border_width' => (string)($tenant['card_border_width'] ?? '0'),
         'card_shadow' => (string)($tenant['card_shadow'] ?? 'none'),
     ];
+}
+
+function mf_install_referral_code(array $tenant): string
+{
+    return mf_mobile_identity_normalize_slug((string) ($tenant['tenant_slug'] ?? $tenant['tenant_id'] ?? ''));
+}
+
+function mf_install_issue_tenant_reference_token(array $tenant, int $ttlSeconds = 604800): string
+{
+    return mf_mobile_identity_issue_token([
+        'tenant_id' => (string) ($tenant['tenant_id'] ?? ''),
+        'tenant_slug' => mf_install_referral_code($tenant),
+        'tenant_name' => (string) ($tenant['tenant_name'] ?? ''),
+    ], 'tenant-reference', $ttlSeconds);
+}
+
+function mf_install_tenant_reference_payload(array $tenant): string
+{
+    return mf_mobile_identity_format_qr_payload(
+        mf_install_issue_tenant_reference_token($tenant)
+    );
+}
+
+function mf_install_tenant_reference_qr_url(array $tenant, int $size = 220): string
+{
+    $payload = mf_install_tenant_reference_payload($tenant);
+    $size = max(160, min(512, $size));
+
+    return 'https://api.qrserver.com/v1/create-qr-code/?size='
+        . rawurlencode($size . 'x' . $size)
+        . '&margin=0&data='
+        . rawurlencode($payload);
 }
 
 function mf_install_record_download(PDO $pdo, array $tenant, ?array $apkAsset = null): array

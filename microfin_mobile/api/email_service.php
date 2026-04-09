@@ -350,15 +350,21 @@ function microfin_send_password_reset_email(mysqli $conn, array $context): array
     $recipientName = trim((string) ($context['recipient_name'] ?? ''));
     $otp = (string) ($context['otp'] ?? '');
     $minutes = (int) ($context['ttl_minutes'] ?? 15);
+    $loginUsername = trim((string) ($context['login_username'] ?? ''));
+    $loginUsernameHtml = $loginUsername !== ''
+        ? '<p style="margin:0 0 20px;font-size:14px;line-height:1.7;">Login username: <strong>' . htmlspecialchars($loginUsername, ENT_QUOTES, 'UTF-8') . '</strong></p>'
+        : '';
+    $loginUsernameText = $loginUsername !== '' ? "\nLogin username: {$loginUsername}\n" : "\n";
 
     $bodyHtml = '
         <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hello ' . htmlspecialchars($recipientName !== '' ? $recipientName : 'there', ENT_QUOTES, 'UTF-8') . ',</p>
         <p style="margin:0 0 20px;font-size:16px;line-height:1.7;">We received a request to reset the password for your <strong>' . htmlspecialchars($tenantName, ENT_QUOTES, 'UTF-8') . '</strong> account.</p>
+        ' . $loginUsernameHtml . '
         <div style="margin:0 0 20px;padding:18px 20px;border-radius:16px;background:#fff7ed;border:1px solid #fdba74;font-size:32px;font-weight:700;letter-spacing:0.32em;text-align:center;">' . htmlspecialchars($otp, ENT_QUOTES, 'UTF-8') . '</div>
         <p style="margin:0 0 12px;font-size:14px;line-height:1.7;">This reset code expires in ' . $minutes . ' minutes.</p>
         <p style="margin:0;font-size:14px;line-height:1.7;color:#6b7280;">If you did not request a password reset, you can ignore this message.</p>';
 
-    $textContent = "Hello " . ($recipientName !== '' ? $recipientName : 'there') . ",\n\nUse this password reset code for {$tenantName}: {$otp}\n\nThis code expires in {$minutes} minutes.";
+    $textContent = "Hello " . ($recipientName !== '' ? $recipientName : 'there') . ",\n\nUse this password reset code for {$tenantName}: {$otp}{$loginUsernameText}\nThis code expires in {$minutes} minutes.";
 
     return microfin_send_email($conn, [
         'tenant_id' => $context['tenant_id'] ?? null,
@@ -375,6 +381,47 @@ function microfin_send_password_reset_email(mysqli $conn, array $context): array
         ),
         'text_content' => $textContent,
         'tags' => ['password-reset', 'otp'],
+    ]);
+}
+
+function microfin_send_account_lookup_email(mysqli $conn, array $context): array
+{
+    $recipientName = trim((string) ($context['recipient_name'] ?? ''));
+    $usernames = array_values(array_filter(array_map(static function ($value): string {
+        return trim((string) $value);
+    }, (array) ($context['login_usernames'] ?? []))));
+
+    if (empty($usernames)) {
+        return ['success' => false, 'message' => 'No login usernames were provided.'];
+    }
+
+    $listItemsHtml = implode('', array_map(static function (string $username): string {
+        return '<li style="margin:0 0 10px;"><strong>' . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . '</strong></li>';
+    }, $usernames));
+
+    $bodyHtml = '
+        <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hello ' . htmlspecialchars($recipientName !== '' ? $recipientName : 'there', ENT_QUOTES, 'UTF-8') . ',</p>
+        <p style="margin:0 0 20px;font-size:16px;line-height:1.7;">Here are the login usernames linked to this email address in the shared MicroFin mobile app.</p>
+        <ul style="margin:0 0 20px;padding-left:20px;font-size:16px;line-height:1.7;">' . $listItemsHtml . '</ul>
+        <p style="margin:0;font-size:14px;line-height:1.7;color:#6b7280;">Use the exact username above when signing in or resetting your password.</p>';
+
+    $textContent = "Hello " . ($recipientName !== '' ? $recipientName : 'there') . ",\n\nHere are your MicroFin login usernames:\n- " . implode("\n- ", $usernames) . "\n\nUse the exact username above when signing in or resetting your password.";
+
+    return microfin_send_email($conn, [
+        'tenant_id' => $context['tenant_id'] ?? null,
+        'user_id' => $context['user_id'] ?? null,
+        'email_type' => 'account_lookup',
+        'to_email' => $context['to_email'] ?? '',
+        'to_name' => $recipientName,
+        'subject' => 'Your MicroFin login usernames',
+        'html_content' => microfin_render_email_layout(
+            'Your MicroFin login usernames are ready.',
+            'Find your account',
+            $bodyHtml,
+            '#1D4ED8'
+        ),
+        'text_content' => $textContent,
+        'tags' => ['account-lookup', 'username-recovery'],
     ]);
 }
 

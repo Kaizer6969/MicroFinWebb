@@ -1,14 +1,10 @@
 <?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+require_once __DIR__ . '/api_utils.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth_identity.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    exit;
-}
-
-require_once 'db.php';
+microfin_api_bootstrap();
+microfin_require_post();
 
 function microfin_login_normalize_status(?string $status, ?string $documentStatus): string
 {
@@ -24,60 +20,59 @@ function microfin_login_normalize_status(?string $status, ?string $documentStatu
     };
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = json_decode(file_get_contents("php://input"), true);
-    
-    $username = $data['username'] ?? '';
-    // $email mapped to same param if user types email
-    $password = $data['password'] ?? '';
-    $tenant_id = $data['tenant_id'] ?? '';
-    
-    if(empty($username) || empty($password) || empty($tenant_id)) {
-        echo json_encode(['success' => false, 'message' => 'Required fields are missing']);
-        exit;
-    }
+$data = microfin_read_json_input();
+$password = (string) ($data['password'] ?? $data['pin'] ?? '');
 
-    $tenant_stmt = $conn->prepare("SELECT tenant_id FROM tenants WHERE tenant_id = ? AND deleted_at IS NULL LIMIT 1");
-    $tenant_stmt->bind_param("s", $tenant_id);
-    $tenant_stmt->execute();
-    $tenant_exists = $tenant_stmt->get_result()->num_rows === 1;
-    $tenant_stmt->close();
+if ($password === '') {
+    microfin_json_response(['success' => false, 'message' => 'Password is required.'], 422);
+}
 
-    if (!$tenant_exists) {
-        echo json_encode(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.']);
-        exit;
-    }
+$context = microfin_identity_resolve_login_context($conn, $data);
+if (!is_array($context) || !is_array($context['tenant'] ?? null)) {
+    microfin_json_response(['success' => false, 'message' => 'A valid login username is required.'], 422);
+}
 
-    $verificationColumnExists = false;
-    if ($columnStmt = $conn->prepare("
-        SELECT 1
-        FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'clients'
-          AND COLUMN_NAME = 'verification_status'
-        LIMIT 1
-    ")) {
-        $columnStmt->execute();
-        $verificationColumnExists = $columnStmt->get_result()->num_rows === 1;
-        $columnStmt->close();
-    }
+$tenant = $context['tenant'];
+$tenantId = (string) ($tenant['tenant_id'] ?? '');
+$tenantSlug = (string) ($tenant['tenant_slug'] ?? '');
+$baseUsername = trim((string) ($context['base_username'] ?? ''));
+$canonicalLoginUsername = mf_mobile_identity_build_login_username($baseUsername, $tenantSlug);
+$isLegacyRequest = trim((string) ($data['login_username'] ?? '')) === '';
 
-    $selectColumns = [
-        'u.user_id',
-        'u.password_hash',
-        'u.status',
-        'u.first_name AS user_first_name',
-        'u.last_name AS user_last_name',
-        'c.client_status',
-        'c.first_name AS client_first_name',
-        'c.last_name AS client_last_name',
-        'c.document_verification_status',
-        'c.credit_limit'
-    ];
-    if ($verificationColumnExists) {
-        $selectColumns[] = 'c.verification_status';
-    }
+$verificationColumnExists = false;
+if ($columnStmt = $conn->prepare("
+    SELECT 1
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'clients'
+      AND COLUMN_NAME = 'verification_status'
+    LIMIT 1
+")) {
+    $columnStmt->execute();
+    $verificationColumnExists = $columnStmt->get_result()->num_rows === 1;
+    $columnStmt->close();
+}
 
+$selectColumns = [
+    'u.user_id',
+    'u.username',
+    'u.password_hash',
+    'u.status',
+    'u.first_name AS user_first_name',
+    'u.last_name AS user_last_name',
+    'u.email',
+    'c.client_status',
+    'c.first_name AS client_first_name',
+    'c.last_name AS client_last_name',
+    'c.document_verification_status',
+    'c.credit_limit'
+];
+if ($verificationColumnExists) {
+    $selectColumns[] = 'c.verification_status';
+}
+
+if ($isLegacyRequest) {
+    $legacyIdentifier = $baseUsername;
     $stmt = $conn->prepare("
         SELECT " . implode(', ', $selectColumns) . "
         FROM users u
@@ -89,42 +84,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           AND u.user_type = 'Client'
         LIMIT 1
     ");
-    $stmt->bind_param("sss", $username, $username, $tenant_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    
-    if ($res->num_rows === 1) {
-        $user = $res->fetch_assoc();
-        if ($user['status'] !== 'Active') {
-            echo json_encode(['success' => false, 'message' => 'Account is not active.']);
-        } elseif ($user['client_status'] !== 'Active') {
-            echo json_encode(['success' => false, 'message' => 'Client profile is not active.']);
-        } elseif (password_verify($password, $user['password_hash'])) {
-            $firstName = $user['user_first_name'] ?? $user['client_first_name'] ?? '';
-            $lastName = $user['user_last_name'] ?? $user['client_last_name'] ?? '';
-            $verificationStatus = microfin_login_normalize_status(
-                $user['verification_status'] ?? null,
-                $user['document_verification_status'] ?? null
-            );
-
-            echo json_encode([
-                'success' => true,
-                'message' => 'Login successful!',
-                'user_id' => $user['user_id'],
-                'first_name' => $firstName,
-                'last_name' => $lastName,
-                'verification_status' => $verificationStatus,
-                'credit_limit' => (float) ($user['credit_limit'] ?? 0),
-            ]);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Invalid username or password.']);
-        }
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Invalid client credentials for this tenant.']);
-    }
-    
-    $stmt->close();
+    $stmt->bind_param('sss', $legacyIdentifier, $legacyIdentifier, $tenantId);
 } else {
-    echo json_encode(['success' => false, 'message' => 'Invalid Request']);
+    $stmt = $conn->prepare("
+        SELECT " . implode(', ', $selectColumns) . "
+        FROM users u
+        INNER JOIN clients c
+            ON c.user_id = u.user_id
+           AND c.tenant_id = u.tenant_id
+        WHERE u.username = ?
+          AND u.tenant_id = ?
+          AND u.user_type = 'Client'
+        LIMIT 1
+    ");
+    $stmt->bind_param('ss', $baseUsername, $tenantId);
 }
-?>
+
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$user || !password_verify($password, (string) ($user['password_hash'] ?? ''))) {
+    microfin_json_response(['success' => false, 'message' => 'Invalid login username or password.'], 401);
+}
+
+if (($user['status'] ?? '') !== 'Active') {
+    microfin_json_response(['success' => false, 'message' => 'Account is not active.'], 403);
+}
+
+if (($user['client_status'] ?? '') !== 'Active') {
+    microfin_json_response(['success' => false, 'message' => 'Client profile is not active.'], 403);
+}
+
+$firstName = trim((string) ($user['user_first_name'] ?? $user['client_first_name'] ?? ''));
+$lastName = trim((string) ($user['user_last_name'] ?? $user['client_last_name'] ?? ''));
+$verificationStatus = microfin_login_normalize_status(
+    $user['verification_status'] ?? null,
+    $user['document_verification_status'] ?? null
+);
+
+microfin_json_response([
+    'success' => true,
+    'message' => 'Login successful!',
+    'user_id' => (int) ($user['user_id'] ?? 0),
+    'first_name' => $firstName,
+    'last_name' => $lastName,
+    'email' => (string) ($user['email'] ?? ''),
+    'verification_status' => $verificationStatus,
+    'credit_limit' => (float) ($user['credit_limit'] ?? 0),
+    'login_username' => mf_mobile_identity_build_login_username((string) ($user['username'] ?? ''), $tenantSlug),
+    'tenant' => microfin_identity_branding_payload($tenant),
+]);

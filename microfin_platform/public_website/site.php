@@ -4,6 +4,7 @@
 // No authentication required.
 
 require_once dirname(__DIR__) . '/backend/db_connect.php';
+require_once __DIR__ . '/install_attribution.php';
 
 function site_normalize_asset_path(string $path): string
 {
@@ -147,6 +148,8 @@ $btn_text_color     = $pageData['btn_text_color'] ?? '#ffffff';
 
 // Content Strings
 $tenant_name      = $data['tenant_name'] ?? 'MicroFin OS';
+$tenant_id        = $data['tenant_id'] ?? '';
+$tenant_slug      = $data['tenant_slug'] ?? $slug;
 $company_name     = $pageData['company_name'] ?? $tenant_name;
 $short_name       = $pageData['short_name'] ?? '';
 $display_name     = $short_name ? $short_name : $company_name;
@@ -240,6 +243,21 @@ $headline_font = 'Manrope';
 $body_font = 'Public Sans';
 $onPrimary = '#ffffff';
 $secondary = $data['theme_secondary_color'] ?: '#10b981';
+
+$tenantReferenceTenant = [
+    'tenant_id' => (string) $tenant_id,
+    'tenant_name' => (string) $tenant_name,
+    'tenant_slug' => (string) $tenant_slug,
+];
+$tenant_referral_code = function_exists('mf_install_referral_code')
+    ? mf_install_referral_code($tenantReferenceTenant)
+    : (string) $tenant_slug;
+$tenant_reference_payload = function_exists('mf_install_tenant_reference_payload')
+    ? mf_install_tenant_reference_payload($tenantReferenceTenant)
+    : '';
+$tenant_reference_qr_url = function_exists('mf_install_tenant_reference_qr_url')
+    ? mf_install_tenant_reference_qr_url($tenantReferenceTenant)
+    : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">

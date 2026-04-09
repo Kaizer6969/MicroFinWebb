@@ -11,6 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once '../../backend/db_connect.php';
 require_once '../../backend/login_activity.php';
+require_once '../../backend/mobile_identity.php';
 
 $raw_data = file_get_contents('php://input');
 $data = json_decode($raw_data, true);
@@ -19,6 +20,7 @@ if (!is_array($data)) {
     exit;
 }
 
+$login_username = trim((string) ($data['login_username'] ?? ''));
 $email = trim((string) ($data['email'] ?? ''));
 $password = trim((string) ($data['password'] ?? ''));
 
@@ -29,13 +31,30 @@ if ($password === '' && isset($data['pin'])) {
 
 $tenant_id = trim((string) ($data['tenant_id'] ?? ''));
 $tenant_slug = trim((string) ($data['tenant_slug'] ?? ''));
+$username = trim((string) ($data['username'] ?? ''));
 
-if ($email === '' || $password === '') {
-    echo json_encode(['status' => 'error', 'message' => 'Email and password are required.']);
+if ($password === '' || ($login_username === '' && $email === '' && $username === '')) {
+    echo json_encode(['status' => 'error', 'message' => 'Login username and password are required.']);
     exit;
 }
 
 try {
+    $isCanonicalLogin = $login_username !== '';
+    $baseUsername = '';
+
+    if ($isCanonicalLogin) {
+        $parsedLogin = mf_mobile_identity_parse_login_username($login_username);
+        if (!is_array($parsedLogin)) {
+            echo json_encode(['status' => 'error', 'message' => 'Enter the exact login username in the format username@tenant.']);
+            exit;
+        }
+
+        $tenant_slug = (string) ($parsedLogin['tenant_slug'] ?? '');
+        $baseUsername = (string) ($parsedLogin['base_username'] ?? '');
+    } else {
+        $baseUsername = $username !== '' ? $username : $email;
+    }
+
     if ($tenant_id === '') {
         if ($tenant_slug === '') {
             echo json_encode(['status' => 'error', 'message' => 'Tenant identifier is required.']);
@@ -59,27 +78,51 @@ try {
         $tenant_id = (string) $tenant_row['tenant_id'];
     }
 
-    $stmt = $pdo->prepare('
-        SELECT
-            u.user_id, u.tenant_id, u.email, u.password_hash, u.status,
-            c.client_id, c.first_name AS client_first_name, c.last_name AS client_last_name, c.client_status,
-            t.tenant_name, t.tenant_slug,
-            b.logo_path, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family
-        FROM users u
-        JOIN clients c ON c.user_id = u.user_id AND c.tenant_id = u.tenant_id
-        JOIN tenants t ON t.tenant_id = u.tenant_id
-        LEFT JOIN tenant_branding b ON b.tenant_id = t.tenant_id
-        WHERE u.tenant_id = ?
-          AND u.email = ?
-          AND u.user_type = "Client"
-                    AND t.status = "Active"
-        LIMIT 1
-    ');
-    $stmt->execute([$tenant_id, $email]);
+    if ($isCanonicalLogin) {
+        $stmt = $pdo->prepare('
+            SELECT
+                u.user_id, u.username, u.tenant_id, u.email, u.password_hash, u.status,
+                c.client_id, c.first_name AS client_first_name, c.last_name AS client_last_name, c.client_status,
+                t.tenant_name, t.tenant_slug,
+                b.logo_path, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family
+            FROM users u
+            JOIN clients c ON c.user_id = u.user_id AND c.tenant_id = u.tenant_id
+            JOIN tenants t ON t.tenant_id = u.tenant_id
+            LEFT JOIN tenant_branding b ON b.tenant_id = t.tenant_id
+            WHERE u.tenant_id = ?
+              AND u.username = ?
+              AND u.user_type = "Client"
+              AND t.status = "Active"
+              AND u.deleted_at IS NULL
+              AND c.deleted_at IS NULL
+            LIMIT 1
+        ');
+        $stmt->execute([$tenant_id, $baseUsername]);
+    } else {
+        $stmt = $pdo->prepare('
+            SELECT
+                u.user_id, u.username, u.tenant_id, u.email, u.password_hash, u.status,
+                c.client_id, c.first_name AS client_first_name, c.last_name AS client_last_name, c.client_status,
+                t.tenant_name, t.tenant_slug,
+                b.logo_path, b.theme_primary_color, b.theme_secondary_color, b.theme_text_main, b.theme_text_muted, b.theme_bg_body, b.theme_bg_card, b.font_family
+            FROM users u
+            JOIN clients c ON c.user_id = u.user_id AND c.tenant_id = u.tenant_id
+            JOIN tenants t ON t.tenant_id = u.tenant_id
+            LEFT JOIN tenant_branding b ON b.tenant_id = t.tenant_id
+            WHERE u.tenant_id = ?
+              AND (u.email = ? OR u.username = ?)
+              AND u.user_type = "Client"
+              AND t.status = "Active"
+              AND u.deleted_at IS NULL
+              AND c.deleted_at IS NULL
+            LIMIT 1
+        ');
+        $stmt->execute([$tenant_id, $email, $baseUsername]);
+    }
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$user || !password_verify($password, (string) ($user['password_hash'] ?? ''))) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid email or password.']);
+        echo json_encode(['status' => 'error', 'message' => $isCanonicalLogin ? 'Invalid login username or password.' : 'Invalid login credentials.']);
         exit;
     }
 
@@ -107,6 +150,7 @@ try {
     echo json_encode([
         'status' => 'success',
         'message' => 'Login successful',
+        'login_username' => mf_mobile_identity_build_login_username((string) ($user['username'] ?? $baseUsername), (string) ($user['tenant_slug'] ?? $tenant_slug)),
         'auth_token' => $mock_token,
         'global_user' => [
             'app_user_id' => (int) $user['user_id'],

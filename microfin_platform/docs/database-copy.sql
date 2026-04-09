@@ -713,7 +713,7 @@ INSERT INTO `system_settings` (`setting_id`, `tenant_id`, `setting_key`, `settin
 ('1', 'YRL5G6VV30', 'billing_access_user_3', '1', 'Billing', NULL, 'Boolean', '1', NULL, '2026-04-08 03:49:28'),
 ('3', 'YRL5G6VV30', 'next_billing_date', '2026-05-08', 'Billing', NULL, 'String', '1', NULL, '2026-04-08 03:50:37'),
 ('4', 'YRL5G6VV30', 'mobile_app_build_status', 'queued', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
-('5', 'YRL5G6VV30', 'mobile_app_build_message', 'Tenant app build queued automatically. The APK should be available in a few minutes.', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
+('5', 'YRL5G6VV30', 'mobile_app_build_message', 'The shared company mobile app is the only supported APK. Use the tenant QR or referral code to bind registration inside the app.', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
 ('6', 'YRL5G6VV30', 'mobile_app_build_requested_at', '2026-04-08T03:51:44+00:00', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
 ('7', 'YRL5G6VV30', 'mobile_app_build_slug', 'fundline', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
 ('8', 'YRL5G6VV30', 'mobile_app_build_app_name', 'Fundline', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),

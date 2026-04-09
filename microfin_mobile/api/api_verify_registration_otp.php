@@ -2,6 +2,7 @@
 require_once __DIR__ . '/api_utils.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/email_service.php';
+require_once __DIR__ . '/auth_identity.php';
 
 microfin_api_bootstrap();
 microfin_require_post();
@@ -9,16 +10,34 @@ microfin_require_post();
 $data = microfin_read_json_input();
 
 $email = microfin_clean_string($data['email'] ?? '');
-$tenantId = microfin_clean_string($data['tenant_id'] ?? '');
+$loginUsername = microfin_clean_string($data['login_username'] ?? '');
 $otp = microfin_clean_string($data['otp'] ?? '');
 
-if ($email === '' || $tenantId === '' || $otp === '') {
+if ($email === '' || $otp === '') {
     microfin_json_response(['success' => false, 'message' => 'Required fields are missing'], 422);
 }
 
 try {
+    $tenant = null;
+    if ($loginUsername !== '') {
+        $parsedLogin = mf_mobile_identity_parse_login_username($loginUsername);
+        if (!is_array($parsedLogin)) {
+            microfin_json_response(['success' => false, 'message' => 'The login username format is invalid.'], 422);
+        }
+        $tenant = microfin_identity_query_active_tenant($conn, (string) $parsedLogin['tenant_slug']);
+    } else {
+        $tenant = microfin_identity_resolve_tenant_context($conn, $data);
+    }
+
+    if (!is_array($tenant)) {
+        microfin_json_response(['success' => false, 'message' => 'Unable to verify the tenant for this registration.'], 422);
+    }
+
+    $tenantId = (string) ($tenant['tenant_id'] ?? '');
+    $tenantSlug = (string) ($tenant['tenant_slug'] ?? '');
+
     $userStmt = $conn->prepare("
-        SELECT user_id, email_verified, verification_token
+        SELECT user_id, username, email_verified, verification_token
         FROM users
         WHERE email = ?
           AND tenant_id = ?
@@ -60,7 +79,11 @@ try {
     $updateStmt->execute();
     $updateStmt->close();
 
-    microfin_json_response(['success' => true, 'message' => 'Email verified successfully.']);
+    microfin_json_response([
+        'success' => true,
+        'message' => 'Email verified successfully.',
+        'login_username' => mf_mobile_identity_build_login_username((string) ($user['username'] ?? ''), $tenantSlug),
+    ]);
 } catch (Throwable $e) {
     microfin_json_response(['success' => false, 'message' => $e->getMessage()], 500);
 }

@@ -2,22 +2,23 @@
 require_once __DIR__ . '/api_utils.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/email_service.php';
+require_once __DIR__ . '/auth_identity.php';
 
 microfin_api_bootstrap();
 microfin_require_post();
 
 $data = microfin_read_json_input();
 
-$username = microfin_clean_string($data['username'] ?? '');
+$baseUsernameInput = microfin_clean_string($data['base_username'] ?? $data['username'] ?? '');
 $email = microfin_clean_string($data['email'] ?? '');
 $password = (string) ($data['password'] ?? '');
 $firstName = microfin_clean_string($data['first_name'] ?? '');
 $middleName = microfin_clean_string($data['middle_name'] ?? '');
 $lastName = microfin_clean_string($data['last_name'] ?? '');
 $suffix = microfin_clean_string($data['suffix'] ?? '');
-$tenantId = microfin_clean_string($data['tenant_id'] ?? '');
+$tenantContextToken = microfin_clean_string($data['tenant_context_token'] ?? '');
 
-if ($username === '' || $email === '' || $password === '' || $firstName === '' || $lastName === '' || $tenantId === '') {
+if ($baseUsernameInput === '' || $email === '' || $password === '' || $firstName === '' || $lastName === '') {
     microfin_json_response(['success' => false, 'message' => 'Required fields are missing'], 422);
 }
 
@@ -26,21 +27,25 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 }
 
 try {
-    $tenantStmt = $conn->prepare("
-        SELECT tenant_id, tenant_name
-        FROM tenants
-        WHERE tenant_id = ?
-          AND deleted_at IS NULL
-        LIMIT 1
-    ");
-    $tenantStmt->bind_param('s', $tenantId);
-    $tenantStmt->execute();
-    $tenantResult = $tenantStmt->get_result();
-    $tenant = $tenantResult->fetch_assoc();
-    $tenantStmt->close();
+    $tenant = microfin_identity_resolve_tenant_context($conn, $data);
+    if (!is_array($tenant)) {
+        microfin_json_response(['success' => false, 'message' => 'A valid tenant reference is required before registration.'], 422);
+    }
 
-    if (!$tenant) {
-        microfin_json_response(['success' => false, 'message' => 'Invalid tenant_id. Tenant does not exist.'], 404);
+    $tenantId = (string) ($tenant['tenant_id'] ?? '');
+    $tenantSlug = (string) ($tenant['tenant_slug'] ?? '');
+
+    $baseUsername = mf_mobile_identity_normalize_username_base($baseUsernameInput);
+    if (!mf_mobile_identity_is_valid_username_base($baseUsername)) {
+        microfin_json_response([
+            'success' => false,
+            'message' => 'Choose a username using 3-50 letters, numbers, dots, hyphens, or underscores only.',
+        ], 422);
+    }
+
+    $loginUsername = mf_mobile_identity_build_login_username($baseUsername, $tenantSlug);
+    if ($loginUsername === '') {
+        microfin_json_response(['success' => false, 'message' => 'Unable to build the final login username for this tenant.'], 422);
     }
 
     $existingStmt = $conn->prepare("
@@ -51,13 +56,13 @@ try {
           AND deleted_at IS NULL
         LIMIT 1
     ");
-    $existingStmt->bind_param('sss', $tenantId, $username, $email);
+    $existingStmt->bind_param('sss', $tenantId, $baseUsername, $email);
     $existingStmt->execute();
     $existingFound = $existingStmt->get_result()->num_rows > 0;
     $existingStmt->close();
 
     if ($existingFound) {
-        microfin_json_response(['success' => false, 'message' => 'Username or Email already exists for this tenant.'], 409);
+        microfin_json_response(['success' => false, 'message' => 'Username or email already exists for this tenant.'], 409);
     }
 
     $conn->begin_transaction();
@@ -112,7 +117,7 @@ try {
     $userStmt->bind_param(
         'ssssssssis',
         $tenantId,
-        $username,
+        $baseUsername,
         $email,
         $passwordHash,
         $firstName,
@@ -177,6 +182,8 @@ try {
         'success' => true,
         'requires_otp' => true,
         'message' => 'Verification code sent to your email.',
+        'login_username' => $loginUsername,
+        'tenant_context_token' => $tenantContextToken !== '' ? $tenantContextToken : microfin_identity_issue_tenant_context_token($tenant),
     ]);
 } catch (Throwable $e) {
     if ($conn->errno === 0 && $conn->more_results()) {

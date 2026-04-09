@@ -3,6 +3,11 @@
 -- Version 3.1 - Revised with Tenant-Scoped App Flow
 -- Generated: 2026-03-11 | Revised: 2026-03-19
 -- ============================================================
+-- SHARED APP REVISION:
+--   One shared company-branded APK is now the only supported mobile app.
+--   Tenant context must be resolved at runtime through referral code or QR.
+--   Canonical mobile login format is username@tenant_slug.
+--   Real email remains separate for verification, notifications, and recovery.
 -- This schema supports multi-tenant microfinancing:
 --   Example Tenants: Fundline (Marilao), PlaridelMicroFin, Sacred Heart Coop
 -- ============================================================

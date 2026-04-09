@@ -218,6 +218,77 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
         display: grid;
         gap: 2px;
     }
+
+    .shared-app-steps {
+        display: grid;
+        gap: 12px;
+        margin-top: 28px;
+    }
+
+    .shared-app-step {
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        text-align: left;
+    }
+
+    .shared-app-step-label {
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        opacity: 0.6;
+        margin-bottom: 8px;
+    }
+
+    .shared-app-step-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 4px;
+    }
+
+    .shared-app-step-copy {
+        font-size: 0.92rem;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.78);
+        margin: 0;
+    }
+
+    .shared-app-qr-card {
+        margin-top: 28px;
+        padding: 18px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        min-width: 220px;
+    }
+
+    .shared-app-qr-card img {
+        width: 180px;
+        height: 180px;
+        border-radius: 18px;
+        background: #fff;
+        padding: 12px;
+        object-fit: contain;
+    }
+
+    .shared-app-code {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.36);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+        font-weight: 700;
+    }
 </style>
 
 <nav class="site-nav sticky-top py-3">
@@ -246,7 +317,9 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
         }
         $login_href = $app_base . '/tenant_login/login.php?' . $login_query;
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
-        $download_href = $app_base . '/public_website/index.php?route=get-app&bank_id=' . urlencode($download_identifier);
+        $download_href = $download_href ?? ($app_base . '/public_website/index.php?route=get-app&bank_id=' . urlencode($download_identifier));
+        $tenant_referral_code_value = trim((string)($tenant_referral_code ?? $tenant_slug ?? $site_slug ?? ''));
+        $tenant_qr_url = trim((string)($tenant_reference_qr_url ?? ''));
         ?>
         <a href="<?php echo $login_href; ?>" class="btn btn-brand rounded-pill px-4 shadow-sm" contenteditable="false">Log In</a>
     </div>
@@ -458,14 +531,44 @@ if (is_string($show_download_val))
     style="<?php echo getBgStyle('sec_download', $sec_styles, '#0f172a'); ?> <?php if (!$show_download_val)
               echo 'display:none;'; ?>">
     <div class="container py-5">
-        <div class="small opacity-50 text-uppercase fw-700 mb-3 text-white" style="letter-spacing:.15em;">Mobile App
+        <div class="small opacity-50 text-uppercase fw-700 mb-3 text-white" style="letter-spacing:.15em;">Shared Mobile App
         </div>
-        <h2 class="headline fw-800 mb-4 display-5 text-white">Get Our Mobile App</h2>
+        <h2 class="headline fw-800 mb-4 display-5 text-white">Install Once, Register With Your Institution</h2>
         <div class="mb-5 lh-lg opacity-75 mx-auto text-white" style="max-width:600px;" data-edit="download_description"
-            contenteditable="true"><?php echo $e($download_description ?? 'Track your loans easily.'); ?></div>
+            contenteditable="true"><?php echo $e($download_description ?? 'Download the shared MicroFin app, then bind your registration to this institution with the QR code or referral code below.'); ?></div>
         <a href="<?php echo $e($download_href); ?>" 
             class="btn btn-outline-light rounded-pill px-5 py-3 fw-bold text-decoration-none" 
-            contenteditable="false">Download APK (<?php echo $e($company_name ?? ''); ?>)</a>
+            contenteditable="false">Download Shared App</a>
+        <div class="shared-app-steps mx-auto" style="max-width:780px;">
+            <div class="shared-app-step">
+                <div class="shared-app-step-label">Step 1</div>
+                <div class="shared-app-step-title">Install the shared MicroFin app</div>
+                <p class="shared-app-step-copy">The download button always installs the same company-branded app for every tenant.</p>
+            </div>
+            <div class="shared-app-step">
+                <div class="shared-app-step-label">Step 2</div>
+                <div class="shared-app-step-title">Open Create Account and scan this QR</div>
+                <p class="shared-app-step-copy">The QR code passes this institution's tenant reference into registration so the form unlocks with the correct <strong>@<?php echo $e($tenant_slug ?? $site_slug ?? 'tenant'); ?></strong> suffix.</p>
+            </div>
+            <div class="shared-app-step">
+                <div class="shared-app-step-label">Step 3</div>
+                <div class="shared-app-step-title">Use the referral code if scanning is unavailable</div>
+                <p class="shared-app-step-copy">Manual fallback code: <strong><?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?></strong></p>
+            </div>
+        </div>
+        <div class="shared-app-qr-card">
+            <?php if ($tenant_qr_url !== ''): ?>
+                <img src="<?php echo $e($tenant_qr_url); ?>" alt="Tenant registration QR code">
+            <?php else: ?>
+                <div class="d-flex align-items-center justify-content-center text-white text-center" style="width:180px;height:180px;border-radius:18px;background:rgba(255,255,255,0.12);padding:20px;">
+                    Publish the site to generate the tenant QR code.
+                </div>
+            <?php endif; ?>
+            <div class="shared-app-code">
+                <span class="material-symbols-rounded" style="font-size:1.1rem;">confirmation_number</span>
+                Referral Code: <?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?>
+            </div>
+        </div>
       </div>
 </section>
 
