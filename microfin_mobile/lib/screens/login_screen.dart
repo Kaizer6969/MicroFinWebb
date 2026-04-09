@@ -1496,6 +1496,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
           ],
         ),
       ),
+    ),
     );
   }
 
