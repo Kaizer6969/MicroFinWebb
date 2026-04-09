@@ -427,8 +427,8 @@ class _LoginScreenState extends State<LoginScreen>
                                     Text(
                                       tenant.id ==
                                               TenantBranding.defaultTenant.id
-                                          ? 'Sign in with your tenant-bound login username to continue.'
-                                          : 'Use your tenant-bound login username to continue in ${tenant.appName}.',
+                                          ? 'Sign in with your username to continue.'
+                                          : 'Use your username to continue in ${tenant.appName}.',
                                       style: GoogleFonts.inter(
                                         fontSize: 14,
                                         color: AppColors.textMuted,
@@ -456,7 +456,7 @@ class _LoginScreenState extends State<LoginScreen>
                                           const SizedBox(width: 10),
                                           Expanded(
                                             child: Text(
-                                              'Use the exact format username@tenant_slug when signing in or recovering your password.',
+                                              'Use the exact format username@institution when signing in or recovering your password.',
                                               style: GoogleFonts.inter(
                                                 fontSize: 12.5,
                                                 color: AppColors.textMain,
@@ -469,7 +469,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     ),
                                     const SizedBox(height: 28),
                                     Text(
-                                      'Login Username',
+                                      'Username',
                                       style: GoogleFonts.inter(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
@@ -478,17 +478,17 @@ class _LoginScreenState extends State<LoginScreen>
                                     ),
                                     const SizedBox(height: 8),
                                     _LegacyLoginField(
-                                      hint: 'username@tenant_slug',
+                                      hint: 'username@institution',
                                       controller: _loginUsernameController,
                                       primary: primary,
                                       keyboardType: TextInputType.emailAddress,
                                       validator: (value) {
                                         final text = value?.trim() ?? '';
                                         if (text.isEmpty) {
-                                          return 'Enter your login username.';
+                                          return 'Enter your username.';
                                         }
                                         if (!text.contains('@')) {
-                                          return 'Use the format username@tenant_slug.';
+                                          return 'Use the format username@institution.';
                                         }
                                         return null;
                                       },
@@ -1140,7 +1140,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
                                     ? 'Validate your institution first, then complete the account form.'
                                     : _step == 2
                                         ? 'Enter the verification code sent to your real email address.'
-                                        : 'Use this exact login username the next time you sign in.',
+                                        : 'Use this exact username the next time you sign in.',
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
                                   color: AppColors.textMuted,
@@ -1269,7 +1269,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
                                     Align(
                                       alignment: Alignment.centerLeft,
                                       child: Text(
-                                        'Final login username: $_loginPreview',
+                                        'Final username: $_loginPreview',
                                         style: GoogleFonts.inter(
                                           color: AppColors.textMuted,
                                           fontSize: 12.5,
@@ -1554,7 +1554,7 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
     if (loginUsername.isEmpty || !loginUsername.contains('@')) {
       setState(() {
         _errorMessage =
-            'Enter the exact login username in the format username@tenant_slug.';
+            'Enter the exact username in the format username@institution.';
         _infoMessage = null;
       });
       return;
@@ -1808,9 +1808,9 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
       'Reset Password',
     ];
     final stepSubs = [
-      'Enter your exact login username to receive a reset code.',
+      'Enter your exact username to receive a reset code.',
       'Enter the 6-digit code sent to the real email linked to that username.',
-      'Choose a strong new password for this tenant-bound account.',
+      'Choose a strong new password for this account.',
     ];
 
     return Container(
@@ -1876,7 +1876,7 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
                         const SizedBox(height: 4),
                         Text(
                           _showFindAccount
-                              ? 'Enter your real email and the app will email every linked login username.'
+                              ? 'Enter your real email and the app will email every linked username.'
                               : stepSubs[_step - 1],
                           style: GoogleFonts.inter(
                             color: AppColors.textMuted,
@@ -1911,7 +1911,7 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
                 ),
                 const SizedBox(height: 24),
                 _PremiumButton(
-                  label: 'Email My Login Usernames',
+                  label: 'Email My Usernames',
                   isLoading: _isLoading,
                   primary: primary,
                   secondary: secondary,
@@ -1992,8 +1992,8 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
                 ),
               ] else if (_step == 1) ...[
                 _PremiumField(
-                  label: 'Login Username',
-                  hint: 'username@tenant_slug',
+                  label: 'Username',
+                  hint: 'username@institution',
                   icon: Icons.alternate_email_rounded,
                   primary: primary,
                   controller: _loginUsernameController,
@@ -3072,7 +3072,7 @@ class _LoginUsernameCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Login Username',
+            'Username',
             style: GoogleFonts.inter(
               color: AppColors.textMuted,
               fontSize: 12.5,
