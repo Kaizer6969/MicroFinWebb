@@ -11,6 +11,9 @@ if (mf_refresh_backend_session_state($pdo, 'super_admin') && isset($_SESSION['su
     exit;
 }
 
+$platformLogoFile = __DIR__ . '/../public_website/logo/MicroFin-logo-transparent-temp.png';
+$platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=' . urlencode((string) @filemtime($platformLogoFile));
+
 function sa_password_reset_link(string $token): string
 {
     $explicitBase = trim((string)(getenv('APP_BASE_URL') ?: getenv('PUBLIC_BASE_URL') ?: ''));
@@ -127,7 +130,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MicroFin - Forgot Password</title>
+    <title>MicroFin | Forgot Password</title>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="super_admin_theme.css">
     <link rel="stylesheet" href="super_admin_auth.css">

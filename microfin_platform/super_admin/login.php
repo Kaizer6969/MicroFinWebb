@@ -23,6 +23,9 @@ if ($error_msg === '' && $browser_session_block_message !== '') {
     $error_msg = $browser_session_block_message;
 }
 
+$platformLogoFile = __DIR__ . '/../public_website/logo/MicroFin-logo-transparent-temp.png';
+$platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=' . urlencode((string) @filemtime($platformLogoFile));
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_once '../backend/login_activity.php';
     require_once __DIR__ . '/super_admin_auth.php';
@@ -96,7 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MicroFin - Super Admin Login</title>
+    <title>MicroFin | Super Admin Login</title>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="super_admin_theme.css">
@@ -112,9 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="login-container">
         <div class="logo-header">
-            <span class="material-symbols-outlined logo-icon">admin_panel_settings</span>
-            <h1 class="company-name">MicroFin OS</h1>
-            <p class="subtitle">Platform Owner Login</p>
+            <div class="logo-mark-shell">
+                <img src="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>" alt="MicroFin logo" class="logo-mark">
+            </div>
+            <h1 class="company-name">MicroFin</h1>
+            <p class="subtitle">Super Admin Login</p>
         </div>
 
         <form id="login-form" method="POST" action=""<?php echo $browser_session_block_message !== '' ? ' onsubmit="return false;"' : ''; ?>>

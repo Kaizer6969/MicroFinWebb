@@ -1587,13 +1587,18 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
     }
     $subscription_plan_distribution[$rowPlan]++;
 }
+
+$platformLogoFile = __DIR__ . '/../public_website/logo/MicroFin-logo-transparent-temp.png';
+$platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=' . urlencode((string) @filemtime($platformLogoFile));
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo htmlspecialchars((string)($_SESSION['ui_theme'] ?? 'light'), ENT_QUOTES, 'UTF-8'); ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MicroFin Platform Admin</title>
+    <title>MicroFin | Platform Admin</title>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1630,11 +1635,11 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="logo-circle">
-                    <span class="material-symbols-rounded" style="font-size: 24px;">public</span>
+                    <img src="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>" alt="MicroFin logo" class="logo-circle-mark">
                 </div>
                 <div class="brand-text">
                     <h2>MicroFin</h2>
-                    <span>Platform Admin</span>
+                    <span>Super Admin</span>
                 </div>
             </div>
 

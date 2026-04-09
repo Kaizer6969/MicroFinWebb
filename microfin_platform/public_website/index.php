@@ -3,12 +3,20 @@ require_once '../backend/db_connect.php';
 require_once '../backend/mobile_app_build.php';
 require_once __DIR__ . '/install_attribution.php';
 
-$renderUnavailable = static function (string $title, string $message): void {
+$microfinLogoFile = __DIR__ . '/logo/MicroFin-logo-transparent-temp.png';
+$microfinLogoAsset = 'logo/MicroFin-logo-transparent-temp.png?v=' . urlencode((string) @filemtime($microfinLogoFile));
+
+$renderUnavailable = static function (string $title, string $message) use ($microfinLogoAsset): void {
     http_response_code(404);
     header('Content-Type: text/html; charset=UTF-8');
+    $pageTitle = 'MicroFin | ' . $title;
     echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>'
-        . htmlspecialchars($title, ENT_QUOTES, 'UTF-8')
-        . '</title></head><body style="font-family: \'Plus Jakarta Sans\', Arial, sans-serif; background:#f7f3e8; color:#1f2d25; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;"><div style="max-width:420px; background:#fffdf7; border:transparent; border-radius:18px; padding:32px; text-align:center; box-shadow:0 18px 40px rgba(54,43,12,0.12);"><h1 style="margin:0 0 12px; font-size:1.5rem;">'
+        . htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8')
+        . '</title><link rel="icon" type="image/png" href="'
+        . htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8')
+        . '"><link rel="apple-touch-icon" href="'
+        . htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8')
+        . '"></head><body style="font-family: \'Plus Jakarta Sans\', Arial, sans-serif; background:#f7f3e8; color:#1f2d25; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0;"><div style="max-width:420px; background:#fffdf7; border:transparent; border-radius:18px; padding:32px; text-align:center; box-shadow:0 18px 40px rgba(54,43,12,0.12);"><h1 style="margin:0 0 12px; font-size:1.5rem;">'
         . htmlspecialchars($title, ENT_QUOTES, 'UTF-8')
         . '</h1><p style="margin:0; color:#475569; line-height:1.6;">'
         . htmlspecialchars($message, ENT_QUOTES, 'UTF-8')
@@ -71,8 +79,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MicroFin | The Cloud Banking Platform for Modern MFIs</title>
-    <link rel="icon" type="image/png" href="logo/MicroFin-logo-transparent-temp.png?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/logo/MicroFin-logo-transparent-temp.png')); ?>">
-    <link rel="apple-touch-icon" href="logo/MicroFin-logo-transparent-temp.png?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/logo/MicroFin-logo-transparent-temp.png')); ?>">
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>">
     <script>
         (function () {
             try {
@@ -102,7 +110,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <nav class="navbar">
         <div class="container nav-container">
             <div class="logo">
-                <img src="logo/MicroFin-logo-transparent-temp.png" alt="MicroFin logo" class="logo-mark">
+                <img src="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>" alt="MicroFin logo" class="logo-mark">
                 <span class="logo-text">MicroFin</span>
             </div>
             
@@ -381,7 +389,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         <div class="container footer-grid">
             <div class="footer-brand">
                 <div class="logo">
-                    <img src="logo/MicroFin-logo-transparent-temp.png" alt="MicroFin logo" class="logo-mark">
+                    <img src="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>" alt="MicroFin logo" class="logo-mark">
                     <span class="logo-text">MicroFin</span>
                 </div>
                 <p>Cloud core banking for cooperatives, MFIs, and SACCOs.</p>

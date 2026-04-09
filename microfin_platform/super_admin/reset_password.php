@@ -6,6 +6,8 @@ $token = trim((string)($_GET['token'] ?? ''));
 $message = '';
 $message_type = '';
 $user_id = null;
+$platformLogoFile = __DIR__ . '/../public_website/logo/MicroFin-logo-transparent-temp.png';
+$platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=' . urlencode((string) @filemtime($platformLogoFile));
 
 if ($token !== '') {
     $stmt = $pdo->prepare("
@@ -68,7 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user_id) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MicroFin - Reset Password</title>
+    <title>MicroFin | Reset Password</title>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="super_admin_theme.css">
     <link rel="stylesheet" href="super_admin_auth.css">
