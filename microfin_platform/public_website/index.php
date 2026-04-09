@@ -7,6 +7,7 @@ $microfinLogoFile = __DIR__ . '/logo/MicroFin-logo-transparent-temp.png';
 $microfinLogoAsset = 'logo/MicroFin-logo-transparent-temp.png?v=' . urlencode((string) @filemtime($microfinLogoFile));
 $microfinAnimatedLogoFile = __DIR__ . '/logo/microfin_smooth_flip_transparent.gif';
 $microfinAnimatedLogoAsset = 'logo/microfin_smooth_flip_transparent.gif?v=' . urlencode((string) @filemtime($microfinAnimatedLogoFile));
+$microfinAnimatedLogoDurationMs = 8450;
 
 $renderUnavailable = static function (string $title, string $message) use ($microfinLogoAsset): void {
     http_response_code(404);
@@ -120,7 +121,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                     data-logo-static-src="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>"
                     data-logo-animated-src="<?php echo htmlspecialchars($microfinAnimatedLogoAsset, ENT_QUOTES, 'UTF-8'); ?>"
                     data-logo-idle-delay="30000"
-                    data-logo-play-duration="3600"
+                    data-logo-play-duration="<?php echo (int) $microfinAnimatedLogoDurationMs; ?>"
                     data-logo-preload-timeout="1250"
                 >
                 <span class="logo-text">MicroFin</span>
