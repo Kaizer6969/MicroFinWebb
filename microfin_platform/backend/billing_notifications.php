@@ -100,20 +100,38 @@ function mf_billing_send_due_soon_email(PDO $pdo, string $tenantId, array $detai
     $dueDate = mf_billing_date_label((string)($details['due_date'] ?? ''), 'F j, Y');
     $amountText = mf_billing_money((float)($details['amount'] ?? 0));
 
-    $html = "
-        <div style=\"font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;\">
-            <h2 style=\"margin: 0 0 12px;\">Upcoming Subscription Payment</h2>
-            <p>Hello {$recipientName},</p>
-            <p>This is a reminder that your <strong>{$tenantName}</strong> subscription payment is coming up soon.</p>
-            <div style=\"margin: 20px 0; padding: 16px; border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff;\">
-                <p style=\"margin: 0 0 8px;\"><strong>Plan:</strong> {$planTier}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Amount:</strong> {$amountText}</p>
-                <p style=\"margin: 0;\"><strong>Scheduled charge date:</strong> {$dueDate}</p>
-            </div>
-            <p>Please make sure your saved billing method is up to date so your renewal can be processed smoothly.</p>
-            <p style=\"margin-top: 24px;\">Thank you,<br>MicroFin Billing</p>
-        </div>
-    ";
+    $html = mf_email_template([
+        'accent' => '#1d4ed8',
+        'eyebrow' => 'Billing Reminder',
+        'title' => 'Upcoming Subscription Payment',
+        'preheader' => "Upcoming payment reminder for {$tenantName}.",
+        'intro_html' => "
+            <p style=\"margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                Hello {$recipientName},
+            </p>
+            <p style=\"margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                This is a reminder that your <strong>{$tenantName}</strong> subscription payment is coming up soon.
+            </p>
+        ",
+        'body_html' => mf_email_panel(
+            'Payment Summary',
+            mf_email_detail_table([
+                ['label' => 'Plan', 'value' => $planTier, 'html' => true],
+                ['label' => 'Amount', 'value' => $amountText, 'html' => true],
+                ['label' => 'Scheduled charge date', 'value' => $dueDate],
+            ]),
+            'info'
+        ) . "
+            <p style=\"margin: 0; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                Please make sure your saved billing method is up to date so your renewal can be processed smoothly.
+            </p>
+        ",
+        'footer_html' => "
+            <p style=\"margin: 0; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #64748b;\">
+                Sent by MicroFin Billing for {$tenantName}. If you need help with your subscription, reply to this email and our billing team will assist you.
+            </p>
+        ",
+    ]);
 
     return mf_send_brevo_email((string)$contact['email'], "{$tenantName} - Upcoming Subscription Payment", $html);
 }
@@ -141,24 +159,39 @@ function mf_billing_send_receipt_email(PDO $pdo, string $tenantId, array $detail
     $paymentReference = htmlspecialchars((string)($details['payment_reference'] ?? 'N/A'), ENT_QUOTES, 'UTF-8');
     $paymentMethod = htmlspecialchars((string)($details['payment_method'] ?? 'Saved payment method'), ENT_QUOTES, 'UTF-8');
 
-    $html = "
-        <div style=\"font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;\">
-            <h2 style=\"margin: 0 0 12px;\">Subscription Payment Receipt</h2>
-            <p>Hello {$recipientName},</p>
-            <p>Your payment for <strong>{$tenantName}</strong> has been successfully recorded. This email serves as your receipt.</p>
-            <div style=\"margin: 20px 0; padding: 16px; border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff;\">
-                <p style=\"margin: 0 0 8px;\"><strong>Plan:</strong> {$planTier}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Amount paid:</strong> {$amountText}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Payment date:</strong> {$paymentDate}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Payment reference:</strong> {$paymentReference}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Invoice number:</strong> {$invoiceNumber}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Payment method:</strong> {$paymentMethod}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Coverage period:</strong> {$periodStart} to {$periodEnd}</p>
-                <p style=\"margin: 0;\"><strong>Next scheduled payment:</strong> {$nextBillingDate}</p>
-            </div>
-            <p style=\"margin-top: 24px;\">Thank you,<br>MicroFin Billing</p>
-        </div>
-    ";
+    $html = mf_email_template([
+        'accent' => '#0f8a5f',
+        'eyebrow' => 'Payment Receipt',
+        'title' => 'Subscription Payment Received',
+        'preheader' => "Your payment receipt for {$tenantName} is ready.",
+        'intro_html' => "
+            <p style=\"margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                Hello {$recipientName},
+            </p>
+            <p style=\"margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                Your payment for <strong>{$tenantName}</strong> has been successfully recorded. This email serves as your receipt.
+            </p>
+        ",
+        'body_html' => mf_email_panel(
+            'Receipt Details',
+            mf_email_detail_table([
+                ['label' => 'Plan', 'value' => $planTier, 'html' => true],
+                ['label' => 'Amount paid', 'value' => $amountText, 'html' => true],
+                ['label' => 'Payment date', 'value' => $paymentDate],
+                ['label' => 'Payment reference', 'value' => $paymentReference],
+                ['label' => 'Invoice number', 'value' => $invoiceNumber],
+                ['label' => 'Payment method', 'value' => $paymentMethod],
+                ['label' => 'Coverage period', 'value' => $periodStart . ' to ' . $periodEnd],
+                ['label' => 'Next scheduled payment', 'value' => $nextBillingDate],
+            ]),
+            'success'
+        ),
+        'footer_html' => "
+            <p style=\"margin: 0; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #64748b;\">
+                Keep this email for your records. If you need billing assistance, reply to this message and the MicroFin Billing team will help you.
+            </p>
+        ",
+    ]);
 
     return mf_send_brevo_email((string)$contact['email'], "{$tenantName} - Payment Receipt {$invoiceNumber}", $html);
 }

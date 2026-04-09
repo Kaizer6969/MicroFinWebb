@@ -3154,21 +3154,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 
 
+            $tenant_name_email = htmlspecialchars((string)$_SESSION['tenant_name'], ENT_QUOTES, 'UTF-8');
             $subject = "Welcome to " . $_SESSION['tenant_name'] . " - Employee Logins";
 
-            $greet_name = !empty($first_name) ? $first_name : 'Team Member';
-            $message = "Hello $greet_name,\n\n"
-                . "An employee portal account has been created for you at " . $_SESSION['tenant_name'] . ".\n\n"
-                . "Please log in and set up your permanent password using the following details:\n\n"
-                . "Login URL: $login_url\n"
-                . "Temporary Password: $temp_password\n\n"
-                . "Note: You will be required to change this password on your first login.\n\n"
-                . "Best Regards,\n"
-                . $_SESSION['tenant_name'] . " Administration";
+            $greet_name = htmlspecialchars(!empty($first_name) ? $first_name : 'Team Member', ENT_QUOTES, 'UTF-8');
+            $safe_login_url = htmlspecialchars($login_url, ENT_QUOTES, 'UTF-8');
+            $safe_temp_password = htmlspecialchars($temp_password, ENT_QUOTES, 'UTF-8');
+            $message = mf_email_template([
+                'accent' => '#2563eb',
+                'eyebrow' => $tenant_name_email,
+                'title' => 'Your Employee Portal Account Is Ready',
+                'preheader' => "{$_SESSION['tenant_name']} created an employee portal account for you.",
+                'intro_html' => "
+                    <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                        Hello {$greet_name},
+                    </p>
+                    <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                        An employee portal account has been created for you at <strong>{$tenant_name_email}</strong>.
+                    </p>
+                ",
+                'body_html' => mf_email_panel(
+                    'Access Details',
+                    mf_email_detail_table([
+                        ['label' => 'Login URL', 'value' => "<a href='{$safe_login_url}' style='color: #1d4ed8; text-decoration: none;'>{$safe_login_url}</a>", 'html' => true],
+                        ['label' => 'Temporary password', 'value' => "<code style='display: inline-block; padding: 4px 8px; background: #f8fafc; border: 1px solid #dbe4ee; border-radius: 8px; font-size: 15px; color: #0f172a;'>{$safe_temp_password}</code>", 'html' => true],
+                    ]),
+                    'info'
+                ) . "
+                    <p style='margin: 0; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                        You will be required to change this password on your first login.
+                    </p>
+                ",
+            ]);
 
 
 
-            $result_msg = mf_send_brevo_email($email, $subject, nl2br($message));
+            $result_msg = mf_send_brevo_email($email, $subject, $message);
 
             if ($result_msg === 'Email sent successfully.') {
 

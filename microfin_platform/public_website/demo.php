@@ -46,27 +46,54 @@ function demo_send_acknowledgement_email($toEmail, $institutionName, $isTalkToEx
         : 'MicroFin Application Received';
 
     if ($isTalkToExpert) {
-        $body = "
-            <html>
-            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
-                <h2 style='margin-bottom: 8px;'>MicroFin</h2>
-                <p>Thank you for your inquiry.</p>
-                <p>Please wait as our staff will email you shortly.</p>
-            </body>
-            </html>
-        ";
+        $body = mf_email_template([
+            'accent' => '#2563eb',
+            'eyebrow' => 'Consultation Request',
+            'title' => 'Your Inquiry Has Been Received',
+            'preheader' => 'MicroFin has received your consultation request.',
+            'intro_html' => "
+                <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                    Thank you for reaching out to MicroFin.
+                </p>
+                <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                    Our team has received your inquiry and will contact you shortly using the details you provided.
+                </p>
+            ",
+            'body_html' => mf_email_panel(
+                'What Happens Next',
+                "
+                    <p style='margin: 0; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                        Expect a follow-up from a MicroFin representative for the next steps, product questions, or scheduling details.
+                    </p>
+                ",
+                'info'
+            ),
+        ]);
     } else {
-        $body = "
-            <html>
-            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
-                <h2 style='margin-bottom: 8px;'>MicroFin</h2>
-                <p>Thank you for applying to MicroFin. We have received your application.</p>
-                <p><strong>Institution:</strong> " . htmlspecialchars((string)$institutionName, ENT_QUOTES, 'UTF-8') . "</p>
-                <p>Please wait for our team response while we review your application.</p>
-                <p>Regards,<br>MicroFin Team</p>
-            </body>
-            </html>
-        ";
+        $safeInstitution = htmlspecialchars((string)$institutionName, ENT_QUOTES, 'UTF-8');
+        $body = mf_email_template([
+            'accent' => '#0f8a5f',
+            'eyebrow' => 'Application Received',
+            'title' => 'Your Application Is Now in Review',
+            'preheader' => 'MicroFin has received your application.',
+            'intro_html' => "
+                <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                    Thank you for applying to MicroFin. We have successfully received your application.
+                </p>
+            ",
+            'body_html' => mf_email_panel(
+                'Application Summary',
+                mf_email_detail_table([
+                    ['label' => 'Institution', 'value' => $safeInstitution, 'html' => true],
+                    ['label' => 'Status', 'value' => 'Submitted and queued for review'],
+                ]),
+                'success'
+            ) . "
+                <p style='margin: 0; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                    Please wait for our team’s response while we review your application and supporting details.
+                </p>
+            ",
+        ]);
     }
 
     $result_msg = mf_send_brevo_email($toEmail, $subject, $body);
@@ -994,7 +1021,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         </div>
                         <div class="otp-row">
                             <input type="text" class="input-field" name="otp_code" id="otp_code" placeholder="123456" maxlength="6">
-                            <button type="button" id="btn-verify-otp" class="btn btn-primary otp-action-btn">Verify</button>
+                            <button type="button" id="btn-verify-otp" class="btn btn-primary otp-action-btn" style="display:none;" aria-hidden="true" tabindex="-1">Verify</button>
                         </div>
                         <div id="otp-status-msg" class="otp-status-msg"></div>
                         <input type="hidden" name="is_otp_verified" id="is_otp_verified" value="0">
@@ -1181,6 +1208,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         const isOtpVerified = document.getElementById('is_otp_verified');
         const emailHelpText = document.getElementById('email-help-text');
         const otpCountdown = document.getElementById('otp-countdown');
+        let otpVerifyInFlight = false;
+        let otpLastAttemptedCode = '';
         const companyLocationInput = document.getElementById('company_location');
         const companyLocationMapWrap = document.getElementById('company-location-map-wrap');
         const companyLocationMap = document.getElementById('company-location-map');
@@ -1618,6 +1647,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             otpExpiryInterval = setInterval(updateExpiry, 1000);
         }
 
+        function verifyOtpCode() {
+            const email = emailInput.value.trim();
+            const code = otpInput.value.trim();
+
+            if (isOtpVerified.value === '1' || otpVerifyInFlight) {
+                return;
+            }
+
+            if (code.length !== 6) {
+                otpMsg.style.color = '#ef4444';
+                otpMsg.innerText = 'Please enter a valid 6-digit OTP.';
+                return;
+            }
+
+            otpVerifyInFlight = true;
+            otpLastAttemptedCode = code;
+            otpMsg.style.color = '#2563eb';
+            otpMsg.innerText = 'Checking OTP...';
+            if (otpCountdown && otpCountdown.innerText !== 'Verified') {
+                otpCountdown.style.color = '#2563eb';
+            }
+            if (btnVerifyOtp) {
+                btnVerifyOtp.disabled = true;
+                btnVerifyOtp.innerHTML = 'Verifying...';
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'verify_otp');
+            formData.append('email', email);
+            formData.append('otp_code', code);
+
+            fetch('api/api_demo.php', { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (otpExpiryInterval) {
+                        clearInterval(otpExpiryInterval);
+                        otpExpiryInterval = null;
+                    }
+                    if (otpCountdown) {
+                        otpCountdown.style.color = '#10b981';
+                        otpCountdown.innerText = 'Verified';
+                    }
+                    if (btnVerifyOtp) {
+                        btnVerifyOtp.innerHTML = 'Verified';
+                        btnVerifyOtp.style.backgroundColor = '#10b981';
+                        btnVerifyOtp.style.borderColor = '#10b981';
+                    }
+                    otpMsg.style.color = '#10b981';
+                    otpMsg.innerText = data.message;
+                    emailInput.readOnly = true;
+                    otpInput.readOnly = true;
+                    isOtpVerified.value = '1';
+                    btnFinalSubmit.style.opacity = '1';
+                    btnFinalSubmit.style.pointerEvents = 'auto';
+                    formBlockNote.style.color = '#10b981';
+                    formBlockNote.innerText = 'You may now submit your request.';
+                } else {
+                    otpVerifyInFlight = false;
+                    otpLastAttemptedCode = '';
+                    if (btnVerifyOtp) {
+                        btnVerifyOtp.disabled = false;
+                        btnVerifyOtp.innerHTML = 'Verify';
+                    }
+                    otpMsg.style.color = '#ef4444';
+                    otpMsg.innerText = data.message;
+                }
+            })
+            .catch(() => {
+                otpVerifyInFlight = false;
+                otpLastAttemptedCode = '';
+                if (btnVerifyOtp) {
+                    btnVerifyOtp.disabled = false;
+                    btnVerifyOtp.innerHTML = 'Verify';
+                }
+                otpMsg.style.color = '#ef4444';
+                otpMsg.innerText = 'Unable to verify OTP right now. Please try again.';
+            });
+        }
+
         // Send OTP
         if (btnSendOtp) {
             btnSendOtp.addEventListener('click', () => {
@@ -1651,18 +1760,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                     if (data.success) {
                         otpGroup.style.display = 'block';
+                        otpInput.readOnly = false;
+                        otpInput.value = '';
+                        otpLastAttemptedCode = '';
+                        otpVerifyInFlight = false;
+                        isOtpVerified.value = '0';
                         btnSendOtp.innerHTML = 'OTP Sent';
                         btnSendOtp.classList.remove('btn-outline');
                         btnSendOtp.style.backgroundColor = '#10b981';
                         btnSendOtp.style.color = 'white';
                         btnSendOtp.style.borderColor = '#10b981';
                         otpMsg.style.color = '#10b981';
-
-                        otpMsg.innerText = data.message || 'OTP sent.';
+                        otpMsg.innerText = 'OTP sent. Enter the 6-digit code and verification will happen automatically.';
 
                         if (emailHelpText) {
                             emailHelpText.style.color = '#10b981';
-                            emailHelpText.innerText = 'OTP sent! Check your inbox.';
+                            emailHelpText.innerText = 'OTP sent! Check your inbox and enter all 6 digits.';
                         }
                         startOtpExpiry(); // Start 5-minute countdown
                     } else {
@@ -1694,56 +1807,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         // Verify OTP
         if (btnVerifyOtp) {
-            btnVerifyOtp.addEventListener('click', () => {
-                const email = emailInput.value.trim();
-                const code = otpInput.value.trim();
-                if (code.length !== 6) {
-                    otpMsg.style.color = '#ef4444';
-                    otpMsg.innerText = 'Please enter a valid 6-digit OTP.';
+            btnVerifyOtp.addEventListener('click', verifyOtpCode);
+        }
+
+        if (otpInput) {
+            otpInput.addEventListener('input', () => {
+                otpInput.value = otpInput.value.replace(/\D/g, '').slice(0, 6);
+
+                if (isOtpVerified.value === '1') {
                     return;
                 }
 
-                btnVerifyOtp.disabled = true;
-                btnVerifyOtp.innerHTML = 'Verifying...';
-
-                const formData = new FormData();
-                formData.append('action', 'verify_otp');
-                formData.append('email', email);
-                formData.append('otp_code', code);
-
-                fetch('api/api_demo.php', { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        // Stop expiry countdown and show verified
-                        if (otpExpiryInterval) {
-                            clearInterval(otpExpiryInterval);
-                            otpExpiryInterval = null;
-                        }
-                        if (otpCountdown) {
-                            otpCountdown.style.color = '#10b981';
-                            otpCountdown.innerText = 'Verified';
-                        }
-                        btnVerifyOtp.innerHTML = 'Verified';
-                        btnVerifyOtp.style.backgroundColor = '#10b981';
-                        btnVerifyOtp.style.borderColor = '#10b981';
-                        otpMsg.style.color = '#10b981';
-                        otpMsg.innerText = data.message;
-                        emailInput.readOnly = true;
-                        otpInput.readOnly = true;
-                        isOtpVerified.value = '1';
-                        btnFinalSubmit.style.opacity = '1';
-                        btnFinalSubmit.style.pointerEvents = 'auto';
-                        formBlockNote.style.color = '#10b981';
-                        formBlockNote.innerText = 'You may now submit your request.';
-                    } else {
-                        btnVerifyOtp.disabled = false;
-                        btnVerifyOtp.innerHTML = 'Verify';
-                        otpMsg.style.color = '#ef4444';
-                        otpMsg.innerText = data.message;
+                if (otpInput.value.length < 6) {
+                    otpLastAttemptedCode = '';
+                    if (!otpVerifyInFlight) {
+                        otpMsg.innerText = '';
                     }
-                })
-                .catch(() => { btnVerifyOtp.disabled = false; btnVerifyOtp.innerHTML = 'Verify'; });
+                    return;
+                }
+
+                if (otpInput.value === otpLastAttemptedCode && otpVerifyInFlight) {
+                    return;
+                }
+
+                if (otpInput.value === otpLastAttemptedCode && !otpVerifyInFlight) {
+                    return;
+                }
+
+                verifyOtpCode();
             });
         }
 

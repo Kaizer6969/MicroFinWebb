@@ -307,22 +307,36 @@ function sa_send_tenant_deactivation_email(PDO $pdo, string $tenantId, string $r
     $reasonHtml = nl2br(htmlspecialchars($reason, ENT_QUOTES, 'UTF-8'));
     $noticeDate = htmlspecialchars(date('F j, Y g:i A'), ENT_QUOTES, 'UTF-8');
 
-    $html = "
-        <div style=\"font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;\">
-            <h2 style=\"margin: 0 0 12px;\">Tenant Account Deactivated</h2>
-            <p>Hello {$recipientName},</p>
-            <p>Your <strong>{$tenantName}</strong> workspace has been temporarily deactivated by the MicroFin platform team.</p>
-            <div style=\"margin: 20px 0; padding: 16px; border: 1px solid #fecaca; border-radius: 12px; background: #fff7f7;\">
-                <p style=\"margin: 0 0 8px;\"><strong>Status:</strong> Suspended</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Effective date:</strong> {$noticeDate}</p>
-                <p style=\"margin: 0 0 8px;\"><strong>Reason provided:</strong></p>
-                <div style=\"padding: 12px; border-radius: 10px; background: #ffffff; border: 1px solid #fecaca;\">{$reasonHtml}</div>
-            </div>
-            <p>Dashboard access will remain unavailable until your workspace is reactivated.</p>
-            <p>If you need help or believe this was done in error, you may reply to this email.</p>
-            <p style=\"margin-top: 24px;\">Thank you,<br>MicroFin Platform Team</p>
-        </div>
-    ";
+    $html = mf_email_template([
+        'accent' => '#b91c1c',
+        'eyebrow' => 'Account Status Update',
+        'title' => 'Workspace Temporarily Deactivated',
+        'preheader' => "{$tenantNameRaw} has been temporarily deactivated.",
+        'intro_html' => "
+            <p style=\"margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                Hello {$recipientName},
+            </p>
+            <p style=\"margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                Your <strong>{$tenantName}</strong> workspace has been temporarily deactivated by the MicroFin platform team.
+            </p>
+        ",
+        'body_html' => mf_email_panel(
+            'Deactivation Details',
+            mf_email_detail_table([
+                ['label' => 'Status', 'value' => 'Suspended'],
+                ['label' => 'Effective date', 'value' => $noticeDate],
+                ['label' => 'Reason provided', 'value' => "<div style=\"padding: 12px 14px; background: #ffffff; border: 1px solid #fecaca; border-radius: 12px;\">{$reasonHtml}</div>", 'html' => true],
+            ]),
+            'danger'
+        ) . "
+            <p style=\"margin: 0 0 10px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                Dashboard access will remain unavailable until your workspace is reactivated.
+            </p>
+            <p style=\"margin: 0; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;\">
+                If you need help or believe this was done in error, you may reply to this email.
+            </p>
+        ",
+    ]);
 
     return mf_send_brevo_email((string)$contact['email'], "{$tenantNameRaw} - Account Deactivation Notice", $html);
 }
@@ -763,20 +777,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $private_url = sa_build_tenant_login_url($tenant_slug);
 
-            $message = "
-            <html>
-            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
-               <h2>Welcome to MicroFin, {$tenant_name}!</h2>
-               <p>Your demo request has been approved and your instance has been provisioned.</p>
-               <p><strong>Your Plan:</strong> {$plan_tier}</p>
-               <p><strong>Login URL:</strong> <a href='{$private_url}'>{$private_url}</a></p>
-               <p><strong>Temporary Password:</strong> <code style='background:#f4f4f5; padding:4px 8px; border-radius:4px; font-size:16px;'>{$temp_password}</code></p>
-               <p>Please log in using the email address you originally registered with ({$admin_email}) and this temporary password to begin configuring your instance. You will be required to change your password and complete our First-Time Setup Wizard upon this first login.</p>
-               <p>Please note: You have <strong>30 days</strong> to complete your initial setup. If setup is not complete by this deadline, your account will temporarily be drafted or suspended.</p>
-               <p>We're excited to have you on board!</p>
-            </body>
-            </html>
-            ";
+            $safeTenantName = htmlspecialchars($tenant_name, ENT_QUOTES, 'UTF-8');
+            $safePlanTier = htmlspecialchars($plan_tier, ENT_QUOTES, 'UTF-8');
+            $safeAdminEmail = htmlspecialchars($admin_email, ENT_QUOTES, 'UTF-8');
+            $safePrivateUrl = htmlspecialchars($private_url, ENT_QUOTES, 'UTF-8');
+            $safeTempPassword = htmlspecialchars($temp_password, ENT_QUOTES, 'UTF-8');
+            $message = mf_email_template([
+                'accent' => '#0f8a5f',
+                'eyebrow' => 'Instance Provisioned',
+                'title' => "Welcome to MicroFin, {$safeTenantName}!",
+                'preheader' => "{$tenant_name} is ready to log in and complete setup.",
+                'intro_html' => "
+                    <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                        Your request has been approved and your MicroFin instance is now provisioned.
+                    </p>
+                ",
+                'body_html' => mf_email_panel(
+                    'Access Details',
+                    mf_email_detail_table([
+                        ['label' => 'Plan', 'value' => $safePlanTier, 'html' => true],
+                        ['label' => 'Sign-in email', 'value' => $safeAdminEmail, 'html' => true],
+                        ['label' => 'Login URL', 'value' => "<a href='{$safePrivateUrl}' style='color: #1d4ed8; text-decoration: none;'>{$safePrivateUrl}</a>", 'html' => true],
+                        ['label' => 'Temporary password', 'value' => "<code style='display: inline-block; padding: 4px 8px; background: #f8fafc; border: 1px solid #dbe4ee; border-radius: 8px; font-size: 15px; color: #0f172a;'>{$safeTempPassword}</code>", 'html' => true],
+                    ]),
+                    'success'
+                ) . mf_email_panel(
+                    'Next Steps',
+                    "
+                        <p style='margin: 0 0 10px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                            Sign in using the email address you originally registered with and the temporary password above.
+                        </p>
+                        <p style='margin: 0 0 10px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                            On first login, you will be required to change your password and complete the First-Time Setup Wizard.
+                        </p>
+                        <p style='margin: 0; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                            Please complete your initial setup within <strong>30 days</strong> to avoid your account being drafted or suspended.
+                        </p>
+                    ",
+                    'info'
+                ),
+            ]);
 
             $result_msg = mf_send_brevo_email($admin_email, 'MicroFin - Your Instance is Ready!', $message);
             if ($result_msg === 'Email sent successfully.') {
@@ -842,16 +882,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $contact_name = trim(((string)($lead['first_name'] ?? '')) . ' ' . ((string)($lead['last_name'] ?? '')));
         $contact_name = $contact_name !== '' ? $contact_name : ((string)($lead['tenant_name'] ?? 'there'));
         $subject = 'MicroFin Consultation Follow-up for ' . (string)($lead['tenant_name'] ?? 'your institution');
-        $body = "
-            <html>
-            <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
-                <p>Hi {$contact_name},</p>
-                <p>Hi from MicroFin. Thank you for your inquiry.</p>
-                <p>For additional concerns, please contact me at <a href='mailto:{$super_admin_email}'>{$super_admin_email}</a>.</p>
-                <p>Best regards,<br>MicroFin Platform Team</p>
-            </body>
-            </html>
-        ";
+        $safeContactName = htmlspecialchars($contact_name, ENT_QUOTES, 'UTF-8');
+        $safeLeadName = htmlspecialchars((string)($lead['tenant_name'] ?? 'your institution'), ENT_QUOTES, 'UTF-8');
+        $safeSuperAdminEmail = htmlspecialchars($super_admin_email, ENT_QUOTES, 'UTF-8');
+        $body = mf_email_template([
+            'accent' => '#2563eb',
+            'eyebrow' => 'Consultation Follow-up',
+            'title' => 'Thanks for Reaching Out to MicroFin',
+            'preheader' => 'A MicroFin representative is following up on your inquiry.',
+            'intro_html' => "
+                <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                    Hi {$safeContactName},
+                </p>
+                <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                    Thank you for your inquiry about <strong>{$safeLeadName}</strong>. We are reviewing your questions and preparing the best next steps for you.
+                </p>
+            ",
+            'body_html' => mf_email_panel(
+                'Direct Contact',
+                "
+                    <p style='margin: 0; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                        For any additional concerns, you may reply directly to this email or contact us at
+                        <a href='mailto:{$safeSuperAdminEmail}' style='color: #1d4ed8; text-decoration: none;'>{$safeSuperAdminEmail}</a>.
+                    </p>
+                ",
+                'info'
+            ),
+        ]);
 
         $result_msg = mf_send_brevo_email((string)$lead['email'], $subject, $body);
 
@@ -1230,20 +1287,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $temporaryPassword = sa_generate_temporary_password();
                     $hash = password_hash($temporaryPassword, PASSWORD_DEFAULT);
                     $loginUrl = sa_build_super_admin_login_url();
-                    $message = "
-                    <html>
-                    <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
-                       <h2>Your MicroFin Super Admin Account Is Ready</h2>
-                       <p>A platform administrator account has been created for you.</p>
-                       <p><strong>Login URL:</strong> <a href='{$loginUrl}'>{$loginUrl}</a></p>
-                       <p><strong>Use this email to sign in:</strong> {$saEmail}</p>
-                       <p><strong>Temporary Password:</strong> <code style='background:#f4f4f5; padding:4px 8px; border-radius:4px; font-size:16px;'>{$temporaryPassword}</code></p>
-                       <p>Please keep this password secure. It was generated automatically by the system.</p>
-                       <p><strong>Next step:</strong> You will reset this temporary password on first login.</p>
-                       <p><strong>Profile setup:</strong> {$profileModeLabel}</p>
-                    </body>
-                    </html>
-                    ";
+                    $safeLoginUrl = htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8');
+                    $safeEmail = htmlspecialchars($saEmail, ENT_QUOTES, 'UTF-8');
+                    $safeTemporaryPassword = htmlspecialchars($temporaryPassword, ENT_QUOTES, 'UTF-8');
+                    $safeProfileMode = htmlspecialchars($profileModeLabel, ENT_QUOTES, 'UTF-8');
+                    $message = mf_email_template([
+                        'accent' => '#0f8a5f',
+                        'eyebrow' => 'Platform Admin Access',
+                        'title' => 'Your MicroFin Super Admin Account Is Ready',
+                        'preheader' => 'Your new MicroFin super admin credentials are ready.',
+                        'intro_html' => "
+                            <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                                A platform administrator account has been created for you.
+                            </p>
+                        ",
+                        'body_html' => mf_email_panel(
+                            'Access Details',
+                            mf_email_detail_table([
+                                ['label' => 'Login URL', 'value' => "<a href='{$safeLoginUrl}' style='color: #1d4ed8; text-decoration: none;'>{$safeLoginUrl}</a>", 'html' => true],
+                                ['label' => 'Sign-in email', 'value' => $safeEmail, 'html' => true],
+                                ['label' => 'Temporary password', 'value' => "<code style='display: inline-block; padding: 4px 8px; background: #f8fafc; border: 1px solid #dbe4ee; border-radius: 8px; font-size: 15px; color: #0f172a;'>{$safeTemporaryPassword}</code>", 'html' => true],
+                                ['label' => 'Profile setup', 'value' => $safeProfileMode, 'html' => true],
+                            ]),
+                            'success'
+                        ) . mf_email_panel(
+                            'Important',
+                            "
+                                <p style='margin: 0 0 10px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                                    Please keep this password secure. It was generated automatically by the system.
+                                </p>
+                                <p style='margin: 0; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                                    On first login, you will be required to reset this temporary password.
+                                </p>
+                            ",
+                            'info'
+                        ),
+                    ]);
 
                     $pdo->beginTransaction();
                     try {

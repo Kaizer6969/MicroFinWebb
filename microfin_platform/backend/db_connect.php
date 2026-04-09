@@ -190,6 +190,166 @@ function mf_send_brevo_email($toEmail, $subject, $htmlContent)
     return 'API Error: HTTP ' . $httpCode . ' - ' . (is_string($result) ? $result : '');
 }
 
+function mf_email_escape($value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function mf_email_button(string $label, string $url, string $accent = '#0f8a5f'): string
+{
+    $safeLabel = mf_email_escape($label);
+    $safeUrl = mf_email_escape($url);
+
+    return "
+        <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin: 24px 0 12px;\">
+            <tr>
+                <td align=\"center\" bgcolor=\"{$accent}\" style=\"border-radius: 14px;\">
+                    <a href=\"{$safeUrl}\" style=\"display: inline-block; padding: 14px 22px; font-family: Arial, sans-serif; font-size: 15px; font-weight: 700; line-height: 1; color: #ffffff; text-decoration: none; border-radius: 14px;\">
+                        {$safeLabel}
+                    </a>
+                </td>
+            </tr>
+        </table>
+    ";
+}
+
+function mf_email_detail_table(array $rows): string
+{
+    $html = '';
+
+    foreach ($rows as $row) {
+        $label = trim((string) ($row['label'] ?? ''));
+        $value = $row['value'] ?? '';
+        $allowHtml = !empty($row['html']);
+
+        if ($label === '' || trim(strip_tags((string) $value)) === '') {
+            continue;
+        }
+
+        $safeLabel = mf_email_escape($label);
+        $safeValue = $allowHtml ? (string) $value : mf_email_escape($value);
+
+        $html .= "
+            <tr>
+                <td valign=\"top\" style=\"padding: 0 0 12px; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; line-height: 1.4; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;\">
+                    {$safeLabel}
+                </td>
+            </tr>
+            <tr>
+                <td valign=\"top\" style=\"padding: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.65; color: #0f172a; border-bottom: 1px solid #e2e8f0;\">
+                    {$safeValue}
+                </td>
+            </tr>
+        ";
+    }
+
+    if ($html === '') {
+        return '';
+    }
+
+    return "
+        <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse: collapse;\">
+            {$html}
+        </table>
+    ";
+}
+
+function mf_email_panel(string $title, string $contentHtml, string $tone = 'neutral'): string
+{
+    $palettes = [
+        'brand' => ['bg' => '#f0fdf4', 'border' => '#bbf7d0', 'title' => '#166534'],
+        'info' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'title' => '#1d4ed8'],
+        'success' => ['bg' => '#ecfdf5', 'border' => '#a7f3d0', 'title' => '#047857'],
+        'warning' => ['bg' => '#fff7ed', 'border' => '#fed7aa', 'title' => '#c2410c'],
+        'danger' => ['bg' => '#fef2f2', 'border' => '#fecaca', 'title' => '#b91c1c'],
+        'neutral' => ['bg' => '#f8fafc', 'border' => '#e2e8f0', 'title' => '#0f172a'],
+    ];
+
+    $palette = $palettes[$tone] ?? $palettes['neutral'];
+    $titleHtml = trim($title) === ''
+        ? ''
+        : '<p style="margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; line-height: 1.4; color: ' . $palette['title'] . ';">' . mf_email_escape($title) . '</p>';
+
+    return "
+        <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin: 20px 0; border-collapse: separate;\">
+            <tr>
+                <td style=\"padding: 20px 22px; background: {$palette['bg']}; border: 1px solid {$palette['border']}; border-radius: 18px;\">
+                    {$titleHtml}
+                    {$contentHtml}
+                </td>
+            </tr>
+        </table>
+    ";
+}
+
+function mf_email_template(array $options): string
+{
+    $accent = trim((string) ($options['accent'] ?? '#0f8a5f'));
+    if (!preg_match('/^#[0-9a-fA-F]{6}$/', $accent)) {
+        $accent = '#0f8a5f';
+    }
+
+    $brandLabel = mf_email_escape($options['brand_label'] ?? (defined('BREVO_SENDER_NAME') ? BREVO_SENDER_NAME : 'MicroFin'));
+    $eyebrow = trim((string) ($options['eyebrow'] ?? ''));
+    $title = mf_email_escape($options['title'] ?? 'MicroFin Update');
+    $preheader = mf_email_escape($options['preheader'] ?? $options['title'] ?? 'MicroFin update');
+    $introHtml = (string) ($options['intro_html'] ?? '');
+    $bodyHtml = (string) ($options['body_html'] ?? '');
+    $footerHtml = (string) ($options['footer_html'] ?? '');
+
+    $eyebrowHtml = $eyebrow === ''
+        ? ''
+        : '<p style="margin: 0 0 10px; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: #64748b;">' . mf_email_escape($eyebrow) . '</p>';
+
+    if ($footerHtml === '') {
+        $footerHtml = '
+            <p style="margin: 0; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #64748b;">
+                This is an automated message from MicroFin. If you need help, reply to this email and our team will assist you.
+            </p>
+        ';
+    }
+
+    return "<!DOCTYPE html>
+<html lang=\"en\">
+<body style=\"margin: 0; padding: 0; background: #eef3f8;\">
+    <div style=\"display: none; max-height: 0; overflow: hidden; opacity: 0; mso-hide: all;\">
+        {$preheader}
+    </div>
+    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background: #eef3f8;\">
+        <tr>
+            <td align=\"center\" style=\"padding: 28px 16px;\">
+                <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"max-width: 680px; background: #ffffff; border: 1px solid #dce5ee; border-radius: 24px;\">
+                    <tr>
+                        <td style=\"height: 8px; font-size: 0; line-height: 0; background: {$accent}; border-radius: 24px 24px 0 0;\">&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td style=\"padding: 28px 32px 20px;\">
+                            <span style=\"display: inline-block; padding: 8px 12px; background: #eff6ff; border: 1px solid #dbeafe; border-radius: 999px; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; color: #1d4ed8;\">
+                                {$brandLabel}
+                            </span>
+                            <div style=\"height: 18px; line-height: 18px; font-size: 18px;\">&nbsp;</div>
+                            {$eyebrowHtml}
+                            <h1 style=\"margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 30px; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; color: #0f172a;\">
+                                {$title}
+                            </h1>
+                            {$introHtml}
+                            {$bodyHtml}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style=\"padding: 0 32px 28px;\">
+                            <div style=\"height: 1px; background: #e2e8f0; margin-bottom: 18px;\"></div>
+                            {$footerHtml}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+}
+
 function mf_db_is_retryable_disconnect(\Throwable $error): bool
 {
     $message = (string) $error->getMessage();

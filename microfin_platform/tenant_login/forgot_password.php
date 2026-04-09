@@ -58,21 +58,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
             $resetPath = rtrim($scriptDir, '/') . '/reset_password.php';
             $reset_link = $protocol . $domainName . $resetPath . '?token=' . urlencode($token);
 
-            $htmlBody = "
-            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;'>
-                <h2>Reset Your Password</h2>
-                <p>Hello,</p>
-                <p>We received a request to reset the password for your account at <strong>{$tenant['tenant_name']}</strong>.</p>
-                <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
-                <div style='text-align: center; margin: 30px 0;'>
-                    <a href='{$reset_link}' style='background-color: {$theme_color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Reset Password</a>
-                </div>
-                <p>If the button doesn't work, copy and paste this link into your browser:</p>
-                <p style='word-break: break-all; color: #666;'>{$reset_link}</p>
-                <hr style='border: none; border-top: 1px solid #eee; margin: 30px 0;' />
-                <p style='font-size: 12px; color: #999;'>If you didn't request a password reset, you can safely ignore this email.</p>
-            </div>
-            ";
+            $tenantNameHtml = htmlspecialchars((string)$tenant['tenant_name'], ENT_QUOTES, 'UTF-8');
+            $safeResetLink = htmlspecialchars($reset_link, ENT_QUOTES, 'UTF-8');
+            $htmlBody = mf_email_template([
+                'accent' => $theme_color,
+                'eyebrow' => $tenantNameHtml,
+                'title' => 'Reset Your Password',
+                'preheader' => "Password reset instructions for {$tenant['tenant_name']}.",
+                'intro_html' => "
+                    <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                        Hello,
+                    </p>
+                    <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                        We received a request to reset the password for your account at <strong>{$tenantNameHtml}</strong>.
+                    </p>
+                    <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                        Use the button below to set a new password. This link will expire in 1 hour.
+                    </p>
+                ",
+                'body_html' => mf_email_button('Reset Password', $reset_link, $theme_color)
+                    . mf_email_panel(
+                        'Reset Link',
+                        "
+                            <p style='margin: 0 0 10px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                                If the button does not work, copy and paste this link into your browser:
+                            </p>
+                            <p style='margin: 0; font-family: Arial, sans-serif; font-size: 13px; line-height: 1.7; word-break: break-all; color: #1d4ed8;'>
+                                <a href='{$safeResetLink}' style='color: #1d4ed8; text-decoration: none;'>{$safeResetLink}</a>
+                            </p>
+                        ",
+                        'info'
+                    ),
+                'footer_html' => "
+                    <p style='margin: 0; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #64748b;'>
+                        If you did not request a password reset, you can safely ignore this email. Your current password will remain unchanged.
+                    </p>
+                ",
+            ]);
 
             $result_msg = mf_send_brevo_email($email, 'Password Reset Request', $htmlBody);
             

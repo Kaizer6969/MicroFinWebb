@@ -32,16 +32,37 @@ if ($action === 'send_otp') {
                  if ($stmt->execute([$email, $otp])) {
                      // Build OTP email HTML
                             $subject = 'MicroFin - Your OTP Code';
-                     $message = "
-                     <html>
-                     <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
-                                <h2>MicroFin OTP</h2>
-                                <p>This is your OTP:</p>
-                        <h1 style='color: #10b981; letter-spacing: 5px;'>{$otp}</h1>
-                        <p>This code will expire in 5 minutes.</p>
-                     </body>
-                     </html>
-                     ";
+                     $otpHtml = htmlspecialchars($otp, ENT_QUOTES, 'UTF-8');
+                     $message = mf_email_template([
+                         'accent' => '#10b981',
+                         'eyebrow' => 'Email Verification',
+                         'title' => 'Your MicroFin Verification Code',
+                         'preheader' => "Use {$otp} to verify your email address.",
+                         'intro_html' => "
+                            <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                                Use the code below to continue your MicroFin verification.
+                            </p>
+                         ",
+                         'body_html' => mf_email_panel(
+                             'One-Time Password',
+                             "
+                                <div style='padding: 6px 0 2px; text-align: center;'>
+                                    <div style='display: inline-block; padding: 14px 20px; background: #ffffff; border: 1px dashed #86efac; border-radius: 16px; font-family: Arial, sans-serif; font-size: 30px; font-weight: 800; letter-spacing: 0.28em; color: #047857;'>
+                                        {$otpHtml}
+                                    </div>
+                                </div>
+                                <p style='margin: 16px 0 0; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155; text-align: center;'>
+                                    This code will expire in <strong>5 minutes</strong>.
+                                </p>
+                             ",
+                             'success'
+                         ),
+                         'footer_html' => "
+                            <p style='margin: 0; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #64748b;'>
+                                Do not share this verification code with anyone. If you did not request it, you can ignore this email.
+                            </p>
+                         ",
+                     ]);
 
                      // Send using Brevo API wrapper
                      $emailSent = mf_send_brevo_email($email, $subject, $message);

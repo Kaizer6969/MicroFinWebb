@@ -316,21 +316,36 @@ try {
     $tenant_name = htmlspecialchars((string) ($_SESSION['tenant_name'] ?? 'Microfin Partner'));
     
     $subject = "Welcome to " . $tenant_name . " - Set up your password";
-    $htmlContent = "
-        <div style='font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333;'>
-            <h2 style='color: #2563eb;'>Welcome to {$tenant_name}!</h2>
-            <p>Hi " . htmlspecialchars($first_name) . ",</p>
-            <p>An account has been created for you. To complete your setup, please click the button below to choose your password.</p>
-            <p style='margin: 30px 0;'>
-                <a href='{$reset_url}' style='background-color: #2563eb; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; font-size: 16px;'>Set My Password</a>
+    $safeFirstName = htmlspecialchars($first_name, ENT_QUOTES, 'UTF-8');
+    $safeResetUrl = htmlspecialchars($reset_url, ENT_QUOTES, 'UTF-8');
+    $htmlContent = mf_email_template([
+        'accent' => '#2563eb',
+        'eyebrow' => $tenant_name,
+        'title' => 'Welcome! Set Up Your Password',
+        'preheader' => "Your {$tenant_name} account is ready. Set your password to finish setup.",
+        'intro_html' => "
+            <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                Hi {$safeFirstName},
             </p>
-            <p>If the button doesn't work, copy and paste this link into your browser:</p>
-            <p><a href='{$reset_url}' style='color: #2563eb; word-break: break-all;'>{$reset_url}</a></p>
-            <p>This link will expire in 48 hours for security reasons.</p>
-            <br>
-            <p>Thank you,<br>The {$tenant_name} Team</p>
-        </div>
-    ";
+            <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                An account has been created for you in <strong>{$tenant_name}</strong>. To complete your setup, choose your password using the button below.
+            </p>
+        ",
+        'body_html' => mf_email_button('Set My Password', $reset_url, '#2563eb')
+            . mf_email_panel(
+                'Important',
+                mf_email_detail_table([
+                    ['label' => 'Link validity', 'value' => 'This setup link expires in 48 hours.'],
+                    ['label' => 'Reset link', 'value' => "<a href='{$safeResetUrl}' style='color: #1d4ed8; text-decoration: none;'>{$safeResetUrl}</a>", 'html' => true],
+                ]),
+                'info'
+            ),
+        'footer_html' => "
+            <p style='margin: 0; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #64748b;'>
+                If you did not expect this account, please contact {$tenant_name} directly before using the link above.
+            </p>
+        ",
+    ]);
 
     $email_result = '';
     if (function_exists('mf_send_brevo_email') && filter_var($email, FILTER_VALIDATE_EMAIL)) {

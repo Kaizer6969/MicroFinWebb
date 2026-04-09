@@ -71,19 +71,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $resetLink = sa_password_reset_link($token);
-                $htmlBody = "
-                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0f172a;'>
-                        <h2>Reset Your Super Admin Password</h2>
-                        <p>Hello " . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ",</p>
-                        <p>We received a request to reset your MicroFin platform owner password.</p>
-                        <p>Click the button below to set a new password. This link will expire in 1 hour.</p>
-                        <div style='text-align: center; margin: 30px 0;'>
-                            <a href='" . htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8') . "' style='background-color: #1f8a5a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Reset Password</a>
-                        </div>
-                        <hr style='border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;' />
-                        <p style='font-size: 12px; color: #94a3b8;'>If you did not request a password reset, you can safely ignore this email.</p>
-                    </div>
-                ";
+                $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+                $safeResetLink = htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8');
+                $htmlBody = mf_email_template([
+                    'accent' => '#1f8a5a',
+                    'eyebrow' => 'Platform Owner Access',
+                    'title' => 'Reset Your Super Admin Password',
+                    'preheader' => 'Password reset instructions for your MicroFin platform owner account.',
+                    'intro_html' => "
+                        <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                            Hello {$safeName},
+                        </p>
+                        <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                            We received a request to reset your MicroFin platform owner password.
+                        </p>
+                        <p style='margin: 0 0 14px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #334155;'>
+                            Use the button below to set a new password. This link will expire in 1 hour.
+                        </p>
+                    ",
+                    'body_html' => mf_email_button('Reset Password', $resetLink, '#1f8a5a')
+                        . mf_email_panel(
+                            'Reset Link',
+                            "
+                                <p style='margin: 0 0 10px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.7; color: #334155;'>
+                                    If the button does not work, copy and paste this link into your browser:
+                                </p>
+                                <p style='margin: 0; font-family: Arial, sans-serif; font-size: 13px; line-height: 1.7; word-break: break-all; color: #1d4ed8;'>
+                                    <a href='{$safeResetLink}' style='color: #1d4ed8; text-decoration: none;'>{$safeResetLink}</a>
+                                </p>
+                            ",
+                            'info'
+                        ),
+                    'footer_html' => "
+                        <p style='margin: 0; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; color: #64748b;'>
+                            If you did not request this reset, you can safely ignore this message and your current password will remain unchanged.
+                        </p>
+                    ",
+                ]);
 
                 $result_msg = mf_send_brevo_email($email, 'MicroFin - Super Admin Password Reset', $htmlBody);
                 if ($result_msg === 'Email sent successfully.') {
