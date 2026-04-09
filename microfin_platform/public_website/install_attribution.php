@@ -66,7 +66,7 @@ function mf_install_slugify(string $value): string
 
 function mf_install_download_filename(array $tenant): string
 {
-    return 'MicroFin Shared App.apk';
+    return 'MicroFin.apk';
 }
 
 function mf_install_generic_apk_path(): string
@@ -96,11 +96,12 @@ function mf_install_tenant_apk_directory(): string
 
 function mf_install_resolve_generic_apk_asset(): array
 {
+    $downloadFilename = mf_install_download_filename([]);
     $genericPath = mf_install_generic_apk_path();
     if (is_file($genericPath)) {
         return [
             'path' => $genericPath,
-            'filename' => 'MicroFin Shared App.apk',
+            'filename' => $downloadFilename,
             'variant' => 'shared',
         ];
     }
@@ -109,7 +110,7 @@ function mf_install_resolve_generic_apk_asset(): array
     if ($override !== '') {
         return [
             'url' => $override,
-            'filename' => 'MicroFin Shared App.apk',
+            'filename' => $downloadFilename,
             'variant' => 'remote-shared',
         ];
     }
@@ -122,7 +123,7 @@ function mf_install_resolve_generic_apk_asset(): array
         if ($remoteUrl !== '' && mf_mobile_app_remote_asset_exists($remoteUrl)) {
             return [
                 'url' => $remoteUrl,
-                'filename' => 'MicroFin Shared App.apk',
+                'filename' => $downloadFilename,
                 'variant' => 'github-shared',
             ];
         }
@@ -130,7 +131,7 @@ function mf_install_resolve_generic_apk_asset(): array
 
     return [
         'url' => mf_install_generic_apk_url(),
-        'filename' => 'MicroFin Shared App.apk',
+        'filename' => $downloadFilename,
         'variant' => 'remote-shared',
     ];
 }
