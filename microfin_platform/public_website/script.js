@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeButtons = document.querySelectorAll('.js-public-theme-toggle');
     const themeStorageKey = 'microfin_public_theme';
     const navbar = document.querySelector('.navbar');
+    const animatedLogo = document.querySelector('[data-animated-logo]');
+    const reducedMotionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
     const normalizeTheme = (value) => value === 'dark' ? 'dark' : 'light';
 
@@ -58,6 +60,194 @@ document.addEventListener('DOMContentLoaded', () => {
             applyPublicTheme(currentTheme === 'dark' ? 'light' : 'dark');
         });
     });
+
+    // --- Public Logo Animation ---
+    if (animatedLogo) {
+        const staticSrc = animatedLogo.getAttribute('data-logo-static-src') || animatedLogo.getAttribute('src') || '';
+        const animatedSrc = animatedLogo.getAttribute('data-logo-animated-src') || '';
+        const idleDelayMs = Number(animatedLogo.getAttribute('data-logo-idle-delay') || 30000);
+        const playDurationMs = Number(animatedLogo.getAttribute('data-logo-play-duration') || 3600);
+        const preloadTimeoutMs = Number(animatedLogo.getAttribute('data-logo-preload-timeout') || 1250);
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+
+        let idleTimerId = 0;
+        let animationTimerId = 0;
+        let preloadPromise = null;
+        let animationEnabled = false;
+        let animationPlaying = false;
+        let idleAnimationUnlocked = true;
+        let lastPointerMoveAt = 0;
+
+        const setLogoState = (state) => {
+            const nextSrc = state === 'animated' ? animatedSrc : staticSrc;
+            if (!nextSrc) {
+                return;
+            }
+
+            if (animatedLogo.getAttribute('src') !== nextSrc) {
+                animatedLogo.setAttribute('src', nextSrc);
+            }
+
+            animatedLogo.setAttribute('data-logo-state', state);
+        };
+
+        const clearIdleTimer = () => {
+            if (idleTimerId) {
+                window.clearTimeout(idleTimerId);
+                idleTimerId = 0;
+            }
+        };
+
+        const stopLogoAnimation = () => {
+            if (animationTimerId) {
+                window.clearTimeout(animationTimerId);
+                animationTimerId = 0;
+            }
+
+            animationPlaying = false;
+            setLogoState('static');
+        };
+
+        const pageIsVisible = () => document.visibilityState === 'visible';
+
+        const connectionAllowsAnimation = () => {
+            if (!connection) {
+                return true;
+            }
+
+            if (connection.saveData) {
+                return false;
+            }
+
+            const effectiveType = String(connection.effectiveType || '').toLowerCase();
+            return effectiveType !== 'slow-2g' && effectiveType !== '2g';
+        };
+
+        const scheduleIdleAnimation = () => {
+            clearIdleTimer();
+
+            if (!animationEnabled || !pageIsVisible()) {
+                return;
+            }
+
+            idleTimerId = window.setTimeout(() => {
+                if (!idleAnimationUnlocked) {
+                    return;
+                }
+
+                idleAnimationUnlocked = false;
+                playLogoAnimation();
+            }, idleDelayMs);
+        };
+
+        function playLogoAnimation() {
+            if (!animationEnabled || animationPlaying || !pageIsVisible()) {
+                return false;
+            }
+
+            animationPlaying = true;
+            setLogoState('animated');
+
+            animationTimerId = window.setTimeout(() => {
+                animationTimerId = 0;
+                animationPlaying = false;
+                setLogoState('static');
+            }, playDurationMs);
+
+            return true;
+        }
+
+        const preloadAnimatedLogo = () => {
+            if (preloadPromise) {
+                return preloadPromise;
+            }
+
+            if (!staticSrc || !animatedSrc || (reducedMotionQuery && reducedMotionQuery.matches) || !connectionAllowsAnimation()) {
+                preloadPromise = Promise.resolve(false);
+                return preloadPromise;
+            }
+
+            preloadPromise = new Promise((resolve) => {
+                const preloadImage = new Image();
+                let settled = false;
+                let timeoutId = 0;
+
+                const finish = (result) => {
+                    if (settled) {
+                        return;
+                    }
+
+                    settled = true;
+                    window.clearTimeout(timeoutId);
+                    preloadImage.onload = null;
+                    preloadImage.onerror = null;
+                    resolve(result);
+                };
+
+                timeoutId = window.setTimeout(() => finish(false), preloadTimeoutMs);
+
+                preloadImage.onload = () => finish(true);
+                preloadImage.onerror = () => finish(false);
+                preloadImage.decoding = 'async';
+                preloadImage.src = animatedSrc;
+
+                if (preloadImage.complete && preloadImage.naturalWidth > 0) {
+                    finish(true);
+                }
+            });
+
+            return preloadPromise;
+        };
+
+        const noteActivity = (eventName) => {
+            if (eventName === 'pointermove') {
+                const now = Date.now();
+                if (now - lastPointerMoveAt < 1000) {
+                    return;
+                }
+                lastPointerMoveAt = now;
+            }
+
+            if (!pageIsVisible()) {
+                return;
+            }
+
+            idleAnimationUnlocked = true;
+            scheduleIdleAnimation();
+        };
+
+        setLogoState('static');
+
+        preloadAnimatedLogo().then((ready) => {
+            animationEnabled = ready;
+
+            if (!animationEnabled) {
+                setLogoState('static');
+                return;
+            }
+
+            if (pageIsVisible()) {
+                playLogoAnimation();
+            }
+
+            scheduleIdleAnimation();
+        });
+
+        ['pointermove', 'pointerdown', 'keydown', 'scroll', 'touchstart'].forEach((eventName) => {
+            window.addEventListener(eventName, () => noteActivity(eventName), { passive: true });
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (!pageIsVisible()) {
+                clearIdleTimer();
+                stopLogoAnimation();
+                return;
+            }
+
+            idleAnimationUnlocked = true;
+            scheduleIdleAnimation();
+        });
+    }
 
     // --- Smooth Scrolling for Navigation Links ---
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {

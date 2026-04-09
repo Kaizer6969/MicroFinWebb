@@ -137,6 +137,10 @@ body {
     height: 34px;
     object-fit: contain;
 }
+.navbar .logo-mark {
+    width: 60px;
+    flex-shrink: 0;
+}
 .logo-text { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.5px; color: var(--base-dark); }
 
 .nav-links {

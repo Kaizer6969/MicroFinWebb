@@ -103,15 +103,14 @@ html[data-theme="light"] .nav-badge {
     width: 52px;
     height: 52px;
     padding: 8px;
-    background: rgba(255, 255, 255, 0.96);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: linear-gradient(180deg, rgba(9, 19, 17, 0.96) 0%, rgba(18, 29, 27, 0.98) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    box-shadow: 0 12px 24px -14px rgba(12, 22, 16, 0.55);
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+    box-shadow: 0 14px 28px -18px rgba(0, 0, 0, 0.48);
 }
 
 .logo-circle-mark {
@@ -119,11 +118,6 @@ html[data-theme="light"] .nav-badge {
     height: 100%;
     display: block;
     object-fit: contain;
-}
-
-.sidebar-header:hover .logo-circle {
-    transform: scale(1.05) rotate(-5deg);
-    box-shadow: 0 16px 28px -14px var(--theme-glow-strong);
 }
 
 .brand-text h2 {
@@ -1947,8 +1941,9 @@ html[data-theme="dark"] .sidebar-footer {
 }
 
 html[data-theme="dark"] .logo-circle {
-    background: rgba(245, 248, 255, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: linear-gradient(180deg, rgba(2, 6, 23, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: 0 16px 30px -18px rgba(0, 0, 0, 0.72);
 }
 
 html[data-theme="dark"] .brand-text span,
