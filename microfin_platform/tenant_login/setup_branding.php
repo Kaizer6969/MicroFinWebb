@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bg_card = $form_values['theme_bg_card'];
 
     $border_color = $form_values['theme_border_color'];
-    $border_width = max(0, min(3, round((float)$form_values['card_border_width'] * 10) / 10));
+    $border_width = max(0, min(3, round((float)$form_values[e'card_border_width'] * 10) / 10));
     $card_shadow = in_array($form_values['card_shadow'], ['none', 'sm', 'md', 'lg'], true) ? $form_values['card_shadow'] : 'sm';
     $form_values['card_border_width'] = (string)$border_width;
     $form_values['card_shadow'] = $card_shadow;
