@@ -11,14 +11,12 @@ on:
     branches:
       - main
     paths:
-      - microfin_mobile/android/**
-      - microfin_mobile/images/**
-      - microfin_mobile/lib/**
-      - microfin_mobile/pubspec.yaml
-      - microfin_mobile/pubspec.lock
-      - microfin_mobile/analysis_options.yaml
-      - microfin_mobile/.metadata
+      - microfin_mobile/**
       - .github/workflows/build-generic-apk.yml
+      - '!microfin_mobile/microfin_app.apk'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: write

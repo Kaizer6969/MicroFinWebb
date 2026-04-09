@@ -289,6 +289,42 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
         color: #fff;
         font-weight: 700;
     }
+
+    .shared-app-qr-toggle {
+        margin-top: 28px;
+    }
+
+    .shared-app-qr-toggle summary {
+        list-style: none;
+    }
+
+    .shared-app-qr-toggle summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .shared-app-qr-toggle-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 14px 22px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .shared-app-qr-toggle-button:hover {
+        background: rgba(255, 255, 255, 0.14);
+        transform: translateY(-1px);
+    }
+
+    .shared-app-qr-panel {
+        margin-top: 16px;
+    }
 </style>
 
 <nav class="site-nav sticky-top py-3">
@@ -307,17 +343,20 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
             : (strpos($_SERVER['PHP_SELF'], 'editor') !== false || strpos($_SERVER['PHP_SELF'], 'setup') !== false);
         $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
         if (strpos($script, '/admin_panel/website_editor/') !== false) {
-            $app_base = rtrim(str_replace('\\', '/', dirname(dirname(dirname($script)))), '/');
+            $platform_base = dirname(dirname(dirname($script)));
+        } elseif (strpos($script, '/public_website/') !== false) {
+            $platform_base = dirname(dirname($script));
         } else {
-            $app_base = rtrim(str_replace('\\', '/', dirname($script)), '/');
+            $platform_base = dirname($script);
         }
+        $platform_base = rtrim(str_replace('\\', '/', (string)$platform_base), '/');
         $login_query = 'tenant=' . urlencode($tid_val) . '&auth=1';
         if (!$is_editor) {
             $login_query .= '&from_site=1';
         }
-        $login_href = $app_base . '/tenant_login/login.php?' . $login_query;
+        $login_href = $platform_base . '/tenant_login/login.php?' . $login_query;
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
-        $download_href = $download_href ?? ($app_base . '/public_website/index.php?route=get-app&bank_id=' . urlencode($download_identifier));
+        $download_href = $download_href ?? ($platform_base . '/public_website/index.php?route=get-app&bank_id=' . urlencode($download_identifier));
         $tenant_referral_code_value = trim((string)($tenant_referral_code ?? $tenant_slug ?? $site_slug ?? ''));
         $tenant_qr_url = trim((string)($tenant_reference_qr_url ?? ''));
         ?>
@@ -531,24 +570,24 @@ if (is_string($show_download_val))
     style="<?php echo getBgStyle('sec_download', $sec_styles, '#0f172a'); ?> <?php if (!$show_download_val)
               echo 'display:none;'; ?>">
     <div class="container py-5">
-        <div class="small opacity-50 text-uppercase fw-700 mb-3 text-white" style="letter-spacing:.15em;">Shared Mobile App
+        <div class="small opacity-50 text-uppercase fw-700 mb-3 text-white" style="letter-spacing:.15em;">MicroFin Mobile App
         </div>
         <h2 class="headline fw-800 mb-4 display-5 text-white">Install Once, Register With Your Institution</h2>
         <div class="mb-5 lh-lg opacity-75 mx-auto text-white" style="max-width:600px;" data-edit="download_description"
-            contenteditable="true"><?php echo $e($download_description ?? 'Download the shared MicroFin app, then bind your registration to this institution with the QR code or referral code below.'); ?></div>
+            contenteditable="true"><?php echo $e($download_description ?? 'Download the MicroFin app, then bind your registration to this institution with the QR code or referral code below.'); ?></div>
         <a href="<?php echo $e($download_href); ?>" 
             class="btn btn-outline-light rounded-pill px-5 py-3 fw-bold text-decoration-none" 
-            contenteditable="false">Download Shared App</a>
+            contenteditable="false">Download App</a>
         <div class="shared-app-steps mx-auto" style="max-width:780px;">
             <div class="shared-app-step">
                 <div class="shared-app-step-label">Step 1</div>
-                <div class="shared-app-step-title">Install the shared MicroFin app</div>
-                <p class="shared-app-step-copy">The download button always installs the same company-branded app for every tenant.</p>
+                <div class="shared-app-step-title">Install the MicroFin app</div>
+                <p class="shared-app-step-copy">The download button installs the company-branded MicroFin mobile app.</p>
             </div>
             <div class="shared-app-step">
                 <div class="shared-app-step-label">Step 2</div>
-                <div class="shared-app-step-title">Open Create Account and scan this QR</div>
-                <p class="shared-app-step-copy">The QR code passes this institution's tenant reference into registration so the form unlocks with the correct <strong>@<?php echo $e($tenant_slug ?? $site_slug ?? 'tenant'); ?></strong> suffix.</p>
+                <div class="shared-app-step-title">Open Create Account and tap the QR button below</div>
+                <p class="shared-app-step-copy">That will reveal this institution's registration QR so the app can unlock the form with the correct <strong>@<?php echo $e($tenant_slug ?? $site_slug ?? 'tenant'); ?></strong> suffix.</p>
             </div>
             <div class="shared-app-step">
                 <div class="shared-app-step-label">Step 3</div>
@@ -556,19 +595,27 @@ if (is_string($show_download_val))
                 <p class="shared-app-step-copy">Manual fallback code: <strong><?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?></strong></p>
             </div>
         </div>
-        <div class="shared-app-qr-card">
-            <?php if ($tenant_qr_url !== ''): ?>
-                <img src="<?php echo $e($tenant_qr_url); ?>" alt="Tenant registration QR code">
-            <?php else: ?>
-                <div class="d-flex align-items-center justify-content-center text-white text-center" style="width:180px;height:180px;border-radius:18px;background:rgba(255,255,255,0.12);padding:20px;">
-                    Publish the site to generate the tenant QR code.
+        <details class="shared-app-qr-toggle" contenteditable="false">
+            <summary class="shared-app-qr-toggle-button">
+                <span class="material-symbols-rounded" style="font-size:1.1rem;">help</span>
+                Downloaded the app already? Show the registration QR
+            </summary>
+            <div class="shared-app-qr-panel">
+                <div class="shared-app-qr-card">
+                    <?php if ($tenant_qr_url !== ''): ?>
+                        <img src="<?php echo $e($tenant_qr_url); ?>" alt="Tenant registration QR code">
+                    <?php else: ?>
+                        <div class="d-flex align-items-center justify-content-center text-white text-center" style="width:180px;height:180px;border-radius:18px;background:rgba(255,255,255,0.12);padding:20px;">
+                            Publish the site to generate the tenant QR code.
+                        </div>
+                    <?php endif; ?>
+                    <div class="shared-app-code">
+                        <span class="material-symbols-rounded" style="font-size:1.1rem;">confirmation_number</span>
+                        Referral Code: <?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?>
+                    </div>
                 </div>
-            <?php endif; ?>
-            <div class="shared-app-code">
-                <span class="material-symbols-rounded" style="font-size:1.1rem;">confirmation_number</span>
-                Referral Code: <?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?>
             </div>
-        </div>
+        </details>
       </div>
 </section>
 

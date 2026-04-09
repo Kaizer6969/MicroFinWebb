@@ -249,6 +249,42 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
         color: #fff;
         font-weight: 700;
     }
+
+    .tpl2-qr-toggle {
+        margin-top: 1.5rem;
+    }
+
+    .tpl2-qr-toggle summary {
+        list-style: none;
+    }
+
+    .tpl2-qr-toggle summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .tpl2-qr-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.7rem;
+        padding: 1rem 1.4rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .tpl2-qr-toggle-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
+        transform: translateY(-1px);
+    }
+
+    .tpl2-qr-panel {
+        margin-top: 1rem;
+    }
 </style>
 
 <div class="tpl2-wrapper">
@@ -273,17 +309,20 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
             : (strpos($_SERVER['PHP_SELF'], 'editor') !== false || strpos($_SERVER['PHP_SELF'], 'setup') !== false);
         $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
         if (strpos($script, '/admin_panel/website_editor/') !== false) {
-            $app_base = rtrim(str_replace('\\', '/', dirname(dirname(dirname($script)))), '/');
+            $platform_base = dirname(dirname(dirname($script)));
+        } elseif (strpos($script, '/public_website/') !== false) {
+            $platform_base = dirname(dirname($script));
         } else {
-            $app_base = rtrim(str_replace('\\', '/', dirname($script)), '/');
+            $platform_base = dirname($script);
         }
+        $platform_base = rtrim(str_replace('\\', '/', (string)$platform_base), '/');
         $login_query = 'tenant=' . urlencode($tid_val) . '&auth=1';
         if (!$is_editor) {
             $login_query .= '&from_site=1';
         }
-        $login_href = $app_base . '/tenant_login/login.php?' . $login_query;
+        $login_href = $platform_base . '/tenant_login/login.php?' . $login_query;
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
-        $download_href = $download_href ?? ($app_base . '/public_website/index.php?route=get-app&bank_id=' . urlencode($download_identifier));
+        $download_href = $download_href ?? ($platform_base . '/public_website/index.php?route=get-app&bank_id=' . urlencode($download_identifier));
         $tenant_referral_code_value = trim((string)($tenant_referral_code ?? $tenant_slug ?? $site_slug ?? ''));
         $tenant_qr_url = trim((string)($tenant_reference_qr_url ?? ''));
         ?>
@@ -361,25 +400,25 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
     <section id="sec_app" class="editable-section" style="display: <?php echo $show_app_promo ? 'block' : 'none'; ?>">
         <div class="tpl2-app-promo">
             <span class="material-symbols-rounded mb-3" style="font-size: 3rem; color: var(--brand);">smartphone</span>
-            <h2 class="fw-bold display-5 mb-3 text-white" contenteditable="true" data-edit="app_promo_title"><?php echo $e($app_promo_title ?: 'Join through the shared MicroFin app'); ?></h2>
-            <p class="fs-5 mb-4 opacity-75 mx-auto text-white" style="max-width: 600px;" contenteditable="true" data-edit="app_promo_desc"><?php echo $e($app_promo_desc ?: 'Install the shared app, open Create Account, then use this tenant QR or referral code so your registration is linked to the correct institution.'); ?></p>
+            <h2 class="fw-bold display-5 mb-3 text-white" contenteditable="true" data-edit="app_promo_title"><?php echo $e($app_promo_title ?: 'Join through the MicroFin app'); ?></h2>
+            <p class="fs-5 mb-4 opacity-75 mx-auto text-white" style="max-width: 600px;" contenteditable="true" data-edit="app_promo_desc"><?php echo $e($app_promo_desc ?: 'Install the MicroFin app, open Create Account, then use this tenant QR or referral code so your registration is linked to the correct institution.'); ?></p>
             <div class="d-flex gap-3 justify-content-center">
                 <a href="<?php echo $e($download_href); ?>" 
                    class="btn btn-light fw-bold px-4 py-3 d-flex align-items-center gap-2 text-decoration-none" 
                     style="border-radius: var(--radius); color: #000;" contenteditable="false">
-                    <span class="material-symbols-rounded">download</span> Download Shared App
+                    <span class="material-symbols-rounded">download</span> Download App
                 </a>
             </div>
             <div class="tpl2-onboarding">
                 <div class="tpl2-onboarding-card">
                     <small>Step 1</small>
-                    <strong>Install the shared app</strong>
-                    <p>The download button always installs the same company-branded MicroFin app for every tenant.</p>
+                    <strong>Install the MicroFin app</strong>
+                    <p>The download button installs the company-branded MicroFin mobile app.</p>
                 </div>
                 <div class="tpl2-onboarding-card">
                     <small>Step 2</small>
-                    <strong>Scan this institution QR</strong>
-                    <p>QR registration loads the tenant context and unlocks the Create Account form with the correct <strong>@<?php echo $e($tenant_slug ?? $site_slug ?? 'tenant'); ?></strong> suffix.</p>
+                    <strong>Open Create Account and use the QR button below</strong>
+                    <p>That button reveals this institution QR so the app can unlock the Create Account form with the correct <strong>@<?php echo $e($tenant_slug ?? $site_slug ?? 'tenant'); ?></strong> suffix.</p>
                 </div>
                 <div class="tpl2-onboarding-card">
                     <small>Step 3</small>
@@ -387,19 +426,27 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
                     <p>If scanning is unavailable, enter <strong><?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?></strong> manually inside the app.</p>
                 </div>
             </div>
-            <div class="tpl2-qr-stack">
-                <?php if ($tenant_qr_url !== ''): ?>
-                    <img src="<?php echo $e($tenant_qr_url); ?>" alt="Tenant registration QR code" class="tpl2-qr-box">
-                <?php else: ?>
-                    <div class="tpl2-qr-box d-flex align-items-center justify-content-center text-center" style="background: rgba(255,255,255,0.12); color: #fff;">
-                        Publish the site to generate the tenant QR code.
+            <details class="tpl2-qr-toggle" contenteditable="false">
+                <summary class="tpl2-qr-toggle-btn">
+                    <span class="material-symbols-rounded">help</span>
+                    Downloaded the app already? Show the registration QR
+                </summary>
+                <div class="tpl2-qr-panel">
+                    <div class="tpl2-qr-stack">
+                        <?php if ($tenant_qr_url !== ''): ?>
+                            <img src="<?php echo $e($tenant_qr_url); ?>" alt="Tenant registration QR code" class="tpl2-qr-box">
+                        <?php else: ?>
+                            <div class="tpl2-qr-box d-flex align-items-center justify-content-center text-center" style="background: rgba(255,255,255,0.12); color: #fff;">
+                                Publish the site to generate the tenant QR code.
+                            </div>
+                        <?php endif; ?>
+                        <div class="tpl2-referral-pill">
+                            <span class="material-symbols-rounded">confirmation_number</span>
+                            Referral Code: <?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?>
+                        </div>
                     </div>
-                <?php endif; ?>
-                <div class="tpl2-referral-pill">
-                    <span class="material-symbols-rounded">confirmation_number</span>
-                    Referral Code: <?php echo $e($tenant_referral_code_value !== '' ? $tenant_referral_code_value : ($tenant_slug ?? $site_slug ?? '')); ?>
                 </div>
-            </div>
+            </details>
         </div>
     </section>
 
