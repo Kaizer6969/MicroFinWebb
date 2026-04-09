@@ -103,7 +103,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/style.css')); ?>">
-    <link rel="stylesheet" href="sarah-chatbot.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah-chatbot.css')); ?>">
+    <link rel="stylesheet" href="sarah/sarah-chatbot.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah/sarah-chatbot.css')); ?>">
 </head>
 <body>
 
@@ -384,26 +384,25 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
 
     <!-- Footer -->
     <footer class="footer footer-galaxy">
-        <div class="footer-top-line"></div>
         <div class="container footer-grid">
             <div class="footer-brand">
                 <div class="logo">
                     <span class="material-symbols-rounded">account_balance</span>
                     <span class="logo-text">MicroFin</span>
                 </div>
-                <p>The developer-first banking platform enabling financial inclusion across the globe.</p>
+                <p>Cloud core banking for cooperatives, MFIs, and SACCOs.</p>
             </div>
             <div class="footer-links">
                 <h4>Product</h4>
-                <a href="#">Core Banking</a>
-                <a href="#">Security</a>
-                <a href="#">Pricing</a>
+                <a href="#features">Core Banking</a>
+                <a href="#security">Security</a>
+                <a href="#pricing">Pricing</a>
             </div>
             <div class="footer-links">
                 <h4>Company</h4>
-                <a href="#">About Us</a>
-                <a href="#">Careers</a>
+                <a href="#how-it-works">How It Works</a>
                 <a href="javascript:void(0)" class="js-open-sarah-chat">Chat with Sarah</a>
+                <a href="../super_admin/login.php">Platform Login</a>
             </div>
         </div>
         <div class="container footer-bottom">
@@ -411,46 +410,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         </div>
     </footer>
 
-    <div class="sarah-chatbot" data-sarah-chatbot>
-        <section class="sarah-chatbot-window" id="sarah-chatbot-window" hidden aria-label="Sarah chatbot">
-            <div class="sarah-chatbot-header">
-                <div class="sarah-chatbot-header-copy">
-                    <div class="sarah-chatbot-avatar">S</div>
-                    <div>
-                        <strong>Sarah</strong>
-                        <span>MicroFin virtual assistant</span>
-                    </div>
-                </div>
-                <button type="button" class="sarah-chatbot-close" aria-label="Close Sarah chat">
-                    <span class="material-symbols-rounded">close</span>
-                </button>
-            </div>
-            <div class="sarah-chatbot-messages" aria-live="polite"></div>
-            <div class="sarah-chatbot-actions">
-                <button type="button" class="sarah-chatbot-chip" data-prompt="Pricing">Pricing</button>
-                <button type="button" class="sarah-chatbot-chip" data-prompt="Security">Security</button>
-                <button type="button" class="sarah-chatbot-chip" data-prompt="Setup time">Setup time</button>
-                <button type="button" class="sarah-chatbot-chip" data-prompt="Talk to an agent">Talk to an Agent</button>
-                <button type="button" class="sarah-chatbot-chip" data-prompt="Apply now">Apply now</button>
-            </div>
-            <form class="sarah-chatbot-form">
-                <input type="text" class="sarah-chatbot-input" aria-label="Message Sarah" placeholder="Ask Sarah a question" autocomplete="off">
-                <button type="submit" class="sarah-chatbot-send" aria-label="Send message">
-                    <span class="material-symbols-rounded">send</span>
-                </button>
-            </form>
-        </section>
-        <button type="button" class="sarah-chatbot-launcher" aria-controls="sarah-chatbot-window" aria-expanded="false">
-            <span class="material-symbols-rounded">smart_toy</span>
-            <span class="sarah-chatbot-launcher-copy">
-                <strong>Sarah</strong>
-                <span>Need help?</span>
-            </span>
-        </button>
-    </div>
+    <?php require __DIR__ . '/sarah/widget.php'; ?>
 
     <script src="script.js"></script>
-    <script src="sarah-chatbot.js?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah-chatbot.js')); ?>"></script>
+    <script src="sarah/sarah-chatbot.js?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah/sarah-chatbot.js')); ?>"></script>
 </body>
 </html>
 
