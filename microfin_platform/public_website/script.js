@@ -63,7 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Public Logo Animation ---
     if (animatedLogo) {
-        const staticSrc = animatedLogo.getAttribute('data-logo-static-src') || animatedLogo.getAttribute('src') || '';
+        const staticLogoLayer = animatedLogo.querySelector('[data-logo-layer="static"]');
+        let animatedLogoLayer = animatedLogo.querySelector('[data-logo-layer="animated"]');
+        const usesLayeredLogo = Boolean(staticLogoLayer && animatedLogoLayer);
+        const staticSrc = animatedLogo.getAttribute('data-logo-static-src')
+            || (usesLayeredLogo ? (staticLogoLayer.getAttribute('src') || '') : (animatedLogo.getAttribute('src') || ''));
         const animatedSrc = animatedLogo.getAttribute('data-logo-animated-src') || '';
         const idleDelayMs = Number(animatedLogo.getAttribute('data-logo-idle-delay') || 30000);
         const playDurationMs = Number(animatedLogo.getAttribute('data-logo-play-duration') || 3600);
@@ -72,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let idleTimerId = 0;
         let animationTimerId = 0;
+        let handoffTimerId = 0;
         let preloadPromise = null;
         let animationEnabled = false;
         let animationPlaying = false;
@@ -79,6 +84,19 @@ document.addEventListener('DOMContentLoaded', () => {
         let lastPointerMoveAt = 0;
 
         const setLogoState = (state) => {
+            if (usesLayeredLogo) {
+                if (staticSrc && staticLogoLayer.getAttribute('src') !== staticSrc) {
+                    staticLogoLayer.setAttribute('src', staticSrc);
+                }
+
+                if (animatedSrc && animatedLogoLayer.getAttribute('src') !== animatedSrc) {
+                    animatedLogoLayer.setAttribute('src', animatedSrc);
+                }
+
+                animatedLogo.setAttribute('data-logo-state', state);
+                return;
+            }
+
             const nextSrc = state === 'animated' ? animatedSrc : staticSrc;
             if (!nextSrc) {
                 return;
@@ -91,6 +109,17 @@ document.addEventListener('DOMContentLoaded', () => {
             animatedLogo.setAttribute('data-logo-state', state);
         };
 
+        const clearHandoffTimer = () => {
+            if (handoffTimerId) {
+                window.clearTimeout(handoffTimerId);
+                handoffTimerId = 0;
+            }
+
+            if (usesLayeredLogo) {
+                animatedLogo.removeAttribute('data-logo-transition');
+            }
+        };
+
         const clearIdleTimer = () => {
             if (idleTimerId) {
                 window.clearTimeout(idleTimerId);
@@ -98,14 +127,41 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        const stopLogoAnimation = () => {
+        const stopLogoAnimation = (options = {}) => {
+            const immediate = Boolean(options.immediate);
+
             if (animationTimerId) {
                 window.clearTimeout(animationTimerId);
                 animationTimerId = 0;
             }
 
             animationPlaying = false;
+
+            if (usesLayeredLogo && !immediate) {
+                clearHandoffTimer();
+                animatedLogo.setAttribute('data-logo-transition', 'handoff');
+                setLogoState('static');
+
+                handoffTimerId = window.setTimeout(() => {
+                    handoffTimerId = 0;
+                    animatedLogo.removeAttribute('data-logo-transition');
+                }, 170);
+                return;
+            }
+
+            clearHandoffTimer();
             setLogoState('static');
+        };
+
+        const restartAnimatedLayer = () => {
+            if (!usesLayeredLogo || !animatedLogoLayer || !animatedSrc) {
+                return;
+            }
+
+            const freshLayer = animatedLogoLayer.cloneNode(true);
+            freshLayer.setAttribute('src', animatedSrc);
+            animatedLogoLayer.replaceWith(freshLayer);
+            animatedLogoLayer = freshLayer;
         };
 
         const pageIsVisible = () => document.visibilityState === 'visible';
@@ -145,13 +201,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return false;
             }
 
+            clearHandoffTimer();
+            restartAnimatedLayer();
             animationPlaying = true;
             setLogoState('animated');
 
             animationTimerId = window.setTimeout(() => {
                 animationTimerId = 0;
-                animationPlaying = false;
-                setLogoState('static');
+                stopLogoAnimation();
             }, playDurationMs);
 
             return true;
@@ -240,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('visibilitychange', () => {
             if (!pageIsVisible()) {
                 clearIdleTimer();
-                stopLogoAnimation();
+                stopLogoAnimation({ immediate: true });
                 return;
             }
 

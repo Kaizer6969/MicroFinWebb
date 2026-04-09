@@ -106,6 +106,113 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/style.css')); ?>">
     <link rel="stylesheet" href="sarah/sarah-chatbot.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah/sarah-chatbot.css')); ?>">
+    <style>
+        .navbar .logo-text-animated {
+            display: inline-grid;
+            align-items: center;
+            justify-items: end;
+        }
+
+        .navbar .logo-text-animated .logo-text-sizer,
+        .navbar .logo-text-animated .logo-text-track {
+            grid-area: 1 / 1;
+            white-space: pre;
+        }
+
+        .navbar .logo-text-animated .logo-text-sizer {
+            visibility: hidden;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .navbar .logo-text-animated .logo-text-track {
+            display: inline-flex;
+            align-items: baseline;
+            justify-self: stretch;
+            justify-content: flex-end;
+            width: 100%;
+            pointer-events: none;
+        }
+
+        .navbar .logo-text-animated .logo-char {
+            display: inline-flex;
+            overflow: hidden;
+            max-width: var(--char-width, 1.2ch);
+            transform: translateX(0);
+            transition:
+                max-width 290ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 290ms cubic-bezier(0.16, 1, 0.3, 1),
+                margin-right 290ms cubic-bezier(0.16, 1, 0.3, 1);
+            will-change: max-width, transform, margin-right;
+        }
+
+        .navbar .logo-text-animated .logo-char-glyph {
+            display: inline-block;
+            min-width: max-content;
+        }
+
+        .navbar .logo-text-animated .logo-char.is-hidden {
+            max-width: 0;
+            margin-right: 0 !important;
+            transform: translateX(0.12em);
+        }
+
+        .navbar .logo-text-animated .logo-char.logo-char-last.is-hidden {
+            transform: translateX(0);
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo] {
+            position: relative;
+            display: block;
+            width: 60px;
+            height: 34px;
+            flex-shrink: 0;
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo] .logo-mark {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform-origin: left center;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo] .logo-mark-static {
+            opacity: 1;
+            transform: scale(1);
+            transition:
+                opacity 120ms ease,
+                transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: opacity, transform;
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo] .logo-mark-animated {
+            opacity: 0;
+            transform: scale(1.18);
+            transition: opacity 80ms ease;
+            will-change: opacity;
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo][data-logo-state="animated"] .logo-mark-static {
+            opacity: 0;
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo][data-logo-transition="handoff"] .logo-mark-static {
+            transform: scale(1.18);
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo][data-logo-transition="handoff"] .logo-mark-animated {
+            opacity: 0 !important;
+            transition: none;
+        }
+
+        .navbar .logo-mark-stack[data-animated-logo][data-logo-state="animated"] .logo-mark-animated {
+            opacity: 1;
+        }
+    </style>
 </head>
 <body>
 
@@ -113,18 +220,34 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <nav class="navbar">
         <div class="container nav-container">
             <div class="logo">
-                <img
-                    src="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>"
-                    alt="MicroFin logo"
-                    class="logo-mark"
+                <span
+                    class="logo-mark-stack"
                     data-animated-logo
                     data-logo-static-src="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>"
                     data-logo-animated-src="<?php echo htmlspecialchars($microfinAnimatedLogoAsset, ENT_QUOTES, 'UTF-8'); ?>"
                     data-logo-idle-delay="30000"
                     data-logo-play-duration="<?php echo (int) $microfinAnimatedLogoDurationMs; ?>"
                     data-logo-preload-timeout="1250"
+                    data-logo-state="static"
                 >
-                <span class="logo-text">MicroFin</span>
+                    <img
+                        src="<?php echo htmlspecialchars($microfinLogoAsset, ENT_QUOTES, 'UTF-8'); ?>"
+                        alt="MicroFin logo"
+                        class="logo-mark logo-mark-static"
+                        data-logo-layer="static"
+                    >
+                    <img
+                        src="<?php echo htmlspecialchars($microfinAnimatedLogoAsset, ENT_QUOTES, 'UTF-8'); ?>"
+                        alt=""
+                        class="logo-mark logo-mark-animated"
+                        data-logo-layer="animated"
+                        aria-hidden="true"
+                    >
+                </span>
+                <span class="logo-text logo-text-animated" data-animated-logo-text data-logo-word="MicroFin">
+                    <span class="logo-text-sizer" aria-hidden="true">MicroFin</span>
+                    <span class="logo-text-track" aria-hidden="true"></span>
+                </span>
             </div>
             
             <div class="nav-links">
@@ -428,6 +551,179 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <?php require __DIR__ . '/sarah/widget.php'; ?>
 
     <script src="script.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var animatedLogo = document.querySelector('.navbar [data-animated-logo]');
+            var animatedText = document.querySelector('.navbar [data-animated-logo-text]');
+
+            if (!animatedLogo || !animatedText) {
+                return;
+            }
+
+            var textTrack = animatedText.querySelector('.logo-text-track');
+            var fullWord = animatedText.getAttribute('data-logo-word') || 'MicroFin';
+            var activeTimers = [];
+            var cycleToken = 0;
+            var currentState = animatedLogo.getAttribute('data-logo-state') || 'static';
+            var charNodes = [];
+
+            if (!textTrack) {
+                return;
+            }
+
+            function clearTimers() {
+                while (activeTimers.length > 0) {
+                    window.clearTimeout(activeTimers.pop());
+                }
+            }
+
+            function queueStep(callback, delay) {
+                var timerId = window.setTimeout(callback, delay);
+                activeTimers.push(timerId);
+            }
+
+            function buildAnimatedLetters() {
+                var fragment = document.createDocumentFragment();
+                var spacingValue = window.getComputedStyle(animatedText).letterSpacing;
+                var letterSpacing = spacingValue === 'normal' ? 0 : parseFloat(spacingValue);
+
+                textTrack.textContent = '';
+                charNodes = [];
+
+                fullWord.split('').forEach(function (character, index) {
+                    var shell = document.createElement('span');
+                    var glyph = document.createElement('span');
+
+                    shell.className = 'logo-char';
+                    if (index === fullWord.length - 1) {
+                        shell.classList.add('logo-char-last');
+                    }
+                    glyph.className = 'logo-char-glyph';
+                    glyph.textContent = character;
+                    shell.appendChild(glyph);
+
+                    if (!Number.isNaN(letterSpacing) && index < fullWord.length - 1) {
+                        shell.style.marginRight = letterSpacing + 'px';
+                    }
+
+                    fragment.appendChild(shell);
+                    charNodes.push(shell);
+                });
+
+                textTrack.appendChild(fragment);
+                syncCharacterWidths();
+            }
+
+            function syncCharacterWidths() {
+                charNodes.forEach(function (node) {
+                    var wasHidden = node.classList.contains('is-hidden');
+
+                    if (wasHidden) {
+                        node.classList.remove('is-hidden');
+                    }
+
+                    node.style.setProperty('--char-width', node.scrollWidth + 'px');
+
+                    if (wasHidden) {
+                        node.classList.add('is-hidden');
+                    }
+                });
+            }
+
+            function showAllCharactersInstant() {
+                clearTimers();
+                cycleToken++;
+                charNodes.forEach(function (node) {
+                    node.classList.remove('is-hidden');
+                });
+            }
+
+            function runHideSequence() {
+                clearTimers();
+                cycleToken++;
+
+                var token = cycleToken;
+                var characterCount = charNodes.length;
+
+                if (!characterCount) {
+                    return;
+                }
+
+                var hideStepDelay = 108;
+
+                charNodes.forEach(function (node) {
+                    node.classList.remove('is-hidden');
+                });
+
+                charNodes.forEach(function (node, index) {
+                    (function (charNode, stepIndex) {
+                        queueStep(function () {
+                            if (token !== cycleToken) {
+                                return;
+                            }
+
+                            charNode.classList.add('is-hidden');
+                        }, stepIndex * hideStepDelay);
+                    }(node, index));
+                });
+            }
+
+            function runRevealSequence() {
+                clearTimers();
+                cycleToken++;
+
+                var token = cycleToken;
+                var reversedNodes = charNodes.slice().reverse();
+                var revealStepDelay = 102;
+
+                reversedNodes.forEach(function (node, index) {
+                    (function (charNode, stepIndex) {
+                        queueStep(function () {
+                            if (token !== cycleToken) {
+                                return;
+                            }
+
+                            charNode.classList.remove('is-hidden');
+                        }, stepIndex * revealStepDelay);
+                    }(node, index));
+                });
+            }
+
+            buildAnimatedLetters();
+
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(syncCharacterWidths).catch(function () {});
+            }
+
+            var observer = new MutationObserver(function () {
+                var nextState = animatedLogo.getAttribute('data-logo-state') || 'static';
+
+                if (nextState === currentState) {
+                    return;
+                }
+
+                currentState = nextState;
+
+                if (nextState === 'animated') {
+                    runHideSequence();
+                    return;
+                }
+
+                runRevealSequence();
+            });
+
+            observer.observe(animatedLogo, {
+                attributes: true,
+                attributeFilter: ['data-logo-state']
+            });
+
+            if (currentState === 'animated') {
+                runHideSequence();
+            } else {
+                showAllCharactersInstant();
+            }
+        });
+    </script>
     <script src="sarah/sarah-chatbot.js?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah/sarah-chatbot.js')); ?>"></script>
 </body>
 </html>
