@@ -1,8 +1,8 @@
 <?php
-require_once '../backend/session_auth.php';
+require_once dirname(__DIR__, 2) . '/backend/session_auth.php';
 mf_start_backend_session();
-require_once '../backend/db_connect.php';
-require_once '../backend/mobile_app_build.php';
+require_once dirname(__DIR__, 2) . '/backend/db_connect.php';
+require_once dirname(__DIR__, 2) . '/backend/mobile_app_build.php';
 mf_require_tenant_session($pdo, [
     'response' => 'die',
     'status' => 403,
@@ -16,7 +16,11 @@ $tenant_slug = $_SESSION['tenant_slug'] ?? '';
 function builder_app_base_path(): string
 {
     $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-    $base = rtrim(str_replace('\\', '/', dirname(dirname($script))), '/');
+    if (strpos($script, '/admin_panel/website_editor/') !== false) {
+        $base = rtrim(str_replace('\\', '/', dirname(dirname(dirname($script)))), '/');
+    } else {
+        $base = rtrim(str_replace('\\', '/', dirname(dirname($script))), '/');
+    }
     return $base === '.' ? '' : $base;
 }
 
@@ -48,9 +52,9 @@ function builder_store_uploaded_asset(array $file, string $directoryName, string
         return '';
     }
 
-    $baseUploadDir = realpath(__DIR__ . '/../uploads');
+    $baseUploadDir = realpath(dirname(__DIR__, 2) . '/uploads');
     if ($baseUploadDir === false) {
-        $baseUploadDir = __DIR__ . '/../uploads';
+        $baseUploadDir = dirname(__DIR__, 2) . '/uploads';
     }
 
     $targetDir = rtrim($baseUploadDir, '/\\') . DIRECTORY_SEPARATOR . trim($directoryName, '/\\');
@@ -210,7 +214,7 @@ if ($website && !empty($website['website_data'])) {
 // ==========================================
 // DYNAMIC TEMPLATE SCANNER
 // ==========================================
-$templates_dir = '../templates/';
+$templates_dir = __DIR__ . '/templates/';
 $available_templates = [];
 if (is_dir($templates_dir)) {
     foreach (scandir($templates_dir) as $file) {
@@ -239,12 +243,13 @@ if (file_exists($manifest_path)) {
 // ==========================================
 // PRESET TEMPLATE IMAGES
 // ==========================================
-$preset_dir = '../uploads/hero/presets/';
+$preset_dir_relative = '../../uploads/hero/presets/';
+$preset_dir = dirname(__DIR__, 2) . '/uploads/hero/presets/';
 $preset_images = [];
 if (is_dir($preset_dir)) {
     foreach (scandir($preset_dir) as $file) {
         if (in_array(strtolower(pathinfo($file, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'webp'])) {
-            $preset_images[] = $preset_dir . $file;
+            $preset_images[] = $preset_dir_relative . $file;
         }
     }
 }
@@ -358,7 +363,9 @@ $e = function ($str) {
     return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
 };
 
-$site_url = '../site.php?site=' . urlencode($tenant_slug);
+$admin_url = builder_app_base_path() . '/admin_panel/admin.php';
+$site_url = builder_app_base_path() . '/admin_panel/website_editor/site.php?site=' . urlencode($tenant_slug);
+$save_endpoint = builder_app_base_path() . '/admin_panel/website_editor/index.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -503,7 +510,7 @@ $site_url = '../site.php?site=' . urlencode($tenant_slug);
 
 <body>
     <div class="editor-sidebar">
-        <a href="admin.php" class="back-link">
+        <a href="<?php echo $e($admin_url); ?>" class="back-link">
             <span class="material-symbols-rounded" style="font-size:18px;">arrow_back</span> Back to Admin
         </a>
 
@@ -613,7 +620,8 @@ $site_url = '../site.php?site=' . urlencode($tenant_slug);
         <img id="hiddenLogo" style="display:none;" <?php if ($logo) echo 'src="' . $e($logo) . '"'; ?>>
         <canvas id="colorCanvas" style="display:none;"></canvas>
         <?php
-        $full_template_path = '../templates/' . $selected_template;
+        $is_editor_context = true;
+        $full_template_path = $templates_dir . $selected_template;
         if (file_exists($full_template_path)) {
             include $full_template_path;
         } else {
@@ -1017,7 +1025,7 @@ $site_url = '../site.php?site=' . urlencode($tenant_slug);
 
             formData.append('json_data', JSON.stringify(jsonPayload));
 
-            fetch('website_editor.php', {
+            fetch(<?php echo json_encode($save_endpoint, JSON_UNESCAPED_SLASHES); ?>, {
                     method: 'POST',
                     body: formData
                 })

@@ -175,36 +175,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Dark Mode Toggle ---
-    const darkModeToggle = document.getElementById('darkModeToggle');
-    const isDarkMode = localStorage.getItem('theme') === 'dark';
-    if (isDarkMode) {
-        document.body.classList.add('dark-mode');
-        if (darkModeToggle) {
-             if (darkModeToggle.querySelector('.material-symbols-rounded')) {
-                 darkModeToggle.querySelector('.material-symbols-rounded').textContent = 'light_mode';
-             } else {
-                 darkModeToggle.textContent = 'light_mode';
-             }
-        }
-    }
-    
-    if (darkModeToggle) {
-        darkModeToggle.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            document.body.classList.toggle('dark-mode');
-            let icon = darkModeToggle;
-            if (darkModeToggle.querySelector('.material-symbols-rounded')) {
-                icon = darkModeToggle.querySelector('.material-symbols-rounded');
-            }
-            if (document.body.classList.contains('dark-mode')) {
-                localStorage.setItem('theme', 'dark');
-                icon.textContent = 'light_mode';
-            } else {
-                localStorage.setItem('theme', 'light');
-                icon.textContent = 'dark_mode';
-            }
-        });
-    }
 });

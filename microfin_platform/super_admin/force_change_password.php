@@ -32,7 +32,6 @@ if (!$_SESSION['super_admin_force_password_change']) {
     exit;
 }
 
-$uiTheme = sa_super_admin_theme($superAdmin);
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -70,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?php echo htmlspecialchars($uiTheme, ENT_QUOTES, 'UTF-8'); ?>">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

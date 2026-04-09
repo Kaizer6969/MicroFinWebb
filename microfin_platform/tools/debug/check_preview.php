@@ -5,7 +5,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 $_GET['site'] = 'fundline';
 ob_start();
-include mf_platform_path('site.php');
+include mf_platform_path('admin_panel/website_editor/site.php');
 $html = ob_get_clean();
 if (preg_match_all('/(Warning|Fatal|Notice|Error|Undefined).*on line \d+/i', $html, $matches)) {
     echo "ERRORS:\n";

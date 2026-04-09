@@ -4059,7 +4059,7 @@ $e = function ($v) {
 
 $tenant_slug = $_SESSION['tenant_slug'] ?? '';
 
-$site_url = '../site.php?site=' . urlencode($tenant_slug);
+$site_url = 'website_editor/site.php?site=' . urlencode($tenant_slug);
 
 
 
@@ -11187,7 +11187,7 @@ function hexToRgb($hex)
 
                                 </a>
 
-                                <a href="website_editor.php" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 10px 24px; font-weight: 600;">
+                                <a href="website_editor/index.php" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 10px 24px; font-weight: 600;">
 
                                     <span class="material-symbols-rounded" style="font-size: 18px;">edit</span> Edit Website
 

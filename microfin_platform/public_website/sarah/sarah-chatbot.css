@@ -406,128 +406,16 @@
     box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 31, 138, 90), 0.18);
 }
 
-body:not(.dark-mode) .sarah-chatbot-avatar {
+.sarah-chatbot-avatar {
     background: linear-gradient(135deg, var(--primary-deep, #176543) 0%, var(--primary, #1f8a5a) 100%);
 }
 
-body:not(.dark-mode) .sarah-chatbot-message--user {
+.sarah-chatbot-message--user {
     background: linear-gradient(135deg, var(--primary-deep, #176543) 0%, var(--primary, #1f8a5a) 100%);
 }
 
-body:not(.dark-mode) .sarah-chatbot-send {
+.sarah-chatbot-send {
     background: linear-gradient(135deg, var(--primary-deep, #176543) 0%, var(--primary, #1f8a5a) 100%);
-}
-
-body.dark-mode .sarah-chatbot-launcher {
-    border-color: rgba(var(--accent-rgb, 40, 79, 158), 0.28);
-    background: linear-gradient(135deg, rgba(10, 14, 25, 0.96), rgba(17, 28, 53, 0.96));
-    color: var(--text-dark, #f3f6ff);
-    box-shadow: 0 24px 46px -28px rgba(0, 0, 0, 0.72);
-}
-
-body.dark-mode .sarah-chatbot-launcher .material-symbols-rounded {
-    color: #b9caff;
-}
-
-body.dark-mode .sarah-chatbot-launcher-copy span {
-    color: var(--text-gray, #cad5f3);
-}
-
-body.dark-mode .sarah-chatbot-window {
-    border-color: rgba(var(--accent-rgb, 40, 79, 158), 0.3);
-    background: linear-gradient(180deg, rgba(8, 12, 24, 0.98), rgba(4, 7, 15, 0.94));
-    box-shadow: 0 36px 68px -36px rgba(0, 0, 0, 0.82);
-}
-
-body.dark-mode .sarah-chatbot-header {
-    border-bottom-color: rgba(var(--accent-rgb, 40, 79, 158), 0.26);
-    background:
-        radial-gradient(circle at top left, rgba(var(--primary-rgb, 111, 91, 255), 0.2), transparent 28%),
-        linear-gradient(135deg, rgba(11, 17, 33, 0.96), rgba(12, 22, 43, 0.94));
-}
-
-body.dark-mode .sarah-chatbot-header-copy strong,
-body.dark-mode .sarah-chatbot-header-copy span {
-    color: var(--text-dark, #f3f6ff);
-}
-
-body.dark-mode .sarah-chatbot-header-copy span {
-    color: var(--text-gray, #cad5f3);
-}
-
-body.dark-mode .sarah-chatbot-close {
-    border-color: rgba(var(--accent-rgb, 40, 79, 158), 0.24);
-    background: rgba(10, 15, 29, 0.88);
-    color: var(--text-dark, #f3f6ff);
-}
-
-body.dark-mode .sarah-chatbot-reset {
-    border-color: rgba(var(--accent-rgb, 40, 79, 158), 0.24);
-    background: rgba(10, 15, 29, 0.88);
-    color: var(--text-dark, #f3f6ff);
-}
-
-body.dark-mode .sarah-chatbot-reset:hover {
-    border-color: rgba(var(--primary-rgb, 111, 91, 255), 0.48);
-}
-
-body.dark-mode .sarah-chatbot-messages {
-    background: linear-gradient(180deg, rgba(7, 11, 21, 0.98), rgba(4, 7, 15, 0.92));
-}
-
-body.dark-mode .sarah-chatbot-message--bot {
-    border-color: rgba(var(--accent-rgb, 40, 79, 158), 0.28);
-    background: rgba(12, 18, 34, 0.96);
-    color: var(--text-dark, #f3f6ff);
-}
-
-body.dark-mode .sarah-chatbot-message--typing span {
-    background: rgba(202, 213, 243, 0.78);
-}
-
-body.dark-mode .sarah-chatbot-messages::-webkit-scrollbar-thumb {
-    background: rgba(138, 157, 220, 0.52);
-    border-color: transparent;
-}
-
-body.dark-mode .sarah-chatbot-actions,
-body.dark-mode .sarah-chatbot-form {
-    border-top-color: rgba(var(--accent-rgb, 40, 79, 158), 0.24);
-    background: rgba(7, 11, 21, 0.96);
-}
-
-body.dark-mode .sarah-chatbot-chip {
-    border-color: rgba(var(--accent-rgb, 40, 79, 158), 0.28);
-    background: rgba(var(--accent-rgb, 40, 79, 158), 0.12);
-    color: #dfe7ff;
-}
-
-body.dark-mode .sarah-chatbot-input {
-    border-color: rgba(var(--accent-rgb, 40, 79, 158), 0.3);
-    background: rgba(9, 14, 26, 0.96);
-    color: var(--text-dark, #f3f6ff);
-}
-
-body.dark-mode .sarah-chatbot-input::placeholder {
-    color: rgba(202, 213, 243, 0.8);
-}
-
-body.dark-mode .sarah-chatbot-input:focus {
-    border-color: rgba(var(--primary-rgb, 111, 91, 255), 0.48);
-    box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 111, 91, 255), 0.14);
-}
-
-body.dark-mode .sarah-chatbot-send {
-    box-shadow: 0 18px 34px -24px rgba(0, 0, 0, 0.72);
-}
-
-body.dark-mode .sarah-chatbot-send:focus-visible,
-body.dark-mode .sarah-chatbot-launcher:focus-visible,
-body.dark-mode .sarah-chatbot-reset:focus-visible,
-body.dark-mode .sarah-chatbot-close:focus-visible,
-body.dark-mode .sarah-chatbot-chip:focus-visible {
-    box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 111, 91, 255), 0.2);
-    border-color: rgba(var(--primary-rgb, 111, 91, 255), 0.5);
 }
 
 @media (max-width: 576px) {

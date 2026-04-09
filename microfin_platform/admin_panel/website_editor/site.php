@@ -3,7 +3,7 @@
 // URL: site.php?site=tenant-slug
 // No authentication required.
 
-require_once 'backend/db_connect.php';
+require_once dirname(__DIR__, 2) . '/backend/db_connect.php';
 
 function site_normalize_asset_path(string $path): string
 {
@@ -20,7 +20,11 @@ function site_normalize_asset_path(string $path): string
     $path = preg_replace('~^(?:\./)+~', '', $path);
     $path = preg_replace('~^(?:\.\./)+~', '', $path);
     $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-    $base = rtrim(str_replace('\\', '/', dirname($script)), '/');
+    if (strpos($script, '/admin_panel/website_editor/') !== false) {
+        $base = rtrim(str_replace('\\', '/', dirname(dirname(dirname($script)))), '/');
+    } else {
+        $base = rtrim(str_replace('\\', '/', dirname($script)), '/');
+    }
     return ($base === '' ? '' : $base) . '/' . ltrim($path, '/');
 }
 
@@ -274,6 +278,7 @@ body { font-family: '<?php echo $e($body_font); ?>', sans-serif; background: #f8
 <?php
 // Load the template, strip contenteditable attributes for public view
 if (file_exists($template_path)) {
+    $is_editor_context = false;
     ob_start();
     include $template_path;
     $raw_html = ob_get_clean();

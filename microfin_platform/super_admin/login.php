@@ -18,9 +18,6 @@ $active_browser_session = mf_get_active_browser_backend_session($pdo);
 $browser_session_block_message = $active_browser_session
     ? 'This browser already has an active session. Please log out of the current account before signing in again.'
     : '';
-$initialTheme = in_array((string) ($_SESSION['ui_theme'] ?? ''), ['light', 'dark'], true)
-    ? (string) $_SESSION['ui_theme']
-    : 'light';
 
 if ($error_msg === '' && $browser_session_block_message !== '') {
     $error_msg = $browser_session_block_message;
@@ -95,25 +92,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?php echo htmlspecialchars($initialTheme, ENT_QUOTES, 'UTF-8'); ?>">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MicroFin - Super Admin Login</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
-    <script>
-        (function () {
-            try {
-                var storedTheme = localStorage.getItem('microfin-platform-auth-theme');
-                if (storedTheme === 'light' || storedTheme === 'dark') {
-                    document.documentElement.setAttribute('data-theme', storedTheme);
-                }
-            } catch (error) {
-                // Ignore storage access issues and keep the server-provided default.
-            }
-        })();
-    </script>
     <link rel="stylesheet" href="super_admin_theme.css">
     <link rel="stylesheet" href="super_admin_auth.css">
 </head>
@@ -123,21 +108,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="spinner"></div>
         <p class="loader-message">Authenticating...</p>
     </div>
-
-    <button
-        type="button"
-        class="auth-theme-toggle"
-        id="auth-theme-toggle"
-        aria-label="Toggle dark mode"
-        aria-pressed="<?php echo $initialTheme === 'dark' ? 'true' : 'false'; ?>"
-    >
-        <span class="material-symbols-outlined auth-theme-toggle-icon">
-            <?php echo $initialTheme === 'dark' ? 'light_mode' : 'dark_mode'; ?>
-        </span>
-        <span class="auth-theme-toggle-label">
-            <?php echo $initialTheme === 'dark' ? 'Light Mode' : 'Dark Mode'; ?>
-        </span>
-    </button>
 
     <div class="login-container">
         <div class="logo-header">

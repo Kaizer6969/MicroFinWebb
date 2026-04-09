@@ -39,48 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetNav) targetNav.click();
     }
 
-    // ============================================================
-    // THEME TOGGLE
-    // ============================================================
-    const themeToggleBtn = document.getElementById('theme-toggle');
-    const htmlElement = document.documentElement;
     let latestDashboardData = null;
     let latestSalesData = null;
     let chartUserGrowth = null;
     let chartTenantActivity = null;
     let chartSalesTrends = null;
     let chartRevenue = null;
-
-    function applyTheme(theme) {
-        htmlElement.setAttribute('data-theme', theme);
-        const icon = themeToggleBtn ? themeToggleBtn.querySelector('span') : null;
-        if (icon) {
-            icon.textContent = theme === 'light' ? 'dark_mode' : 'light_mode';
-        }
-    }
-
-    async function persistTheme(theme) {
-        try {
-            await fetch('../backend/api_theme_preference.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ theme: theme, role: 'super_admin' })
-            });
-        } catch (error) {
-            // Ignore persistence failures and keep UI state.
-        }
-    }
-
-    if (themeToggleBtn) {
-        applyTheme(htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
-        themeToggleBtn.addEventListener('click', () => {
-            const currentTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            applyTheme(newTheme);
-            requestAnimationFrame(refreshThemedCharts);
-            persistTheme(newTheme);
-        });
-    }
 
     // ============================================================
     // MODAL (Provision Tenant)

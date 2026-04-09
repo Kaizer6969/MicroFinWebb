@@ -202,16 +202,22 @@ $show_app_promo    = filter_var($pageData['show_app_promo'] ?? true, FILTER_VALI
         </div>
         <?php 
         $tid_val = $tenant_id ?? ($data['tenant_id'] ?? '');
-        $is_editor = strpos($_SERVER['PHP_SELF'], 'editor') !== false || strpos($_SERVER['PHP_SELF'], 'setup') !== false;
+        $is_editor = isset($is_editor_context)
+            ? (bool)$is_editor_context
+            : (strpos($_SERVER['PHP_SELF'], 'editor') !== false || strpos($_SERVER['PHP_SELF'], 'setup') !== false);
+        $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        if (strpos($script, '/admin_panel/website_editor/') !== false) {
+            $app_base = rtrim(str_replace('\\', '/', dirname(dirname(dirname($script)))), '/');
+        } else {
+            $app_base = rtrim(str_replace('\\', '/', dirname($script)), '/');
+        }
         $login_query = 'tenant=' . urlencode($tid_val) . '&auth=1';
         if (!$is_editor) {
             $login_query .= '&from_site=1';
         }
-        $login_href = $is_editor ? "../tenant_login/login.php?{$login_query}" : "tenant_login/login.php?{$login_query}";
+        $login_href = $app_base . '/tenant_login/login.php?' . $login_query;
         $download_identifier = (string)($site_slug ?? $tenant_slug ?? $tid_val);
-        $download_href = $is_editor
-            ? "../public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier)
-            : "public_website/index.php?route=get-app&bank_id=" . urlencode($download_identifier);
+        $download_href = $app_base . '/public_website/index.php?route=get-app&bank_id=' . urlencode($download_identifier);
         ?>
         <a href="<?php echo $login_href; ?>" class="tpl2-btn" contenteditable="false">Staff Portal</a>
     </nav>

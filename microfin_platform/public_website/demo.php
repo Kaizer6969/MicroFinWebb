@@ -781,63 +781,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         @media (max-width: 1024px) { .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
-        /* Dark Mode Toggle */
-        .dark-mode-toggle {
-            position: fixed;
-            top: 22px;
-            right: 22px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            border-radius: 999px;
-            background: #ffffff;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-            border: 1px solid #e2e8f0;
-            color: var(--text-dark);
-            text-decoration: none;
-            transition: all 0.25s ease;
-            z-index: 20;
-            cursor: pointer;
-        }
-        .dark-mode-toggle:hover {
-            color: var(--primary);
-            background: #f8fafc;
-            border-color: #cbd5e1;
-        }
-        
-        /* Dark Mode Extensions */
-        body.dark-mode { background: var(--page-bg); color: var(--text-dark); }
-        body.dark-mode::before {
-            background: radial-gradient(circle at 12% 18%, rgba(var(--primary-rgb), 0.2) 0%, transparent 46%),
-                        radial-gradient(circle at 86% 6%, rgba(var(--secondary-rgb), 0.16) 0%, transparent 42%),
-                        radial-gradient(circle at 70% 88%, rgba(var(--secondary-rgb), 0.1) 0%, transparent 45%);
-        }
-        body.dark-mode .back-btn, body.dark-mode .dark-mode-toggle { background: var(--card-bg); border-color: var(--card-border); color: var(--text-dark); }
-        body.dark-mode .back-btn:hover, body.dark-mode .dark-mode-toggle:hover { background: var(--surface-soft); border-color: var(--surface-border); }
-        body.dark-mode .demo-card { background: var(--card-bg); border-color: var(--card-border); }
-        body.dark-mode .demo-card h2, body.dark-mode .demo-card label, body.dark-mode .plan-name { color: var(--text-dark); }
-        body.dark-mode .demo-card .subtitle, body.dark-mode .plan-capacity { color: var(--text-muted); }
-        body.dark-mode .input-field { background: var(--field-bg); border-color: var(--field-border); color: var(--text-dark); }
-        body.dark-mode .input-field:focus { border-color: var(--secondary); background: rgba(14, 20, 36, 0.98); }
-        body.dark-mode .location-suggestions, body.dark-mode .location-suggestion-empty { background: var(--surface-soft); border-color: var(--card-border); }
-        body.dark-mode .location-suggestion { border-bottom-color: rgba(var(--secondary-rgb), 0.12); background: transparent; }
-        body.dark-mode .location-suggestion:hover { background: rgba(var(--secondary-rgb), 0.12); }
-        body.dark-mode .location-suggestion-title { color: var(--text-dark); }
-        body.dark-mode .plan-card-content { background: var(--surface-soft); border-color: var(--card-border); }
-        body.dark-mode .plan-card-content::after { background: var(--card-bg); border-color: rgba(var(--secondary-rgb), 0.2); }
-        body.dark-mode .btn-outline { background: var(--surface-soft); border-color: rgba(var(--secondary-rgb), 0.2); color: var(--text-dark); }
-        body.dark-mode .btn-outline:hover { background: rgba(var(--secondary-rgb), 0.12); border-color: rgba(var(--secondary-rgb), 0.3); }
-        body.dark-mode .location-map-actions { background: var(--surface-soft); border-color: var(--card-border); }
-        body.dark-mode .location-map-status { color: var(--text-muted); }
-        body.dark-mode .plan-option input:checked + .plan-card-content { background: rgba(18, 26, 48, 0.96); }
-        body.dark-mode .plan-option.plan-starter input:checked + .plan-card-content { background: rgba(22, 163, 74, 0.1); border-color: #16a34a; }
-        body.dark-mode .plan-option.plan-pro input:checked + .plan-card-content { background: rgba(53, 84, 171, 0.18); border-color: var(--secondary); }
-        body.dark-mode .plan-option.plan-enterprise input:checked + .plan-card-content { background: rgba(53, 84, 171, 0.16); border-color: var(--secondary); }
-        body.dark-mode .plan-option.plan-unlimited input:checked + .plan-card-content { background: rgba(123, 97, 255, 0.16); border-color: var(--primary); }
-        body.dark-mode .success-view h3 { color: var(--text-dark); }
-        body.dark-mode .otp-group { background: var(--surface-soft); border-color: var(--card-border); }
     </style>
     <link rel="stylesheet" href="demo.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/demo.css')); ?>">
     <link rel="stylesheet" href="sarah/sarah-chatbot.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/sarah/sarah-chatbot.css')); ?>">
@@ -848,11 +791,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <span class="material-symbols-rounded">arrow_back</span>
         Back to Home
     </a>
-    
-    <a href="javascript:void(0)" id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle Dark Mode">
-        <span class="material-symbols-rounded">dark_mode</span>
-    </a>
-
     <div class="demo-wrapper">
         <div class="demo-layout">
             <aside class="demo-intro">
@@ -1134,32 +1072,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // Dark Mode Initialization
-        const isDarkMode = localStorage.getItem('theme') === 'dark';
-        const darkModeToggle = document.getElementById('darkModeToggle');
-        if (isDarkMode) {
-            document.body.classList.add('dark-mode');
-            if (darkModeToggle) {
-                const toggleIcon = darkModeToggle.querySelector('.material-symbols-rounded');
-                if (toggleIcon) toggleIcon.textContent = 'light_mode';
-            }
-        }
-
-        if (darkModeToggle) {
-            darkModeToggle.addEventListener('click', function(e) {
-                e.preventDefault();
-                document.body.classList.toggle('dark-mode');
-                const toggleIcon = darkModeToggle.querySelector('.material-symbols-rounded');
-                if (document.body.classList.contains('dark-mode')) {
-                    localStorage.setItem('theme', 'dark');
-                    if(toggleIcon) toggleIcon.textContent = 'light_mode';
-                } else {
-                    localStorage.setItem('theme', 'light');
-                    if(toggleIcon) toggleIcon.textContent = 'dark_mode';
-                }
-            });
-        }
-
         const demoForm = document.getElementById('demo-form');
         if (!demoForm) return;
 

@@ -1264,10 +1264,10 @@ CREATE TABLE IF NOT EXISTS tenant_feature_toggles (
 -- TABLE M3: tenant_website_content (Public Website Content)
 -- ============================================================
 -- PURPOSE: Tenant-managed public website content and selected layout template.
---   Used by onboarding setup_website.php, website_editor.php, and site.php.
+--   Used by admin_panel/website_editor/index.php and admin_panel/website_editor/site.php.
 --   All page content is stored in a single website_data JSON column.
---   The builder (website_editor.php) reads/writes this JSON via AJAX.
---   The public site (site.php) decodes website_data and renders the template.
+--   The builder (admin_panel/website_editor/index.php) reads/writes this JSON via AJAX.
+--   The public site (admin_panel/website_editor/site.php) decodes website_data and renders the template.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS tenant_website_content (
     tenant_id VARCHAR(50) PRIMARY KEY,

@@ -177,13 +177,13 @@ if (!$tenant) {
     } else {
         $tenant_public_website_ready = mf_tenant_public_website_is_ready($pdo, (string)$tenant['tenant_id']);
         if ($came_from_site) {
-            $back_to_site_href = '../site.php?site=' . urlencode((string)$tenant['tenant_slug']);
+            $back_to_site_href = '../admin_panel/website_editor/site.php?site=' . urlencode((string)$tenant['tenant_slug']);
         }
     }
 }
 
 if ($tenant && $tenant_public_website_ready && !empty($tenant['setup_completed']) && !isset($_GET['auth']) && !isset($_GET['impersonate']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header("Location: ../site.php?site=" . urlencode($tenant['tenant_slug']));
+    header("Location: ../admin_panel/website_editor/site.php?site=" . urlencode($tenant['tenant_slug']));
     exit;
 }
 

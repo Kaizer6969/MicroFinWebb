@@ -25,8 +25,7 @@ if (!$superAdminState) {
 }
 
 sa_sync_super_admin_session_from_state($superAdminState);
-$ui_theme = sa_super_admin_theme($superAdminState);
-$avatarBackground = $ui_theme === 'dark' ? '8D63FF' : '1F8A5A';
+$avatarBackground = '1F8A5A';
 
 if (!empty($_SESSION['super_admin_force_password_change'])) {
     header('Location: force_change_password.php');
@@ -1511,7 +1510,7 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?php echo htmlspecialchars($ui_theme, ENT_QUOTES, 'UTF-8'); ?>">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1622,9 +1621,6 @@ foreach ($tenant_subscriptions as $subscriptionRow) {
                     <h1 id="page-title">Dashboard</h1>
                 </div>
                 <div class="header-right">
-                    <button id="theme-toggle" class="icon-btn" title="Toggle Light/Dark Mode">
-                        <span class="material-symbols-rounded"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
-                    </button>
                     <div class="admin-profile">
                         <img src="https://ui-avatars.com/api/?name=System+Host&background=<?php echo $avatarBackground; ?>&color=fff" alt="Admin Avatar" class="avatar">
                         <div class="admin-info">

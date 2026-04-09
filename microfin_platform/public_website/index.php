@@ -123,7 +123,6 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             </div>
             
             <div class="nav-cta">
-                <a href="javascript:void(0)" id="darkModeToggle" class="nav-btn-link material-symbols-rounded" aria-label="Toggle Dark Mode">dark_mode</a>
                 <a href="../super_admin/login.php" class="btn btn-login">Platform Login</a>
                 <a href="demo.php" class="btn btn-primary">Apply Now</a>
             </div>
