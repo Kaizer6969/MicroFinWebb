@@ -1,11 +1,11 @@
 {
-    "name": "microfin_mobile",
-    "short_name": "microfin_mobile",
+    "name": "MicroFin",
+    "short_name": "MicroFin",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "MicroFin shared mobile app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

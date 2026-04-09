@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "microfin_mobile" "\0"
+            VALUE "FileDescription", "MicroFin" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "microfin_mobile" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "microfin_mobile.exe" "\0"
-            VALUE "ProductName", "microfin_mobile" "\0"
+            VALUE "ProductName", "MicroFin" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
