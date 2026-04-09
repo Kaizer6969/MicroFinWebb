@@ -52,12 +52,51 @@ body {
     z-index: 100;
 }
 
+html[data-theme="light"] .sidebar {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 18%),
+        linear-gradient(180deg, #1b6e49 0%, #176543 54%, #134b32 100%);
+    border-right-color: rgba(18, 80, 54, 0.24);
+    box-shadow: 18px 0 42px -32px rgba(23, 92, 62, 0.34);
+}
+
 .sidebar-header {
     padding: 24px;
     display: flex;
     align-items: center;
     gap: 16px;
     border-bottom: 1px solid var(--border-color);
+}
+
+html[data-theme="light"] .sidebar-header,
+html[data-theme="light"] .sidebar-footer {
+    border-color: rgba(231, 247, 239, 0.14);
+}
+
+html[data-theme="light"] .brand-text h2,
+html[data-theme="light"] .brand-text span,
+html[data-theme="light"] .nav-section-label,
+html[data-theme="light"] .nav-item {
+    color: rgba(241, 251, 246, 0.92);
+}
+
+html[data-theme="light"] .nav-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+html[data-theme="light"] .nav-item.active {
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="light"] .nav-item::before {
+    background-color: #f4d47a;
+}
+
+html[data-theme="light"] .nav-badge {
+    background: #f97316;
 }
 
 .logo-circle {
@@ -1857,4 +1896,242 @@ input:checked + .slider:before { transform: translateX(22px); }
 .subscription-table tbody tr:hover .plan-pill,
 .subscription-table tbody tr:hover .subscription-cycle-chip {
     border-color: rgba(var(--interaction-rgb), 0.3);
+}
+
+/* ============================================================ */
+/* Dark SaaS Identity                                           */
+/* ============================================================ */
+html[data-theme="dark"] {
+    background:
+        radial-gradient(circle at top left, rgba(var(--primary-rgb), 0.14), transparent 24%),
+        radial-gradient(circle at 88% 10%, rgba(var(--secondary-rgb), 0.12), transparent 20%),
+        linear-gradient(180deg, #03050a 0%, var(--bg-body) 46%, #04060d 100%);
+}
+
+html[data-theme="dark"] body {
+    background: transparent;
+}
+
+html[data-theme="dark"] body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(circle at 14% 16%, rgba(var(--primary-rgb), 0.08), transparent 30%),
+        radial-gradient(circle at 82% 6%, rgba(var(--secondary-rgb), 0.08), transparent 24%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 32%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+html[data-theme="dark"] .sidebar {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 12%),
+        linear-gradient(180deg, #080b14 0%, #070912 100%);
+    border-right-color: rgba(255, 255, 255, 0.06);
+    box-shadow: 18px 0 48px -34px rgba(0, 0, 0, 0.72);
+}
+
+html[data-theme="dark"] .sidebar-header,
+html[data-theme="dark"] .sidebar-footer {
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .logo-circle {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(135deg, rgba(34, 40, 78, 0.98) 0%, rgba(var(--primary-rgb), 0.94) 58%, rgba(var(--secondary-rgb), 0.92) 100%);
+}
+
+html[data-theme="dark"] .brand-text span,
+html[data-theme="dark"] .nav-section-label {
+    color: #8792b2;
+}
+
+html[data-theme="dark"] .nav-item {
+    border: 1px solid transparent;
+}
+
+html[data-theme="dark"] .nav-item::before {
+    background: linear-gradient(180deg, var(--secondary-color), var(--primary-color));
+}
+
+html[data-theme="dark"] .nav-item:hover {
+    border-color: rgba(var(--primary-rgb), 0.14);
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.09), rgba(var(--secondary-rgb), 0.04));
+}
+
+html[data-theme="dark"] .nav-item.active {
+    border-color: rgba(var(--primary-rgb), 0.22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 22px -18px rgba(var(--primary-rgb), 0.42);
+}
+
+html[data-theme="dark"] .top-header {
+    background:
+        linear-gradient(180deg, rgba(10, 14, 26, 0.94), rgba(10, 14, 26, 0.78)),
+        rgba(10, 14, 26, 0.72);
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 16px 34px -30px rgba(0, 0, 0, 0.8);
+}
+
+html[data-theme="dark"] #page-title {
+    letter-spacing: -0.04em;
+}
+
+html[data-theme="dark"] .icon-btn:hover {
+    color: var(--text-main);
+    background: rgba(var(--primary-rgb), 0.12);
+}
+
+html[data-theme="dark"] .admin-profile {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)), var(--bg-card);
+    border-color: rgba(255, 255, 255, 0.07);
+}
+
+html[data-theme="dark"] .admin-profile:hover {
+    border-color: rgba(var(--primary-rgb), 0.3);
+    background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.06), rgba(255, 255, 255, 0.02)), var(--bg-elevated);
+}
+
+html[data-theme="dark"] .views-container {
+    position: relative;
+}
+
+html[data-theme="dark"] .stat-card,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .settings-tabs,
+html[data-theme="dark"] .billing-tabs {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+        var(--bg-card);
+    border-color: rgba(255, 255, 255, 0.07);
+    box-shadow: var(--shadow-md);
+}
+
+html[data-theme="dark"] .stat-card:hover,
+html[data-theme="dark"] .card:hover {
+    border-color: rgba(var(--primary-rgb), 0.14);
+}
+
+html[data-theme="dark"] .welcome-banner {
+    background:
+        radial-gradient(circle at top left, rgba(var(--secondary-rgb), 0.12), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(var(--primary-rgb), 0.12), transparent 32%),
+        linear-gradient(145deg, rgba(17, 22, 39, 0.96), rgba(10, 14, 26, 0.98));
+    border-color: rgba(var(--primary-rgb), 0.18);
+    box-shadow: 0 28px 56px -38px rgba(0, 0, 0, 0.86), 0 18px 34px -28px rgba(var(--primary-rgb), 0.28);
+}
+
+html[data-theme="dark"] .subscription-hero-card,
+html[data-theme="dark"] .profile-summary-card,
+html[data-theme="dark"] .profile-form-block {
+    border-color: rgba(255, 255, 255, 0.08);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 100%),
+        var(--bg-elevated);
+}
+
+html[data-theme="dark"] .subscription-overview-card,
+html[data-theme="dark"] .profile-summary-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .btn {
+    border-radius: 14px;
+}
+
+html[data-theme="dark"] .btn-primary {
+    background: linear-gradient(135deg, rgba(73, 81, 150, 0.98) 0%, rgba(var(--primary-rgb), 0.96) 58%, rgba(var(--secondary-rgb), 0.92) 100%);
+    color: var(--text-inverse);
+    box-shadow: 0 18px 34px -22px rgba(var(--primary-rgb), 0.44);
+}
+
+html[data-theme="dark"] .btn-primary:hover {
+    background: linear-gradient(135deg, rgba(84, 92, 168, 0.98) 0%, rgba(var(--primary-rgb), 0.98) 56%, rgba(var(--secondary-rgb), 0.94) 100%);
+    box-shadow: 0 24px 40px -24px rgba(var(--primary-rgb), 0.5);
+}
+
+html[data-theme="dark"] .btn-outline,
+html[data-theme="dark"] .btn-outline-primary,
+html[data-theme="dark"] .btn-outline-success,
+html[data-theme="dark"] .btn-outline-danger {
+    background: rgba(255, 255, 255, 0.018);
+    border-width: 1px;
+}
+
+html[data-theme="dark"] .btn-outline:hover {
+    border-color: rgba(var(--primary-rgb), 0.26);
+    background: rgba(var(--primary-rgb), 0.08);
+}
+
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .search-box,
+html[data-theme="dark"] .input-group-text {
+    background: var(--field-bg);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .form-control::placeholder,
+html[data-theme="dark"] .search-box input::placeholder {
+    color: #7f89aa;
+}
+
+html[data-theme="dark"] .form-control:focus,
+html[data-theme="dark"] .search-box:focus-within {
+    border-color: rgba(var(--primary-rgb), 0.44);
+    background: rgba(9, 13, 25, 1);
+    box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.16);
+}
+
+html[data-theme="dark"] .settings-tab.active,
+html[data-theme="dark"] .billing-tab.active {
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.92), rgba(var(--secondary-rgb), 0.9));
+    box-shadow: 0 14px 24px -20px rgba(var(--primary-rgb), 0.58);
+}
+
+html[data-theme="dark"] .admin-table,
+html[data-theme="dark"] .subscription-table,
+html[data-theme="dark"] table {
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .admin-table th,
+html[data-theme="dark"] .subscription-table thead th,
+html[data-theme="dark"] table thead th {
+    background: rgba(255, 255, 255, 0.035);
+    color: #d8def4;
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .admin-table td,
+html[data-theme="dark"] .subscription-table tbody tr td,
+html[data-theme="dark"] table tbody td {
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .admin-table tbody tr:hover,
+html[data-theme="dark"] .subscription-table tbody tr:hover,
+html[data-theme="dark"] table tbody tr:hover {
+    background: rgba(var(--primary-rgb), 0.06);
+}
+
+html[data-theme="dark"] .modal-footer {
+    background: rgba(255, 255, 255, 0.025);
+}
+
+html[data-theme="dark"] .badge,
+html[data-theme="dark"] .status-badge,
+html[data-theme="dark"] .plan-pill,
+html[data-theme="dark"] .subscription-cycle-chip {
+    backdrop-filter: blur(10px);
+}
+
+html[data-theme="dark"] a:focus-visible,
+html[data-theme="dark"] button:focus-visible,
+html[data-theme="dark"] input:focus-visible,
+html[data-theme="dark"] select:focus-visible,
+html[data-theme="dark"] textarea:focus-visible {
+    outline: 2px solid rgba(var(--secondary-rgb), 0.88);
+    outline-offset: 2px;
 }

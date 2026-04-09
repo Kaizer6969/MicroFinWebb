@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user_id) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo htmlspecialchars((string)($_SESSION['ui_theme'] ?? 'light'), ENT_QUOTES, 'UTF-8'); ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -74,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user_id) {
     <link rel="stylesheet" href="super_admin_auth.css">
 </head>
 <body class="platform-auth auth-compact">
+    <button type="button" class="auth-theme-toggle" id="auth-theme-toggle" aria-label="Switch to dark mode">Dark mode</button>
     <div class="card">
         <h1>Set New Password</h1>
         <p>Choose a new password for your super admin account.</p>
@@ -100,5 +101,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user_id) {
         <a href="login.php" class="login-link">Return to Login</a>
         <?php endif; ?>
     </div>
+    <script src="login.js"></script>
 </body>
 </html>

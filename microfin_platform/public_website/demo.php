@@ -362,12 +362,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $is_talk_to_expert ? 'Talk to an Expert' : 'Apply Now'; ?> | MicroFin</title>
     <meta name="description" content="<?php echo $is_talk_to_expert ? 'Talk to a MicroFin expert and get guidance tailored to your institution.' : 'Apply to MicroFin, the cloud banking platform built for Microfinance Institutions. Fill out the form and our team will be in touch.'; ?>">
+    <script>
+        (function () {
+            try {
+                var storedTheme = localStorage.getItem('microfin_public_theme');
+                if (storedTheme === 'light' || storedTheme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', storedTheme);
+                }
+            } catch (error) {}
+        }());
+    </script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -791,6 +801,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <span class="material-symbols-rounded">arrow_back</span>
         Back to Home
     </a>
+    <button type="button" class="theme-toggle-btn theme-toggle-floating" id="public-theme-toggle" aria-label="Switch to dark mode">
+        <span class="material-symbols-rounded theme-toggle-icon">dark_mode</span>
+        <span class="theme-toggle-label">Dark</span>
+    </button>
     <div class="demo-wrapper">
         <div class="demo-layout">
             <aside class="demo-intro">
@@ -1011,6 +1025,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </div>
 
     <?php require __DIR__ . '/sarah/widget.php'; ?>
+
+    <script>
+    (function () {
+        const root = document.documentElement;
+        const themeToggle = document.getElementById('public-theme-toggle');
+        const storageKey = 'microfin_public_theme';
+
+        const normalizeTheme = (value) => value === 'dark' ? 'dark' : 'light';
+
+        const syncThemeToggle = (theme) => {
+            if (!themeToggle) {
+                return;
+            }
+
+            const nextTheme = theme === 'dark' ? 'light' : 'dark';
+            const icon = themeToggle.querySelector('.theme-toggle-icon');
+            const label = themeToggle.querySelector('.theme-toggle-label');
+            themeToggle.setAttribute('aria-label', `Switch to ${nextTheme} mode`);
+            themeToggle.setAttribute('title', `Switch to ${nextTheme} mode`);
+            if (icon) {
+                icon.textContent = nextTheme === 'dark' ? 'light_mode' : 'dark_mode';
+            }
+            if (label) {
+                label.textContent = nextTheme === 'dark' ? 'Light' : 'Dark';
+            }
+        };
+
+        const applyTheme = (theme) => {
+            const resolvedTheme = normalizeTheme(theme);
+            root.setAttribute('data-theme', resolvedTheme);
+            syncThemeToggle(resolvedTheme);
+            try {
+                localStorage.setItem(storageKey, resolvedTheme);
+            } catch (error) {}
+        };
+
+        applyTheme(root.getAttribute('data-theme') || 'light');
+
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = normalizeTheme(root.getAttribute('data-theme'));
+                applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+            });
+        }
+    }());
+    </script>
 
     <div id="tos-modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index:9999; overflow-y:auto; padding:40px 20px;">
         <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:18px; max-width:680px; margin:0 auto; padding:40px; color:var(--text-muted); line-height:1.7; box-shadow: var(--card-shadow);">

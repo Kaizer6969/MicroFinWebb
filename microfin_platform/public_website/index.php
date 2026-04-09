@@ -87,11 +87,21 @@ $tenant_count = $stmt_count->fetch(PDO::FETCH_ASSOC)['count'];
 $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MicroFin | The Cloud Banking Platform for Modern MFIs</title>
+    <script>
+        (function () {
+            try {
+                var storedTheme = localStorage.getItem('microfin_public_theme');
+                if (storedTheme === 'light' || storedTheme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', storedTheme);
+                }
+            } catch (error) {}
+        }());
+    </script>
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -123,6 +133,10 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             </div>
             
             <div class="nav-cta">
+                <button type="button" class="theme-toggle-btn js-public-theme-toggle" aria-label="Switch to dark mode">
+                    <span class="material-symbols-rounded theme-toggle-icon">dark_mode</span>
+                    <span class="theme-toggle-label">Dark</span>
+                </button>
                 <a href="../super_admin/login.php" class="btn btn-login">Platform Login</a>
                 <a href="demo.php" class="btn btn-primary">Apply Now</a>
             </div>
@@ -135,7 +149,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
             <div class="hero-content">
                 <div class="badge-pill">SaaS for Microfinance</div>
                 <h1>Empower your institution with a true cloud core banking system.</h1>
-                <p>MicroFin is a fully isolated, multi-tenant cloud banking platform designed specifically for Microfinance Institutions, SACCOs, and Cooperatives.</p>
+                <p>MicroFin is a fully isolated, multi-tenant cloud banking platform for Microfinance Institutions, SACCOs, and Cooperatives, with a secure platform shell that stays distinct from each tenant's own brand experience.</p>
                 
                 <div class="hero-actions">
                     <a href="demo.php" class="btn btn-primary btn-lg">Apply Now</a>
@@ -185,7 +199,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <div class="feature-card feature-card-guidance">
                     <div class="feature-icon"><span class="material-symbols-rounded">palette</span></div>
                     <h3>Fully Whitelabeled</h3>
-                    <p>It's your brand. Upload your logo, change your color themes, and instantly transform the dashboard to look like your own proprietary software.</p>
+                    <p>It's your brand. Tenant logos, colors, and themes stay inside tenant-owned spaces, while the MicroFin platform shell remains a separate secure parent layer.</p>
                 </div>
                 <!-- Feature 3 -->
                 <div class="feature-card feature-card-vault">

@@ -3,7 +3,7 @@
 // URL: site.php?site=tenant-slug
 // No authentication required.
 
-require_once dirname(__DIR__, 2) . '/backend/db_connect.php';
+require_once dirname(__DIR__) . '/backend/db_connect.php';
 
 function site_normalize_asset_path(string $path): string
 {
@@ -22,6 +22,8 @@ function site_normalize_asset_path(string $path): string
     $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
     if (strpos($script, '/admin_panel/website_editor/') !== false) {
         $base = rtrim(str_replace('\\', '/', dirname(dirname(dirname($script)))), '/');
+    } elseif (strpos($script, '/public_website/') !== false) {
+        $base = rtrim(str_replace('\\', '/', dirname(dirname($script))), '/');
     } else {
         $base = rtrim(str_replace('\\', '/', dirname($script)), '/');
     }
@@ -124,7 +126,7 @@ $e = function($val) { return htmlspecialchars($val ?? '', ENT_QUOTES, 'UTF-8'); 
 $selected_template = $data['layout_template'] ?? 'template1.php';
 // Normalize old-style names (template1 → template1.php)
 if (strpos($selected_template, '.php') === false) $selected_template .= '.php';
-$templates_dir = __DIR__ . '/templates/';
+$templates_dir = dirname(__DIR__) . '/admin_panel/website_editor/templates/';
 $template_path = $templates_dir . basename($selected_template);
 if (!file_exists($template_path)) $template_path = $templates_dir . 'template1.php';
 

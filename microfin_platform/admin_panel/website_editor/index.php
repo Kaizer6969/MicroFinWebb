@@ -364,7 +364,7 @@ $e = function ($str) {
 };
 
 $admin_url = builder_app_base_path() . '/admin_panel/admin.php';
-$site_url = builder_app_base_path() . '/admin_panel/website_editor/site.php?site=' . urlencode($tenant_slug);
+$site_url = builder_app_base_path() . '/public_website/site.php?site=' . urlencode($tenant_slug);
 $save_endpoint = builder_app_base_path() . '/admin_panel/website_editor/index.php';
 ?>
 <!DOCTYPE html>

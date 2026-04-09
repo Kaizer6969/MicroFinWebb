@@ -35,7 +35,8 @@ function sa_load_super_admin_state(PDO $pdo, int $userId): ?array
 
 function sa_super_admin_theme(array $superAdmin): string
 {
-    return 'light';
+    $theme = strtolower(trim((string)($superAdmin['ui_theme'] ?? '')));
+    return in_array($theme, ['light', 'dark'], true) ? $theme : 'light';
 }
 
 function sa_super_admin_profile_is_complete(array $superAdmin): bool

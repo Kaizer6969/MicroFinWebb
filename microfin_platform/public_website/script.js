@@ -1,4 +1,63 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const root = document.documentElement;
+    const themeButtons = document.querySelectorAll('.js-public-theme-toggle');
+    const themeStorageKey = 'microfin_public_theme';
+    const navbar = document.querySelector('.navbar');
+
+    const normalizeTheme = (value) => value === 'dark' ? 'dark' : 'light';
+
+    const updateThemeButtons = (theme) => {
+        themeButtons.forEach((button) => {
+            const nextTheme = theme === 'dark' ? 'light' : 'dark';
+            const icon = button.querySelector('.theme-toggle-icon');
+            const label = button.querySelector('.theme-toggle-label');
+            button.setAttribute('aria-label', `Switch to ${nextTheme} mode`);
+            button.setAttribute('title', `Switch to ${nextTheme} mode`);
+            if (icon) {
+                icon.textContent = nextTheme === 'dark' ? 'light_mode' : 'dark_mode';
+            }
+            if (label) {
+                label.textContent = nextTheme === 'dark' ? 'Light' : 'Dark';
+            }
+        });
+    };
+
+    const updateNavbarShadow = () => {
+        if (!navbar) {
+            return;
+        }
+
+        if (window.scrollY <= 10) {
+            navbar.style.boxShadow = 'none';
+            return;
+        }
+
+        navbar.style.boxShadow = root.getAttribute('data-theme') === 'dark'
+            ? '0 18px 36px -28px rgba(0, 0, 0, 0.65)'
+            : '0 10px 22px -18px rgba(15, 23, 42, 0.16)';
+    };
+
+    const applyPublicTheme = (theme) => {
+        const resolvedTheme = normalizeTheme(theme);
+        root.setAttribute('data-theme', resolvedTheme);
+        updateThemeButtons(resolvedTheme);
+        updateNavbarShadow();
+
+        try {
+            localStorage.setItem(themeStorageKey, resolvedTheme);
+        } catch (error) {
+            console.warn('Unable to store public theme preference.', error);
+        }
+    };
+
+    applyPublicTheme(root.getAttribute('data-theme') || 'light');
+
+    themeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const currentTheme = normalizeTheme(root.getAttribute('data-theme'));
+            applyPublicTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+    });
 
     // --- Smooth Scrolling for Navigation Links ---
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -165,14 +224,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Navbar Scroll Effect ---
-    const navbar = document.querySelector('.navbar');
-    
     window.addEventListener('scroll', () => {
-        if (window.scrollY > 10) {
-            navbar.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';
-        } else {
-            navbar.style.boxShadow = 'none';
-        }
+        updateNavbarShadow();
     });
-
+    updateNavbarShadow();
 });

@@ -45,6 +45,51 @@ document.addEventListener('DOMContentLoaded', () => {
     let chartTenantActivity = null;
     let chartSalesTrends = null;
     let chartRevenue = null;
+    const rootElement = document.documentElement;
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeToggleIcon = document.getElementById('theme-toggle-icon');
+    const themeStorageKey = 'microfin_super_admin_theme';
+
+    const normalizeTheme = (value) => value === 'dark' ? 'dark' : 'light';
+
+    function syncThemeToggle(theme) {
+        if (!themeToggle) {
+            return;
+        }
+
+        const nextTheme = theme === 'dark' ? 'light' : 'dark';
+        const label = `Switch to ${nextTheme} mode`;
+        themeToggle.setAttribute('aria-label', label);
+        themeToggle.setAttribute('title', label);
+        if (themeToggleIcon) {
+            themeToggleIcon.textContent = nextTheme === 'dark' ? 'dark_mode' : 'light_mode';
+        }
+    }
+
+    function applyPlatformTheme(theme, persistLocal = true) {
+        const resolvedTheme = normalizeTheme(theme);
+        rootElement.setAttribute('data-theme', resolvedTheme);
+        syncThemeToggle(resolvedTheme);
+
+        if (persistLocal) {
+            try {
+                localStorage.setItem(themeStorageKey, resolvedTheme);
+            } catch (error) {
+                console.warn('Unable to store platform theme preference.', error);
+            }
+        }
+    }
+
+    try {
+        const storedTheme = localStorage.getItem(themeStorageKey);
+        if (storedTheme === 'light' || storedTheme === 'dark') {
+            applyPlatformTheme(storedTheme, false);
+        } else {
+            applyPlatformTheme(rootElement.getAttribute('data-theme') || 'light', false);
+        }
+    } catch (error) {
+        applyPlatformTheme(rootElement.getAttribute('data-theme') || 'light', false);
+    }
 
     // ============================================================
     // MODAL (Provision Tenant)
@@ -678,6 +723,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (latestSalesData) {
             renderSalesReport(latestSalesData);
         }
+    }
+
+    if (themeToggle) {
+        themeToggle.addEventListener('click', async () => {
+            const previousTheme = normalizeTheme(rootElement.getAttribute('data-theme'));
+            const nextTheme = previousTheme === 'dark' ? 'light' : 'dark';
+            applyPlatformTheme(nextTheme);
+            refreshThemedCharts();
+
+            try {
+                const response = await fetch('../backend/api_theme_preference.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        role: 'super_admin',
+                        theme: nextTheme
+                    })
+                });
+
+                const result = await response.json();
+                if (!response.ok || result.status !== 'success') {
+                    throw new Error(result.message || 'Failed to save theme preference.');
+                }
+            } catch (error) {
+                console.error('Theme preference save failed:', error);
+                applyPlatformTheme(previousTheme);
+                refreshThemedCharts();
+            }
+        });
     }
 
     // ============================================================

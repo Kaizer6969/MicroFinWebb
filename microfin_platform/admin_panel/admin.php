@@ -4059,7 +4059,7 @@ $e = function ($v) {
 
 $tenant_slug = $_SESSION['tenant_slug'] ?? '';
 
-$site_url = 'website_editor/site.php?site=' . urlencode($tenant_slug);
+$site_url = '../public_website/site.php?site=' . urlencode($tenant_slug);
 
 
 

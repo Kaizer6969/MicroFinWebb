@@ -17,6 +17,31 @@ body.platform-auth {
         linear-gradient(180deg, var(--bg-body), var(--bg-elevated));
 }
 
+body.platform-auth .auth-theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 50;
+    min-height: 42px;
+    padding: 0.75rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card-glass);
+    color: var(--text-main);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+body.platform-auth .auth-theme-toggle:hover {
+    transform: translateY(-1px);
+    border-color: var(--primary-color);
+}
+
 body.platform-auth .login-container,
 body.platform-auth .card,
 body.platform-auth .panel {
@@ -331,6 +356,14 @@ body.platform-auth .loader-message {
         padding-top: 76px;
     }
 
+    body.platform-auth .auth-theme-toggle {
+        top: 14px;
+        right: 14px;
+        min-height: 38px;
+        padding: 0.65rem 0.9rem;
+        font-size: 0.8rem;
+    }
+
     body.platform-auth .login-container,
     body.platform-auth .card,
     body.platform-auth .panel,
@@ -344,4 +377,80 @@ body.platform-auth .loader-message {
         grid-template-columns: 1fr;
     }
 
+}
+
+html[data-theme="dark"] body.platform-auth {
+    background:
+        radial-gradient(circle at 12% 16%, rgba(var(--primary-rgb), 0.16), transparent 28%),
+        radial-gradient(circle at 88% 10%, rgba(var(--secondary-rgb), 0.14), transparent 24%),
+        linear-gradient(180deg, #02040a 0%, var(--bg-body) 54%, #04060d 100%);
+}
+
+html[data-theme="dark"] body.platform-auth .login-container,
+html[data-theme="dark"] body.platform-auth .card,
+html[data-theme="dark"] body.platform-auth .panel {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.014)),
+        var(--bg-card);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 34px 76px -42px rgba(0, 0, 0, 0.88), 0 22px 42px -30px rgba(var(--primary-rgb), 0.24);
+}
+
+html[data-theme="dark"] body.platform-auth .login-container::before,
+html[data-theme="dark"] body.platform-auth .card::before,
+html[data-theme="dark"] body.platform-auth .panel::before {
+    height: 3px;
+    background: linear-gradient(135deg, rgba(78, 86, 162, 0.98) 0%, rgba(var(--primary-rgb), 0.96) 58%, rgba(var(--secondary-rgb), 0.92) 100%);
+}
+
+html[data-theme="dark"] body.platform-auth .logo-icon {
+    color: #d7d2ff;
+    text-shadow: 0 0 28px rgba(var(--primary-rgb), 0.3);
+}
+
+html[data-theme="dark"] body.platform-auth .eyebrow {
+    background: rgba(var(--secondary-rgb), 0.14);
+    color: #ddd3ff;
+    border-color: rgba(var(--secondary-rgb), 0.24);
+}
+
+html[data-theme="dark"] body.platform-auth .form-input,
+html[data-theme="dark"] body.platform-auth input,
+html[data-theme="dark"] body.platform-auth textarea {
+    background: rgba(8, 12, 24, 0.98);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] body.platform-auth .form-input:focus,
+html[data-theme="dark"] body.platform-auth input:focus,
+html[data-theme="dark"] body.platform-auth textarea:focus {
+    border-color: rgba(var(--primary-rgb), 0.48);
+    background: rgba(8, 12, 24, 1);
+    box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.14);
+}
+
+html[data-theme="dark"] body.platform-auth .btn-submit,
+html[data-theme="dark"] body.platform-auth button[type='submit'] {
+    background: linear-gradient(135deg, rgba(78, 86, 162, 0.98) 0%, rgba(var(--primary-rgb), 0.96) 56%, rgba(var(--secondary-rgb), 0.92) 100%);
+    box-shadow: 0 20px 34px -24px rgba(var(--primary-rgb), 0.46);
+}
+
+html[data-theme="dark"] body.platform-auth .login-link {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(var(--primary-rgb), 0.22);
+}
+
+html[data-theme="dark"] body.platform-auth .loader-overlay {
+    background: rgba(2, 4, 10, 0.62);
+}
+
+html[data-theme="dark"] body.platform-auth .auth-theme-toggle {
+    background: rgba(8, 12, 24, 0.84);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+html[data-theme="dark"] body.platform-auth .auth-theme-toggle:hover {
+    background: rgba(var(--primary-rgb), 0.08);
+    border-color: rgba(var(--primary-rgb), 0.24);
 }

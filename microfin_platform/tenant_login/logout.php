@@ -47,7 +47,7 @@ mf_destroy_backend_session($pdo);
 
 $redirect = 'login.php';
 if ($tenant_slug !== '' && $tenant_id !== '' && mf_tenant_public_website_is_ready($pdo, (string)$tenant_id)) {
-    $redirect = '../admin_panel/website_editor/site.php?site=' . urlencode($tenant_slug);
+    $redirect = '../public_website/site.php?site=' . urlencode($tenant_slug);
 } elseif ($tenant_slug !== '') {
 	$redirect = 'login.php?s=' . urlencode($tenant_slug);
 }
