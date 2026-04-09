@@ -1,43 +1,39 @@
-import '../theme.dart';
 import 'package:flutter/material.dart';
 
 class MicroFinLogo extends StatelessWidget {
   final double size;
+  final bool elevated;
 
-  MicroFinLogo({
+  const MicroFinLogo({
     super.key,
     this.size = 100,
+    this.elevated = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final shadow = elevated
+        ? [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.16),
+              blurRadius: size * 0.18,
+              offset: Offset(0, size * 0.07),
+            ),
+          ]
+        : const <BoxShadow>[];
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-        ),
-        borderRadius: BorderRadius.circular(size * 0.25),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0xFF1D4ED8).withOpacity(0.35),
-            blurRadius: size * 0.2,
-            offset: Offset(0, size * 0.08),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(size * 0.24),
+        boxShadow: shadow,
       ),
-      child: Center(
-        child: Icon(
-          Icons.account_balance_outlined,
-          color: AppColors.card,
-          size: size * 0.55,
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: Image.asset(
+        'images/microfin_app_icon.png',
+        fit: BoxFit.contain,
       ),
     );
   }
 }
-
-

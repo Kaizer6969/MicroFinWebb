@@ -1057,263 +1057,6 @@ class _RegistrationModalState extends State<_RegistrationModal> {
       secondary: secondary,
       bottomInset: bottomInset,
     );
-
-    return Container(
-      margin: const EdgeInsets.only(top: 44),
-      padding: EdgeInsets.fromLTRB(20, 18, 20, bottomInset + 24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                _step == 1
-                    ? 'Create Account'
-                    : _step == 2
-                        ? 'Verify Email'
-                        : 'Account Ready',
-                style: GoogleFonts.outfit(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textMain,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _step == 1
-                    ? 'Tenant reference comes first. Registration stays locked until your institution is validated.'
-                    : _step == 2
-                        ? 'Enter the verification code sent to your real email address.'
-                        : 'Use this exact username when signing in or recovering your account.',
-                style: GoogleFonts.inter(
-                  color: AppColors.textMuted,
-                  fontSize: 14,
-                  height: 1.55,
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (_errorMessage != null)
-                _StatusBanner(message: _errorMessage!, isError: true),
-              if (_infoMessage != null)
-                _StatusBanner(message: _infoMessage!, isError: false),
-              if (_step == 1) ...[
-                _TenantReferenceCard(
-                  referralController: _referralController,
-                  isLoading: _isLoading,
-                  tenant: _tenant,
-                  primary: primary,
-                  onResolveReferral: _resolveReferral,
-                  onScanQr: _scanQr,
-                  onUploadQr: _uploadQr,
-                  onChangeTenant: () {
-                    setState(() {
-                      _tenant = null;
-                      _infoMessage = null;
-                      _errorMessage = null;
-                    });
-                  },
-                ),
-                const SizedBox(height: 18),
-                AnimatedOpacity(
-                  opacity: _unlocked ? 1 : 0.5,
-                  duration: const Duration(milliseconds: 180),
-                  child: IgnorePointer(
-                    ignoring: !_unlocked,
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _AuthTextField(
-                                label: 'First Name',
-                                hint: 'First name',
-                                controller: _firstNameController,
-                                prefixIcon: Icons.person_outline_rounded,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _AuthTextField(
-                                label: 'Last Name',
-                                hint: 'Last name',
-                                controller: _lastNameController,
-                                prefixIcon: Icons.badge_outlined,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _AuthTextField(
-                                label: 'Middle Name',
-                                hint: 'Optional',
-                                controller: _middleNameController,
-                                prefixIcon: Icons.short_text_rounded,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _AuthTextField(
-                                label: 'Suffix',
-                                hint: 'Optional',
-                                controller: _suffixController,
-                                prefixIcon: Icons.verified_user_outlined,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _AuthTextField(
-                          label: 'Real Email',
-                          hint: 'name@example.com',
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          prefixIcon: Icons.email_outlined,
-                        ),
-                        const SizedBox(height: 14),
-                        _UsernameField(
-                          controller: _usernameController,
-                          tenantSuffix: _tenant?.slug ?? 'tenant',
-                          primary: primary,
-                        ),
-                        const SizedBox(height: 8),
-                        if (_loginPreview.isNotEmpty)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Final login username: $_loginPreview',
-                              style: GoogleFonts.inter(
-                                color: AppColors.textMuted,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 14),
-                        _AuthTextField(
-                          label: 'Password',
-                          hint: 'Create a password',
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          prefixIcon: Icons.lock_outline_rounded,
-                          suffix: IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        _AuthTextField(
-                          label: 'Confirm Password',
-                          hint: 'Re-enter your password',
-                          controller: _confirmPasswordController,
-                          obscureText: _obscureConfirmPassword,
-                          prefixIcon: Icons.lock_reset_rounded,
-                          suffix: IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _obscureConfirmPassword =
-                                    !_obscureConfirmPassword;
-                              });
-                            },
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        _PrimaryAuthButton(
-                          label: 'Create Account',
-                          isLoading: _isLoading,
-                          onPressed: _register,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ] else if (_step == 2) ...[
-                _LoginUsernameCard(loginUsername: _finalLoginUsername),
-                const SizedBox(height: 16),
-                _AuthTextField(
-                  label: 'Verification Code',
-                  hint: 'Enter the 6-digit code',
-                  controller: _otpController,
-                  keyboardType: TextInputType.number,
-                  prefixIcon: Icons.pin_outlined,
-                ),
-                const SizedBox(height: 20),
-                _PrimaryAuthButton(
-                  label: 'Verify Email',
-                  isLoading: _isLoading,
-                  onPressed: _verifyRegistrationCode,
-                ),
-              ] else ...[
-                Center(
-                  child: Container(
-                    width: 78,
-                    height: 78,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFDCFCE7),
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: const Icon(
-                      Icons.check_circle_outline_rounded,
-                      color: Color(0xFF16A34A),
-                      size: 40,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                _LoginUsernameCard(loginUsername: _finalLoginUsername),
-                const SizedBox(height: 20),
-                _PrimaryAuthButton(
-                  label: 'Continue to Sign In',
-                  isLoading: false,
-                  onPressed: () {
-                    if (_tenant == null) {
-                      Navigator.of(context).pop();
-                      return;
-                    }
-                    Navigator.of(context).pop(
-                      _RegistrationCompletion(
-                        loginUsername: _finalLoginUsername,
-                        tenant: _tenant!.tenant,
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildLegacyRegistrationSheet(
@@ -1651,7 +1394,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
                                       keyboardType: TextInputType.number,
                                       enabled: !_isLoading,
                                       maxLength: 6,
-                                      inputFormatters: const [
+                                      inputFormatters: [
                                         FilteringTextInputFormatter.digitsOnly,
                                       ],
                                     ),
@@ -1754,6 +1497,302 @@ class _RegistrationModalState extends State<_RegistrationModal> {
         ),
       ),
     );
+  }
+
+}
+
+class _ForgotPasswordModal extends StatefulWidget {
+  const _ForgotPasswordModal();
+
+  @override
+  State<_ForgotPasswordModal> createState() => _ForgotPasswordModalState();
+}
+
+class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
+  final _loginUsernameController = TextEditingController();
+  final _recoveryEmailController = TextEditingController();
+  final _codeController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  bool _isLoading = false;
+  bool _showFindAccount = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  int _step = 1;
+  int _passwordStrength = 0;
+  String? _errorMessage;
+  String? _infoMessage;
+  List<Map<String, dynamic>> _accounts = <Map<String, dynamic>>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _newPasswordController.addListener(_handlePasswordStrengthChange);
+  }
+
+  void _handlePasswordStrengthChange() {
+    final strength = _calculatePasswordStrength(_newPasswordController.text);
+    if (_passwordStrength != strength && mounted) {
+      setState(() => _passwordStrength = strength);
+    }
+  }
+
+  @override
+  void dispose() {
+    _loginUsernameController.dispose();
+    _recoveryEmailController.dispose();
+    _codeController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendResetCode() async {
+    final loginUsername = _loginUsernameController.text.trim();
+    if (loginUsername.isEmpty || !loginUsername.contains('@')) {
+      setState(() {
+        _errorMessage =
+            'Enter the exact login username in the format username@tenant_slug.';
+        _infoMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(ApiConfig.getUrl('api_forgot_password.php')),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'login_username': loginUsername}),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      final data = _decodeApiMap(response.body);
+      if (data['success'] == true) {
+        setState(() {
+          _step = 2;
+          _infoMessage = _cleanString(data['message']).isEmpty
+              ? 'Reset code sent.'
+              : _cleanString(data['message']);
+          final returnedUsername = _cleanString(data['login_username']);
+          if (returnedUsername.isNotEmpty) {
+            _loginUsernameController.text = returnedUsername;
+          }
+        });
+      } else {
+        setState(() {
+          _errorMessage = _cleanString(data['message']).isEmpty
+              ? 'Unable to send the reset code.'
+              : _cleanString(data['message']);
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Failed to connect to the server.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _verifyResetCode() async {
+    if (_codeController.text.trim().isEmpty) {
+      setState(() {
+        _errorMessage = 'Enter the reset code.';
+        _infoMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(ApiConfig.getUrl('api_verify_otp.php')),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'login_username': _loginUsernameController.text.trim(),
+              'reset_code': _codeController.text.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      final data = _decodeApiMap(response.body);
+      if (data['success'] == true) {
+        setState(() {
+          _step = 3;
+          _infoMessage = _cleanString(data['message']).isEmpty
+              ? 'Reset code verified.'
+              : _cleanString(data['message']);
+          final returnedUsername = _cleanString(data['login_username']);
+          if (returnedUsername.isNotEmpty) {
+            _loginUsernameController.text = returnedUsername;
+          }
+        });
+      } else {
+        setState(() {
+          _errorMessage = _cleanString(data['message']).isEmpty
+              ? 'Unable to verify the reset code.'
+              : _cleanString(data['message']);
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Failed to connect to the server.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (_newPasswordController.text.length < 8) {
+      setState(() {
+        _errorMessage = 'Use a password with at least 8 characters.';
+        _infoMessage = null;
+      });
+      return;
+    }
+
+    if (_newPasswordController.text != _confirmPasswordController.text) {
+      setState(() {
+        _errorMessage = 'Passwords do not match.';
+        _infoMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(ApiConfig.getUrl('api_reset_password.php')),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'login_username': _loginUsernameController.text.trim(),
+              'reset_code': _codeController.text.trim(),
+              'new_password': _newPasswordController.text,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      final data = _decodeApiMap(response.body);
+      if (data['success'] == true) {
+        if (!mounted) {
+          return;
+        }
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Password reset for ${_loginUsernameController.text.trim()}.',
+            ),
+          ),
+        );
+        Navigator.of(context).pop();
+      } else {
+        setState(() {
+          _errorMessage = _cleanString(data['message']).isEmpty
+              ? 'Unable to reset the password.'
+              : _cleanString(data['message']);
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Failed to connect to the server.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _findAccounts() async {
+    final email = _recoveryEmailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _errorMessage = 'Enter the real email linked to your account.';
+        _infoMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = null;
+      _accounts = <Map<String, dynamic>>[];
+    });
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(ApiConfig.getUrl('api_find_accounts.php')),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email}),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      final data = _decodeApiMap(response.body);
+      if (data['success'] == true) {
+        setState(() {
+          _infoMessage = _cleanString(data['message']).isEmpty
+              ? 'If that email is linked to an account, recovery details are on the way.'
+              : _cleanString(data['message']);
+          _accounts = (data['accounts'] as List? ?? const [])
+              .map((item) => _stringMap(item))
+              .where((item) => item.isNotEmpty)
+              .toList();
+        });
+      } else {
+        setState(() {
+          _errorMessage = _cleanString(data['message']).isEmpty
+              ? 'Unable to look up accounts.'
+              : _cleanString(data['message']);
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Failed to connect to the server.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _useRecoveredUsername(String loginUsername) {
+    setState(() {
+      _showFindAccount = false;
+      _loginUsernameController.text = loginUsername;
+      _accounts = <Map<String, dynamic>>[];
+      _errorMessage = null;
+      _infoMessage =
+          'Recovered username loaded. Continue with Forgot Password using $loginUsername.';
+    });
   }
 
   Widget _buildLegacyForgotPasswordSheet(
@@ -2082,301 +2121,6 @@ class _RegistrationModalState extends State<_RegistrationModal> {
       ),
     );
   }
-}
-
-class _ForgotPasswordModal extends StatefulWidget {
-  const _ForgotPasswordModal();
-
-  @override
-  State<_ForgotPasswordModal> createState() => _ForgotPasswordModalState();
-}
-
-class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
-  final _loginUsernameController = TextEditingController();
-  final _recoveryEmailController = TextEditingController();
-  final _codeController = TextEditingController();
-  final _newPasswordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-
-  bool _isLoading = false;
-  bool _showFindAccount = false;
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
-  int _step = 1;
-  int _passwordStrength = 0;
-  String? _errorMessage;
-  String? _infoMessage;
-  List<Map<String, dynamic>> _accounts = <Map<String, dynamic>>[];
-
-  @override
-  void initState() {
-    super.initState();
-    _newPasswordController.addListener(_handlePasswordStrengthChange);
-  }
-
-  void _handlePasswordStrengthChange() {
-    final strength = _calculatePasswordStrength(_newPasswordController.text);
-    if (_passwordStrength != strength && mounted) {
-      setState(() => _passwordStrength = strength);
-    }
-  }
-
-  @override
-  void dispose() {
-    _loginUsernameController.dispose();
-    _recoveryEmailController.dispose();
-    _codeController.dispose();
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _sendResetCode() async {
-    final loginUsername = _loginUsernameController.text.trim();
-    if (loginUsername.isEmpty || !loginUsername.contains('@')) {
-      setState(() {
-        _errorMessage =
-            'Enter the exact login username in the format username@tenant_slug.';
-        _infoMessage = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _infoMessage = null;
-    });
-
-    try {
-      final response = await http
-          .post(
-            Uri.parse(ApiConfig.getUrl('api_forgot_password.php')),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'login_username': loginUsername}),
-          )
-          .timeout(const Duration(seconds: 20));
-
-      final data = _decodeApiMap(response.body);
-      if (data['success'] == true) {
-        setState(() {
-          _step = 2;
-          _infoMessage = _cleanString(data['message']).isEmpty
-              ? 'Reset code sent.'
-              : _cleanString(data['message']);
-          final returnedUsername = _cleanString(data['login_username']);
-          if (returnedUsername.isNotEmpty) {
-            _loginUsernameController.text = returnedUsername;
-          }
-        });
-      } else {
-        setState(() {
-          _errorMessage = _cleanString(data['message']).isEmpty
-              ? 'Unable to send the reset code.'
-              : _cleanString(data['message']);
-        });
-      }
-    } catch (_) {
-      setState(() {
-        _errorMessage = 'Failed to connect to the server.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _verifyResetCode() async {
-    if (_codeController.text.trim().isEmpty) {
-      setState(() {
-        _errorMessage = 'Enter the reset code.';
-        _infoMessage = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _infoMessage = null;
-    });
-
-    try {
-      final response = await http
-          .post(
-            Uri.parse(ApiConfig.getUrl('api_verify_otp.php')),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'login_username': _loginUsernameController.text.trim(),
-              'reset_code': _codeController.text.trim(),
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
-
-      final data = _decodeApiMap(response.body);
-      if (data['success'] == true) {
-        setState(() {
-          _step = 3;
-          _infoMessage = _cleanString(data['message']).isEmpty
-              ? 'Reset code verified.'
-              : _cleanString(data['message']);
-          final returnedUsername = _cleanString(data['login_username']);
-          if (returnedUsername.isNotEmpty) {
-            _loginUsernameController.text = returnedUsername;
-          }
-        });
-      } else {
-        setState(() {
-          _errorMessage = _cleanString(data['message']).isEmpty
-              ? 'Unable to verify the reset code.'
-              : _cleanString(data['message']);
-        });
-      }
-    } catch (_) {
-      setState(() {
-        _errorMessage = 'Failed to connect to the server.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _resetPassword() async {
-    if (_newPasswordController.text.length < 8) {
-      setState(() {
-        _errorMessage = 'Use a password with at least 8 characters.';
-        _infoMessage = null;
-      });
-      return;
-    }
-
-    if (_newPasswordController.text != _confirmPasswordController.text) {
-      setState(() {
-        _errorMessage = 'Passwords do not match.';
-        _infoMessage = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _infoMessage = null;
-    });
-
-    try {
-      final response = await http
-          .post(
-            Uri.parse(ApiConfig.getUrl('api_reset_password.php')),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'login_username': _loginUsernameController.text.trim(),
-              'reset_code': _codeController.text.trim(),
-              'new_password': _newPasswordController.text,
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
-
-      final data = _decodeApiMap(response.body);
-      if (data['success'] == true) {
-        if (!mounted) {
-          return;
-        }
-        final messenger = ScaffoldMessenger.of(context);
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              'Password reset for ${_loginUsernameController.text.trim()}.',
-            ),
-          ),
-        );
-        Navigator.of(context).pop();
-      } else {
-        setState(() {
-          _errorMessage = _cleanString(data['message']).isEmpty
-              ? 'Unable to reset the password.'
-              : _cleanString(data['message']);
-        });
-      }
-    } catch (_) {
-      setState(() {
-        _errorMessage = 'Failed to connect to the server.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _findAccounts() async {
-    final email = _recoveryEmailController.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() {
-        _errorMessage = 'Enter the real email linked to your account.';
-        _infoMessage = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _infoMessage = null;
-      _accounts = <Map<String, dynamic>>[];
-    });
-
-    try {
-      final response = await http
-          .post(
-            Uri.parse(ApiConfig.getUrl('api_find_accounts.php')),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'email': email}),
-          )
-          .timeout(const Duration(seconds: 20));
-
-      final data = _decodeApiMap(response.body);
-      if (data['success'] == true) {
-        setState(() {
-          _infoMessage = _cleanString(data['message']).isEmpty
-              ? 'If that email is linked to an account, recovery details are on the way.'
-              : _cleanString(data['message']);
-          _accounts = (data['accounts'] as List? ?? const [])
-              .map((item) => _stringMap(item))
-              .where((item) => item.isNotEmpty)
-              .toList();
-        });
-      } else {
-        setState(() {
-          _errorMessage = _cleanString(data['message']).isEmpty
-              ? 'Unable to look up accounts.'
-              : _cleanString(data['message']);
-        });
-      }
-    } catch (_) {
-      setState(() {
-        _errorMessage = 'Failed to connect to the server.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  void _useRecoveredUsername(String loginUsername) {
-    setState(() {
-      _showFindAccount = false;
-      _loginUsernameController.text = loginUsername;
-      _accounts = <Map<String, dynamic>>[];
-      _errorMessage = null;
-      _infoMessage =
-          'Recovered username loaded. Continue with Forgot Password using $loginUsername.';
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2390,232 +2134,6 @@ class _ForgotPasswordModalState extends State<_ForgotPasswordModal> {
       primary: primary,
       secondary: secondary,
       bottomInset: bottomInset,
-    );
-
-    return Container(
-      margin: const EdgeInsets.only(top: 64),
-      padding: EdgeInsets.fromLTRB(20, 18, 20, bottomInset + 24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                _showFindAccount
-                    ? 'Find My Account'
-                    : _step == 1
-                        ? 'Forgot Password'
-                        : _step == 2
-                            ? 'Verify Reset Code'
-                            : 'Set New Password',
-                style: GoogleFonts.outfit(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textMain,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _showFindAccount
-                    ? 'Enter your real email and the app will email every linked login username.'
-                    : _step == 1
-                        ? 'Use the exact username@tenant_slug login for password recovery.'
-                        : _step == 2
-                            ? 'Enter the reset code sent to the email linked to that username.'
-                            : 'Choose a new password for this tenant-bound account.',
-                style: GoogleFonts.inter(
-                  color: AppColors.textMuted,
-                  fontSize: 14,
-                  height: 1.55,
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (_errorMessage != null)
-                _StatusBanner(message: _errorMessage!, isError: true),
-              if (_infoMessage != null)
-                _StatusBanner(message: _infoMessage!, isError: false),
-              if (_showFindAccount) ...[
-                _AuthTextField(
-                  label: 'Real Email',
-                  hint: 'name@example.com',
-                  controller: _recoveryEmailController,
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                ),
-                const SizedBox(height: 18),
-                _PrimaryAuthButton(
-                  label: 'Email My Login Usernames',
-                  isLoading: _isLoading,
-                  onPressed: _findAccounts,
-                ),
-                if (_accounts.isNotEmpty) ...[
-                  const SizedBox(height: 18),
-                  ..._accounts.map((account) {
-                    final loginUsername =
-                        _cleanString(account['login_username']);
-                    final tenantName = _cleanString(account['tenant_name']);
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  loginUsername,
-                                  style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textMain,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  tenantName,
-                                  style: GoogleFonts.inter(
-                                    color: AppColors.textMuted,
-                                    fontSize: 12.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => _useRecoveredUsername(loginUsername),
-                            child: const Text('Use this'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _showFindAccount = false;
-                      _errorMessage = null;
-                      _infoMessage = null;
-                      _accounts = <Map<String, dynamic>>[];
-                    });
-                  },
-                  child: const Text('I remember my username'),
-                ),
-              ] else if (_step == 1) ...[
-                _AuthTextField(
-                  label: 'Login Username',
-                  hint: 'username@tenant_slug',
-                  controller: _loginUsernameController,
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.alternate_email_rounded,
-                ),
-                const SizedBox(height: 18),
-                _PrimaryAuthButton(
-                  label: 'Send Reset Code',
-                  isLoading: _isLoading,
-                  onPressed: _sendResetCode,
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _showFindAccount = true;
-                      _errorMessage = null;
-                      _infoMessage = null;
-                    });
-                  },
-                  child: const Text('Forgot your username too?'),
-                ),
-              ] else if (_step == 2) ...[
-                _LoginUsernameCard(loginUsername: _loginUsernameController.text.trim()),
-                const SizedBox(height: 16),
-                _AuthTextField(
-                  label: 'Reset Code',
-                  hint: 'Enter the 6-digit code',
-                  controller: _codeController,
-                  keyboardType: TextInputType.number,
-                  prefixIcon: Icons.pin_outlined,
-                ),
-                const SizedBox(height: 18),
-                _PrimaryAuthButton(
-                  label: 'Verify Code',
-                  isLoading: _isLoading,
-                  onPressed: _verifyResetCode,
-                ),
-              ] else ...[
-                _LoginUsernameCard(loginUsername: _loginUsernameController.text.trim()),
-                const SizedBox(height: 16),
-                _AuthTextField(
-                  label: 'New Password',
-                  hint: 'Enter a new password',
-                  controller: _newPasswordController,
-                  obscureText: _obscurePassword,
-                  prefixIcon: Icons.lock_outline_rounded,
-                  suffix: IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                _AuthTextField(
-                  label: 'Confirm Password',
-                  hint: 'Re-enter the new password',
-                  controller: _confirmPasswordController,
-                  obscureText: _obscureConfirmPassword,
-                  prefixIcon: Icons.lock_reset_rounded,
-                  suffix: IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _obscureConfirmPassword =
-                            !_obscureConfirmPassword;
-                      });
-                    },
-                    icon: Icon(
-                      _obscureConfirmPassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                _PrimaryAuthButton(
-                  label: 'Reset Password',
-                  isLoading: _isLoading,
-                  onPressed: _resetPassword,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

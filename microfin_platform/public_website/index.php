@@ -71,6 +71,8 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MicroFin | The Cloud Banking Platform for Modern MFIs</title>
+    <link rel="icon" type="image/png" href="logo/MicroFin-logo-transparent-temp.png?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/logo/MicroFin-logo-transparent-temp.png')); ?>">
+    <link rel="apple-touch-icon" href="logo/MicroFin-logo-transparent-temp.png?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/logo/MicroFin-logo-transparent-temp.png')); ?>">
     <script>
         (function () {
             try {
@@ -100,7 +102,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <nav class="navbar">
         <div class="container nav-container">
             <div class="logo">
-                <span class="material-symbols-rounded">account_balance</span>
+                <img src="logo/MicroFin-logo-transparent-temp.png" alt="MicroFin logo" class="logo-mark">
                 <span class="logo-text">MicroFin</span>
             </div>
             
@@ -379,7 +381,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
         <div class="container footer-grid">
             <div class="footer-brand">
                 <div class="logo">
-                    <span class="material-symbols-rounded">account_balance</span>
+                    <img src="logo/MicroFin-logo-transparent-temp.png" alt="MicroFin logo" class="logo-mark">
                     <span class="logo-text">MicroFin</span>
                 </div>
                 <p>Cloud core banking for cooperatives, MFIs, and SACCOs.</p>

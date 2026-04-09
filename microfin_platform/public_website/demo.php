@@ -368,6 +368,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $is_talk_to_expert ? 'Talk to an Expert' : 'Apply Now'; ?> | MicroFin</title>
     <meta name="description" content="<?php echo $is_talk_to_expert ? 'Talk to a MicroFin expert and get guidance tailored to your institution.' : 'Apply to MicroFin, the cloud banking platform built for Microfinance Institutions. Fill out the form and our team will be in touch.'; ?>">
+    <link rel="icon" type="image/png" href="logo/MicroFin-logo-transparent-temp.png?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/logo/MicroFin-logo-transparent-temp.png')); ?>">
+    <link rel="apple-touch-icon" href="logo/MicroFin-logo-transparent-temp.png?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/logo/MicroFin-logo-transparent-temp.png')); ?>">
     <script>
         (function () {
             try {
@@ -491,6 +493,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         .page-brand .logo {
             display: inline-flex; align-items: center; gap: 8px;
             color: #60A5FA; margin-bottom: 8px;
+        }
+        .page-brand .logo-mark {
+            display: block;
+            width: auto;
+            height: 34px;
+            object-fit: contain;
         }
         .page-brand .logo-text { font-size: 1.2rem; font-weight: 800; letter-spacing: -0.4px; color: white;}
         .page-brand p { color: #94A3B8; font-size: 0.9rem; }
@@ -810,7 +818,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <aside class="demo-intro">
                 <div class="page-brand">
                     <div class="logo">
-                        <span class="material-symbols-rounded">account_balance</span>
+                        <img src="logo/MicroFin-logo-transparent-temp.png" alt="MicroFin logo" class="logo-mark">
                         <span class="logo-text">MicroFin</span>
                     </div>
                     <p>Cloud core banking for modern MFIs</p>

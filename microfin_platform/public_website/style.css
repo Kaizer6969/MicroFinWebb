@@ -131,6 +131,12 @@ body {
     gap: 8px;
     color: var(--primary);
 }
+.logo-mark {
+    display: block;
+    width: auto;
+    height: 34px;
+    object-fit: contain;
+}
 .logo-text { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.5px; color: var(--base-dark); }
 
 .nav-links {
@@ -582,6 +588,7 @@ body {
 }
 .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 24px; margin-bottom: 32px; }
 .footer-brand .logo { color: white; margin-bottom: 12px; }
+.footer-brand .logo-mark { height: 38px; }
 .footer-brand .logo-text { color: white; }
 .footer-brand p { max-width: 300px; font-size: 0.85rem; }
 .footer-links h4 { color: white; margin-bottom: 12px; font-weight: 600; font-size: 0.95rem; }

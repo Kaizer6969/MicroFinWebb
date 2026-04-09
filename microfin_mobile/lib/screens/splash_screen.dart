@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../main.dart';
 import '../models/tenant_branding.dart';
 import '../theme.dart';
+import '../widgets/microfin_logo.dart';
 import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -90,19 +91,19 @@ class _SplashScreenState extends State<SplashScreen>
                   children: [
                     const Spacer(),
                     Container(
-                      width: 82,
-                      height: 82,
+                      width: 92,
+                      height: 92,
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.16),
-                        borderRadius: BorderRadius.circular(28),
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(30),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.18),
+                          color: Colors.white.withOpacity(0.16),
                         ),
                       ),
-                      child: const Icon(
-                        Icons.account_balance_rounded,
-                        color: Colors.white,
-                        size: 38,
+                      child: const MicroFinLogo(
+                        size: 76,
+                        elevated: false,
                       ),
                     ),
                     const SizedBox(height: 28),
