@@ -5,9 +5,9 @@ require_once __DIR__ . '/install_attribution.php';
 
 $microfinLogoFile = __DIR__ . '/logo/MicroFin-logo-transparent-temp.png';
 $microfinLogoAsset = 'logo/MicroFin-logo-transparent-temp.png?v=' . urlencode((string) @filemtime($microfinLogoFile));
-$microfinAnimatedLogoFile = __DIR__ . '/logo/microfin_smooth_flip_transparent.gif';
-$microfinAnimatedLogoAsset = 'logo/microfin_smooth_flip_transparent.gif?v=' . urlencode((string) @filemtime($microfinAnimatedLogoFile));
-$microfinAnimatedLogoDurationMs = 8450;
+$microfinAnimatedLogoFile = __DIR__ . '/logo/microfin_wide_smooth_flip_transparent.gif';
+$microfinAnimatedLogoAsset = 'logo/microfin_wide_smooth_flip_transparent.gif?v=' . urlencode((string) @filemtime($microfinAnimatedLogoFile));
+$microfinAnimatedLogoDurationMs = 9230;
 
 $renderUnavailable = static function (string $title, string $message) use ($microfinLogoAsset): void {
     http_response_code(404);
