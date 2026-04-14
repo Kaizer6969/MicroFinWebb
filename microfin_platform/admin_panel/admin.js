@@ -124,6 +124,40 @@ document.addEventListener('DOMContentLoaded', () => {
             bar: document.getElementById('credit-weight-bar-business'),
         },
     };
+    const personalProfileForm = document.getElementById('personal-profile-form');
+    const personalPasswordInput = document.getElementById('personal-password');
+    const personalPasswordConfirmInput = document.getElementById('personal-password-confirm');
+    const personalPasswordPanel = document.querySelector('[data-personal-password-panel]');
+    const personalPasswordStrengthFill = document.getElementById('personal-password-strength-fill');
+    const personalPasswordStrengthLabel = document.getElementById('personal-password-strength-label');
+    const personalPasswordMatch = document.getElementById('personal-password-match');
+    const personalProfileSubmit = document.getElementById('personal-profile-submit');
+    const personalPasswordRuleItems = Array.from(document.querySelectorAll('[data-personal-password-rule]'));
+    const personalPasswordToggleButtons = Array.from(document.querySelectorAll('[data-password-toggle]'));
+    const personalEmailInput = document.querySelector('[data-personal-email-input]');
+    const personalEmailToggle = document.querySelector('[data-personal-email-toggle]');
+    const personalEmailToggleText = personalEmailToggle ? personalEmailToggle.querySelector('[data-personal-email-toggle-text]') : null;
+    const personalEmailChangeRequested = document.getElementById('personal-email-change-requested');
+    const personalEmailHint = document.getElementById('personal-email-hint');
+    const personalEmailActions = document.getElementById('personal-email-actions');
+    const personalEmailCancelButton = document.getElementById('personal-email-cancel');
+    const personalEmailStatus = document.getElementById('personal-email-status');
+    const personalEmailOtpPanel = document.getElementById('personal-email-otp-panel');
+    const personalEmailOtpCode = document.getElementById('personal-email-otp-code');
+    const personalEmailVerifyOtpButton = document.getElementById('personal-email-verify-otp');
+    const personalEmailOtpHint = document.getElementById('personal-email-otp-hint');
+    const personalEmailOtpVerified = document.getElementById('personal-email-otp-verified');
+    const personalEmailCurrentAddress = personalEmailInput ? (personalEmailInput.getAttribute('data-current-email') || personalEmailInput.value || personalEmailInput.getAttribute('placeholder') || '') : '';
+    const personalEmailOriginalValue = personalEmailCurrentAddress;
+    const personalEmailApiEndpoint = '../backend/api_profile_email_change.php';
+    let personalEmailVerifiedAddress = '';
+    let personalEmailTrackedServerAddress = '';
+    let personalEmailAvailabilityState = 'idle';
+    let personalEmailAvailabilityRequestId = 0;
+    let personalEmailAvailabilityMessage = '';
+    let personalEmailCheckTimeoutId = null;
+    let personalEmailSendingOtp = false;
+    let personalEmailVerifyingOtp = false;
 
     const sectionDefaults = {
         staff: 'staff-list',
@@ -394,6 +428,383 @@ document.addEventListener('DOMContentLoaded', () => {
                 dropdown.open = true;
             }
         });
+    }
+
+    function getPersonalPasswordChecks(password) {
+        return {
+            length: password.length >= 8,
+            mixedCase: /[a-z]/.test(password) && /[A-Z]/.test(password),
+            number: /\d/.test(password),
+            symbol: /[^A-Za-z0-9]/.test(password),
+        };
+    }
+
+    function getPersonalPasswordStrength(password) {
+        if (!password) {
+            return { label: 'No new password entered', level: '', width: '0%' };
+        }
+
+        const checks = getPersonalPasswordChecks(password);
+        const passedChecks = Object.values(checks).filter(Boolean).length;
+        const hasBonusLength = password.length >= 12;
+        const score = passedChecks + (hasBonusLength ? 1 : 0);
+
+        if (password.length < 8) {
+            return { label: 'Too short', level: 'is-weak', width: '22%' };
+        }
+
+        if (score <= 2) {
+            return { label: 'Basic strength', level: 'is-weak', width: '38%' };
+        }
+
+        if (score === 3 || score === 4) {
+            return { label: 'Good strength', level: 'is-fair', width: '72%' };
+        }
+
+        return { label: 'Strong password', level: 'is-strong', width: '100%' };
+    }
+
+    function setPersonalEmailStatus(message = '', state = '') {
+        if (!personalEmailStatus) {
+            return;
+        }
+
+        personalEmailStatus.textContent = message;
+        personalEmailStatus.classList.toggle('is-success', state === 'success');
+        personalEmailStatus.classList.toggle('is-error', state === 'error');
+        personalEmailStatus.classList.toggle('is-info', state === 'info');
+    }
+
+    function normalizePersonalEmailValue(value = '') {
+        return (value || '').trim().toLowerCase();
+    }
+
+    function getPersonalEmailDraftValue() {
+        return personalEmailInput ? (personalEmailInput.value || '').trim() : '';
+    }
+
+    function setPersonalEmailAvailability(state = 'idle', message = '') {
+        personalEmailAvailabilityState = state;
+        personalEmailAvailabilityMessage = message;
+    }
+
+    function setPersonalEmailToggleAppearance(label, iconName, title) {
+        if (personalEmailToggleText) {
+            personalEmailToggleText.textContent = label;
+        }
+
+        if (!personalEmailToggle) {
+            return;
+        }
+
+        personalEmailToggle.setAttribute('title', title);
+        const icon = personalEmailToggle.querySelector('.material-symbols-rounded');
+        if (icon) {
+            icon.textContent = iconName;
+        }
+    }
+
+    function syncPersonalEmailActionState() {
+        if (!personalEmailToggle || !personalEmailInput) {
+            return;
+        }
+
+        const isEditing = !personalEmailInput.readOnly;
+        const draftValue = getPersonalEmailDraftValue();
+        const normalizedDraftValue = normalizePersonalEmailValue(draftValue);
+        const isVerifiedForCurrentDraft = normalizedDraftValue !== ''
+            && normalizedDraftValue === normalizePersonalEmailValue(personalEmailVerifiedAddress)
+            && personalEmailOtpVerified
+            && personalEmailOtpVerified.value === '1';
+
+        personalEmailToggle.disabled = false;
+
+        if (!isEditing) {
+            setPersonalEmailToggleAppearance('Change Email', 'edit', 'Change email address');
+            return;
+        }
+
+        if (isVerifiedForCurrentDraft) {
+            setPersonalEmailToggleAppearance('Verified', 'verified', 'Email verified');
+            personalEmailToggle.disabled = true;
+            return;
+        }
+
+        setPersonalEmailToggleAppearance('Change', 'forward_to_inbox', 'Send OTP to this email address');
+        personalEmailToggle.disabled = personalEmailSendingOtp
+            || personalEmailVerifyingOtp
+            || personalEmailAvailabilityState !== 'available';
+    }
+
+    function resetPersonalEmailOtpState(options = {}) {
+        const {
+            clearStatus = true,
+            hidePanel = true,
+            clearOtpInput = true,
+            clearVerification = true,
+        } = options;
+
+        if (clearOtpInput && personalEmailOtpCode) {
+            personalEmailOtpCode.value = '';
+        }
+
+        if (hidePanel && personalEmailOtpPanel) {
+            personalEmailOtpPanel.hidden = true;
+        }
+
+        if (clearVerification && personalEmailOtpVerified) {
+            personalEmailOtpVerified.value = '0';
+            personalEmailVerifiedAddress = '';
+        }
+
+        if (personalEmailOtpHint) {
+            personalEmailOtpHint.textContent = 'Click Change after entering a new available email address, then verify the 6-digit OTP before saving.';
+        }
+
+        if (clearStatus) {
+            setPersonalEmailStatus('', '');
+        }
+
+        syncPersonalEmailActionState();
+    }
+
+    async function postPersonalEmailChangeAction(action, payload = {}) {
+        const response = await fetch(personalEmailApiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ action, ...payload }),
+        });
+
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (error) {
+            data = null;
+        }
+
+        if (!response.ok || !data || data.status !== 'success') {
+            const error = new Error((data && data.message) ? data.message : 'Unable to complete the email verification request right now.');
+            error.code = data && data.code ? data.code : '';
+            throw error;
+        }
+
+        return data;
+    }
+
+    function setPersonalEmailEditable(isEditable) {
+        if (!personalEmailInput) {
+            return;
+        }
+
+        personalEmailInput.readOnly = !isEditable;
+        personalEmailInput.setAttribute('aria-readonly', isEditable ? 'false' : 'true');
+        personalEmailInput.classList.toggle('is-locked', !isEditable);
+        personalEmailInput.classList.toggle('is-editing', isEditable);
+
+        if (personalEmailChangeRequested) {
+            personalEmailChangeRequested.value = isEditable ? '1' : '0';
+        }
+
+        if (personalEmailToggle) {
+            personalEmailToggle.setAttribute('aria-pressed', isEditable ? 'true' : 'false');
+        }
+
+        if (personalEmailCancelButton) {
+            personalEmailCancelButton.hidden = !isEditable;
+            personalEmailCancelButton.setAttribute('aria-hidden', isEditable ? 'false' : 'true');
+        }
+
+        if (personalEmailActions) {
+            personalEmailActions.hidden = !isEditable;
+        }
+
+        if (personalEmailHint) {
+            personalEmailHint.textContent = isEditable
+                ? 'Enter a new email address. We will check if it is already used in this workspace, then send the OTP when you click Change.'
+                : 'This is your current sign-in email from the database. Click Change Email if you want to replace it.';
+        }
+
+        if (!isEditable) {
+            setPersonalEmailAvailability('idle', '');
+        }
+
+        syncPersonalEmailActionState();
+    }
+
+    function clearTrackedPersonalEmailServerState() {
+        if (personalEmailTrackedServerAddress === '') {
+            return;
+        }
+
+        personalEmailTrackedServerAddress = '';
+        void postPersonalEmailChangeAction('clear_state').catch(() => {});
+    }
+
+    function schedulePersonalEmailAvailabilityCheck(email) {
+        if (!personalEmailInput || personalEmailInput.readOnly) {
+            return;
+        }
+
+        if (personalEmailCheckTimeoutId) {
+            window.clearTimeout(personalEmailCheckTimeoutId);
+            personalEmailCheckTimeoutId = null;
+        }
+
+        const trimmedEmail = (email || '').trim();
+        const normalizedEmail = normalizePersonalEmailValue(trimmedEmail);
+        const normalizedCurrent = normalizePersonalEmailValue(personalEmailCurrentAddress);
+
+        if (trimmedEmail === '') {
+            setPersonalEmailAvailability('idle', '');
+            setPersonalEmailStatus('', '');
+            syncPersonalProfileSecurity();
+            return;
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+            setPersonalEmailAvailability('invalid', 'Please enter a valid email address.');
+            setPersonalEmailStatus(personalEmailAvailabilityMessage, 'error');
+            syncPersonalProfileSecurity();
+            return;
+        }
+
+        if (normalizedEmail === normalizedCurrent) {
+            setPersonalEmailAvailability('same', 'Please enter a different email address from your current one.');
+            setPersonalEmailStatus(personalEmailAvailabilityMessage, 'error');
+            syncPersonalProfileSecurity();
+            return;
+        }
+
+        const requestId = ++personalEmailAvailabilityRequestId;
+        setPersonalEmailAvailability('checking', 'Checking whether this email is already used in your workspace...');
+        setPersonalEmailStatus(personalEmailAvailabilityMessage, 'info');
+        syncPersonalProfileSecurity();
+
+        personalEmailCheckTimeoutId = window.setTimeout(async () => {
+            try {
+                const data = await postPersonalEmailChangeAction('check_email', { email: trimmedEmail });
+                if (requestId !== personalEmailAvailabilityRequestId || normalizePersonalEmailValue(getPersonalEmailDraftValue()) !== normalizedEmail) {
+                    return;
+                }
+
+                setPersonalEmailAvailability('available', data.message || 'This email address is available in your workspace.');
+                setPersonalEmailStatus(personalEmailAvailabilityMessage || 'This email address is available in your workspace.', 'success');
+            } catch (error) {
+                if (requestId !== personalEmailAvailabilityRequestId || normalizePersonalEmailValue(getPersonalEmailDraftValue()) !== normalizedEmail) {
+                    return;
+                }
+
+                const nextState = error.code === 'duplicate_email' ? 'duplicate' : error.code === 'same_email' ? 'same' : error.code === 'invalid_email' ? 'invalid' : 'error';
+                setPersonalEmailAvailability(nextState, error.message || 'Unable to check this email address right now.');
+                setPersonalEmailStatus(personalEmailAvailabilityMessage, 'error');
+            } finally {
+                if (requestId === personalEmailAvailabilityRequestId) {
+                    personalEmailCheckTimeoutId = null;
+                    syncPersonalProfileSecurity();
+                }
+            }
+        }, 320);
+    }
+
+    function syncPersonalProfileSecurity() {
+        if (!personalProfileForm || !personalPasswordInput || !personalPasswordConfirmInput) {
+            return;
+        }
+
+        const password = personalPasswordInput.value || '';
+        const confirmation = personalPasswordConfirmInput.value || '';
+        const hasInteraction = password !== '' || confirmation !== '';
+
+        if (personalPasswordPanel) {
+            personalPasswordPanel.hidden = !hasInteraction;
+        }
+
+        const checks = getPersonalPasswordChecks(password);
+        personalPasswordRuleItems.forEach((item) => {
+            const ruleName = item.getAttribute('data-personal-password-rule') || '';
+            item.classList.toggle('is-met', Boolean(checks[ruleName]));
+        });
+
+        const strength = getPersonalPasswordStrength(password);
+        if (personalPasswordStrengthFill) {
+            personalPasswordStrengthFill.style.width = strength.width;
+            personalPasswordStrengthFill.classList.remove('is-weak', 'is-fair', 'is-strong');
+            if (strength.level) {
+                personalPasswordStrengthFill.classList.add(strength.level);
+            }
+        }
+
+        if (personalPasswordStrengthLabel) {
+            personalPasswordStrengthLabel.textContent = strength.label;
+        }
+
+        let passwordError = '';
+        let confirmationError = '';
+        let emailChangeError = '';
+        let feedbackMessage = '';
+        let feedbackState = '';
+
+        if (password !== '' && password.length < 8) {
+            passwordError = 'New password must be at least 8 characters long.';
+            feedbackMessage = passwordError;
+            feedbackState = 'is-error';
+        } else if (password === '' && confirmation !== '') {
+            confirmationError = 'Enter a new password before confirming it.';
+            feedbackMessage = confirmationError;
+            feedbackState = 'is-error';
+        } else if (password !== '' && confirmation === '') {
+            feedbackMessage = 'Re-enter the new password to confirm it before saving.';
+        } else if (password !== '' && confirmation !== '' && password !== confirmation) {
+            confirmationError = 'Passwords do not match.';
+            feedbackMessage = confirmationError;
+            feedbackState = 'is-error';
+        } else if (password !== '' && confirmation !== '' && password === confirmation) {
+            feedbackMessage = 'Passwords match and are ready to save.';
+            feedbackState = 'is-success';
+        }
+
+        const pendingEmail = getPersonalEmailDraftValue();
+        const emailChangeActive = Boolean(personalEmailInput && !personalEmailInput.readOnly);
+        if (emailChangeActive) {
+            const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pendingEmail);
+
+            if (pendingEmail === '') {
+                emailChangeError = 'Enter your new email address or cancel the email change.';
+            } else if (!emailLooksValid) {
+                emailChangeError = 'Please enter a valid email address.';
+            } else if (personalEmailCurrentAddress && normalizePersonalEmailValue(pendingEmail) === normalizePersonalEmailValue(personalEmailCurrentAddress)) {
+                emailChangeError = 'Please enter a different email address from your current one.';
+            } else if (personalEmailAvailabilityState === 'checking') {
+                emailChangeError = 'We are still checking that email address in your workspace.';
+            } else if (personalEmailAvailabilityState === 'duplicate') {
+                emailChangeError = personalEmailAvailabilityMessage || 'That email address is already being used by another account in your organization.';
+            } else if (personalEmailAvailabilityState !== 'available') {
+                emailChangeError = personalEmailAvailabilityMessage || 'Enter an available email address before continuing.';
+            } else if (!personalEmailOtpVerified || personalEmailOtpVerified.value !== '1' || normalizePersonalEmailValue(pendingEmail) !== normalizePersonalEmailValue(personalEmailVerifiedAddress)) {
+                emailChangeError = 'Verify your new email address with the OTP before saving.';
+            }
+        }
+
+        personalPasswordInput.setCustomValidity(passwordError);
+        personalPasswordConfirmInput.setCustomValidity(confirmationError);
+        if (personalEmailInput) {
+            personalEmailInput.setCustomValidity(emailChangeError);
+        }
+
+        if (personalPasswordMatch) {
+            personalPasswordMatch.textContent = feedbackMessage;
+            personalPasswordMatch.classList.toggle('is-error', feedbackState === 'is-error');
+            personalPasswordMatch.classList.toggle('is-success', feedbackState === 'is-success');
+        }
+
+        syncPersonalEmailActionState();
+
+        if (personalProfileSubmit) {
+            personalProfileSubmit.disabled = Boolean(passwordError || confirmationError || emailChangeError);
+        }
     }
 
     function activateSection(targetId, options = {}) {
@@ -1257,6 +1668,257 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Ignore storage failures and keep the UI responsive.
             }
         });
+    }
+
+    if (personalProfileForm && personalPasswordInput && personalPasswordConfirmInput) {
+        [personalPasswordInput, personalPasswordConfirmInput].forEach((input) => {
+            input.addEventListener('input', syncPersonalProfileSecurity);
+            input.addEventListener('change', syncPersonalProfileSecurity);
+        });
+
+        if (personalPasswordToggleButtons.length) {
+            const personalPasswordInputs = [personalPasswordInput, personalPasswordConfirmInput].filter(Boolean);
+
+            const setPersonalPasswordVisibility = (isVisible) => {
+                personalPasswordInputs.forEach((input) => {
+                    input.type = isVisible ? 'text' : 'password';
+                });
+
+                personalPasswordToggleButtons.forEach((button) => {
+                    const icon = button.querySelector('.material-symbols-rounded');
+                    const label = button.querySelector('[data-password-toggle-text]');
+                    button.setAttribute('aria-label', isVisible ? 'Hide passwords' : 'Show passwords');
+                    if (icon) {
+                        icon.textContent = isVisible ? 'visibility_off' : 'visibility';
+                    }
+                    if (label) {
+                        label.textContent = isVisible ? 'Hide' : 'Show';
+                    }
+                });
+            };
+
+            setPersonalPasswordVisibility(false);
+
+            personalPasswordToggleButtons.forEach((button) => {
+                const targetId = button.getAttribute('data-password-toggle') || '';
+                const targetInput = document.getElementById(targetId);
+
+                button.addEventListener('click', () => {
+                    const nextVisibleState = personalPasswordInput.type === 'password';
+                    setPersonalPasswordVisibility(nextVisibleState);
+                    if (targetInput) {
+                        targetInput.focus();
+                    }
+                });
+            });
+        }
+
+        if (personalEmailInput && personalEmailToggle) {
+            setPersonalEmailEditable(false);
+            personalEmailInput.value = personalEmailOriginalValue;
+            personalEmailInput.placeholder = personalEmailCurrentAddress;
+            resetPersonalEmailOtpState();
+            setPersonalEmailAvailability('idle', '');
+
+            personalEmailInput.addEventListener('input', () => {
+                const nextValue = getPersonalEmailDraftValue();
+                const normalizedNextValue = normalizePersonalEmailValue(nextValue);
+                const normalizedTrackedAddress = normalizePersonalEmailValue(personalEmailTrackedServerAddress);
+                const isVerifiedForCurrentDraft = personalEmailOtpVerified
+                    && personalEmailOtpVerified.value === '1'
+                    && normalizedNextValue !== ''
+                    && normalizedNextValue === normalizePersonalEmailValue(personalEmailVerifiedAddress);
+
+                if (normalizedTrackedAddress !== '' && normalizedTrackedAddress !== normalizedNextValue) {
+                    clearTrackedPersonalEmailServerState();
+                }
+
+                if (!isVerifiedForCurrentDraft && ((personalEmailOtpVerified && personalEmailOtpVerified.value === '1') || (personalEmailOtpPanel && !personalEmailOtpPanel.hidden))) {
+                    resetPersonalEmailOtpState();
+                }
+
+                schedulePersonalEmailAvailabilityCheck(nextValue);
+                syncPersonalProfileSecurity();
+            });
+
+            personalEmailToggle.addEventListener('click', async () => {
+                const willEnableEditing = personalEmailInput.readOnly;
+                if (willEnableEditing) {
+                    personalEmailInput.value = '';
+                    personalEmailInput.placeholder = personalEmailCurrentAddress;
+                    resetPersonalEmailOtpState();
+                    setPersonalEmailAvailability('idle', '');
+                    setPersonalEmailEditable(true);
+                    setPersonalEmailStatus('', '');
+                    personalEmailInput.focus();
+                    syncPersonalProfileSecurity();
+                    return;
+                }
+
+                const email = getPersonalEmailDraftValue();
+                const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+                if (email === '') {
+                    setPersonalEmailAvailability('idle', 'Enter the new email address first.');
+                    setPersonalEmailStatus(personalEmailAvailabilityMessage, 'error');
+                    personalEmailInput.focus();
+                    syncPersonalProfileSecurity();
+                    return;
+                }
+
+                if (!emailLooksValid) {
+                    setPersonalEmailAvailability('invalid', 'Please enter a valid email address before requesting an OTP.');
+                    setPersonalEmailStatus(personalEmailAvailabilityMessage, 'error');
+                    personalEmailInput.focus();
+                    syncPersonalProfileSecurity();
+                    return;
+                }
+
+                if (personalEmailCurrentAddress && normalizePersonalEmailValue(email) === normalizePersonalEmailValue(personalEmailCurrentAddress)) {
+                    setPersonalEmailAvailability('same', 'Please enter a different email address from your current one.');
+                    setPersonalEmailStatus(personalEmailAvailabilityMessage, 'error');
+                    personalEmailInput.focus();
+                    syncPersonalProfileSecurity();
+                    return;
+                }
+
+                if (personalEmailAvailabilityState === 'checking') {
+                    setPersonalEmailStatus('Please wait while we finish checking that email address.', 'info');
+                    syncPersonalProfileSecurity();
+                    return;
+                }
+
+                if (personalEmailAvailabilityState !== 'available') {
+                    schedulePersonalEmailAvailabilityCheck(email);
+                    if (personalEmailAvailabilityMessage !== '') {
+                        setPersonalEmailStatus(personalEmailAvailabilityMessage, personalEmailAvailabilityState === 'available' ? 'success' : personalEmailAvailabilityState === 'checking' ? 'info' : 'error');
+                    }
+                    syncPersonalProfileSecurity();
+                    return;
+                }
+
+                personalEmailSendingOtp = true;
+                if (personalEmailVerifyOtpButton) {
+                    personalEmailVerifyOtpButton.disabled = true;
+                }
+                setPersonalEmailStatus('Sending OTP to the new email address...', 'info');
+                syncPersonalProfileSecurity();
+
+                try {
+                    const data = await postPersonalEmailChangeAction('send_otp', { email });
+                    personalEmailTrackedServerAddress = email;
+                    resetPersonalEmailOtpState({ clearStatus: false, hidePanel: false });
+                    setPersonalEmailStatus(data.message || 'OTP sent successfully.', 'success');
+                    if (personalEmailOtpHint) {
+                        personalEmailOtpHint.textContent = 'Enter the 6-digit OTP sent to your new email address, then verify it before saving.';
+                    }
+                    if (personalEmailOtpCode) {
+                        personalEmailOtpCode.focus();
+                    }
+                } catch (error) {
+                    resetPersonalEmailOtpState({ clearStatus: false });
+                    if (error.code === 'duplicate_email') {
+                        setPersonalEmailAvailability('duplicate', error.message || 'That email address is already being used by another account in your organization.');
+                    }
+                    setPersonalEmailStatus(error.message || 'Unable to send OTP right now.', 'error');
+                } finally {
+                    personalEmailSendingOtp = false;
+                    if (personalEmailVerifyOtpButton) {
+                        personalEmailVerifyOtpButton.disabled = false;
+                    }
+                    syncPersonalProfileSecurity();
+                }
+            });
+
+            if (personalEmailCancelButton) {
+                personalEmailCancelButton.addEventListener('click', () => {
+                    personalEmailInput.value = personalEmailOriginalValue;
+                    personalEmailInput.placeholder = personalEmailCurrentAddress;
+                    resetPersonalEmailOtpState();
+                    setPersonalEmailEditable(false);
+                    clearTrackedPersonalEmailServerState();
+                    setPersonalEmailStatus('', '');
+                    syncPersonalProfileSecurity();
+                });
+            }
+        }
+
+        if (personalEmailOtpCode) {
+            personalEmailOtpCode.addEventListener('input', () => {
+                personalEmailOtpCode.value = (personalEmailOtpCode.value || '').replace(/\D/g, '').slice(0, 6);
+            });
+        }
+
+        if (personalEmailVerifyOtpButton && personalEmailInput && personalEmailOtpCode) {
+            personalEmailVerifyOtpButton.addEventListener('click', async () => {
+                const email = (personalEmailInput.value || '').trim();
+                const otpCode = (personalEmailOtpCode.value || '').replace(/\D/g, '').slice(0, 6);
+
+                if (email === '') {
+                    setPersonalEmailStatus('Enter the new email address before verifying the OTP.', 'error');
+                    personalEmailInput.focus();
+                    return;
+                }
+
+                if (otpCode.length !== 6) {
+                    setPersonalEmailStatus('Please enter the full 6-digit OTP.', 'error');
+                    personalEmailOtpCode.focus();
+                    return;
+                }
+
+                personalEmailVerifyingOtp = true;
+                personalEmailVerifyOtpButton.disabled = true;
+                setPersonalEmailStatus('Verifying OTP...', 'info');
+                syncPersonalProfileSecurity();
+
+                try {
+                    const data = await postPersonalEmailChangeAction('verify_otp', { email, otp_code: otpCode });
+                    if (personalEmailOtpVerified) {
+                        personalEmailOtpVerified.value = '1';
+                    }
+                    personalEmailVerifiedAddress = email;
+                    personalEmailTrackedServerAddress = email;
+                    setPersonalEmailAvailability('available', 'This email address is ready to be saved after OTP verification.');
+                    setPersonalEmailStatus(data.message || 'Email verified successfully.', 'success');
+                    if (personalEmailOtpHint) {
+                        personalEmailOtpHint.textContent = 'OTP verified. You can now save your profile to apply the new email address.';
+                    }
+                } catch (error) {
+                    if (personalEmailOtpVerified) {
+                        personalEmailOtpVerified.value = '0';
+                    }
+                    personalEmailVerifiedAddress = '';
+                    if (error.code === 'duplicate_email') {
+                        setPersonalEmailAvailability('duplicate', error.message || 'That email address is already being used by another account in your organization.');
+                        clearTrackedPersonalEmailServerState();
+                    }
+                    setPersonalEmailStatus(error.message || 'Unable to verify OTP right now.', 'error');
+                } finally {
+                    personalEmailVerifyingOtp = false;
+                    personalEmailVerifyOtpButton.disabled = false;
+                    syncPersonalProfileSecurity();
+                }
+            });
+        }
+
+        personalProfileForm.addEventListener('reset', () => {
+            window.setTimeout(() => {
+                if (personalEmailInput) {
+                    personalEmailInput.value = personalEmailOriginalValue;
+                    personalEmailInput.placeholder = personalEmailCurrentAddress;
+                    resetPersonalEmailOtpState();
+                    setPersonalEmailEditable(false);
+                }
+                clearTrackedPersonalEmailServerState();
+                syncPersonalProfileSecurity();
+            }, 0);
+        });
+
+        personalProfileForm.addEventListener('submit', () => {
+            syncPersonalProfileSecurity();
+        });
+
+        syncPersonalProfileSecurity();
     }
 
     tabBtns.forEach(btn => {

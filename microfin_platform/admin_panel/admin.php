@@ -1339,40 +1339,198 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 
     $uid = $_SESSION['user_id'] ?? null;
 
-    if ($uid) {
+    if (!$uid) {
 
-        $pf = trim($_POST['personal_first_name'] ?? '');
+        $_SESSION['admin_error'] = 'Unable to find your profile. Please sign in again.';
 
-        $pl = trim($_POST['personal_last_name'] ?? '');
+        header("Location: admin.php?tab=personal");
 
-        $pe = trim($_POST['personal_email'] ?? '');
+        exit;
+    }
 
-        $pp = $_POST['personal_password'] ?? '';
+    $current_profile_stmt = $pdo->prepare('SELECT email FROM users WHERE user_id = ? AND tenant_id = ? LIMIT 1');
+
+    $current_profile_stmt->execute([$uid, $tenant_id]);
+
+    $current_profile = $current_profile_stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$current_profile) {
+
+        $_SESSION['admin_error'] = 'Unable to load your current account details. Please sign in again.';
+
+        header("Location: admin.php?tab=personal");
+
+        exit;
+    }
+
+    $current_email = trim((string)($current_profile['email'] ?? ''));
+    $pe = trim((string)($_POST['personal_email'] ?? ''));
+    $email_change_requested = (string)($_POST['personal_email_change_requested'] ?? '0') === '1';
+    $verified_email_session = trim((string)($_SESSION['admin_profile_email_change_verified_email'] ?? ''));
+    $verified_email_user_id = (int)($_SESSION['admin_profile_email_change_verified_user_id'] ?? 0);
+    $verified_email_tenant_id = trim((string)($_SESSION['admin_profile_email_change_verified_tenant_id'] ?? ''));
+
+    $pp = (string)($_POST['personal_password'] ?? '');
+
+    $pp_confirm = (string)($_POST['personal_password_confirm'] ?? '');
 
 
 
-        $pdo->prepare('UPDATE employees SET first_name = ?, last_name = ? WHERE user_id = ? AND tenant_id = ?')->execute([$pf, $pl, $uid, $tenant_id]);
+    if ($email_change_requested && $pe === '') {
 
-        $pdo->prepare('UPDATE users SET email = ? WHERE user_id = ?')->execute([$pe, $uid]);
+        $_SESSION['admin_error'] = 'Please enter the new email address you want to use.';
 
+        header("Location: admin.php?tab=personal");
 
+        exit;
+    }
+
+    if ($email_change_requested && strcasecmp($pe, $current_email) === 0) {
+
+        $_SESSION['admin_error'] = 'Please enter a different email address from your current one.';
+
+        header("Location: admin.php?tab=personal");
+
+        exit;
+    }
+
+    if ($email_change_requested && !filter_var($pe, FILTER_VALIDATE_EMAIL)) {
+
+        $_SESSION['admin_error'] = 'Please enter a valid email address.';
+
+        header("Location: admin.php?tab=personal");
+
+        exit;
+    }
+
+    if ($pp === '' && $pp_confirm !== '') {
+
+        $_SESSION['admin_error'] = 'Enter a new password before confirming it.';
+
+        header("Location: admin.php?tab=personal");
+
+        exit;
+    }
+
+    if ($pp !== '' && strlen($pp) < 8) {
+
+        $_SESSION['admin_error'] = 'Your new password must be at least 8 characters long.';
+
+        header("Location: admin.php?tab=personal");
+
+        exit;
+    }
+
+    if ($pp !== '' && $pp !== $pp_confirm) {
+
+        $_SESSION['admin_error'] = 'Your password confirmation does not match.';
+
+        header("Location: admin.php?tab=personal");
+
+        exit;
+    }
+
+    $email_will_change = $email_change_requested && $pe !== '' && strcasecmp($pe, $current_email) !== 0;
+
+    if ($email_will_change) {
+
+        if (
+            $verified_email_session === ''
+            || strcasecmp($verified_email_session, $pe) !== 0
+            || $verified_email_user_id !== (int)$uid
+            || strcasecmp($verified_email_tenant_id, (string)$tenant_id) !== 0
+        ) {
+
+            $_SESSION['admin_error'] = 'Please verify your new email address with the OTP before saving.';
+
+            header("Location: admin.php?tab=personal");
+
+            exit;
+        }
+
+        $duplicate_email_stmt = $pdo->prepare('SELECT COUNT(*) FROM users WHERE tenant_id = ? AND email = ? AND user_id != ?');
+
+        $duplicate_email_stmt->execute([$tenant_id, $pe, $uid]);
+
+        if ((int)$duplicate_email_stmt->fetchColumn() > 0) {
+
+            $_SESSION['admin_error'] = 'That email address is already in use by another account in your organization.';
+
+            header("Location: admin.php?tab=personal");
+
+            exit;
+        }
+    }
+
+    try {
+
+        $pdo->beginTransaction();
+
+        if ($email_will_change) {
+
+            $pdo->prepare('UPDATE users SET email = ? WHERE user_id = ? AND tenant_id = ?')->execute([$pe, $uid, $tenant_id]);
+        }
 
         if ($pp !== '') {
 
             $hash = password_hash($pp, PASSWORD_DEFAULT);
 
-            $pdo->prepare('UPDATE users SET password_hash = ? WHERE user_id = ?')->execute([$hash, $uid]);
+            $pdo->prepare('UPDATE users SET password_hash = ? WHERE user_id = ? AND tenant_id = ?')->execute([$hash, $uid, $tenant_id]);
         }
-
-
 
         $log_stmt = $pdo->prepare("INSERT INTO audit_logs (tenant_id, user_id, action_type, description, ip_address) VALUES (?, ?, 'PROFILE_UPDATE', ?, ?)");
 
-        $log_stmt->execute([$tenant_id, $uid, "User updated their personal profile.", $_SERVER['REMOTE_ADDR'] ?? '']);
+        $profile_update_events = [];
+        if ($email_will_change) {
+            $profile_update_events[] = 'changed their email address';
+        }
+        if ($pp !== '') {
+            $profile_update_events[] = 'changed their password';
+        }
+        if (!$profile_update_events) {
+            $profile_update_events[] = 'reviewed their personal profile';
+        }
 
+        $log_stmt->execute([
 
+            $tenant_id,
 
-        $_SESSION['admin_flash'] = "Personal profile updated successfully.";
+            $uid,
+
+            'User ' . implode(' and ', $profile_update_events) . '.',
+
+            $_SERVER['REMOTE_ADDR'] ?? ''
+
+        ]);
+
+        $pdo->commit();
+
+        if ($email_will_change && $pp !== '') {
+            $_SESSION['admin_flash'] = 'Email address and password updated successfully.';
+        } elseif ($email_will_change) {
+            $_SESSION['admin_flash'] = 'Email address updated successfully.';
+        } elseif ($pp !== '') {
+            $_SESSION['admin_flash'] = 'Password updated successfully.';
+        } else {
+            $_SESSION['admin_flash'] = 'No profile changes were needed.';
+        }
+
+        unset(
+            $_SESSION['admin_profile_email_change_pending_email'],
+            $_SESSION['admin_profile_email_change_pending_user_id'],
+            $_SESSION['admin_profile_email_change_pending_tenant_id'],
+            $_SESSION['admin_profile_email_change_verified_email'],
+            $_SESSION['admin_profile_email_change_verified_user_id'],
+            $_SESSION['admin_profile_email_change_verified_tenant_id']
+        );
+    } catch (Throwable $e) {
+
+        if ($pdo->inTransaction()) {
+
+            $pdo->rollBack();
+        }
+
+        $_SESSION['admin_error'] = 'We could not save your profile changes right now. Please try again.';
     }
 
     header("Location: admin.php?tab=personal");
@@ -9178,82 +9336,450 @@ function hexToRgb($hex)
 
                 <section id="personal" class="view-section <?php echo $active_view === 'personal' ? 'active' : ''; ?>">
 
-                    <div class="settings-panel">
+                    <div class="settings-panel personal-profile-shell">
 
                         <?php
 
-                        $personal_data = ['first_name' => '', 'last_name' => '', 'email' => ''];
+                        $personal_data = ['first_name' => '', 'last_name' => '', 'email' => '', 'last_login' => ''];
 
                         if (isset($_SESSION['user_id'])) {
 
-                            $pd_stmt = $pdo->prepare('SELECT u.email, e.first_name, e.last_name FROM users u JOIN employees e ON u.user_id = e.user_id WHERE u.user_id = ?');
+                            $pd_stmt = $pdo->prepare("
+                                SELECT
+                                    u.email,
+                                    u.last_login,
+                                    COALESCE(NULLIF(TRIM(u.first_name), ''), NULLIF(TRIM(e.first_name), '')) AS first_name,
+                                    COALESCE(NULLIF(TRIM(u.last_name), ''), NULLIF(TRIM(e.last_name), '')) AS last_name
+                                FROM users u
+                                LEFT JOIN employees e ON u.user_id = e.user_id AND u.tenant_id = e.tenant_id
+                                WHERE u.user_id = ? AND u.tenant_id = ?
+                                LIMIT 1
+                            ");
 
-                            $pd_stmt->execute([$_SESSION['user_id']]);
+                            $pd_stmt->execute([$_SESSION['user_id'], $tenant_id]);
 
                             $pd_res = $pd_stmt->fetch(PDO::FETCH_ASSOC);
 
                             if ($pd_res) $personal_data = $pd_res;
                         }
 
+                        $personal_full_name = trim(((string)($personal_data['first_name'] ?? '')) . ' ' . ((string)($personal_data['last_name'] ?? '')));
+                        if ($personal_full_name === '') {
+                            $personal_full_name = 'Your Admin Account';
+                        }
+
+                        $personal_initials_source = trim(((string)($personal_data['first_name'] ?? '')) . ' ' . ((string)($personal_data['last_name'] ?? '')));
+                        if ($personal_initials_source === '') {
+                            $personal_initials_source = (string)$role_name;
+                        }
+
+                        $personal_initials = '';
+                        $personal_initials_parts = preg_split('/\s+/', $personal_initials_source) ?: [];
+                        foreach ($personal_initials_parts as $name_part) {
+                            if ($name_part === '') {
+                                continue;
+                            }
+                            $personal_initials .= strtoupper(substr($name_part, 0, 1));
+                            if (strlen($personal_initials) >= 2) {
+                                break;
+                            }
+                        }
+                        if ($personal_initials === '') {
+                            $personal_initials = 'U';
+                        }
+
+                        $personal_last_login_display = 'No recent sign-in recorded';
+                        $personal_last_login_raw = trim((string)($personal_data['last_login'] ?? ''));
+                        if ($personal_last_login_raw !== '') {
+                            $personal_last_login_timestamp = strtotime($personal_last_login_raw);
+                            $personal_last_login_display = $personal_last_login_timestamp !== false
+                                ? date('M j, Y g:i A', $personal_last_login_timestamp)
+                                : $personal_last_login_raw;
+                        }
+
+                        $personal_workspace_name = trim((string)$tenant_name);
+                        if ($personal_workspace_name === '') {
+                            $personal_workspace_name = trim((string)($settings['company_name'] ?? ''));
+                        }
+                        if ($personal_workspace_name === '') {
+                            $personal_workspace_name = 'Your organization';
+                        }
+
+                        $personal_email_display = trim((string)($personal_data['email'] ?? ''));
+                        if ($personal_email_display === '') {
+                            $personal_email_display = 'Add your sign-in email address';
+                        }
+
                         ?>
 
-                        <form method="POST" action="admin.php">
+                        <div class="section-intro personal-profile-intro">
+
+                            <div>
+
+                                <h2>Personal Profile</h2>
+
+                                <p class="text-muted">Keep your personal details current and manage sign-in security from one clear workspace.</p>
+
+                            </div>
+
+                            <div class="personal-profile-kicker">
+
+                                <span class="material-symbols-rounded">shield_person</span>
+
+                                <span>Account settings</span>
+
+                            </div>
+
+                        </div>
+
+                        <form method="POST" action="admin.php" id="personal-profile-form" class="personal-profile-form">
 
                             <input type="hidden" name="action" value="update_personal_profile">
 
-                            <div class="card">
+                            <div class="personal-profile-layout">
 
-                                <h3>Personal Details</h3>
+                                <aside class="personal-profile-summary">
 
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                                    <div class="card personal-profile-hero-card">
 
-                                    <div class="form-group" style="margin-bottom:0;">
+                                        <div class="personal-profile-avatar"><?php echo htmlspecialchars($personal_initials); ?></div>
 
-                                        <label>First Name</label>
+                                        <div class="personal-profile-identity">
 
-                                        <input type="text" name="personal_first_name" class="form-control" value="<?php echo htmlspecialchars($personal_data['first_name']); ?>" required>
+                                            <span class="personal-profile-eyebrow">Workspace profile</span>
+
+                                            <h3><?php echo htmlspecialchars($personal_full_name); ?></h3>
+
+                                            <p><?php echo htmlspecialchars($personal_email_display); ?></p>
+
+                                        </div>
+
+                                        <div class="personal-profile-summary-grid">
+
+                                            <div class="personal-profile-summary-card">
+
+                                                <span class="material-symbols-rounded">badge</span>
+
+                                                <div>
+
+                                                    <small>Role</small>
+
+                                                    <strong><?php echo htmlspecialchars($role_name); ?></strong>
+
+                                                </div>
+
+                                            </div>
+
+                                            <div class="personal-profile-summary-card">
+
+                                                <span class="material-symbols-rounded">apartment</span>
+
+                                                <div>
+
+                                                    <small>Workspace</small>
+
+                                                    <strong><?php echo htmlspecialchars($personal_workspace_name); ?></strong>
+
+                                                </div>
+
+                                            </div>
+
+                                            <div class="personal-profile-summary-card">
+
+                                                <span class="material-symbols-rounded">schedule</span>
+
+                                                <div>
+
+                                                    <small>Last sign-in</small>
+
+                                                    <strong><?php echo htmlspecialchars($personal_last_login_display); ?></strong>
+
+                                                </div>
+
+                                            </div>
+
+                                        </div>
 
                                     </div>
 
-                                    <div class="form-group" style="margin-bottom:0;">
+                                    <div class="card personal-profile-note-card">
 
-                                        <label>Last Name</label>
+                                        <div class="personal-profile-note-head">
 
-                                        <input type="text" name="personal_last_name" class="form-control" value="<?php echo htmlspecialchars($personal_data['last_name']); ?>" required>
+                                            <span class="material-symbols-rounded">tips_and_updates</span>
+
+                                            <div>
+
+                                                <h4>Profile tips</h4>
+
+                                                <p class="text-muted">A few small habits make this account easier and safer to manage.</p>
+
+                                            </div>
+
+                                        </div>
+
+                                        <ul class="personal-profile-tip-list">
+
+                                            <li>Keep your email address current so sign-in and account notices reach you.</li>
+
+                                            <li>Only enter a new password when you are ready to change it.</li>
+
+                                            <li>Use a password that is at least 8 characters long and easy for you to remember securely.</li>
+
+                                        </ul>
+
+                                    </div>
+
+                                </aside>
+
+                                <div class="personal-profile-main">
+
+                                    <div class="card personal-profile-card">
+
+                                        <div class="card-header-flex personal-profile-card-head">
+
+                                            <div>
+
+                                                <h3>Basic Information</h3>
+
+                                                <p class="text-muted">Your name is shown here for reference. Use the separate email action if you want to update your sign-in address.</p>
+
+                                            </div>
+
+                                            <div class="personal-profile-status-chip">Saved to your workspace account</div>
+
+                                        </div>
+
+                                        <div class="personal-profile-fields">
+
+                                            <div class="form-group">
+
+                                                <label for="personal-first-name">First Name</label>
+
+                                                <input type="text" id="personal-first-name" class="form-control personal-static-input" value="<?php echo htmlspecialchars((string)$personal_data['first_name']); ?>" autocomplete="given-name" readonly aria-readonly="true" tabindex="-1">
+
+                                                <div class="personal-field-hint">Name changes are not editable from this profile form.</div>
+
+                                            </div>
+
+                                            <div class="form-group">
+
+                                                <label for="personal-last-name">Last Name</label>
+
+                                                <input type="text" id="personal-last-name" class="form-control personal-static-input" value="<?php echo htmlspecialchars((string)$personal_data['last_name']); ?>" autocomplete="family-name" readonly aria-readonly="true" tabindex="-1">
+
+                                                <div class="personal-field-hint">If your name ever needs to be corrected, handle that through a separate account-management flow.</div>
+
+                                            </div>
+
+                                            <div class="form-group personal-profile-field-full">
+
+                                                <label for="personal-email">Log-in Email Address</label>
+
+                                                <div class="personal-email-row">
+
+                                                    <input type="email" id="personal-email" name="personal_email" class="form-control personal-email-input is-locked" value="<?php echo htmlspecialchars((string)$personal_data['email']); ?>" placeholder="<?php echo htmlspecialchars((string)$personal_data['email']); ?>" autocomplete="email" readonly aria-readonly="true" data-personal-email-input data-current-email="<?php echo htmlspecialchars((string)$personal_data['email']); ?>">
+
+                                                    <div class="personal-email-controls">
+
+                                                    <button type="button" class="btn btn-outline btn-sm personal-email-toggle" id="personal-email-toggle" data-personal-email-toggle>
+
+                                                        <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+
+                                                        <span data-personal-email-toggle-text>Change Email</span>
+
+                                                    </button>
+
+                                                    <button type="button" class="btn btn-outline btn-sm personal-email-cancel" id="personal-email-cancel" hidden>
+
+                                                        <span class="material-symbols-rounded" aria-hidden="true">close</span>
+
+                                                        <span>Cancel</span>
+
+                                                    </button>
+
+                                                    </div>
+
+                                                </div>
+
+                                                <input type="hidden" name="personal_email_change_requested" id="personal-email-change-requested" value="0">
+                                                <input type="hidden" id="personal-email-otp-verified" value="0">
+
+                                                <div class="personal-field-hint" id="personal-email-hint">This is your current sign-in email from the database. Click Change Email if you want to replace it.</div>
+
+                                                <div class="personal-email-actions" id="personal-email-actions" hidden>
+
+                                                    <span class="personal-email-status" id="personal-email-status" aria-live="polite"></span>
+
+                                                </div>
+
+                                                <div class="personal-email-otp-panel" id="personal-email-otp-panel" hidden>
+
+                                                    <div class="personal-email-otp-row">
+
+                                                        <input type="text" id="personal-email-otp-code" class="form-control" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Enter 6-digit OTP">
+
+                                                        <button type="button" class="btn btn-primary btn-sm" id="personal-email-verify-otp">
+
+                                                            <span class="material-symbols-rounded" aria-hidden="true">verified</span>
+
+                                                            <span>Verify OTP</span>
+
+                                                        </button>
+
+                                                    </div>
+
+                                                    <div class="personal-field-hint" id="personal-email-otp-hint">Click Change after entering a new available email address, then verify the 6-digit OTP before saving.</div>
+
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+
+                                        <div class="personal-profile-inline-note">
+
+                                            <span class="material-symbols-rounded">info</span>
+
+                                            <p>If you change your email, use an address you can access immediately for future password resets and account notifications.</p>
+
+                                        </div>
+
+                                    </div>
+
+                                    <div class="card personal-profile-card">
+
+                                        <div class="card-header-flex personal-profile-card-head">
+
+                                            <div>
+
+                                                <h3>Password &amp; Sign-in</h3>
+
+                                                <p class="text-muted">Leave the password fields blank if you want to keep your current password.</p>
+
+                                            </div>
+
+                                            <div class="personal-profile-status-chip is-muted">Optional update</div>
+
+                                        </div>
+
+                                        <div class="personal-password-grid">
+
+                                            <div class="form-group">
+
+                                                <label for="personal-password">New Password</label>
+
+                                                <div class="personal-password-input">
+
+                                                    <input type="password" id="personal-password" name="personal_password" class="form-control" placeholder="Enter a new password" autocomplete="new-password" minlength="8">
+
+                                                    <button type="button" class="personal-password-toggle" data-password-toggle="personal-password" aria-label="Show passwords">
+
+                                                        <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
+
+                                                        <span data-password-toggle-text>Show</span>
+
+                                                    </button>
+
+                                                </div>
+
+                                                <div class="personal-field-hint">A new password must be at least 8 characters long.</div>
+
+                                            </div>
+
+                                            <div class="form-group">
+
+                                                <label for="personal-password-confirm">Confirm New Password</label>
+
+                                                <div class="personal-password-input">
+
+                                                    <input type="password" id="personal-password-confirm" name="personal_password_confirm" class="form-control" placeholder="Re-enter the new password" autocomplete="new-password" minlength="8">
+
+                                                    <button type="button" class="personal-password-toggle" data-password-toggle="personal-password-confirm" aria-label="Show passwords">
+
+                                                        <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
+
+                                                        <span data-password-toggle-text>Show</span>
+
+                                                    </button>
+
+                                                </div>
+
+                                                <div id="personal-password-match" class="personal-password-match" aria-live="polite"></div>
+
+                                            </div>
+
+                                        </div>
+
+                                        <div class="personal-password-panel" data-personal-password-panel hidden>
+
+                                            <div class="personal-password-strength">
+
+                                                <div class="personal-password-strength-bar">
+
+                                                    <span id="personal-password-strength-fill" class="personal-password-strength-fill"></span>
+
+                                                </div>
+
+                                                <strong id="personal-password-strength-label">No new password entered</strong>
+
+                                            </div>
+
+                                            <ul class="personal-password-rules">
+
+                                                <li data-personal-password-rule="length">
+
+                                                    <span class="material-symbols-rounded">check_circle</span>
+
+                                                    <span>At least 8 characters</span>
+
+                                                </li>
+
+                                                <li data-personal-password-rule="mixedCase">
+
+                                                    <span class="material-symbols-rounded">check_circle</span>
+
+                                                    <span>Uppercase and lowercase letters</span>
+
+                                                </li>
+
+                                                <li data-personal-password-rule="number">
+
+                                                    <span class="material-symbols-rounded">check_circle</span>
+
+                                                    <span>At least one number</span>
+
+                                                </li>
+
+                                                <li data-personal-password-rule="symbol">
+
+                                                    <span class="material-symbols-rounded">check_circle</span>
+
+                                                    <span>At least one symbol for extra strength</span>
+
+                                                </li>
+
+                                            </ul>
+
+                                        </div>
+
+                                    </div>
+
+                                    <div class="action-bar personal-profile-action-bar">
+
+                                        <button class="btn btn-outline" type="reset">Reset Fields</button>
+
+                                        <button class="btn btn-primary" type="submit" id="personal-profile-submit">
+
+                                            <span class="material-symbols-rounded">save</span>
+
+                                            <span>Save Profile Changes</span>
+
+                                        </button>
 
                                     </div>
 
                                 </div>
-
-                                <div class="form-group">
-
-                                    <label>Log-in Email Address</label>
-
-                                    <input type="email" name="personal_email" class="form-control" value="<?php echo htmlspecialchars($personal_data['email']); ?>" required>
-
-                                </div>
-
-                            </div>
-
-                            <div class="card">
-
-                                <h3>Security</h3>
-
-                                <p class="text-muted" style="margin-bottom: 12px;">Leave blank if you do not want to change your password.</p>
-
-                                <div class="form-group">
-
-                                    <label>New Password</label>
-
-                                    <input type="password" name="personal_password" class="form-control" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
-
-                                </div>
-
-                            </div>
-
-                            <div class="action-bar">
-
-                                <button class="btn btn-primary" type="submit">Update Personal Profile</button>
 
                             </div>
 
