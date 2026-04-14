@@ -208,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelector('.top-header'),
             ...viewSections.filter((section) => section !== loanProductsSection),
             loanProductsSection.querySelector('.section-intro'),
+            loanProductsSection.querySelector('.loan-products-builder-header'),
             loanProductsSection.querySelector('.loan-products-tabs'),
             loanProductsSection.querySelector('#existing-loan-products'),
         ].filter((element) => element && !loanProductsModalPanel.contains(element));

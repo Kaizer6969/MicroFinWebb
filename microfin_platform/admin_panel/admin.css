@@ -22,6 +22,9 @@
     --sidebar-bg: #ffffff;
     --text-main: #0f172a;
     --text-muted: #64748b;
+    --surface-scrollbar-track: rgba(226, 232, 240, 0.82);
+    --surface-scrollbar-thumb: rgba(148, 163, 184, 0.72);
+    --surface-scrollbar-thumb-hover: rgba(100, 116, 139, 0.84);
     --font-family: 'Inter', sans-serif;
 }
 
@@ -38,6 +41,9 @@
     --sidebar-scrollbar-track: rgba(15, 23, 42, 0.55);
     --sidebar-scrollbar-thumb: rgba(100, 116, 139, 0.72);
     --sidebar-scrollbar-thumb-hover: rgba(148, 163, 184, 0.9);
+    --surface-scrollbar-track: rgba(15, 23, 42, 0.72);
+    --surface-scrollbar-thumb: rgba(100, 116, 139, 0.74);
+    --surface-scrollbar-thumb-hover: rgba(148, 163, 184, 0.92);
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.45);
     --shadow-md: 0 10px 15px -3px rgb(0 0 0 / 0.45), 0 4px 6px -4px rgb(0 0 0 / 0.4);
 }
@@ -4767,10 +4773,24 @@ body.loan-products-modal-open::before {
     content: none;
 }
 
+body.loan-products-modal-open .sidebar,
+body.loan-products-modal-open .top-header,
+body.loan-products-modal-open #loan_products > .section-intro,
+body.loan-products-modal-open #loan_products .loan-products-builder-header,
+body.loan-products-modal-open #loan_products .loan-products-tabs,
+body.loan-products-modal-open #loan_products #existing-loan-products {
+    opacity: 0.34;
+    pointer-events: none;
+    user-select: none;
+    transition: opacity 0.18s ease;
+}
+
 .loan-products-modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.56);
+    background:
+        radial-gradient(circle at top, rgba(var(--primary-rgb), 0.14), transparent 38%),
+        rgba(2, 6, 23, 0.58);
     z-index: 11991;
 }
 
@@ -4779,36 +4799,39 @@ body.loan-products-modal-open::before {
     inset: 0;
     z-index: 11992;
     margin: 0;
-    padding: 28px 32px;
+    padding: clamp(20px, 4vw, 44px);
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow-y: auto;
+    overflow: hidden;
     isolation: isolate;
     pointer-events: auto;
 }
 
 .loan-products-modal-shell {
     position: relative;
-    width: min(1220px, calc(100vw - 72px));
+    width: min(1380px, calc(100vw - 64px));
     max-width: 100%;
     height: auto;
-    max-height: min(86vh, 920px);
+    max-height: min(92vh, 980px);
     margin: 0;
     overflow: hidden;
-    padding: 22px;
-    border-radius: 20px;
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    background: var(--bg-card);
+    padding: 28px;
+    border-radius: 26px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    background:
+        linear-gradient(180deg, rgba(var(--primary-rgb), 0.08), rgba(var(--primary-rgb), 0.02) 180px, rgba(255, 255, 255, 0) 320px),
+        var(--bg-card);
     box-shadow:
-        0 30px 80px rgba(15, 23, 42, 0.3),
-        0 10px 24px rgba(15, 23, 42, 0.14);
+        0 34px 84px rgba(15, 23, 42, 0.3),
+        0 14px 30px rgba(15, 23, 42, 0.16);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 16px;
-    animation: modalSlideIn 0.2s ease-out;
+    gap: 22px;
+    animation: modalSlideIn 0.22s ease-out;
     isolation: isolate;
     pointer-events: auto;
+    contain: layout paint;
 }
 
 .loan-products-modal-shell:focus {
@@ -4818,8 +4841,8 @@ body.loan-products-modal-open::before {
 [data-theme="dark"] .loan-products-modal-shell {
     background: var(--bg-card);
     box-shadow:
-        0 30px 84px rgba(0, 0, 0, 0.42),
-        0 10px 24px rgba(0, 0, 0, 0.28);
+        0 34px 84px rgba(0, 0, 0, 0.46),
+        0 14px 30px rgba(0, 0, 0, 0.3);
 }
 
 .loan-products-modal-head {
@@ -4888,14 +4911,39 @@ body.loan-products-modal-open::before {
 
 .loan-products-builder-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.06fr) minmax(340px, 390px);
+    grid-template-columns: minmax(0, 1.08fr) minmax(380px, 440px);
     justify-content: stretch;
-    gap: 22px;
+    gap: 28px;
     align-items: start;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 4px;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding-right: 8px;
     scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-scrollbar-thumb) var(--surface-scrollbar-track);
+}
+
+.loan-products-builder-layout::-webkit-scrollbar {
+    width: 10px;
+}
+
+.loan-products-builder-layout::-webkit-scrollbar-track {
+    background: var(--surface-scrollbar-track);
+    border-radius: 999px;
+}
+
+.loan-products-builder-layout::-webkit-scrollbar-thumb {
+    background: var(--surface-scrollbar-thumb);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.loan-products-builder-layout::-webkit-scrollbar-thumb:hover {
+    background: var(--surface-scrollbar-thumb-hover);
+    background-clip: padding-box;
 }
 
 .loan-products-form-column {

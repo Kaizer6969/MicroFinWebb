@@ -11800,9 +11800,9 @@ function hexToRgb($hex)
 
                             <a href="admin.php?tab=loan_products" class="loan-products-modal-backdrop" aria-label="Close loan product form"></a>
 
-                            <div id="loan-products-form-panel" class="loan-products-modal-panel" role="dialog" aria-modal="true" aria-labelledby="loan-products-modal-title">
+                            <div id="loan-products-form-panel" class="loan-products-modal-panel" role="dialog" aria-modal="true" aria-labelledby="loan-products-modal-title" aria-describedby="loan-products-modal-description">
 
-                                <div class="loan-products-modal-shell" tabindex="2" data-loan-products-modal>
+                                <div class="loan-products-modal-shell" tabindex="-1" data-loan-products-modal>
 
                                     <div class="loan-products-modal-head">
 
@@ -11810,7 +11810,7 @@ function hexToRgb($hex)
 
                                             <h3 id="loan-products-modal-title"><?php echo !empty($existing_product) ? 'Edit Loan Product' : 'Create Loan Product'; ?></h3>
 
-                                            <p class="text-muted"><?php echo !empty($existing_product) ? 'Update rates, terms, and charges while validating the borrower preview.' : 'Define rates, terms, and charges for a new product while validating the borrower preview.'; ?></p>
+                                            <p class="text-muted" id="loan-products-modal-description"><?php echo !empty($existing_product) ? 'Update rates, terms, and charges while validating the borrower preview.' : 'Define rates, terms, and charges for a new product while validating the borrower preview.'; ?></p>
 
                                         </div>
 
