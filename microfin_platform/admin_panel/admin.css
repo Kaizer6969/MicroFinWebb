@@ -89,6 +89,7 @@ body {
     position: fixed;
     height: 100vh;
     z-index: 100;
+    overflow: hidden;
 }
 
 .sidebar-header {
@@ -97,6 +98,7 @@ body {
     align-items: center;
     gap: 12px;
     border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
 .logo-circle {
@@ -120,10 +122,14 @@ body {
 
 .sidebar-nav {
     flex: 1;
+    min-height: 0;
     padding: 20px 16px;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
 }
 
 .sidebar-section-title {
@@ -209,6 +215,7 @@ body {
 .sidebar-footer {
     padding: 20px 16px;
     border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
 .sidebar-footer .nav-item {

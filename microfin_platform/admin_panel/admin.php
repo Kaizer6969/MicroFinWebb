@@ -15794,7 +15794,14 @@ function hexToRgb($hex)
 
 
 
-            function setPolicyTab(tabName) {
+            function isCreditPolicySectionActive() {
+                var section = byId('credit_settings');
+                return !!(section && section.classList.contains('active'));
+            }
+
+            function setPolicyTab(tabName, options) {
+
+                var syncOptions = options && typeof options === 'object' ? options : {};
 
                 var activeTab = tabName;
 
@@ -15830,13 +15837,17 @@ function hexToRgb($hex)
 
 
 
-                document.querySelectorAll('.sidebar-nav .nav-item[data-target="credit_settings"]').forEach(function(item) {
+                if (isCreditPolicySectionActive()) {
 
-                    var itemTab = item.getAttribute('data-credit-policy-subtab') || 'overview';
+                    document.querySelectorAll('.sidebar-nav .nav-item[data-target="credit_settings"]').forEach(function(item) {
 
-                    item.classList.toggle('active', itemTab === activeTab);
+                        var itemTab = item.getAttribute('data-credit-policy-subtab') || 'overview';
 
-                });
+                        item.classList.toggle('active', itemTab === activeTab);
+
+                    });
+
+                }
 
                 var activeTabInput = byId('credit-policy-active-tab-input');
 
@@ -15848,19 +15859,23 @@ function hexToRgb($hex)
 
 
 
-                try {
+                if (syncOptions.syncUrl !== false && isCreditPolicySectionActive()) {
 
-                    var currentUrl = new URL(window.location.href);
+                    try {
 
-                    currentUrl.searchParams.set('tab', 'credit_control_policy');
+                        var currentUrl = new URL(window.location.href);
 
-                    currentUrl.searchParams.set('credit_policy_tab', activeTab || 'overview');
+                        currentUrl.searchParams.set('tab', 'credit_control_policy');
 
-                    window.history.replaceState(window.history.state, '', currentUrl.toString());
+                        currentUrl.searchParams.set('credit_policy_tab', activeTab || 'overview');
 
-                } catch (error) {
+                        window.history.replaceState(window.history.state, '', currentUrl.toString());
 
-                    // Ignore URL sync issues and keep the visual tab state working.
+                    } catch (error) {
+
+                        // Ignore URL sync issues and keep the visual tab state working.
+
+                    }
 
                 }
 
@@ -17099,7 +17114,7 @@ function hexToRgb($hex)
 
             syncCreditPolicyUI();
 
-            setPolicyTab(<?php echo json_encode($credit_policy_subtab, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>);
+            setPolicyTab(<?php echo json_encode($credit_policy_subtab, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>, { syncUrl: false });
 
         })();
     </script>
