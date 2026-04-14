@@ -1,12 +1,40 @@
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.documentElement;
     const themeButtons = document.querySelectorAll('.js-public-theme-toggle');
-    const themeStorageKey = 'microfin_public_theme';
+    const themeStorageKey = 'microfin_ui_theme';
+    const legacyThemeKeys = ['microfin_public_theme', 'microfin_super_admin_theme'];
     const navbar = document.querySelector('.navbar');
     const animatedLogo = document.querySelector('[data-animated-logo]');
     const reducedMotionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
     const normalizeTheme = (value) => value === 'dark' ? 'dark' : 'light';
+
+    const getStoredTheme = () => {
+        try {
+            const themeKeys = [themeStorageKey, ...legacyThemeKeys];
+            for (const key of themeKeys) {
+                const storedTheme = localStorage.getItem(key);
+                if (storedTheme === 'light' || storedTheme === 'dark') {
+                    return storedTheme;
+                }
+            }
+        } catch (error) {
+            console.warn('Unable to read public theme preference.', error);
+        }
+
+        return null;
+    };
+
+    const persistTheme = (theme) => {
+        try {
+            localStorage.setItem(themeStorageKey, theme);
+            legacyThemeKeys.forEach((key) => {
+                localStorage.setItem(key, theme);
+            });
+        } catch (error) {
+            console.warn('Unable to store public theme preference.', error);
+        }
+    };
 
     const updateThemeButtons = (theme) => {
         themeButtons.forEach((button) => {
@@ -39,20 +67,19 @@ document.addEventListener('DOMContentLoaded', () => {
             : '0 10px 22px -18px rgba(15, 23, 42, 0.16)';
     };
 
-    const applyPublicTheme = (theme) => {
+    const applyPublicTheme = (theme, persist = true) => {
         const resolvedTheme = normalizeTheme(theme);
         root.setAttribute('data-theme', resolvedTheme);
         updateThemeButtons(resolvedTheme);
         updateNavbarShadow();
 
-        try {
-            localStorage.setItem(themeStorageKey, resolvedTheme);
-        } catch (error) {
-            console.warn('Unable to store public theme preference.', error);
+        if (persist) {
+            persistTheme(resolvedTheme);
         }
     };
 
-    applyPublicTheme(root.getAttribute('data-theme') || 'light');
+    const storedTheme = getStoredTheme();
+    applyPublicTheme(storedTheme || root.getAttribute('data-theme') || 'light', Boolean(storedTheme));
 
     themeButtons.forEach((button) => {
         button.addEventListener('click', () => {

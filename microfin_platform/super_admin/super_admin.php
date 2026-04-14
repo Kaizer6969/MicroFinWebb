@@ -1828,11 +1828,6 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                         <label>Date To</label>
                                         <input type="date" id="audit-date-to" class="form-control">
                                     </div>
-                                    <div class="form-group" style="align-self: flex-end;">
-                                        <button class="btn btn-primary" id="btn-apply-audit-filter">
-                                            <span class="material-symbols-rounded">filter_alt</span> Filter
-                                        </button>
-                                    </div>
                                 </div>
                                 <div class="table-responsive audit-table-wrap">
                                     <table class="admin-table" id="audit-logs-table">
@@ -2601,11 +2596,6 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="form-group" style="align-self: flex-end;">
-                                <button class="btn btn-primary" id="btn-apply-report-filter">
-                                    <span class="material-symbols-rounded">filter_alt</span> Apply Filter
-                                </button>
-                            </div>
                         </div>
                     </div>
 
@@ -3239,7 +3229,7 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                 12 => 'December',
                             ];
                             ?>
-                            <form method="GET" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+                            <form method="GET" id="receipt-filter-form" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
                                 <input type="hidden" name="section" value="receipts">
                                 <div class="form-group" style="margin:0; min-width:160px;">
                                     <label style="font-size:.8rem;">Receipt Type</label>
@@ -3270,7 +3260,6 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                         value="<?php echo htmlspecialchars((string) $stmt_filter_year, ENT_QUOTES, 'UTF-8'); ?>"
                                     >
                                 </div>
-                                <button type="submit" class="btn btn-primary" style="padding:8px 16px;">Filter</button>
                             </form>
                         </div>
                         <?php

@@ -400,9 +400,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <script>
         (function () {
             try {
-                var storedTheme = localStorage.getItem('microfin_public_theme');
-                if (storedTheme === 'light' || storedTheme === 'dark') {
-                    document.documentElement.setAttribute('data-theme', storedTheme);
+                var themeKeys = ['microfin_ui_theme', 'microfin_public_theme', 'microfin_super_admin_theme'];
+                for (var i = 0; i < themeKeys.length; i += 1) {
+                    var storedTheme = localStorage.getItem(themeKeys[i]);
+                    if (storedTheme === 'light' || storedTheme === 'dark') {
+                        document.documentElement.setAttribute('data-theme', storedTheme);
+                        break;
+                    }
                 }
             } catch (error) {}
         }());
@@ -1064,9 +1068,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     (function () {
         const root = document.documentElement;
         const themeToggle = document.getElementById('public-theme-toggle');
-        const storageKey = 'microfin_public_theme';
+        const storageKey = 'microfin_ui_theme';
+        const legacyThemeKeys = ['microfin_public_theme', 'microfin_super_admin_theme'];
 
         const normalizeTheme = (value) => value === 'dark' ? 'dark' : 'light';
+
+        const getStoredTheme = () => {
+            try {
+                const themeKeys = [storageKey, ...legacyThemeKeys];
+                for (const key of themeKeys) {
+                    const storedTheme = localStorage.getItem(key);
+                    if (storedTheme === 'light' || storedTheme === 'dark') {
+                        return storedTheme;
+                    }
+                }
+            } catch (error) {}
+
+            return null;
+        };
+
+        const persistTheme = (theme) => {
+            try {
+                localStorage.setItem(storageKey, theme);
+                legacyThemeKeys.forEach((key) => {
+                    localStorage.setItem(key, theme);
+                });
+            } catch (error) {}
+        };
 
         const syncThemeToggle = (theme) => {
             if (!themeToggle) {
@@ -1086,16 +1114,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             }
         };
 
-        const applyTheme = (theme) => {
+        const applyTheme = (theme, persist = true) => {
             const resolvedTheme = normalizeTheme(theme);
             root.setAttribute('data-theme', resolvedTheme);
             syncThemeToggle(resolvedTheme);
-            try {
-                localStorage.setItem(storageKey, resolvedTheme);
-            } catch (error) {}
+            if (persist) {
+                persistTheme(resolvedTheme);
+            }
         };
 
-        applyTheme(root.getAttribute('data-theme') || 'light');
+        const storedTheme = getStoredTheme();
+        applyTheme(storedTheme || root.getAttribute('data-theme') || 'light', Boolean(storedTheme));
 
         if (themeToggle) {
             themeToggle.addEventListener('click', () => {

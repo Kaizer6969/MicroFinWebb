@@ -2,11 +2,39 @@
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.documentElement;
     const authThemeToggle = document.getElementById('auth-theme-toggle');
-    const themeKey = 'microfin_super_admin_theme';
+    const themeKey = 'microfin_ui_theme';
+    const legacyThemeKeys = ['microfin_super_admin_theme', 'microfin_public_theme'];
     const loginForm = document.getElementById('login-form');
     const loader = document.getElementById('loader');
 
     const normalizeTheme = (value) => value === 'dark' ? 'dark' : 'light';
+
+    const getStoredTheme = () => {
+        try {
+            const themeKeys = [themeKey, ...legacyThemeKeys];
+            for (const key of themeKeys) {
+                const storedTheme = localStorage.getItem(key);
+                if (storedTheme === 'light' || storedTheme === 'dark') {
+                    return storedTheme;
+                }
+            }
+        } catch (error) {
+            console.warn('Unable to read auth theme preference.', error);
+        }
+
+        return null;
+    };
+
+    const persistTheme = (theme) => {
+        try {
+            localStorage.setItem(themeKey, theme);
+            legacyThemeKeys.forEach((key) => {
+                localStorage.setItem(key, theme);
+            });
+        } catch (error) {
+            console.warn('Unable to store auth theme preference.', error);
+        }
+    };
 
     const updateAuthThemeToggle = (theme) => {
         if (!authThemeToggle) {
@@ -32,24 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
         updateAuthThemeToggle(resolvedTheme);
 
         if (persist) {
-            try {
-                localStorage.setItem(themeKey, resolvedTheme);
-            } catch (error) {
-                console.warn('Unable to store auth theme preference.', error);
-            }
+            persistTheme(resolvedTheme);
         }
     };
 
-    try {
-        const storedTheme = localStorage.getItem(themeKey);
-        if (storedTheme === 'light' || storedTheme === 'dark') {
-            applyAuthTheme(storedTheme, false);
-        } else {
-            applyAuthTheme(root.getAttribute('data-theme') || 'light', false);
-        }
-    } catch (error) {
-        applyAuthTheme(root.getAttribute('data-theme') || 'light', false);
-    }
+    const storedTheme = getStoredTheme();
+    applyAuthTheme(storedTheme || root.getAttribute('data-theme') || 'light', Boolean(storedTheme));
 
     if (authThemeToggle) {
         authThemeToggle.addEventListener('click', () => {

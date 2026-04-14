@@ -887,7 +887,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     // REPORTS: Load via AJAX
     // ============================================================
-    const btnApplyReportFilter = document.getElementById('btn-apply-report-filter');
     const reportDateFromInput = document.getElementById('report-date-from');
     const reportDateToInput = document.getElementById('report-date-to');
     const reportTenantFilter = document.getElementById('report-tenant-filter');
@@ -936,13 +935,12 @@ document.addEventListener('DOMContentLoaded', () => {
         reportPdfButton.href = 'report_pdf.php' + (params.toString() ? `?${params.toString()}` : '');
     }
 
-    if (btnApplyReportFilter) {
-        btnApplyReportFilter.addEventListener('click', loadReports);
-    }
-
     [reportDateFromInput, reportDateToInput, reportTenantFilter].forEach((input) => {
         if (input) {
-            input.addEventListener('change', () => updateReportPdfLink());
+            input.addEventListener('change', () => {
+                updateReportPdfLink();
+                loadReports();
+            });
         }
     });
 
@@ -1156,24 +1154,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ============================================================
     // AUDIT LOGS: Load via AJAX
-    const btnApplyAuditFilter = document.getElementById('btn-apply-audit-filter');
+    const auditActionFilter = document.getElementById('audit-action-filter');
+    const auditTenantFilter = document.getElementById('audit-tenant-filter');
+    const auditDateFromInput = document.getElementById('audit-date-from');
+    const auditDateToInput = document.getElementById('audit-date-to');
 
-    if (btnApplyAuditFilter) {
-        btnApplyAuditFilter.addEventListener('click', () => {
-            const actionType = document.getElementById('audit-action-filter').value;
-            const tenantId = document.getElementById('audit-tenant-filter').value;
-            const dateFrom = document.getElementById('audit-date-from').value;
-            const dateTo = document.getElementById('audit-date-to').value;
+    function loadAuditLogs() {
+        if (!document.getElementById('audit-logs-table')) {
+            return;
+        }
 
-            const params = new URLSearchParams({ action: 'audit_logs' });
-            if (actionType) params.set('action_type', actionType);
-            if (tenantId) params.set('tenant_id', tenantId);
-            if (dateFrom) params.set('date_from', dateFrom);
-            if (dateTo) params.set('date_to', dateTo);
+        const params = new URLSearchParams({ action: 'audit_logs' });
+        if (auditActionFilter && auditActionFilter.value) params.set('action_type', auditActionFilter.value);
+        if (auditTenantFilter && auditTenantFilter.value) params.set('tenant_id', auditTenantFilter.value);
+        if (auditDateFromInput && auditDateFromInput.value) params.set('date_from', auditDateFromInput.value);
+        if (auditDateToInput && auditDateToInput.value) params.set('date_to', auditDateToInput.value);
 
-            fetch('api_dashboard_stats.php?' + params.toString())
-                .then(data => renderAuditLogs(data.logs || []))
-                .catch(e => console.error('Audit logs error:', e));
+        fetch('api_dashboard_stats.php?' + params.toString())
+            .then((response) => response.json())
+            .then((data) => renderAuditLogs(data.logs || []))
+            .catch((error) => console.error('Audit logs error:', error));
+    }
+
+    [auditActionFilter, auditTenantFilter, auditDateFromInput, auditDateToInput].forEach((input) => {
+        if (input) {
+            input.addEventListener('change', loadAuditLogs);
+        }
+    });
+
+    const receiptFilterForm = document.getElementById('receipt-filter-form');
+    if (receiptFilterForm) {
+        const receiptFilterInputs = receiptFilterForm.querySelectorAll('select, input[name="statement_year"]');
+        receiptFilterInputs.forEach((input) => {
+            input.addEventListener('change', () => {
+                receiptFilterForm.requestSubmit();
+            });
         });
     }
 

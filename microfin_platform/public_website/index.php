@@ -87,9 +87,13 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
     <script>
         (function () {
             try {
-                var storedTheme = localStorage.getItem('microfin_public_theme');
-                if (storedTheme === 'light' || storedTheme === 'dark') {
-                    document.documentElement.setAttribute('data-theme', storedTheme);
+                var themeKeys = ['microfin_ui_theme', 'microfin_public_theme', 'microfin_super_admin_theme'];
+                for (var i = 0; i < themeKeys.length; i += 1) {
+                    var storedTheme = localStorage.getItem(themeKeys[i]);
+                    if (storedTheme === 'light' || storedTheme === 'dark') {
+                        document.documentElement.setAttribute('data-theme', storedTheme);
+                        break;
+                    }
                 }
             } catch (error) {}
         }());
@@ -348,7 +352,7 @@ $powered_by_count = $tenant_count > 0 ? $tenant_count : "leading";
                 <div class="feature-card">
                     <div class="feature-icon"><span class="material-symbols-rounded">sms</span></div>
                     <h3>Automated Notifications</h3>
-                    <p>Send automated SMS and email reminders to borrowers for upcoming dues, reducing default rates automatically.</p>
+                    <p>Send automated email reminders to borrowers for upcoming dues, reducing default rates automatically.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon"><span class="material-symbols-rounded">api</span></div>

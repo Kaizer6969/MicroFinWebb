@@ -102,6 +102,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>MicroFin | Super Admin Login</title>
     <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($platformLogoUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <script>
+        (function () {
+            try {
+                var themeKeys = ['microfin_ui_theme', 'microfin_super_admin_theme', 'microfin_public_theme'];
+                for (var i = 0; i < themeKeys.length; i += 1) {
+                    var storedTheme = localStorage.getItem(themeKeys[i]);
+                    if (storedTheme === 'light' || storedTheme === 'dark') {
+                        document.documentElement.setAttribute('data-theme', storedTheme);
+                        break;
+                    }
+                }
+            } catch (error) {}
+        }());
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="super_admin_theme.css">
