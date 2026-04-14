@@ -1522,7 +1522,7 @@ input:checked + .slider:before {
 
 .personal-password-input .form-control {
     min-height: 46px;
-    padding-right: 100px;
+    padding-right: 56px;
 }
 
 .personal-password-toggle {
@@ -1532,14 +1532,14 @@ input:checked + .slider:before {
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
     border: none;
     background: transparent;
     color: var(--text-muted);
-    font: inherit;
-    font-size: 0.82rem;
-    font-weight: 700;
     cursor: pointer;
+    padding: 0;
+    width: 28px;
+    height: 28px;
 }
 
 .personal-password-toggle:hover {
@@ -4783,6 +4783,10 @@ body.loan-products-modal-open #loan_products #existing-loan-products {
     pointer-events: none;
     user-select: none;
     transition: opacity 0.18s ease;
+}
+
+body.loan-products-modal-open .top-header {
+    z-index: 1;
 }
 
 .loan-products-modal-backdrop {

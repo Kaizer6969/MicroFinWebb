@@ -154,6 +154,7 @@ if ($tenant_id) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Complete Profile - MicroFin</title>
     <link href="https://fonts.googleapis.com/css2?family=<?php echo urlencode($t_font); ?>:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/password-toggle.css">
     <style>
         body { font-family: '<?php echo htmlspecialchars($t_font); ?>', sans-serif; background: <?php echo htmlspecialchars($t_bg); ?>; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 40px 20px; box-sizing: border-box; }
         .container { background: <?php echo htmlspecialchars($t_card); ?>; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
@@ -250,5 +251,6 @@ if ($tenant_id) {
             <button type="submit">Save Profile & Continue</button>
         </form>
     </div>
+    <script src="../assets/password-toggle.js"></script>
 </body>
 </html>

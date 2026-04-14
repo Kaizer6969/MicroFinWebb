@@ -9677,8 +9677,6 @@ function hexToRgb($hex)
 
                                                         <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
 
-                                                        <span data-password-toggle-text>Show</span>
-
                                                     </button>
 
                                                 </div>
@@ -9698,8 +9696,6 @@ function hexToRgb($hex)
                                                     <button type="button" class="personal-password-toggle" data-password-toggle="personal-password-confirm" aria-label="Show passwords">
 
                                                         <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
-
-                                                        <span data-password-toggle-text>Show</span>
 
                                                     </button>
 

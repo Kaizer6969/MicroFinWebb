@@ -296,6 +296,7 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
     
     <!-- Material Symbols -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="../assets/password-toggle.css">
     
     <style>
         :root {
@@ -586,7 +587,7 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
         <?php endif; ?>
 
         <div class="footer-text">
-            Powered securely by <a href="../public_website/index.html">MicroFin</a>
+            Powered securely by <a href="../public_website/index.php">MicroFin</a>
         </div>
 
         <!-- Loader -->
@@ -596,6 +597,7 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
     </div>
 
     <script src="login.js"></script>
+    <script src="../assets/password-toggle.js"></script>
 </body>
 </html>
 

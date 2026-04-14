@@ -78,6 +78,7 @@ $theme_font = ($tenant_brand && $tenant_brand['font_family']) ? $tenant_brand['f
     <link href="https://fonts.googleapis.com/css2?family=<?php echo urlencode($theme_font); ?>:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Material Symbols -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="../../assets/password-toggle.css">
     <style>
         :root {
             --brand-color: <?php echo htmlspecialchars($theme_color); ?>;
@@ -258,5 +259,6 @@ $theme_font = ($tenant_brand && $tenant_brand['font_family']) ? $tenant_brand['f
         <?php endif; ?>
     </div>
 
+    <script src="../../assets/password-toggle.js"></script>
 </body>
 </html>

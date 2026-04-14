@@ -99,6 +99,7 @@ $theme_font = $theme_font ?? 'Inter';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reset Password</title>
     <link href="https://fonts.googleapis.com/css2?family=<?php echo urlencode($theme_font); ?>:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/password-toggle.css">
     <style>
         :root {
             --brand-color: <?php echo htmlspecialchars($theme_color); ?>;
@@ -177,5 +178,6 @@ $theme_font = $theme_font ?? 'Inter';
     <?php endif; ?>
 </div>
 
+<script src="../assets/password-toggle.js"></script>
 </body>
 </html>

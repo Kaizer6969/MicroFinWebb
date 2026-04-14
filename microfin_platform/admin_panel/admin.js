@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const setupAlert = document.querySelector('.dashboard-setup-alert');
     const setupAlertToggle = document.querySelector('[data-setup-alert-toggle]');
     const loanProductsForm = document.getElementById('loan-products-form');
+    const loanProductsModalBackdrop = document.querySelector('.loan-products-modal-backdrop');
     const loanProductsModalPanel = document.getElementById('loan-products-form-panel');
     const loanProductsModalShell = loanProductsModalPanel ? loanProductsModalPanel.querySelector('[data-loan-products-modal]') : null;
     const loanPreviewRoot = document.querySelector('[data-loan-preview]');
@@ -194,6 +195,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const loanProductsModalOpen = Boolean(loanProductsModalPanel && loanProductsModalShell && loanProductsSection);
 
     if (loanProductsModalOpen) {
+        if (loanProductsModalBackdrop && loanProductsModalBackdrop.parentElement !== document.body) {
+            document.body.appendChild(loanProductsModalBackdrop);
+        }
+
+        if (loanProductsModalPanel.parentElement !== document.body) {
+            document.body.appendChild(loanProductsModalPanel);
+        }
+
         const focusableSelector = [
             'a[href]',
             'button:not([disabled])',

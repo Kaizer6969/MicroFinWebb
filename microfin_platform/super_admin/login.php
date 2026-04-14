@@ -106,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="super_admin_theme.css">
     <link rel="stylesheet" href="super_admin_auth.css">
+    <link rel="stylesheet" href="../assets/password-toggle.css">
 </head>
 <body class="platform-auth auth-compact">
     <button type="button" class="auth-theme-toggle auth-theme-toggle-icon-only" id="auth-theme-toggle" aria-label="Switch to dark mode">
@@ -158,5 +159,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script src="login.js"></script>
+    <script src="../assets/password-toggle.js"></script>
 </body>
 </html>
