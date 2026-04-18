@@ -204,12 +204,9 @@ if (!function_exists('admin_build_credit_policy_workspace_state')) {
         $credit_policy_product_checks_enabled = (int)!empty($credit_policy['product_checks']['use_product_minimum_credit_score'])
             + (int)!empty($credit_policy['product_checks']['use_product_min_amount'])
             + (int)!empty($credit_policy['product_checks']['use_product_max_amount']);
-        $credit_policy_ci_required_above_amount = (float)($credit_policy['ci_rules']['ci_required_above_amount'] ?? 0);
         $credit_policy_ci_mode_label = !empty($credit_policy['ci_rules']['require_ci'])
             ? 'Always required'
-            : ($credit_policy_ci_required_above_amount > 0
-                ? 'Required above PHP ' . number_format($credit_policy_ci_required_above_amount, 0)
-                : 'Optional');
+            : 'Optional';
         $credit_policy_defaults_json = htmlspecialchars(
             (string)json_encode($credit_policy_defaults, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             ENT_QUOTES,
@@ -258,7 +255,6 @@ if (!function_exists('admin_build_credit_policy_workspace_state')) {
             'credit_policy_auto_ci_count' => $credit_policy_auto_ci_count,
             'credit_policy_review_ci_count' => $credit_policy_review_ci_count,
             'credit_policy_product_checks_enabled' => $credit_policy_product_checks_enabled,
-            'credit_policy_ci_required_above_amount' => $credit_policy_ci_required_above_amount,
             'credit_policy_ci_mode_label' => $credit_policy_ci_mode_label,
             'credit_policy_defaults_json' => $credit_policy_defaults_json,
             'policy_console_credit_limits' => $policy_console_credit_limits,

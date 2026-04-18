@@ -1983,9 +1983,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         'insurance_fee_percentage' => trim($_POST['insurance_fee_percentage'] ?? '0.00'),
 
-        'penalty_rate' => trim($_POST['penalty_rate'] ?? '0.50'),
-
-        'penalty_type' => trim($_POST['penalty_type'] ?? 'Daily'),
+        'early_settlement_fee_type' => trim($_POST['early_settlement_fee_type'] ?? 'Percentage'),
+        'early_settlement_fee_value' => trim($_POST['early_settlement_fee_value'] ?? '0.00'),
 
         'grace_period_days' => trim($_POST['grace_period_days'] ?? '3'),
 
@@ -2004,12 +2003,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     } elseif ($form['product_type'] === 'Others' && $form['custom_product_type'] === '') {
 
         $_SESSION['admin_error'] = 'Please provide a custom product type name.';
-    } elseif (!in_array($form['interest_type'], ['Fixed', 'Diminishing', 'Flat'], true)) {
+    } elseif (!in_array($form['interest_type'], ['Flat', 'Declining Balance'], true)) {
 
         $_SESSION['admin_error'] = 'Invalid interest type.';
-    } elseif (!in_array($form['penalty_type'], ['Daily', 'Monthly', 'Flat'], true)) {
-
-        $_SESSION['admin_error'] = 'Invalid penalty type.';
     } elseif ((float)$form['min_amount'] <= 0 || (float)$form['max_amount'] <= 0) {
 
         $_SESSION['admin_error'] = 'Loan amounts must be greater than zero.';
@@ -2056,7 +2052,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         if ($existing_product) {
 
-            $stmt = $pdo->prepare('UPDATE loan_products SET product_name=?, product_type=?, description=?, min_amount=?, max_amount=?, interest_rate=?, interest_type=?, min_term_months=?, max_term_months=?, processing_fee_percentage=?, service_charge=?, documentary_stamp=?, insurance_fee_percentage=?, penalty_rate=?, penalty_type=?, grace_period_days=? WHERE tenant_id=? AND product_id=?');
+            $stmt = $pdo->prepare('UPDATE loan_products SET product_name=?, product_type=?, description=?, min_amount=?, max_amount=?, interest_rate=?, interest_type=?, min_term_months=?, max_term_months=?, processing_fee_percentage=?, service_charge=?, documentary_stamp=?, insurance_fee_percentage=?, early_settlement_fee_type=?, early_settlement_fee_value=?, grace_period_days=? WHERE tenant_id=? AND product_id=?');
 
             $stmt->execute([
 
@@ -2077,8 +2073,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 (float)$form['documentary_stamp'],
 
                 (float)$form['insurance_fee_percentage'],
-                (float)$form['penalty_rate'],
-                $form['penalty_type'],
+                $form['early_settlement_fee_type'],
+                (float)$form['early_settlement_fee_value'],
 
                 (int)$form['grace_period_days'],
                 $tenant_id,
@@ -2087,7 +2083,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             ]);
         } else {
 
-            $stmt = $pdo->prepare('INSERT INTO loan_products (tenant_id, product_name, product_type, description, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage, service_charge, documentary_stamp, insurance_fee_percentage, penalty_rate, penalty_type, grace_period_days, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)');
+            $stmt = $pdo->prepare('INSERT INTO loan_products (tenant_id, product_name, product_type, description, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage, service_charge, documentary_stamp, insurance_fee_percentage, early_settlement_fee_type, early_settlement_fee_value, grace_period_days, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)');
 
             $stmt->execute([
 
@@ -2109,8 +2105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 (float)$form['documentary_stamp'],
 
                 (float)$form['insurance_fee_percentage'],
-                (float)$form['penalty_rate'],
-                $form['penalty_type'],
+                $form['early_settlement_fee_type'],
+                (float)$form['early_settlement_fee_value'],
 
                 (int)$form['grace_period_days'],
 
@@ -2255,10 +2251,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 
 
+if (!function_exists('policy_console_audit_diff')) {
+    function policy_console_audit_diff(array $old, array $new, string $prefix = ''): array {
+        $diffs = [];
+        foreach ($new as $key => $value) {
+            $old_value = array_key_exists($key, $old) ? $old[$key] : null;
+            $current_prefix = $prefix ? $prefix . '.' . $key : (string)$key;
+
+            if (is_array($value)) {
+                if (!is_array($old_value)) {
+                    $old_value = [];
+                }
+                $diffs = array_merge($diffs, policy_console_audit_diff($old_value, $value, $current_prefix));
+            } else {
+                $val_str = is_bool($value) ? ($value ? 'true' : 'false') : (string)$value;
+                $old_val_str = is_bool($old_value) ? ($old_value ? 'true' : 'false') : (string)$old_value;
+
+                if ($val_str !== $old_val_str) {
+                    $diffs[] = "{$current_prefix} changed from '{$old_val_str}' to '{$val_str}'";
+                }
+            }
+        }
+        foreach ($old as $key => $value) {
+            if (!array_key_exists($key, $new)) {
+                $current_prefix = $prefix ? $prefix . '.' . $key : (string)$key;
+                if (is_array($value)) {
+                    $diffs[] = "{$current_prefix} removed";
+                } else {
+                    $old_val_str = is_bool($value) ? ($value ? 'true' : 'false') : (string)$value;
+                    $diffs[] = "{$current_prefix} removed (was '{$old_val_str}')";
+                }
+            }
+        }
+        return $diffs;
+    }
+}
+
+
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_policy_console_credit_limits') {
+
+    require_once __DIR__ . '/includes/policy_console_credit_limits.php';
 
     $current_credit_policy = mf_get_tenant_credit_policy($pdo, (string)$tenant_id);
     $current_credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, (string)$tenant_id);
+    
+    $old_credit_limits = policy_console_credit_limits_load($pdo, (string)$tenant_id, $current_credit_policy, $current_credit_limit_rules, mf_credit_policy_score_ceiling());
     $normalized_credit_limits = policy_console_credit_limits_build_from_post(
         $_POST,
         $current_credit_policy,
@@ -2291,13 +2329,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             'JSON',
         ]);
 
+        $diffs = policy_console_audit_diff($old_credit_limits, $normalized_credit_limits);
+        $desc = 'Policy Console Credit & Limits updated';
+        if (!empty($diffs)) {
+            $desc .= ': ' . implode('; ', $diffs);
+        }
 
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_CREDIT_LIMITS_UPDATED', 'system_settings', ?, ?)");
 
-        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_CREDIT_LIMITS_UPDATED', 'system_settings', 'Policy Console Credit & Limits updated', ?)");
-
-        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
-
-
+        $log->execute([$_SESSION['user_id'] ?? null, $desc, $tenant_id]);
 
         $_SESSION['admin_flash'] = 'Credit & Limits saved successfully.';
     }
@@ -2311,6 +2351,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_policy_console_decision_rules') {
 
+    require_once __DIR__ . '/includes/policy_console_decision_rules.php';
+    
+    $old_decision_rules = policy_console_decision_rules_load($pdo, (string)$tenant_id, mf_credit_policy_score_ceiling(), mf_credit_policy_ci_recommendation_options());
+
     $normalized_decision_rules = policy_console_decision_rules_build_from_post(
         $_POST,
         mf_credit_policy_score_ceiling(),
@@ -2320,7 +2364,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     if ($encoded_decision_rules === false) {
 
-        $_SESSION['admin_error'] = 'Unable to save Decision Rules right now.';
+        $_SESSION['admin_error'] = 'Unable to save Eligibility Criteria right now.';
     } else {
 
         $upsert = $pdo->prepare(
@@ -2341,15 +2385,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             'JSON',
         ]);
 
+        $diffs = policy_console_audit_diff($old_decision_rules, $normalized_decision_rules);
+        $desc = 'Policy Console Eligibility Criteria updated';
+        if (!empty($diffs)) {
+            $desc .= ': ' . implode('; ', $diffs);
+        }
+
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_DECISION_RULES_UPDATED', 'system_settings', ?, ?)");
+
+        $log->execute([$_SESSION['user_id'] ?? null, $desc, $tenant_id]);
 
 
-        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_DECISION_RULES_UPDATED', 'system_settings', 'Policy Console Decision Rules updated', ?)");
 
-        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
-
-
-
-        $_SESSION['admin_flash'] = 'Decision Rules saved successfully.';
+        $_SESSION['admin_flash'] = 'Eligibility Criteria saved successfully.';
     }
 
 
@@ -2362,6 +2410,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_policy_console_compliance_documents') {
+
+    require_once __DIR__ . '/includes/policy_console_compliance_documents.php';
+    $old_compliance_documents = policy_console_compliance_documents_load($pdo, (string)$tenant_id);
 
     $normalized_compliance = policy_console_compliance_documents_build_from_post($_POST, $pdo);
     $encoded_compliance = json_encode($normalized_compliance, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -2389,11 +2440,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             'JSON',
         ]);
 
+        $diffs = policy_console_audit_diff($old_compliance_documents, $normalized_compliance);
+        $desc = 'Policy Console Compliance & Documents updated';
+        if (!empty($diffs)) {
+            $desc .= ': ' . implode('; ', $diffs);
+        }
 
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_COMPLIANCE_UPDATED', 'system_settings', ?, ?)");
 
-        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_COMPLIANCE_UPDATED', 'system_settings', 'Policy Console Compliance & Documents updated', ?)");
-
-        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
+        $log->execute([$_SESSION['user_id'] ?? null, $desc, $tenant_id]);
 
 
 
@@ -3668,7 +3723,11 @@ $lp_form = [
 
     'interest_rate' => $existing_product['interest_rate'] ?? '3.00',
 
-    'interest_type' => $existing_product['interest_type'] ?? 'Diminishing',
+    'interest_type' => (function($t) {
+        if ($t === 'Diminishing') return 'Declining Balance';
+        if ($t === 'Fixed') return 'Flat';
+        return $t ?? 'Declining Balance';
+    })($existing_product['interest_type'] ?? null),
 
     'min_term_months' => $existing_product['min_term_months'] ?? '3',
 
@@ -3682,9 +3741,8 @@ $lp_form = [
 
     'insurance_fee_percentage' => $existing_product['insurance_fee_percentage'] ?? '0.00',
 
-    'penalty_rate' => $existing_product['penalty_rate'] ?? '0.50',
-
-    'penalty_type' => $existing_product['penalty_type'] ?? 'Daily',
+    'early_settlement_fee_type' => $existing_product['early_settlement_fee_type'] ?? 'Percentage',
+    'early_settlement_fee_value' => $existing_product['early_settlement_fee_value'] ?? '0.00',
 
     'grace_period_days' => $existing_product['grace_period_days'] ?? '3',
 
@@ -7556,9 +7614,9 @@ function hexToRgb($hex)
 
                         </a>
 
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=decision_rules" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'decision_rules' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="decision_rules" data-title="Decision Rules">
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=decision_rules" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'decision_rules' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="decision_rules" data-title="Eligibility Criteria">
 
-                            <span>Decision Rules</span>
+                            <span>Eligibility Criteria</span>
 
                         </a>
 
@@ -8100,69 +8158,7 @@ function hexToRgb($hex)
 
 
 
-                    <div class="dashboard-panel-grid dashboard-panel-grid-secondary">
-
-                        <div class="card dashboard-panel">
-
-                            <div class="card-header-flex">
-
-                                <div>
-
-                                    <h3>Recent Staff Activity</h3>
-
-                                    <p class="text-muted">Latest account access and staff-management changes.</p>
-
-                                </div>
-
-                            </div>
-
-                            <ul class="activity-list">
-
-                                <?php if (empty($staff_audit_logs)): ?>
-
-                                    <li>
-
-                                        <div class="activity-icon" style="background: rgba(100, 116, 139, 0.1);"><span class="material-symbols-rounded">info</span></div>
-
-                                        <div class="activity-text">
-
-                                            <p>No recent staff activity recorded.</p>
-
-                                        </div>
-
-                                    </li>
-
-                                <?php else: ?>
-
-                                    <?php foreach ($staff_audit_logs as $sal): ?>
-
-                                        <li>
-
-                                            <div class="activity-icon" style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color);">
-
-                                                <span class="material-symbols-rounded"><?php echo $sal['action_type'] === 'STAFF_LOGIN' ? 'login' : ($sal['action_type'] === 'STAFF_LOGOUT' ? 'logout' : 'manage_accounts'); ?></span>
-
-                                            </div>
-
-                                            <div class="activity-text">
-
-                                                <p><?php echo htmlspecialchars($sal['description'] . ' (' . ($sal['actor_name'] ?? 'System') . ')'); ?></p>
-
-                                                <span><?php echo date('M j, Y, g:i a', strtotime($sal['created_at'])); ?></span>
-
-                                            </div>
-
-                                        </li>
-
-                                    <?php endforeach; ?>
-
-                                <?php endif; ?>
-
-                            </ul>
-
-                        </div>
-
-
+                    <div style="margin-top: 1.5rem;">
 
                         <div class="card dashboard-panel">
 
@@ -8684,8 +8680,6 @@ function hexToRgb($hex)
 
                                             <button type="button" class="preview-btn" data-view="staff">Staff View</button>
 
-                                            <button type="button" class="preview-btn" data-view="mobile">Client App View</button>
-
                                         </div>
 
                                         <div class="preview-stage" id="preview-stage">
@@ -8805,132 +8799,6 @@ function hexToRgb($hex)
                                                                     <div class="staff-widget-sub">12 payments received</div>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div class="preview-screen" data-preview="mobile">
-                                                <div class="phone-shell">
-                                                    <div class="phone-notch"></div>
-                                                    <div class="phone-statusbar"><span>9:41</span><span style="display:flex;gap:3px;align-items:center;"><span class="material-symbols-rounded" style="font-size:10px;">signal_cellular_alt</span><span class="material-symbols-rounded" style="font-size:10px;">wifi</span><span class="material-symbols-rounded" style="font-size:10px;">battery_full</span></span></div>
-                                                    <div class="client-home-header">
-                                                        <div class="client-greeting">Good morning,</div>
-                                                        <div class="client-name" style="color:var(--theme-text-main);">Maria Santos</div>
-                                                    </div>
-                                                    <div class="client-balance-card">
-                                                        <div class="client-balance-label">Outstanding Balance</div>
-                                                        <div class="client-balance-amount">&#8369;24,500.00</div>
-                                                        <div class="client-balance-sub">Next payment: Apr 29, 2026</div>
-                                                        <div class="client-balance-row">
-                                                            <div class="client-balance-stat">
-                                                                <div class="client-balance-stat-val">&#8369;2,450</div>
-                                                                <div class="client-balance-stat-lbl">Monthly Due</div>
-                                                            </div>
-                                                            <div class="client-balance-stat">
-                                                                <div class="client-balance-stat-val">6 / 12</div>
-                                                                <div class="client-balance-stat-lbl">Payments Made</div>
-                                                            </div>
-                                                            <div class="client-balance-stat">
-                                                                <div class="client-balance-stat-val">On Time</div>
-                                                                <div class="client-balance-stat-lbl">Status</div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="client-quick-actions">
-                                                        <div class="client-action-btn"><span class="material-symbols-rounded">payments</span>Pay Now</div>
-                                                        <div class="client-action-btn"><span class="material-symbols-rounded">add_circle</span>Apply</div>
-                                                        <div class="client-action-btn"><span class="material-symbols-rounded">calendar_month</span>Schedule</div>
-                                                        <div class="client-action-btn"><span class="material-symbols-rounded">chat</span>Support</div>
-                                                    </div>
-                                                    <div class="client-section-title">Active Loan</div>
-                                                    <div class="client-loan-card">
-                                                        <div class="client-loan-top"><span class="client-loan-name">Personal Loan</span><span class="client-loan-badge">Active</span></div>
-                                                        <div class="client-loan-progress">
-                                                            <div class="client-loan-progress-fill" style="width:50%;"></div>
-                                                        </div>
-                                                        <div class="client-loan-details"><span>&#8369;24,500 remaining</span><span>&#8369;49,000 total</span></div>
-                                                    </div>
-                                                    <div class="phone-bottom-nav">
-                                                        <div class="phone-nav-item active"><span class="material-symbols-rounded">home</span>Home</div>
-                                                        <div class="phone-nav-item"><span class="material-symbols-rounded">receipt_long</span>Loans</div>
-                                                        <div class="phone-nav-item"><span class="material-symbols-rounded">payments</span>Payments</div>
-                                                        <div class="phone-nav-item"><span class="material-symbols-rounded">person</span>Profile</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div class="preview-screen" data-preview="website">
-                                                <div class="website-preview-shell">
-                                                    <div class="wp-nav">
-                                                        <div class="wp-nav-brand preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></div>
-                                                        <div class="wp-nav-links"><a href="#">Home</a><a href="#">About</a><a href="#">Services</a><a href="#">Contact</a></div>
-                                                        <div class="wp-nav-btns"><button type="button" class="btn-login">Login</button><button type="button" class="btn-cta">Apply Now</button></div>
-                                                    </div>
-                                                    <div class="wp-hero">
-                                                        <div>
-                                                            <div class="wp-badge"><span class="material-symbols-rounded">verified</span>Trusted Financial Services</div>
-                                                            <div class="wp-hero-title">Build your future with <span class="preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></span></div>
-                                                            <div class="wp-hero-sub">Flexible loan products, reliable service, and a digital experience shaped by your brand.</div>
-                                                            <div class="wp-hero-actions"><button type="button" class="wp-btn-p">Get Started</button><button type="button" class="wp-btn-s">Learn More</button></div>
-                                                        </div>
-                                                        <div class="wp-illus">
-                                                            <div class="wp-stat-card">
-                                                                <div class="wp-stat-icon" style="background:var(--theme-primary);"><span class="material-symbols-rounded">check_circle</span></div>
-                                                                <div>
-                                                                    <div class="wp-stat-label">Approved</div>
-                                                                    <div class="wp-stat-value">1,240</div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="wp-stat-card">
-                                                                <div class="wp-stat-icon" style="background:#10b981;"><span class="material-symbols-rounded">group</span></div>
-                                                                <div>
-                                                                    <div class="wp-stat-label">Members</div>
-                                                                    <div class="wp-stat-value">856</div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="wp-stat-card">
-                                                                <div class="wp-stat-icon" style="background:#f59e0b;"><span class="material-symbols-rounded">trending_up</span></div>
-                                                                <div>
-                                                                    <div class="wp-stat-label">Growth</div>
-                                                                    <div class="wp-stat-value">+24%</div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="wp-services">
-                                                        <div class="wp-section-label">What We Offer</div>
-                                                        <div class="wp-section-heading">Our Services</div>
-                                                        <div class="wp-svc-grid">
-                                                            <div class="wp-svc-card"><span class="material-symbols-rounded" style="color:var(--theme-primary);">account_balance_wallet</span>
-                                                                <h6>Personal Loans</h6>
-                                                                <p>Flexible terms for your needs.</p>
-                                                            </div>
-                                                            <div class="wp-svc-card"><span class="material-symbols-rounded" style="color:#10b981;">store</span>
-                                                                <h6>Business Loans</h6>
-                                                                <p>Grow your enterprise.</p>
-                                                            </div>
-                                                            <div class="wp-svc-card"><span class="material-symbols-rounded" style="color:#f59e0b;">emergency</span>
-                                                                <h6>Emergency Loans</h6>
-                                                                <p>Quick access when needed.</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="wp-about">
-                                                        <div class="wp-about-label">About Us</div>
-                                                        <div class="wp-about-title">Who We Are</div>
-                                                        <div class="wp-about-body">We are committed to empowering communities through accessible financial services and sustainable growth.</div>
-                                                    </div>
-                                                    <div class="wp-footer">
-                                                        <div>
-                                                            <div class="wp-footer-brand preview-company-name"><?php echo htmlspecialchars($settings['company_name']); ?></div>
-                                                            <div class="wp-footer-desc">Your trusted partner in financial growth.</div>
-                                                        </div>
-                                                        <div>
-                                                            <div class="wp-footer-contact-label">Contact</div>
-                                                            <div class="wp-footer-contact-item"><span class="material-symbols-rounded">call</span><?php echo htmlspecialchars(($settings['support_phone'] ?? '') !== '' ? $settings['support_phone'] : '(02) 1234-5678'); ?></div>
-                                                            <div class="wp-footer-contact-item"><span class="material-symbols-rounded">mail</span><?php echo htmlspecialchars(($settings['support_email'] ?? '') !== '' ? $settings['support_email'] : 'info@example.com'); ?></div>
-                                                            <div class="wp-footer-contact-item"><span class="material-symbols-rounded">schedule</span>Mon-Fri 8am-5pm</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -11538,9 +11406,7 @@ function hexToRgb($hex)
 
                                                         <select class="form-control" name="interest_type">
 
-                                                            <option value="Diminishing" <?php echo $lp_form['interest_type'] === 'Diminishing' ? 'selected' : ''; ?>>Diminishing</option>
-
-                                                            <option value="Fixed" <?php echo $lp_form['interest_type'] === 'Fixed' ? 'selected' : ''; ?>>Fixed</option>
+                                                            <option value="Declining Balance" <?php echo $lp_form['interest_type'] === 'Declining Balance' ? 'selected' : ''; ?>>Declining Balance</option>
 
                                                             <option value="Flat" <?php echo $lp_form['interest_type'] === 'Flat' ? 'selected' : ''; ?>>Flat</option>
 
@@ -11548,29 +11414,7 @@ function hexToRgb($hex)
 
                                                     </div>
 
-                                                    <div class="form-group">
 
-                                                        <label>Penalty Rate (%)</label>
-
-                                                        <input type="number" class="form-control" name="penalty_rate" value="<?php echo htmlspecialchars($lp_form['penalty_rate']); ?>" step="0.01" min="0">
-
-                                                    </div>
-
-                                                    <div class="form-group">
-
-                                                        <label>Penalty Type</label>
-
-                                                        <select class="form-control" name="penalty_type">
-
-                                                            <option value="Daily" <?php echo $lp_form['penalty_type'] === 'Daily' ? 'selected' : ''; ?>>Daily</option>
-
-                                                            <option value="Monthly" <?php echo $lp_form['penalty_type'] === 'Monthly' ? 'selected' : ''; ?>>Monthly</option>
-
-                                                            <option value="Flat" <?php echo $lp_form['penalty_type'] === 'Flat' ? 'selected' : ''; ?>>Flat</option>
-
-                                                        </select>
-
-                                                    </div>
 
                                                     <div class="form-group">
 
@@ -11685,6 +11529,78 @@ function hexToRgb($hex)
                                                     </div>
 
                                                 </div>
+
+
+
+                                                <!-- Early Settlement Fee Card -->
+                                                <div class="credit-policy-card" style="margin-top: 24px;">
+                                                    <div class="credit-policy-card-header">
+                                                        <h3 class="credit-policy-card-title">Early Settlement Fee</h3>
+                                                    </div>
+                                                    <div class="credit-policy-card-body">
+                                                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                                                            <div class="form-group" style="margin-bottom: 0;">
+                                                                <label style="margin-bottom: 12px; display: block; font-weight: 600; color: var(--text-color);">Fee Type</label>
+                                                                <div style="display: inline-flex; align-items: center; gap: 16px; background: rgba(0,0,0,0.1); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                                                                    <span id="esf_lbl_pct" style="font-size: 0.95rem; display: inline-flex; align-items: center; font-weight: <?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage' ? '700' : '500'); ?>; color: <?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage' ? 'var(--primary-color)' : 'var(--text-muted)'); ?>; transition: color 0.2s ease;">
+                                                                        Percentage (%)
+                                                                        <span title="Calculated based on the selected Interest Type. If the interest type is flat, the fee will be flat. If it is diminishing balance, the fee will be based on the diminishing balance." style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: currentColor; color: var(--bg-card, #fff); font-size: 11px; font-weight: 800; cursor: help; margin-left: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">!</span>
+                                                                    </span>
+                                                                    
+                                                                    <label class="switch" style="margin: 0; flex-shrink: 0;">
+                                                                        <input type="checkbox" id="early_settlement_toggle_switch" <?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Fixed') ? 'checked' : ''; ?>>
+                                                                        <span class="slider round"></span>
+                                                                    </label>
+                                                                    
+                                                                    <span id="esf_lbl_fixed" style="font-size: 0.95rem; font-weight: <?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Fixed' ? '700' : '500'); ?>; color: <?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Fixed' ? 'var(--primary-color)' : 'var(--text-muted)'); ?>; transition: color 0.2s ease;">Fixed Amount (&#8369;)</span>
+                                                                    <input type="hidden" name="early_settlement_fee_type" id="early_settlement_fee_type_input" value="<?php echo htmlspecialchars($lp_form['early_settlement_fee_type'] ?? 'Percentage'); ?>">
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="form-group" style="margin-bottom: 0;">
+                                                                <label id="early_settlement_fee_value_label" style="font-weight: 600; color: var(--text-color);">Fee Value</label>
+                                                                <div class="credit-input-with-prefix">
+                                                                    <span class="credit-input-prefix" id="early_settlement_fee_value_prefix"><?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage') ? '%' : '&#8369;'; ?></span>
+                                                                    <input type="number" class="form-control" name="early_settlement_fee_value" value="<?php echo htmlspecialchars($lp_form['early_settlement_fee_value']); ?>" step="0.01" min="0" style="font-size: 1.05rem;">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Script to toggle prefix -->
+                                                <script>
+                                                    document.addEventListener('DOMContentLoaded', function() {
+                                                        const toggleSwitch = document.getElementById('early_settlement_toggle_switch');
+                                                        const hiddenInput = document.getElementById('early_settlement_fee_type_input');
+                                                        const prefixSpan = document.getElementById('early_settlement_fee_value_prefix');
+                                                        const lblPct = document.getElementById('esf_lbl_pct');
+                                                        const lblFixed = document.getElementById('esf_lbl_fixed');
+
+                                                        if(toggleSwitch && hiddenInput && prefixSpan) {
+                                                            toggleSwitch.addEventListener('change', function() {
+                                                                if(this.checked) {
+                                                                    hiddenInput.value = 'Fixed';
+                                                                    prefixSpan.innerHTML = '&#8369;';
+                                                                    lblFixed.style.color = 'var(--primary-color)';
+                                                                    lblFixed.style.fontWeight = '700';
+                                                                    lblPct.style.color = 'var(--text-muted)';
+                                                                    lblPct.style.fontWeight = '500';
+                                                                } else {
+                                                                    hiddenInput.value = 'Percentage';
+                                                                    prefixSpan.innerHTML = '%';
+                                                                    lblPct.style.color = 'var(--primary-color)';
+                                                                    lblPct.style.fontWeight = '700';
+                                                                    lblFixed.style.color = 'var(--text-muted)';
+                                                                    lblFixed.style.fontWeight = '500';
+                                                                }
+                                                                
+                                                                // Trigger update for preview calculations
+                                                                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                                            });
+                                                        }
+                                                    });
+                                                </script>
 
 
 
@@ -12008,7 +11924,7 @@ function hexToRgb($hex)
 
                                             <div class="loan-product-record-meta">
 
-                                                <span>Penalty: <?php echo number_format((float)($loan_product_record['penalty_rate'] ?? 0), 2); ?>% <?php echo htmlspecialchars((string)($loan_product_record['penalty_type'] ?? '')); ?></span>
+                                                <span>Early Settlement Fee: <?php echo htmlspecialchars((string)($loan_product_record['early_settlement_fee_type'] ?? 'Percentage')); ?> <?php echo number_format((float)($loan_product_record['early_settlement_fee_value'] ?? 0), 2); ?><?php echo (($loan_product_record['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage') ? '%' : ''; ?></span>
 
                                                 <span>Grace: <?php echo (int)($loan_product_record['grace_period_days'] ?? 0); ?> day(s)</span>
 
@@ -14529,8 +14445,6 @@ function hexToRgb($hex)
 
 
                 setChecked('cp-require-ci', defaults.ci_rules ? defaults.ci_rules.require_ci : false);
-
-                setValue('cp-ci-required-above-amount', defaults.ci_rules ? defaults.ci_rules.ci_required_above_amount : 0);
 
                 setGroup('cp_auto_approve_ci_values', defaults.ci_rules ? defaults.ci_rules.auto_approve_ci_values : []);
 

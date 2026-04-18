@@ -4,432 +4,329 @@ $policy_console_decision_config = isset($policy_console_decision_rules) && is_ar
     : policy_console_decision_rules_defaults(
         isset($credit_policy_score_ceiling) ? (int)$credit_policy_score_ceiling : 1000,
         isset($credit_policy_ci_configurable_options) && is_array($credit_policy_ci_configurable_options)
-            ? $credit_policy_ci_configurable_options
-            : []
+            ? $credit_policy_ci_configurable_options : []
     );
 
 $policy_console_workflow = $policy_console_decision_config['workflow'] ?? [];
 $policy_console_rule_groups = $policy_console_decision_config['decision_rules'] ?? [];
-$policy_console_score_thresholds = $policy_console_rule_groups['score_thresholds'] ?? [];
-$policy_console_ci_rules = $policy_console_rule_groups['ci'] ?? [];
-$policy_console_borrowing_access_rules = $policy_console_rule_groups['borrowing_access_rules'] ?? [];
-$policy_console_manual_review_overrides = $policy_console_rule_groups['manual_review_overrides'] ?? [];
-$policy_console_borrower_safeguards = $policy_console_rule_groups['borrower_safeguards'] ?? [];
-$policy_console_ci_options = isset($credit_policy_ci_configurable_options) && is_array($credit_policy_ci_configurable_options)
-    ? $credit_policy_ci_configurable_options
-    : [];
-$policy_console_manual_review_available = (($policy_console_workflow['approval_mode'] ?? 'semi_automatic') === 'semi_automatic');
-$policy_console_help = static function (string $text, string $label = 'More info'): string {
+$policy_console_demographics = $policy_console_rule_groups['demographics'] ?? [];
+$policy_console_affordability = $policy_console_rule_groups['affordability'] ?? [];
+$policy_console_guardrails = $policy_console_rule_groups['guardrails'] ?? [];
+$policy_console_exposure = $policy_console_rule_groups['exposure'] ?? [];
+
+$policy_console_help = static function (string $text, string ...$label): string {
+    $labelText = $label[0] ?? 'More info';
     return '<span class="policy-help" tabindex="0" role="button" aria-label="'
-        . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+        . htmlspecialchars($labelText, ENT_QUOTES, 'UTF-8')
         . '" data-help="'
         . htmlspecialchars($text, ENT_QUOTES, 'UTF-8')
-        . '">!</span>';
+        . '">i</span>';
 };
 
-$policy_console_workflow_labels = [
-    'automatic' => 'Automatic',
-    'semi_automatic' => 'Semi-Automatic',
-    'manual' => 'Manual',
-];
+function renderToggleHeader($label, $helpText, $name, $value) {
+    global $policy_console_help;
+    $isOn = !empty($value);
+    $isOnClass = $isOn ? 'is-on' : '';
+    $ariaPressed = $isOn ? 'true' : 'false';
+    $labelState = $isOn ? 'On' : 'Off';
+    return "
+        <div class=\"policy-decision-rule-header\">
+            <div class=\"policy-decision-rule-label\">
+                <strong>" . htmlspecialchars($label) . "</strong>
+                " . $policy_console_help($helpText) . "
+            </div>
+            <div class=\"policy-inline-toggle-row__control\" style=\"transform: scale(0.85); margin: 0;\">
+                <input type=\"hidden\" name=\"{$name}\" value=\"" . ($isOn ? '1' : '0') . "\" data-policy-toggle-input=\"{$name}\">
+                <button type=\"button\" class=\"policy-toggle-button {$isOnClass}\" data-policy-toggle-button=\"{$name}\" aria-pressed=\"{$ariaPressed}\" aria-label=\"{$label}\">
+                    <span class=\"policy-toggle-button__track\"><span class=\"policy-toggle-button__thumb\"></span></span>
+                    <span class=\"policy-toggle-button__label\" data-policy-toggle-label>{$labelState}</span>
+                </button>
+            </div>
+        </div>
+    ";
+}
 ?>
+<style>
+.policy-rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+.policy-decision-rule-list {
+    display: flex;
+    flex-direction: column;
+}
+.policy-decision-rule-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color, #2d3748);
+    transition: background-color 0.2s;
+}
+.policy-decision-rule-item:last-child {
+    border-bottom: none;
+}
+.policy-decision-rule-item:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+.policy-decision-rule-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.policy-decision-rule-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+.policy-decision-input-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 4px;
+    transition: opacity 0.2s ease;
+}
+.policy-decision-field {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 160px;
+}
+.policy-decision-field-col {
+    flex-direction: column;
+    align-items: flex-start;
+}
+.policy-decision-field-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted, #a0aec0);
+    white-space: nowrap;
+}
+.policy-decision-field .form-control {
+    background-color: #1a202c;
+    border: 1px solid #4a5568;
+    color: #fff;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    width: 100%;
+    max-width: 160px;
+}
+.policy-decision-field select.form-control[multiple] {
+    height: auto;
+    min-height: 100px;
+    max-width: 100%;
+}
+.policy-help {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 50%; background-color: #4a5568; color: #cbd5e0;
+    font-size: 10px; font-weight: bold; cursor: help; z-index: 20; font-style: italic; font-family: serif;
+}
+.policy-help:hover { background-color: #718096; color: white; }
+.policy-help:hover::after {
+    content: attr(data-help); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-6px);
+    width: 240px; padding: 10px; background-color: #2d3748; border: 1px solid #4a5568; color: #e2e8f0;
+    font-size: 12px; font-weight: normal; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 1000; pointer-events: none; white-space: normal; text-align: left; font-family: sans-serif; font-style: normal;
+}
+.is-visually-disabled { opacity: 0.35; pointer-events: none; filter: grayscale(1); }
+</style>
+
 <form method="POST" action="admin.php" class="policy-tab-form" id="policy-console-decision-rules-form">
     <input type="hidden" name="action" value="save_policy_console_decision_rules">
     <input type="hidden" name="credit_policy_tab" value="decision_rules">
 
     <div class="policy-compact-stack">
-        <section class="policy-compact-card">
+        <section class="policy-compact-card" style="margin-bottom: 16px;">
             <div class="policy-save-row">
                 <div class="policy-compact-toolbar-copy">
-                    <h3>Decision Rules</h3>
-                    <p class="text-muted">Configure workflow routing, approval thresholds, investigation rules, borrowing access, review overrides, and borrower protection in one tenant policy page.</p>
-                </div>
-                <div class="policy-compact-card-actions">
-                    <button type="submit" class="btn btn-primary">
-                        <span class="material-symbols-rounded">save</span>
-                        Save Decision Rules
-                    </button>
+                    <h3 style="margin-bottom: 4px;">Risk Tolerances</h3>
+                    <p class="text-muted" style="font-size: 13px;">Manage fine-grained risk tolerances with independent master toggles.</p>
                 </div>
             </div>
         </section>
 
-        <section class="policy-compact-card">
-            <div class="policy-compact-card-head">
-                <div class="policy-compact-card-title">
-                    <h4>Workflow Routing</h4>
-                    <p class="text-muted">Keep approval workflow separate from the compact decisioning rules below.</p>
-                </div>
-            </div>
+        <div class="policy-rules-grid">
 
-            <div class="policy-form-grid policy-form-grid--one">
-                <label class="policy-field">
-                    <span class="policy-field-label">Approval Workflow <?php echo $policy_console_help('Controls whether approvals are automatic, semi-automatic, or fully manual.'); ?></span>
-                    <select class="form-control" name="pcdr_approval_mode" data-decision-workflow-mode>
-                        <?php foreach ($policy_console_workflow_labels as $policy_console_mode_value => $policy_console_mode_label): ?>
-                            <option value="<?php echo htmlspecialchars($policy_console_mode_value); ?>" <?php echo (($policy_console_workflow['approval_mode'] ?? 'semi_automatic') === $policy_console_mode_value) ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($policy_console_mode_label); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-            </div>
-        </section>
-
-        <section class="policy-compact-card">
-            <div class="policy-compact-card-head">
-                <div class="policy-compact-card-title">
-                    <h4>Decision Rules</h4>
-                    <p class="text-muted">Toggle each rule group on or off, then adjust the related settings directly under the row when needed.</p>
-                </div>
-            </div>
-
-            <div class="policy-decision-rule-list">
-                <div class="policy-decision-rule-item" data-decision-rule-item>
-                    <div class="policy-decision-rule-row">
-                        <div class="policy-decision-rule-copy">
-                            <div class="policy-decision-rule-title-line">
-                                <?php echo $policy_console_help('Controls the tenant-wide reject and hard-approval thresholds used in this workspace.'); ?>
-                                <strong>Score Thresholds</strong>
-                            </div>
-                            <p class="text-muted">Global Auto-Reject Floor and Hard Approval Threshold.</p>
-                        </div>
-                        <div class="policy-decision-rule-switch">
-                            <input
-                                type="hidden"
-                                name="pcdr_score_thresholds_enabled"
-                                value="<?php echo !empty($policy_console_score_thresholds['enabled']) ? '1' : '0'; ?>"
-                                data-decision-rule-toggle="score_thresholds"
-                                data-policy-toggle-input="score_thresholds"
-                            >
-                            <button
-                                type="button"
-                                class="policy-toggle-button <?php echo !empty($policy_console_score_thresholds['enabled']) ? 'is-on' : ''; ?>"
-                                data-policy-toggle-button="score_thresholds"
-                                aria-pressed="<?php echo !empty($policy_console_score_thresholds['enabled']) ? 'true' : 'false'; ?>"
-                                aria-label="Enable Score Thresholds"
-                            >
-                                <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_score_thresholds['enabled']) ? 'On' : 'Off'; ?></span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="policy-decision-rule-content" data-decision-rule-content="score_thresholds" <?php echo empty($policy_console_score_thresholds['enabled']) ? 'hidden' : ''; ?>>
-                        <div class="policy-form-grid policy-form-grid--two">
-                            <label class="policy-field">
-                                <span class="policy-field-label">Global Auto-Reject Floor</span>
-                                <input type="number" class="form-control" name="pcdr_auto_reject_floor" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($policy_console_score_thresholds['auto_reject_floor'] ?? 250)); ?>">
+            <!-- Demographics -->
+            <section class="policy-compact-card">
+                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Demographics</h4></div></div>
+                <div class="policy-decision-rule-list">
+                    
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Age Restrictions', 'Controls demographic age eligibility.', 'pcdr_age_enabled', $policy_console_demographics['age_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_age_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Age</span>
+                                <input type="number" class="form-control" name="pcdr_min_age" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_age'] ?? '')); ?>">
                             </label>
-                            <label class="policy-field">
-                                <span class="policy-field-label">Hard Approval Threshold</span>
-                                <input type="number" class="form-control" name="pcdr_hard_approval_threshold" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($policy_console_score_thresholds['hard_approval_threshold'] ?? 650)); ?>">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max Age</span>
+                                <input type="number" class="form-control" name="pcdr_max_age" value="<?php echo htmlspecialchars((string)($policy_console_demographics['max_age'] ?? '')); ?>">
                             </label>
                         </div>
                     </div>
-                </div>
 
-                <div class="policy-decision-rule-item" data-decision-rule-item>
-                    <div class="policy-decision-rule-row">
-                        <div class="policy-decision-rule-copy">
-                            <div class="policy-decision-rule-title-line">
-                                <?php echo $policy_console_help('Use this group to control when the Credit Investigation phase becomes part of the decision process.'); ?>
-                                <strong>CI</strong>
-                            </div>
-                            <p class="text-muted">Enable Credit Investigation phase and set mandatory CI above amount.</p>
-                        </div>
-                        <div class="policy-decision-rule-switch">
-                            <input
-                                type="hidden"
-                                name="pcdr_ci_enabled"
-                                value="<?php echo !empty($policy_console_ci_rules['enabled']) ? '1' : '0'; ?>"
-                                data-decision-rule-toggle="ci"
-                                data-policy-toggle-input="ci"
-                            >
-                            <button
-                                type="button"
-                                class="policy-toggle-button <?php echo !empty($policy_console_ci_rules['enabled']) ? 'is-on' : ''; ?>"
-                                data-policy-toggle-button="ci"
-                                aria-pressed="<?php echo !empty($policy_console_ci_rules['enabled']) ? 'true' : 'false'; ?>"
-                                aria-label="Enable CI"
-                            >
-                                <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_ci_rules['enabled']) ? 'On' : 'Off'; ?></span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="policy-decision-rule-content" data-decision-rule-content="ci" <?php echo empty($policy_console_ci_rules['enabled']) ? 'hidden' : ''; ?>>
-                        <div class="policy-form-grid policy-form-grid--two">
-                            <label class="policy-field">
-                                <span class="policy-field-label">Mandatory CI Above Amount</span>
-                                <input type="number" class="form-control" name="pcdr_ci_required_above_amount" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($policy_console_ci_rules['mandatory_ci_above_amount'] ?? 0)); ?>">
-                            </label>
-                            <div class="policy-blueprint-note">
-                                <strong>Phase note</strong>
-                                <span>When this rule group is off, the tenant treats CI as outside the default decision flow.</span>
-                            </div>
-                        </div>
-
-                        <?php if ($policy_console_ci_options !== []): ?>
-                            <div class="policy-form-grid policy-form-grid--two">
-                                <div class="policy-field">
-                                    <span class="policy-field-label">Auto-Approve CI Values</span>
-                                    <div class="policy-step-checkboxes">
-                                        <?php foreach ($policy_console_ci_options as $policy_console_ci_value): ?>
-                                            <label class="policy-step-option">
-                                                <input
-                                                    type="checkbox"
-                                                    name="pcdr_auto_approve_ci_values[]"
-                                                    value="<?php echo htmlspecialchars($policy_console_ci_value); ?>"
-                                                    <?php echo in_array($policy_console_ci_value, (array)($policy_console_ci_rules['auto_approve_ci_values'] ?? []), true) ? 'checked' : ''; ?>
-                                                >
-                                                <span><?php echo htmlspecialchars($policy_console_ci_value); ?></span>
-                                            </label>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                                <div class="policy-field">
-                                    <span class="policy-field-label">Manual-Review CI Values</span>
-                                    <div class="policy-step-checkboxes">
-                                        <?php foreach ($policy_console_ci_options as $policy_console_ci_value): ?>
-                                            <label class="policy-step-option">
-                                                <input
-                                                    type="checkbox"
-                                                    name="pcdr_review_ci_values[]"
-                                                    value="<?php echo htmlspecialchars($policy_console_ci_value); ?>"
-                                                    <?php echo in_array($policy_console_ci_value, (array)($policy_console_ci_rules['review_ci_values'] ?? []), true) ? 'checked' : ''; ?>
-                                                >
-                                                <span><?php echo htmlspecialchars($policy_console_ci_value); ?></span>
-                                            </label>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <div class="policy-decision-rule-item" data-decision-rule-item>
-                    <div class="policy-decision-rule-row">
-                        <div class="policy-decision-rule-copy">
-                            <div class="policy-decision-rule-title-line">
-                                <?php echo $policy_console_help('Controls borrower access decisions tied to remaining limit and multiple active borrowing.'); ?>
-                                <strong>Borrowing Access Rules</strong>
-                            </div>
-                            <p class="text-muted">Access handling for remaining limit and multiple active loans.</p>
-                        </div>
-                        <div class="policy-decision-rule-switch">
-                            <input
-                                type="hidden"
-                                name="pcdr_borrowing_access_enabled"
-                                value="<?php echo !empty($policy_console_borrowing_access_rules['enabled']) ? '1' : '0'; ?>"
-                                data-decision-rule-toggle="borrowing_access_rules"
-                                data-policy-toggle-input="borrowing_access_rules"
-                            >
-                            <button
-                                type="button"
-                                class="policy-toggle-button <?php echo !empty($policy_console_borrowing_access_rules['enabled']) ? 'is-on' : ''; ?>"
-                                data-policy-toggle-button="borrowing_access_rules"
-                                aria-pressed="<?php echo !empty($policy_console_borrowing_access_rules['enabled']) ? 'true' : 'false'; ?>"
-                                aria-label="Enable Borrowing Access Rules"
-                            >
-                                <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_borrowing_access_rules['enabled']) ? 'On' : 'Off'; ?></span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="policy-decision-rule-content" data-decision-rule-content="borrowing_access_rules" <?php echo empty($policy_console_borrowing_access_rules['enabled']) ? 'hidden' : ''; ?>>
-                        <div class="policy-form-grid policy-form-grid--two">
-                            <div class="policy-decision-inline-rule">
-                                <div class="policy-inline-toggle-row">
-                                    <div class="policy-inline-toggle-row__copy">
-                                        <span class="policy-field-label">Allow multiple active loans within remaining limit</span>
-                                    </div>
-                                    <div class="policy-inline-toggle-row__control">
-                                        <input
-                                            type="hidden"
-                                            name="pcdr_allow_multiple_active_loans"
-                                            value="<?php echo !empty($policy_console_borrowing_access_rules['allow_multiple_active_loans_within_remaining_limit']) ? '1' : '0'; ?>"
-                                            data-policy-toggle-input="allow_multiple_active_loans"
-                                        >
-                                        <button
-                                            type="button"
-                                            class="policy-toggle-button <?php echo !empty($policy_console_borrowing_access_rules['allow_multiple_active_loans_within_remaining_limit']) ? 'is-on' : ''; ?>"
-                                            data-policy-toggle-button="allow_multiple_active_loans"
-                                            aria-pressed="<?php echo !empty($policy_console_borrowing_access_rules['allow_multiple_active_loans_within_remaining_limit']) ? 'true' : 'false'; ?>"
-                                            aria-label="Allow multiple active loans within remaining limit"
-                                        >
-                                            <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                            <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_borrowing_access_rules['allow_multiple_active_loans_within_remaining_limit']) ? 'On' : 'Off'; ?></span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="policy-decision-inline-rule">
-                                <div class="policy-inline-toggle-row">
-                                    <div class="policy-inline-toggle-row__copy">
-                                        <span class="policy-field-label">Stop application if requested amount exceeds remaining limit</span>
-                                    </div>
-                                    <div class="policy-inline-toggle-row__control">
-                                        <input
-                                            type="hidden"
-                                            name="pcdr_stop_if_exceeds_remaining_limit"
-                                            value="<?php echo !empty($policy_console_borrowing_access_rules['stop_application_if_requested_amount_exceeds_remaining_limit']) ? '1' : '0'; ?>"
-                                            data-policy-toggle-input="stop_if_exceeds_remaining_limit"
-                                        >
-                                        <button
-                                            type="button"
-                                            class="policy-toggle-button <?php echo !empty($policy_console_borrowing_access_rules['stop_application_if_requested_amount_exceeds_remaining_limit']) ? 'is-on' : ''; ?>"
-                                            data-policy-toggle-button="stop_if_exceeds_remaining_limit"
-                                            aria-pressed="<?php echo !empty($policy_console_borrowing_access_rules['stop_application_if_requested_amount_exceeds_remaining_limit']) ? 'true' : 'false'; ?>"
-                                            aria-label="Stop application if requested amount exceeds remaining limit"
-                                        >
-                                            <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                            <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_borrowing_access_rules['stop_application_if_requested_amount_exceeds_remaining_limit']) ? 'On' : 'Off'; ?></span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="policy-decision-rule-item" data-decision-rule-item>
-                    <div class="policy-decision-rule-row">
-                        <div class="policy-decision-rule-copy">
-                            <div class="policy-decision-rule-title-line">
-                                <?php echo $policy_console_help('Semi-Automatic workflow can use score-window overrides to push near-threshold cases into manual review.'); ?>
-                                <strong>Manual Review Overrides</strong>
-                            </div>
-                            <p class="text-muted">Review if score is within a configured points window of the approval threshold.</p>
-                        </div>
-                        <div class="policy-decision-rule-switch">
-                            <input
-                                type="hidden"
-                                name="pcdr_manual_review_overrides_enabled"
-                                value="<?php echo !empty($policy_console_manual_review_overrides['enabled']) ? '1' : '0'; ?>"
-                                data-decision-rule-toggle="manual_review_overrides"
-                                data-policy-toggle-input="manual_review_overrides"
-                            >
-                            <button
-                                type="button"
-                                class="policy-toggle-button <?php echo !empty($policy_console_manual_review_overrides['enabled']) ? 'is-on' : ''; ?>"
-                                data-policy-toggle-button="manual_review_overrides"
-                                data-decision-manual-review-toggle
-                                aria-pressed="<?php echo !empty($policy_console_manual_review_overrides['enabled']) ? 'true' : 'false'; ?>"
-                                aria-label="Enable Manual Review Overrides"
-                                <?php echo $policy_console_manual_review_available ? '' : 'disabled'; ?>
-                            >
-                                <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_manual_review_overrides['enabled']) ? 'On' : 'Off'; ?></span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="policy-decision-rule-note" data-decision-manual-review-note <?php echo $policy_console_manual_review_available ? 'hidden' : ''; ?>>
-                        Available only when Approval Workflow is set to Semi-Automatic.
-                    </div>
-                    <div class="policy-decision-rule-content" data-decision-rule-content="manual_review_overrides" <?php echo (empty($policy_console_manual_review_overrides['enabled']) || !$policy_console_manual_review_available) ? 'hidden' : ''; ?>>
-                        <div class="policy-form-grid policy-form-grid--two">
-                            <div class="policy-decision-inline-rule">
-                                <div class="policy-inline-toggle-row">
-                                    <div class="policy-inline-toggle-row__copy">
-                                        <span class="policy-field-label">Review if score is within the points window of approval threshold</span>
-                                    </div>
-                                    <div class="policy-inline-toggle-row__control">
-                                        <input
-                                            type="hidden"
-                                            name="pcdr_review_if_within_points_window"
-                                            value="<?php echo !empty($policy_console_manual_review_overrides['review_if_score_within_points_of_approval_threshold']) ? '1' : '0'; ?>"
-                                            data-policy-toggle-input="review_if_within_points_window"
-                                        >
-                                        <button
-                                            type="button"
-                                            class="policy-toggle-button <?php echo !empty($policy_console_manual_review_overrides['review_if_score_within_points_of_approval_threshold']) ? 'is-on' : ''; ?>"
-                                            data-policy-toggle-button="review_if_within_points_window"
-                                            aria-pressed="<?php echo !empty($policy_console_manual_review_overrides['review_if_score_within_points_of_approval_threshold']) ? 'true' : 'false'; ?>"
-                                            aria-label="Review if score is within the points window of approval threshold"
-                                        >
-                                            <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                            <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_manual_review_overrides['review_if_score_within_points_of_approval_threshold']) ? 'On' : 'Off'; ?></span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <label class="policy-field">
-                                <span class="policy-field-label">Points Window</span>
-                                <input type="number" class="form-control" name="pcdr_points_window" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" step="1" value="<?php echo htmlspecialchars((string)($policy_console_manual_review_overrides['points_window'] ?? 25)); ?>">
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Employment Tenure', 'Minimum required months of employment.', 'pcdr_employment_tenure_enabled', $policy_console_demographics['employment_tenure_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_employment_tenure_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Months</span>
+                                <input type="number" class="form-control" name="pcdr_min_employment_months" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_employment_months'] ?? '')); ?>">
                             </label>
                         </div>
                     </div>
-                </div>
 
-                <div class="policy-decision-rule-item" data-decision-rule-item>
-                    <div class="policy-decision-rule-row">
-                        <div class="policy-decision-rule-copy">
-                            <div class="policy-decision-rule-title-line">
-                                <?php echo $policy_console_help('Use borrower safeguards to require additional security support for higher-risk or higher-exposure applications.'); ?>
-                                <strong>Borrower Safeguards</strong>
-                            </div>
-                            <p class="text-muted">Guarantor thresholds, collateral handling, and risk-based security requirements.</p>
-                        </div>
-                        <div class="policy-decision-rule-switch">
-                            <input
-                                type="hidden"
-                                name="pcdr_borrower_safeguards_enabled"
-                                value="<?php echo !empty($policy_console_borrower_safeguards['enabled']) ? '1' : '0'; ?>"
-                                data-decision-rule-toggle="borrower_safeguards"
-                                data-policy-toggle-input="borrower_safeguards"
-                            >
-                            <button
-                                type="button"
-                                class="policy-toggle-button <?php echo !empty($policy_console_borrower_safeguards['enabled']) ? 'is-on' : ''; ?>"
-                                data-policy-toggle-button="borrower_safeguards"
-                                aria-pressed="<?php echo !empty($policy_console_borrower_safeguards['enabled']) ? 'true' : 'false'; ?>"
-                                aria-label="Enable Borrower Safeguards"
-                            >
-                                <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_borrower_safeguards['enabled']) ? 'On' : 'Off'; ?></span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="policy-decision-rule-content" data-decision-rule-content="borrower_safeguards" <?php echo empty($policy_console_borrower_safeguards['enabled']) ? 'hidden' : ''; ?>>
-                        <div class="policy-form-grid policy-form-grid--two">
-                            <label class="policy-field">
-                                <span class="policy-field-label">Guarantor Required Above Amount</span>
-                                <input type="number" class="form-control" name="pcdr_guarantor_required_above_amount" min="0" step="0.01" value="<?php echo htmlspecialchars((string)($policy_console_borrower_safeguards['guarantor_required_above_amount'] ?? 50000)); ?>">
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Residency Tenure', 'Minimum required months of living at current residence.', 'pcdr_residency_tenure_enabled', $policy_console_demographics['residency_tenure_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_residency_tenure_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Months</span>
+                                <input type="number" class="form-control" name="pcdr_min_residency_months" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_residency_months'] ?? '')); ?>">
                             </label>
-                            <div class="policy-decision-inline-rule">
-                                <div class="policy-inline-toggle-row">
-                                    <div class="policy-inline-toggle-row__copy">
-                                        <span class="policy-field-label">Collateral Enabled</span>
-                                        <span class="text-muted">Turn on collateral handling as part of borrower protection.</span>
-                                    </div>
-                                    <div class="policy-inline-toggle-row__control">
-                                        <input
-                                            type="hidden"
-                                            name="pcdr_collateral_enabled"
-                                            value="<?php echo !empty($policy_console_borrower_safeguards['collateral_enabled']) ? '1' : '0'; ?>"
-                                            data-policy-toggle-input="collateral_enabled"
-                                        >
-                                        <button
-                                            type="button"
-                                            class="policy-toggle-button <?php echo !empty($policy_console_borrower_safeguards['collateral_enabled']) ? 'is-on' : ''; ?>"
-                                            data-policy-toggle-button="collateral_enabled"
-                                            aria-pressed="<?php echo !empty($policy_console_borrower_safeguards['collateral_enabled']) ? 'true' : 'false'; ?>"
-                                            aria-label="Enable collateral handling"
-                                        >
-                                            <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
-                                            <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_borrower_safeguards['collateral_enabled']) ? 'On' : 'Off'; ?></span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
-                        <label class="policy-field">
-                            <span class="policy-field-label">Detailed Rules for Risk-Based Security Requirements</span>
-                            <textarea class="form-control" name="pcdr_risk_based_security_requirements" rows="4" placeholder="Describe when guarantor or collateral requirements should become stricter for higher-risk applications."><?php echo htmlspecialchars((string)($policy_console_borrower_safeguards['risk_based_security_requirements'] ?? '')); ?></textarea>
-                        </label>
                     </div>
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Employment Status', 'Which employment statuses are allowed.', 'pcdr_employment_status_enabled', $policy_console_demographics['employment_status_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_employment_status_enabled">
+                            <label class="policy-decision-field policy-decision-field-col"><span class="policy-decision-field-label">Eligible Statuses (Hold Ctrl to select multiple)</span>
+                            <?php $selectedStatuses = is_array($policy_console_demographics['eligible_statuses'] ?? null) ? $policy_console_demographics['eligible_statuses'] : []; ?>
+                                <select multiple class="form-control" name="pcdr_eligible_statuses[]">
+                                    <option value="full_time" <?php echo in_array('full_time', $selectedStatuses) ? 'selected' : ''; ?>>Full Time</option>
+                                    <option value="part_time" <?php echo in_array('part_time', $selectedStatuses) ? 'selected' : ''; ?>>Part Time</option>
+                                    <option value="contract" <?php echo in_array('contract', $selectedStatuses) ? 'selected' : ''; ?>>Contract / Freelance</option>
+                                    <option value="self_employed" <?php echo in_array('self_employed', $selectedStatuses) ? 'selected' : ''; ?>>Self Employed (Business Owner)</option>
+                                    <option value="casual" <?php echo in_array('casual', $selectedStatuses) ? 'selected' : ''; ?>>Casual / Seasonal worker</option>
+                                    <option value="retired" <?php echo in_array('retired', $selectedStatuses) ? 'selected' : ''; ?>>Retired / Pensioner</option>
+                                    <option value="student" <?php echo in_array('student', $selectedStatuses) ? 'selected' : ''; ?>>Student</option>
+                                    <option value="unemployed" <?php echo in_array('unemployed', $selectedStatuses) ? 'selected' : ''; ?>>Unemployed</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
                 </div>
-            </div>
-        </section>
+            </section>
+
+            <!-- Affordability -->
+            <section class="policy-compact-card">
+                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Affordability</h4></div></div>
+                <div class="policy-decision-rule-list">
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Minimum Income', 'Minimum gross monthly income requirement.', 'pcdr_income_enabled', $policy_console_affordability['income_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_income_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Income /mo</span>
+                                <input type="number" step="0.01" class="form-control" name="pcdr_min_monthly_income" value="<?php echo htmlspecialchars((string)($policy_console_affordability['min_monthly_income'] ?? '')); ?>">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Debt-to-Income (DTI)', 'Maximum DTI ratio percentage.', 'pcdr_dti_enabled', $policy_console_affordability['dti_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_dti_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max Ratio (%)</span>
+                                <input type="number" step="0.01" class="form-control" name="pcdr_max_dti_percentage" value="<?php echo htmlspecialchars((string)($policy_console_affordability['max_dti_percentage'] ?? '')); ?>">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Payment-to-Income (PTI)', 'Maximum PTI ratio percentage.', 'pcdr_pti_enabled', $policy_console_affordability['pti_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_pti_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max Ratio (%)</span>
+                                <input type="number" step="0.01" class="form-control" name="pcdr_max_pti_percentage" value="<?php echo htmlspecialchars((string)($policy_console_affordability['max_pti_percentage'] ?? '')); ?>">
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- Guardrails -->
+            <section class="policy-compact-card">
+                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Guardrails</h4></div></div>
+                <div class="policy-decision-rule-list">
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Score Thresholds', 'Reject and Hard Approval score limits.', 'pcdr_score_thresholds_enabled', $policy_console_guardrails['score_thresholds_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_score_thresholds_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Auto Reject Under</span>
+                                <input type="number" class="form-control" name="pcdr_auto_reject_floor" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['auto_reject_floor'] ?? '')); ?>">
+                            </label>
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Auto Approve Over</span>
+                                <input type="number" class="form-control" name="pcdr_hard_approval_threshold" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['hard_approval_threshold'] ?? '')); ?>">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Cooling Period', 'Days required to wait after rejection.', 'pcdr_cooling_period_enabled', $policy_console_guardrails['cooling_period_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_cooling_period_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Penalty Days</span>
+                                <input type="number" class="form-control" name="pcdr_rejected_cooling_days" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['rejected_cooling_days'] ?? '')); ?>">
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- Exposure -->
+            <section class="policy-compact-card">
+                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Exposure</h4></div></div>
+                <div class="policy-decision-rule-list">
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('New Borrower Cap', 'Maximum amount allowed for a first-time borrower.', 'pcdr_new_borrower_cap_enabled', $policy_console_exposure['new_borrower_cap_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_new_borrower_cap_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max 1st Loan</span>
+                                <input type="number" step="0.01" class="form-control" name="pcdr_first_loan_max_amount" value="<?php echo htmlspecialchars((string)($policy_console_exposure['first_loan_max_amount'] ?? '')); ?>">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Multiple Active Loans', 'Allow borrowers to have more than one active loan.', 'pcdr_multiple_active_loans_enabled', $policy_console_exposure['multiple_active_loans_enabled']); ?>
+                        <!-- No inputs required -->
+                    </div>
+
+                    <div class="policy-decision-rule-item">
+                        <?php echo renderToggleHeader('Guarantor Required', 'Requires a guarantor if the loan amount exceeds a specific cap.', 'pcdr_guarantor_required_enabled', $policy_console_exposure['guarantor_required_enabled']); ?>
+                        <div class="policy-decision-input-group toggle-group-pcdr_guarantor_required_enabled">
+                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max No-Guarantor</span>
+                                <input type="number" step="0.01" class="form-control" name="pcdr_guarantor_required_above_amount" value="<?php echo htmlspecialchars((string)($policy_console_exposure['guarantor_required_above_amount'] ?? '')); ?>">
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </div>
+
     </div>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('policy-console-decision-rules-form');
+    if (!form) return;
+
+    form.querySelectorAll('.policy-toggle-button').forEach(btn => {
+        const toggleName = btn.getAttribute('data-policy-toggle-button');
+        const targetGroup = form.querySelector(`.toggle-group-${toggleName}`);
+        
+        if (targetGroup) {
+            const observer = new MutationObserver(() => {
+                const isNowOff = !btn.classList.contains('is-on');
+                targetGroup.classList.toggle('is-visually-disabled', isNowOff);
+            });
+            observer.observe(btn, { attributes: true, attributeFilter: ['class'] });
+
+            if (!btn.classList.contains('is-on')) {
+                targetGroup.classList.add('is-visually-disabled');
+            }
+        }
+    });
+});
+</script>

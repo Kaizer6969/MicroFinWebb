@@ -12,7 +12,7 @@ if (!function_exists('policy_console_compliance_documents_setting_key')) {
 if (!function_exists('policy_console_compliance_documents_requirement_values')) {
     function policy_console_compliance_documents_requirement_values(): array
     {
-        return ['required', 'not_needed'];
+        return ['required', 'conditional', 'not_needed'];
     }
 }
 
@@ -74,18 +74,6 @@ if (!function_exists('policy_console_compliance_documents_catalog')) {
             $availableNames,
             static fn(string $name): bool => !in_array($name, $usedNames, true)
         ));
-
-        if ($remainingNames !== []) {
-            $categories[] = [
-                'category_key' => 'supporting_document',
-                'label' => 'Supporting Document',
-                'default_requirement' => 'not_needed',
-                'options' => array_map(
-                    static fn(string $name): array => ['document_name' => $name],
-                    $remainingNames
-                ),
-            ];
-        }
 
         return $categories;
     }

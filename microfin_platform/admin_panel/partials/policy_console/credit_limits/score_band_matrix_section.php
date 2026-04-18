@@ -1,27 +1,18 @@
-<section class="policy-blueprint-card" id="policy-credit-limits-bands">
-    <div class="policy-blueprint-card-head">
-        <div class="policy-blueprint-card-title">
-            <h4>Score Band Matrix</h4>
-            <p class="text-muted">Define score bands and the growth settings used after onboarding when credit limit movement becomes score-based.</p>
-        </div>
-        <div class="policy-blueprint-card-actions" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; width: 100%; max-width: 220px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;">
-                <button type="button" class="btn btn-outline" id="policy-score-band-cancel-btn" style="display: none; text-align: center; justify-content: center; padding: 10px 14px;">Cancel</button>
-                <button type="button" class="btn btn-outline" id="policy-score-band-customize-btn" style="grid-column: 2; text-align: center; justify-content: center; padding: 10px 14px; margin-right: 0;">Customize</button>
-            </div>
-            <button type="button" class="btn btn-outline" data-policy-score-band-add style="display: none; justify-content: center; width: 100%; padding: 10px 14px;">
-                <span class="material-symbols-rounded" style="margin-right: 6px;">add</span>
-                Add Score Band
-            </button>
-        </div>
-    </div>
-
-    <div class="policy-blueprint-panel">
+<section id="policy-credit-limits-bands">
+    <div class="policy-blueprint-panel policy-score-band-panel">
         <div class="policy-blueprint-panel-head">
             <div>
-                <span class="policy-blueprint-panel-kicker">Band Setup</span>
+                <span class="policy-blueprint-panel-kicker">Score Band Matrix</span>
                 <h5>Ordered score bands</h5>
-                <p class="text-muted">Growth percentage per cycle uses: Base Growth + ((Current CS - Band Min) × Micro % per point).</p>
+                <p class="text-muted">Define score bands and the growth settings used after onboarding. Leave the top-band max blank to keep it open-ended, like 850+.</p>
+            </div>
+            <div class="policy-score-band-toolbar">
+                <button type="button" class="btn btn-outline" id="policy-score-band-cancel-btn" style="display: none;">Cancel</button>
+                <button type="button" class="btn btn-outline" id="policy-score-band-customize-btn">Customize</button>
+                <button type="button" class="btn btn-outline" data-policy-score-band-add style="display: none;">
+                    <span class="material-symbols-rounded">add</span>
+                    Add Score Band
+                </button>
             </div>
         </div>
 
@@ -31,7 +22,7 @@
                     <tr>
                         <th>Band <?php echo $policy_console_help('Display label for the score band.'); ?></th>
                         <th>Min <?php echo $policy_console_help('Lowest score included in the band.'); ?></th>
-                        <th>Max <?php echo $policy_console_help('Highest score included in the band.'); ?></th>
+                        <th>Max <?php echo $policy_console_help('Highest score included in the band. Leave blank for an open-ended top band such as 850+.'); ?></th>
                         <th>Base Growth % <?php echo $policy_console_help('Default per-cycle growth rate before score-position sensitivity is added.'); ?></th>
                         <th>Micro % / Point <?php echo $policy_console_help('Additional growth sensitivity applied for every point above the band minimum.'); ?></th>
                         <th class="policy-band-col-actions" style="display: none;"></th>
@@ -44,8 +35,8 @@
                                 <input type="hidden" name="pcc_score_band_id[]" value="<?php echo htmlspecialchars((string)($policy_console_row['id'] ?? ('band_' . ($policy_console_row_index + 1)))); ?>">
                                 <input type="text" class="form-control" name="pcc_score_band_label[]" value="<?php echo htmlspecialchars((string)($policy_console_row['label'] ?? '')); ?>" maxlength="60" required readonly>
                             </td>
-                            <td><input type="number" class="form-control" name="pcc_score_band_min[]" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" value="<?php echo htmlspecialchars((string)($policy_console_row['min_score'] ?? 0)); ?>" required readonly></td>
-                            <td><input type="number" class="form-control" name="pcc_score_band_max[]" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" value="<?php echo htmlspecialchars((string)($policy_console_row['max_score'] ?? 0)); ?>" required readonly></td>
+                            <td><input type="number" class="form-control" name="pcc_score_band_min[]" min="0" value="<?php echo htmlspecialchars((string)($policy_console_row['min_score'] ?? 0)); ?>" required readonly></td>
+                            <td><input type="number" class="form-control" name="pcc_score_band_max[]" min="0" value="<?php echo htmlspecialchars((string)($policy_console_row['max_score'] ?? '')); ?>" placeholder="850+" readonly></td>
                             <td><input type="number" class="form-control" name="pcc_score_band_base_growth[]" min="0" max="100" step="0.001" value="<?php echo htmlspecialchars((string)($policy_console_row['base_growth_percent'] ?? 0)); ?>" required readonly></td>
                             <td><input type="number" class="form-control" name="pcc_score_band_micro_growth[]" min="0" max="10" step="0.001" value="<?php echo htmlspecialchars((string)($policy_console_row['micro_percent_per_point'] ?? 0)); ?>" required readonly></td>
                             <td class="policy-band-actions policy-band-col-actions" style="display: none;">

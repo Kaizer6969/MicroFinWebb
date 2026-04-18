@@ -6285,9 +6285,9 @@ body.loan-products-modal-open .top-header {
 .policy-console-table th,
 .policy-console-table td {
     text-align: left;
-    padding: 14px 16px;
+    padding: 10px 14px;
     border-bottom: 1px solid rgba(var(--primary-rgb), 0.08);
-    vertical-align: top;
+    vertical-align: middle;
 }
 
 .policy-console-table th {
@@ -6348,7 +6348,7 @@ body.loan-products-modal-open .top-header {
   .policy-settings-panel,
   .policy-rule-stack {
       display: grid;
-      gap: 18px;
+      gap: 12px;
   }
 
   .policy-compact-toolbar,
@@ -6383,17 +6383,18 @@ body.loan-products-modal-open .top-header {
   .policy-compact-card,
   .policy-compact-subcard {
       background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: 18px;
-      box-shadow: var(--shadow-sm);
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      margin-bottom: 8px;
   }
 
   .policy-compact-card {
-      padding: 22px 24px;
+      padding: 16px 20px;
   }
 
   .policy-compact-subcard {
-      padding: 18px;
+      padding: 12px 16px;
   }
 
   .policy-compact-card-title h4,
@@ -6470,15 +6471,22 @@ body.loan-products-modal-open .top-header {
   }
 
   .policy-decision-rule-list {
-      display: grid;
-      gap: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
   }
 
   .policy-decision-rule-item {
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.02);
+      border: none;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+      background: transparent;
       overflow: hidden;
+      padding-bottom: 8px;
+  }
+  
+  .policy-decision-rule-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
   }
 
   .policy-decision-rule-item.is-off {
@@ -6494,7 +6502,7 @@ body.loan-products-modal-open .top-header {
       align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      padding: 14px 16px;
+      padding: 10px 0;
   }
 
   .policy-decision-rule-copy {
@@ -6600,8 +6608,9 @@ body.loan-products-modal-open .top-header {
   }
 
   .policy-decision-rule-content {
-      padding: 0 16px 16px 16px;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 0 0 16px 0;
+      border-top: none;
+      margin-top: 4px;
   }
 
   .policy-decision-rule-content[hidden] {
@@ -6609,16 +6618,21 @@ body.loan-products-modal-open .top-header {
   }
 
   .policy-decision-rule-note {
-      padding: 0 16px 12px 16px;
+      padding: 0 0 12px 0;
       color: var(--text-muted);
       font-size: 0.84rem;
   }
 
   .policy-decision-inline-rule {
-      padding: 12px 14px;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.02);
+      padding: 10px 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  }
+  
+  .policy-decision-inline-rule:last-child {
+      border-bottom: none;
   }
 
   .policy-inline-toggle-row {
@@ -6818,6 +6832,24 @@ body.loan-products-modal-open .top-header {
   .policy-band-actions {
       width: 64px;
       text-align: right;
+  }
+
+  .policy-score-band-panel {
+      gap: 16px;
+      padding: 18px;
+  }
+
+  .policy-score-band-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      align-items: center;
+  }
+
+  .policy-score-band-toolbar .btn {
+      justify-content: center;
+      min-width: 110px;
   }
 
   .btn-ghost-danger {
@@ -7206,8 +7238,141 @@ body.loan-products-modal-open .top-header {
       line-height: 1.35;
   }
 
+  .policy-playground-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.95fr);
+      gap: 18px;
+      align-items: stretch;
+  }
+
+  .policy-playground-controls {
+      display: grid;
+      gap: 12px;
+  }
+
+  .policy-playground-result-stack {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+  }
+
+  .policy-playground-control {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.02);
+  }
+
+  .policy-playground-control-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+  }
+
+  .policy-playground-control-head span,
+  .policy-playground-result-meta span,
+  .policy-playground-result-note {
+      color: var(--text-muted);
+  }
+
+  .policy-playground-control-head span {
+      font-size: 0.85rem;
+      font-weight: 600;
+  }
+
+  .policy-playground-control-head strong,
+  .policy-playground-result-meta strong {
+      color: var(--text-main);
+      font-size: 1rem;
+      font-weight: 700;
+  }
+
+  .policy-playground-control input[type="range"] {
+      width: 100%;
+      accent-color: var(--primary-color);
+      cursor: pointer;
+  }
+
+  .policy-playground-control small {
+      color: var(--text-muted);
+      line-height: 1.5;
+  }
+
+  .policy-playground-result-card {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.08), rgba(var(--primary-rgb), 0.03));
+      border: 1px solid rgba(var(--primary-rgb), 0.16);
+      align-content: start;
+  }
+
+  .policy-playground-secondary-card {
+      display: grid;
+      gap: 10px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      align-content: start;
+  }
+
+  .policy-playground-result-kicker {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(var(--primary-rgb), 0.12);
+      color: var(--primary-color);
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+  }
+
+  .policy-playground-result-amount {
+      color: var(--text-main);
+      font-size: clamp(1.9rem, 2.6vw, 2.5rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+  }
+
+  .policy-playground-secondary-amount {
+      color: var(--text-main);
+      font-size: 1.45rem;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+  }
+
+  .policy-playground-result-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      padding-top: 2px;
+  }
+
+  .policy-playground-result-meta div {
+      display: grid;
+      gap: 4px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(var(--primary-rgb), 0.12);
+      background: rgba(255, 255, 255, 0.03);
+  }
+
+  .policy-playground-result-note {
+      margin: 0;
+      line-height: 1.5;
+  }
+
   .policy-governance-table td {
-      vertical-align: top;
+        vertical-align: middle;
   }
 
   .policy-governance-table {
@@ -7215,38 +7380,29 @@ body.loan-products-modal-open .top-header {
   }
 
   .policy-governance-col-category {
-      width: 200px;
-  }
+        width: 220px;
+    }
 
-  .policy-governance-col-requirement {
-      width: 150px;
-  }
+    .policy-governance-col-requirement {
+        width: 140px;
+    }
 
-  .policy-governance-options {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 8px 10px;
-  }
+    .policy-governance-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 8px;
+    }
 
-  .policy-governance-option {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 10px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.02);
-      color: var(--text-main);
-      line-height: 1.4;
-  }
+    .policy-governance-option {
+        align-items: center;
+        min-height: 42px;
+    }
 
-  .policy-governance-option input[type="checkbox"] {
-      margin-top: 2px;
-      accent-color: var(--primary-color);
-  }
-
-  .policy-governance-row-muted {
-      opacity: 0.82;
+    .policy-governance-row-muted {
+        opacity: 0.55;
+    }
+    .policy-governance-row-muted .policy-governance-options {
+        pointer-events: none;
   }
 
   .policy-step-checkboxes {
@@ -7256,9 +7412,13 @@ body.loan-products-modal-open .top-header {
   }
 
   .policy-step-option {
+      min-height: 46px;
+  }
+
+  .policy-selection-toggle {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       padding: 10px 12px;
       border: 1px solid var(--border-color);
       border-radius: 12px;
@@ -7266,11 +7426,80 @@ body.loan-products-modal-open .top-header {
       color: var(--text-main);
       font-weight: 600;
       cursor: pointer;
+      transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
   }
 
-  .policy-step-option input[type="checkbox"] {
-      margin: 0;
-      accent-color: var(--primary-color);
+  .policy-selection-toggle:hover {
+      transform: translateY(-1px);
+      border-color: rgba(var(--primary-rgb), 0.18);
+  }
+
+  .policy-selection-toggle input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+  }
+
+  .policy-selection-toggle__track {
+      position: relative;
+      width: 34px;
+      height: 18px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+      transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+
+  .policy-selection-toggle__thumb {
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #f8fafc;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.28);
+      transition: transform 0.18s ease;
+  }
+
+  .policy-selection-toggle__label {
+      min-width: 0;
+      line-height: 1.4;
+      color: var(--text-main);
+  }
+
+  .policy-selection-toggle input[type="checkbox"]:checked + .policy-selection-toggle__track {
+      background: rgba(var(--primary-rgb), 0.34);
+      border-color: rgba(var(--primary-rgb), 0.24);
+  }
+
+  .policy-selection-toggle input[type="checkbox"]:checked + .policy-selection-toggle__track .policy-selection-toggle__thumb {
+      transform: translateX(16px);
+  }
+
+  .policy-selection-toggle input[type="checkbox"]:checked ~ .policy-selection-toggle__label {
+      color: var(--primary-color);
+  }
+
+  .policy-selection-toggle input[type="checkbox"]:focus-visible + .policy-selection-toggle__track {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+  }
+
+  .policy-selection-toggle.is-disabled {
+      opacity: 0.72;
+      cursor: not-allowed;
+  }
+
+  .policy-selection-toggle.is-disabled:hover {
+      transform: none;
+  }
+
+  .policy-selection-toggle input[type="checkbox"]:disabled + .policy-selection-toggle__track {
+      opacity: 0.55;
   }
 
   @media (max-width: 1180px) {
@@ -7301,8 +7530,19 @@ body.loan-products-modal-open .top-header {
       .policy-blueprint-grid--two,
       .policy-blueprint-grid--three,
       .policy-blueprint-grid--five,
+      .policy-playground-shell,
+      .policy-playground-result-meta,
       .policy-metric-grid {
           grid-template-columns: 1fr;
+      }
+
+      .policy-score-band-toolbar {
+          width: 100%;
+          justify-content: stretch;
+      }
+
+      .policy-score-band-toolbar .btn {
+          flex: 1 1 160px;
       }
 
       .policy-inline-toggle {

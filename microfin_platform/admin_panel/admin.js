@@ -325,13 +325,76 @@ document.addEventListener('DOMContentLoaded', () => {
         return ['overview', 'credit_limits', 'decision_rules', 'compliance_documents'].includes(normalizeCreditPolicySubtab(tabId));
     }
 
+    function syncCreditPolicyPanelState(tabId, options = {}) {
+        const normalizedTabId = normalizeCreditPolicySubtab(tabId);
+        const panels = Array.from(document.querySelectorAll('[data-credit-policy-tab-panel]'));
+        if (!normalizedTabId || panels.length === 0) {
+            return '';
+        }
+
+        const availableTabs = panels
+            .map((panel) => normalizeCreditPolicySubtab(panel.getAttribute('data-credit-policy-tab-panel') || ''))
+            .filter(Boolean);
+
+        const activeTab = availableTabs.includes(normalizedTabId)
+            ? normalizedTabId
+            : (availableTabs[0] || normalizedTabId);
+
+        panels.forEach((panel) => {
+            const panelTab = normalizeCreditPolicySubtab(panel.getAttribute('data-credit-policy-tab-panel') || '');
+            panel.hidden = panelTab !== activeTab;
+        });
+
+        const activeTabInput = document.getElementById('credit-policy-active-tab-input');
+        if (activeTabInput) {
+            activeTabInput.value = activeTab;
+        }
+
+        const creditSettingsSection = document.getElementById('credit_settings');
+        const isCreditSettingsActive = Boolean(creditSettingsSection && creditSettingsSection.classList.contains('active'));
+        if (isCreditSettingsActive) {
+            const activeNavItem = findPreferredNavItem('credit_settings', activeTab);
+
+            document.querySelectorAll('.sidebar-nav .nav-item[data-target="credit_settings"][data-credit-policy-subtab]').forEach((item) => {
+                const itemTab = normalizeCreditPolicySubtab(item.getAttribute('data-credit-policy-subtab') || '');
+                item.classList.toggle('active', itemTab === activeTab);
+            });
+
+            if (activeNavItem) {
+                setPageTitleFromNav(activeNavItem, 'credit_settings');
+            }
+        }
+
+        if (options.syncUrl !== false && isCreditSettingsActive) {
+            try {
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('tab', 'credit_control_policy');
+                currentUrl.searchParams.set('credit_policy_tab', activeTab);
+                currentUrl.hash = 'credit_settings';
+                window.history.replaceState(window.history.state, '', currentUrl.toString());
+            } catch (error) {
+                // Ignore URL sync issues and keep the panel switch working.
+            }
+        }
+
+        return activeTab;
+    }
+
     function activateCreditPolicySubtab(tabId) {
         tabId = normalizeCreditPolicySubtab(tabId);
-        if (!tabId || typeof window.setCreditPolicyTab !== 'function') {
+        if (!tabId) {
             return;
         }
 
-        window.setCreditPolicyTab(tabId);
+        if (typeof window.setCreditPolicyTab === 'function') {
+            try {
+                window.setCreditPolicyTab(tabId, { syncUrl: false });
+            } catch (error) {
+                // Fall back to the local panel switcher below.
+            }
+        }
+
+        syncCreditPolicyPanelState(tabId);
     }
 
     function getCreditPolicySubtabFromItem(item, href = '') {
@@ -369,8 +432,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         event.preventDefault();
 
-        if (isDynamicCreditPolicySubtab(targetTab) && typeof window.setCreditPolicyTab === 'function') {
-            window.setCreditPolicyTab(targetTab);
+        if (isDynamicCreditPolicySubtab(targetTab)) {
+            activateCreditPolicySubtab(targetTab);
             return;
         }
 
@@ -384,6 +447,127 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = `admin.php?tab=credit_control_policy&credit_policy_tab=${encodeURIComponent(targetTab)}#credit_settings`;
         }
     });
+
+    function initPolicyConsoleOverview() {
+        const simulator = document.querySelector('[data-policy-console-overview-simulator]');
+        if (!simulator) {
+            return;
+        }
+
+        let simulatorConfig = {};
+        try {
+            simulatorConfig = JSON.parse(simulator.getAttribute('data-simulator-config') || '{}');
+        } catch (error) {
+            simulatorConfig = {};
+        }
+
+        const scoreBands = Array.isArray(simulatorConfig.scoreBands) ? simulatorConfig.scoreBands.slice() : [];
+        if (scoreBands.length === 0) {
+            return;
+        }
+
+        scoreBands.sort((left, right) => Number(left.min_score || 0) - Number(right.min_score || 0));
+
+        const scoreInput = simulator.querySelector('[data-simulator-score-input]');
+        const limitInput = simulator.querySelector('[data-simulator-limit-input]');
+        const scoreOutput = simulator.querySelector('[data-simulator-score-output]');
+        const scoreCardOutput = simulator.querySelector('[data-simulator-score-card-output]');
+        const limitBasisOutput = simulator.querySelector('[data-simulator-limit-basis-output]');
+        const projectedLimitOutput = simulator.querySelector('[data-simulator-projected-limit]');
+        const firstTimeLimitOutput = simulator.querySelector('[data-simulator-first-time-limit]');
+        const bandOutput = simulator.querySelector('[data-simulator-band-output]');
+        const noteOutput = simulator.querySelector('[data-simulator-note-output]');
+        const firstTimeNoteOutput = simulator.querySelector('[data-simulator-first-time-note-output]');
+        const limitCap = Number(simulatorConfig.limitCap || 0);
+        const initialLimitPercent = Number(simulatorConfig.initialLimitPercent || 0);
+
+        if (!scoreInput || !limitInput || !projectedLimitOutput || !bandOutput) {
+            return;
+        }
+
+        const moneyFormatter = new Intl.NumberFormat('en-PH', {
+            style: 'currency',
+            currency: 'PHP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+
+        const findBandForScore = (score) => {
+            for (const band of scoreBands) {
+                const minScore = Number(band.min_score || 0);
+                const hasOpenMax = band.max_score === null || band.max_score === '';
+                const maxScore = hasOpenMax ? Number.POSITIVE_INFINITY : Number(band.max_score || minScore);
+                if (score >= minScore && score <= maxScore) {
+                    return band;
+                }
+            }
+
+            if (score < Number(scoreBands[0].min_score || 0)) {
+                return scoreBands[0];
+            }
+
+            return scoreBands[scoreBands.length - 1];
+        };
+
+        const renderSimulator = () => {
+            const score = Number.parseInt(scoreInput.value || '0', 10) || 0;
+            const limitBasis = Number.parseFloat(limitInput.value || '0') || 0;
+            const activeBand = findBandForScore(score);
+            const bandMin = Number(activeBand.min_score || 0);
+            const baseGrowth = Number(activeBand.base_growth_percent || 0);
+            const microGrowth = Number(activeBand.micro_percent_per_point || 0);
+            const growthPercent = Math.max(0, baseGrowth + (Math.max(0, score - bandMin) * microGrowth));
+            let firstTimeLimit = limitBasis * (initialLimitPercent / 100);
+            let firstTimeClamped = false;
+            if (limitCap > 0 && firstTimeLimit > limitCap) {
+                firstTimeLimit = limitCap;
+                firstTimeClamped = true;
+            }
+
+            let projectedLimit = limitBasis * (1 + (growthPercent / 100));
+            let wasClamped = false;
+            if (limitCap > 0 && projectedLimit > limitCap) {
+                projectedLimit = limitCap;
+                wasClamped = true;
+            }
+
+            if (scoreOutput) {
+                scoreOutput.textContent = score.toLocaleString('en-PH');
+            }
+            if (scoreCardOutput) {
+                scoreCardOutput.textContent = score.toLocaleString('en-PH');
+            }
+            if (limitBasisOutput) {
+                limitBasisOutput.textContent = moneyFormatter.format(limitBasis);
+            }
+
+            bandOutput.textContent = String(activeBand.label || 'Unassigned');
+            projectedLimitOutput.textContent = moneyFormatter.format(projectedLimit);
+            if (firstTimeLimitOutput) {
+                firstTimeLimitOutput.textContent = moneyFormatter.format(firstTimeLimit);
+            }
+
+            if (noteOutput) {
+                noteOutput.textContent = wasClamped
+                    ? `Projected limit is capped at ${moneyFormatter.format(limitCap)} by the current tenant guard.`
+                    : `Projected using ${growthPercent.toFixed(2)}% growth from the selected basis amount.`;
+            }
+            if (firstTimeNoteOutput) {
+                firstTimeNoteOutput.textContent = firstTimeClamped
+                    ? `Onboarding limit is capped at ${moneyFormatter.format(limitCap)} by the current tenant guard.`
+                    : `Onboarding limit uses ${initialLimitPercent.toFixed(2)}% of the selected monthly income.`;
+            }
+        };
+
+        [scoreInput, limitInput].forEach((input) => {
+            input.addEventListener('input', renderSimulator);
+            input.addEventListener('change', renderSimulator);
+        });
+
+        renderSimulator();
+    }
+
+    initPolicyConsoleOverview();
 
     function initPolicyConsoleCreditLimits() {
         const creditLimitsForm = document.getElementById('policy-console-credit-limits-form');
@@ -404,6 +588,46 @@ document.addEventListener('DOMContentLoaded', () => {
         // Modal Selectors
         const unsavedModal = document.getElementById('policy-unsaved-modal');
         const deleteRowModal = document.getElementById('policy-delete-row-modal');
+
+        const getToggleInput = (key) => creditLimitsForm.querySelector(`[data-policy-toggle-input="${key}"]`);
+        const getToggleButton = (key) => creditLimitsForm.querySelector(`[data-policy-toggle-button="${key}"]`);
+        const getToggleValue = (input) => {
+            if (!input) {
+                return false;
+            }
+
+            if (input.type === 'checkbox') {
+                return Boolean(input.checked);
+            }
+
+            return String(typeof input.value !== 'undefined' ? input.value : '0') === '1';
+        };
+        const notifyToggleChange = (input) => {
+            if (!input) {
+                return;
+            }
+
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        const syncToggleButtonState = (key) => {
+            const hiddenInput = getToggleInput(key);
+            const button = getToggleButton(key);
+            if (!hiddenInput || !button) {
+                return;
+            }
+
+            const isOn = getToggleValue(hiddenInput) && !button.disabled;
+            const toggleLabel = button.querySelector('[data-policy-toggle-label]');
+
+            button.classList.toggle('is-on', isOn);
+            button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+
+            if (toggleLabel) {
+                toggleLabel.textContent = isOn ? 'On' : 'Off';
+            }
+        };
 
         // Move modals to body to ensure fixed overlapping works correctly
         if (unsavedModal && unsavedModal.parentElement !== document.body) {
@@ -503,7 +727,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            card.classList.toggle('is-off', !toggleInput.checked);
+            card.classList.toggle('is-off', !getToggleValue(toggleInput));
         }
 
         function nextScoreBandIndex() {
@@ -532,6 +756,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         creditLimitsForm.addEventListener('click', (event) => {
+            const toggleButton = event.target.closest('[data-policy-toggle-button]');
+            if (toggleButton) {
+                event.preventDefault();
+                const toggleKey = toggleButton.getAttribute('data-policy-toggle-button') || '';
+                const toggleInput = toggleKey ? getToggleInput(toggleKey) : null;
+                if (!toggleKey || !toggleInput || toggleButton.disabled) {
+                    return;
+                }
+
+                if (toggleInput.type === 'checkbox') {
+                    toggleInput.checked = !toggleInput.checked;
+                } else {
+                    toggleInput.value = getToggleValue(toggleInput) ? '0' : '1';
+                }
+
+                notifyToggleChange(toggleInput);
+                syncToggleButtonState(toggleKey);
+
+                if (toggleInput.hasAttribute('data-policy-rule-toggle')) {
+                    syncRuleCardState(toggleInput);
+                }
+                return;
+            }
+
             const jumpTrigger = event.target.closest('[data-policy-section-jump]');
             if (jumpTrigger) {
                 event.preventDefault();
@@ -661,6 +909,12 @@ document.addEventListener('DOMContentLoaded', () => {
         creditLimitsForm.querySelectorAll('[data-policy-rule-toggle]').forEach((toggleInput) => {
             syncRuleCardState(toggleInput);
         });
+        creditLimitsForm.querySelectorAll('[data-policy-toggle-button]').forEach((toggleButton) => {
+            const toggleKey = toggleButton.getAttribute('data-policy-toggle-button');
+            if (toggleKey) {
+                syncToggleButtonState(toggleKey);
+            }
+        });
 
         syncScoreBandEmptyState();
         if (flowButtons.length) {
@@ -736,31 +990,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        const workflowModeInput = decisionRulesForm.querySelector('[data-decision-workflow-mode]');
-        const manualReviewToggle = decisionRulesForm.querySelector('[data-decision-manual-review-toggle]');
-        const manualReviewInput = getToggleInput('manual_review_overrides');
-        const manualReviewNote = decisionRulesForm.querySelector('[data-decision-manual-review-note]');
-
-        const syncManualReviewAvailability = () => {
-            if (!workflowModeInput || !manualReviewToggle || !manualReviewInput) {
-                return;
-            }
-
-            const isSemiAutomatic = workflowModeInput.value === 'semi_automatic';
-            manualReviewToggle.disabled = !isSemiAutomatic;
-            if (!isSemiAutomatic) {
-                manualReviewInput.value = '0';
-                notifyToggleChange(manualReviewInput);
-            }
-
-            if (manualReviewNote) {
-                manualReviewNote.hidden = isSemiAutomatic;
-            }
-
-            syncToggleButtonState('manual_review_overrides');
-            syncRuleState(manualReviewInput);
-        };
-
         decisionRulesForm.querySelectorAll('[data-policy-toggle-button]').forEach((toggleButton) => {
             const toggleKey = toggleButton.getAttribute('data-policy-toggle-button');
             const toggleInput = toggleKey ? getToggleInput(toggleKey) : null;
@@ -789,11 +1018,6 @@ document.addEventListener('DOMContentLoaded', () => {
             syncRuleState(toggleInput);
         });
 
-        if (workflowModeInput) {
-            workflowModeInput.addEventListener('change', syncManualReviewAvailability);
-        }
-
-        syncManualReviewAvailability();
     }
 
     initPolicyConsoleDecisionRules();
@@ -1307,10 +1531,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const creditPolicySubtab = targetId === 'credit_settings' ? getCreditPolicySubtabFromItem(item, href) : '';
 
             if (!isSameAdminPageLink(href)) {
-                return;
-            }
-
-            if (targetId === 'credit_settings' && creditPolicySubtab) {
                 return;
             }
             
@@ -2937,9 +3157,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const maxTerm = Math.max(minTerm, normalizeLoanPreviewInteger(getField('max_term_months')?.value, minTerm));
 
         const interestRate = Math.max(0, normalizeLoanPreviewNumber(getField('interest_rate')?.value, 0));
-        const interestType = getField('interest_type')?.value || 'Diminishing';
-        const penaltyRate = Math.max(0, normalizeLoanPreviewNumber(getField('penalty_rate')?.value, 0));
-        const penaltyType = (getField('penalty_type')?.value || 'Daily').toLowerCase();
+        const interestType = getField('interest_type')?.value || 'Declining Balance';
+        const earlySettlementFeeType = getField('early_settlement_fee_type')?.value || 'Percentage';
+        const earlySettlementFeeValue = Math.max(0, normalizeLoanPreviewNumber(getField('early_settlement_fee_value')?.value, 0));
         const gracePeriodDays = Math.max(0, normalizeLoanPreviewInteger(getField('grace_period_days')?.value, 0));
 
         const processingFeeRate = Math.max(0, normalizeLoanPreviewNumber(getField('processing_fee_percentage')?.value, 0));
@@ -2982,7 +3202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let estimatedInstallment = selectedTerm > 0 ? selectedAmount / selectedTerm : selectedAmount;
-        if (interestType === 'Diminishing') {
+        if (interestType === 'Declining Balance') {
             const monthlyRate = (interestRate / 100) / 12;
             estimatedInstallment = monthlyRate > 0
                 ? (selectedAmount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -selectedTerm))
@@ -3005,7 +3225,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setPreviewText('grace-chip', gracePeriodDays > 0 ? `${gracePeriodDays} day${gracePeriodDays === 1 ? '' : 's'} grace period` : 'No grace period');
         setPreviewText('max-amount', formatLoanPreviewCurrency(maxAmount));
         setPreviewText('term-range', `${minTerm}-${maxTerm} months`);
-        setPreviewText('penalty', penaltyRate > 0 ? `${penaltyRate.toFixed(2)}% ${penaltyType}` : 'No late penalty');
+        setPreviewText('penalty', earlySettlementFeeValue > 0 ? (earlySettlementFeeType === 'Fixed' ? `₱${earlySettlementFeeValue.toFixed(2)} early settlement fee` : `${earlySettlementFeeValue.toFixed(2)}% early settlement fee`) : 'No early settlement fee');
 
         setPreviewText('selected-amount', formatLoanPreviewCurrency(selectedAmount));
         setPreviewText('selected-term', `${selectedTerm} month${selectedTerm === 1 ? '' : 's'}`);
@@ -3212,7 +3432,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (loanProductsForm && loanPreviewRoot) {
         const loanPreviewFields = Array.from(loanProductsForm.querySelectorAll(
-            '[name="product_name"], [name="product_type"], [name="custom_product_type"], [name="description"], [name="min_amount"], [name="max_amount"], [name="interest_rate"], [name="interest_type"], [name="min_term_months"], [name="max_term_months"], [name="processing_fee_percentage"], [name="service_charge"], [name="documentary_stamp"], [name="insurance_fee_percentage"], [name="penalty_rate"], [name="penalty_type"], [name="grace_period_days"]'
+            '[name="product_name"], [name="product_type"], [name="custom_product_type"], [name="description"], [name="min_amount"], [name="max_amount"], [name="interest_rate"], [name="interest_type"], [name="min_term_months"], [name="max_term_months"], [name="processing_fee_percentage"], [name="service_charge"], [name="documentary_stamp"], [name="insurance_fee_percentage"], [name="early_settlement_fee_type"], [name="early_settlement_fee_value"], [name="grace_period_days"]'
         ));
 
         loanPreviewFields.forEach((field) => {

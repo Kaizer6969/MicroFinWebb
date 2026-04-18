@@ -92,7 +92,6 @@ if (!function_exists('mf_credit_policy_defaults')) {
             ],
             'ci_rules' => [
                 'require_ci' => false,
-                'ci_required_above_amount' => 0,
                 'auto_approve_ci_values' => ['Highly Recommended', 'Recommended'],
                 'review_ci_values' => ['Conditional'],
             ],
@@ -292,7 +291,6 @@ if (!function_exists('mf_credit_policy_normalize')) {
             'decision_routing' => $decisionRouting,
             'ci_rules' => [
                 'require_ci' => mf_credit_policy_truthy($policy['ci_rules']['require_ci'] ?? $defaults['ci_rules']['require_ci']),
-                'ci_required_above_amount' => round(max(0, (float) ($policy['ci_rules']['ci_required_above_amount'] ?? $defaults['ci_rules']['ci_required_above_amount'])), 2),
                 'auto_approve_ci_values' => mf_credit_policy_normalize_list(
                     $policy['ci_rules']['auto_approve_ci_values'] ?? [],
                     mf_credit_policy_ci_recommendation_options(),
@@ -1473,10 +1471,6 @@ if (!function_exists('mf_evaluate_application_policy')) {
         }
 
         $ciRequired = !empty($policy['ci_rules']['require_ci']);
-        $ciRequiredAboveAmount = (float) ($policy['ci_rules']['ci_required_above_amount'] ?? 0);
-        if ($ciRequiredAboveAmount > 0 && $requestedAmount > $ciRequiredAboveAmount) {
-            $ciRequired = true;
-        }
 
         if ($ciRequired && !$ci) {
             $reviewReasons[] = 'A completed credit investigation is required.';

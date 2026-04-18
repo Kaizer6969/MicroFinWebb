@@ -1,4 +1,4 @@
-<?php
+ <?php
 // site.php — Tenant Public Website
 // URL: site.php?site=tenant-slug
 // No authentication required.
@@ -276,6 +276,14 @@ $body_font = 'Public Sans';
 $onPrimary = '#ffffff';
 $secondary = $data['theme_secondary_color'] ?: '#10b981';
 
+// Normalize interest type: map legacy values to new standardized values
+$normalize_interest_type = function(?string $type): string {
+    $type = trim($type ?? 'Declining Balance');
+    if ($type === 'Fixed') return 'Flat';
+    if ($type === 'Diminishing') return 'Declining Balance';
+    return $type;
+};
+
 $tenantReferenceTenant = [
     'tenant_id' => (string) $tenant_id,
     'tenant_name' => (string) $tenant_name,
@@ -363,13 +371,13 @@ document.querySelectorAll('.fade-up').forEach(function(el) { obs.observe(el); })
 <?php if ($show_loan_calc && !empty($loan_products)): ?>
 // Calculator Logic
 (function() {
-  var products = <?php echo json_encode(array_map(function($p) {
+  var products = <?php echo json_encode(array_map(function($p) use ($normalize_interest_type) {
       return [
           'name'       => $p['product_name'] ?? 'Loan',
           'min'        => (float)($p['min_amount'] ?? 1000),
           'max'        => (float)($p['max_amount'] ?? 50000),
           'rate'       => (float)($p['interest_rate'] ?? 2.5),
-          'type'       => $p['interest_type'] ?? 'Flat',
+          'type'       => $normalize_interest_type($p['interest_type'] ?? 'Declining Balance'),
           'minTerm'    => (int)($p['min_term_months'] ?? 1),
           'maxTerm'    => (int)($p['max_term_months'] ?? 12),
           'processing' => (float)($p['processing_fee_percentage'] ?? 5),
@@ -432,7 +440,7 @@ document.querySelectorAll('.fade-up').forEach(function(el) { obs.observe(el); })
       var monthly = 0, interest = 0, total = 0;
       if (p.type === 'Flat' || p.type === 'Fixed') {
           interest = amt * rate * term; total = amt + interest; monthly = total / term;
-      } else if (p.type === 'Diminishing') {
+      } else if (p.type === 'Declining Balance' || p.type === 'Diminishing') {
           monthly  = rate > 0 ? amt * (rate * Math.pow(1+rate,term)) / (Math.pow(1+rate,term)-1) : amt/term;
           total    = monthly * term; interest = total - amt;
       }

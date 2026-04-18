@@ -29,6 +29,21 @@ if (!function_exists('policy_console_credit_limits_normalize')) {
             $score = is_numeric($value) ? (float)$value : (float)$fallback;
             return (int)round(min($scoreCeiling, max(0, $score)));
         };
+        $normalizeNullableMaxScore = static function ($value, $fallback = null) use ($scoreCeiling): ?int {
+            if ($value === '' || $value === null) {
+                return null;
+            }
+
+            if (!is_numeric($value)) {
+                if ($fallback === '' || $fallback === null || !is_numeric($fallback)) {
+                    return null;
+                }
+                $value = $fallback;
+            }
+
+            $score = (float)$value;
+            return (int)round(max(0, $score));
+        };
         $normalizeDays = static function ($value, $fallback): int {
             $days = is_numeric($value) ? (float)$value : (float)$fallback;
             return (int)round(min(3650, max(1, $days)));
@@ -51,12 +66,12 @@ if (!function_exists('policy_console_credit_limits_normalize')) {
 
                 $label = trim((string)($row['label'] ?? ''));
                 $minScore = $normalizeScore($row['min_score'] ?? 0, 0);
-                $maxScore = $normalizeScore($row['max_score'] ?? $minScore, $minScore);
-                if ($maxScore < $minScore) {
+                $maxScore = $normalizeNullableMaxScore($row['max_score'] ?? null, $row['max_score'] ?? null);
+                if ($maxScore !== null && $maxScore < $minScore) {
                     $maxScore = $minScore;
                 }
 
-                if ($label === '' && $minScore === 0 && $maxScore === 0) {
+                if ($label === '' && $minScore === 0 && ($maxScore === null || $maxScore === 0)) {
                     continue;
                 }
 
@@ -81,6 +96,21 @@ if (!function_exists('policy_console_credit_limits_normalize')) {
         }
         if ($scoreBandRows === []) {
             $scoreBandRows = $defaults['score_bands']['rows'];
+        } else {
+            $openEndedIndex = null;
+            $highestMinScore = -1;
+            foreach ($scoreBandRows as $index => $row) {
+                $rowMinScore = (int)($row['min_score'] ?? 0);
+                $rowMaxScore = $row['max_score'] ?? null;
+                if (($rowMaxScore === null || $rowMaxScore === '' || (is_numeric($rowMaxScore) && (int)$rowMaxScore >= $scoreCeiling)) && $rowMinScore >= $highestMinScore) {
+                    $highestMinScore = $rowMinScore;
+                    $openEndedIndex = $index;
+                }
+            }
+
+            if ($openEndedIndex !== null) {
+                $scoreBandRows[$openEndedIndex]['max_score'] = null;
+            }
         }
 
         $core = $input['scoring_setup']['core'] ?? [];
@@ -169,7 +199,7 @@ if (!function_exists('policy_console_credit_limits_build_from_post')) {
                 'id' => $ids[$index] ?? ('band_' . ($index + 1)),
                 'label' => $labels[$index] ?? '',
                 'min_score' => $mins[$index] ?? 0,
-                'max_score' => $maxes[$index] ?? 0,
+                'max_score' => $maxes[$index] ?? null,
                 'base_growth_percent' => $baseGrowths[$index] ?? 0,
                 'micro_percent_per_point' => $microGrowths[$index] ?? 0,
             ];
@@ -222,10 +252,8 @@ if (!function_exists('policy_console_credit_limits_build_from_post')) {
                 'initial_limit_percent_of_income' => $source['pcc_limit_initial_percent_of_income'] ?? null,
                 'use_default_lending_cap' => $source['pcc_limit_use_default_lending_cap'] ?? 0,
                 'default_lending_cap_amount' => $source['pcc_limit_default_lending_cap_amount'] ?? null,
-                'score_change_steps' => isset($source['pcc_limit_score_change_steps']) && is_array($source['pcc_limit_score_change_steps'])
-                    ? $source['pcc_limit_score_change_steps']
-                    : [],
                 'apply_score_changes_immediately' => $source['pcc_limit_apply_score_changes_immediately'] ?? 0,
+                'maximum_dti_ratio' => $source['pcc_limit_maximum_dti_ratio'] ?? null,
             ],
         ];
 

@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $min_term = intval($_POST['min_term'] ?? 1);
     $max_term = intval($_POST['max_term'] ?? 12);
     $processing_fee = floatval($_POST['processing_fee'] ?? 0);
-    $penalty_rate = floatval($_POST['penalty_rate'] ?? 0);
+    $early_settlement_fee = floatval($_POST['early_settlement_fee'] ?? 0);
     $grace_period = intval($_POST['grace_period'] ?? 0);
     $doc_stamp = floatval($_POST['doc_stamp'] ?? 0);
 
@@ -63,9 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             INSERT INTO loan_products (
                 tenant_id, product_name, product_type, min_amount, max_amount, 
                 interest_rate, interest_type, min_term_months, max_term_months,
-                processing_fee_percentage, documentary_stamp, penalty_rate, 
+                processing_fee_percentage, documentary_stamp, early_settlement_fee_type, early_settlement_fee_value, 
                 grace_period_days
-            ) VALUES (?, ?, 'Personal Loan', 1000, 50000, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, 'Personal Loan', 1000, 50000, ?, ?, ?, ?, ?, ?, 'Percentage', ?, ?)
         ");
         $insert_product->execute([
             $tenant_id, 
@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $max_term,
             $processing_fee,
             $doc_stamp,
-            $penalty_rate,
+            $early_settlement_fee,
             $grace_period
         ]);
 
@@ -261,8 +261,8 @@ $t_card = '#ffffff';
                 </div>
 
                 <div class="form-group">
-                    <label>Late Penalty Rate (% per day)</label>
-                    <input type="number" step="0.01" name="penalty_rate" value="0.50">
+                    <label>Early Settlement Fee (%)</label>
+                    <input type="number" step="0.01" name="early_settlement_fee" value="0.00">
                 </div>
 
                 <div class="form-group">

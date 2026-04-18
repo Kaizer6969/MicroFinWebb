@@ -76,8 +76,7 @@ $productSql = "
         COALESCE(service_charge, 0) AS service_charge,
         COALESCE(documentary_stamp, 0) AS documentary_stamp,
         COALESCE(insurance_fee_percentage, 0) AS insurance_fee_percentage,
-        COALESCE(penalty_rate, 0) AS penalty_rate,
-        COALESCE(penalty_type, '') AS penalty_type,
+        COALESCE(early_settlement_fee_percentage, 0) AS early_settlement_fee_percentage,
         COALESCE(grace_period_days, 0) AS grace_period_days,
         CAST(COALESCE(is_active, 1) AS CHAR) AS is_active
     FROM loan_products
@@ -116,7 +115,7 @@ while ($row = $result->fetch_assoc()) {
     $row['service_charge'] = (float) ($row['service_charge'] ?? 0);
     $row['documentary_stamp'] = (float) ($row['documentary_stamp'] ?? 0);
     $row['insurance_fee_percentage'] = (float) ($row['insurance_fee_percentage'] ?? 0);
-    $row['penalty_rate'] = (float) ($row['penalty_rate'] ?? 0);
+    $row['early_settlement_fee_percentage'] = (float) ($row['early_settlement_fee_percentage'] ?? 0);
     $row['grace_period_days'] = (int) ($row['grace_period_days'] ?? 0);
     $products[] = $row;
 }

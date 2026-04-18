@@ -324,19 +324,18 @@ if ($method === 'POST' && $action === 'release') {
     $principal = $approved_amount;
     $interest_rate = (float) $app['interest_rate'];
     $loan_term = (int) $app['loan_term_months'];
-    $interest_type = $app['interest_type'] ?? 'Diminishing';
+    $interest_type = $app['interest_type'] ?? 'Declining Balance';
+    if ($interest_type === 'Diminishing') $interest_type = 'Declining Balance';
+    if ($interest_type === 'Fixed') $interest_type = 'Flat';
 
     // Calculate interest based on type
     $monthly_rate = $interest_rate / 100 / 12;
 
-    if ($interest_type === 'Flat') {
-        $interest_amount = $principal * ($interest_rate / 100) * ($loan_term / 12);
-        $monthly_payment = ($principal + $interest_amount) / $loan_term;
-    } elseif ($interest_type === 'Fixed' || $monthly_rate == 0) {
+    if ($interest_type === 'Flat' || $monthly_rate == 0) {
         $interest_amount = $principal * ($interest_rate / 100) * ($loan_term / 12);
         $monthly_payment = ($principal + $interest_amount) / $loan_term;
     } else {
-        // Diminishing balance
+        // Declining Balance
         $monthly_payment = $principal * ($monthly_rate * pow(1 + $monthly_rate, $loan_term)) / (pow(1 + $monthly_rate, $loan_term) - 1);
         $interest_amount = ($monthly_payment * $loan_term) - $principal;
     }

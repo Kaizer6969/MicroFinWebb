@@ -158,7 +158,7 @@ if ($method === 'GET' && $action === 'view') {
             lp.interest_rate AS product_interest_rate, lp.interest_type,
             lp.min_term_months, lp.max_term_months, lp.processing_fee_percentage,
             lp.service_charge, lp.documentary_stamp, lp.insurance_fee_percentage,
-            lp.penalty_rate, lp.grace_period_days,
+            lp.early_settlement_fee_type, lp.early_settlement_fee_value, lp.grace_period_days,
             (
                 SELECT cs.total_score
                 FROM credit_scores cs

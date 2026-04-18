@@ -46,68 +46,31 @@ if (!function_exists('policy_console_decision_rules_normalize')) {
             $number = is_numeric($value) ? (float)$value : (float)$fallback;
             return round(min($max, max($min, $number)), 2);
         };
+        $normalizeArray = static function ($value, $fallback): array {
+            return is_array($value) ? array_values(array_map('trim', array_filter($value))) : $fallback;
+        };
 
-        $approvalMode = (string)($input['workflow']['approval_mode'] ?? $defaults['workflow']['approval_mode']);
-        if (!in_array($approvalMode, policy_console_decision_rules_approval_modes(), true)) {
-            $approvalMode = $defaults['workflow']['approval_mode'];
-        }
-
-        $legacyScoreGuardrails = is_array($input['score_guardrails'] ?? null) ? $input['score_guardrails'] : [];
-        $legacyCiRules = is_array($input['ci_rules'] ?? null) ? $input['ci_rules'] : [];
-        $legacyProductChecks = is_array($input['product_checks'] ?? null) ? $input['product_checks'] : [];
+        // Hardcoded: The system inherently uses a "system suggests, staff approves" model for the MVP.
+        $approvalMode = 'semi_automatic';
 
         $rulesInput = is_array($input['decision_rules'] ?? null) ? $input['decision_rules'] : [];
-        $scoreThresholdsInput = is_array($rulesInput['score_thresholds'] ?? null) ? $rulesInput['score_thresholds'] : [];
-        $ciInput = is_array($rulesInput['ci'] ?? null) ? $rulesInput['ci'] : [];
-        $borrowingInput = is_array($rulesInput['borrowing_access_rules'] ?? null) ? $rulesInput['borrowing_access_rules'] : [];
-        $manualReviewInput = is_array($rulesInput['manual_review_overrides'] ?? null) ? $rulesInput['manual_review_overrides'] : [];
-        $borrowerSafeguardsInput = is_array($rulesInput['borrower_safeguards'] ?? null)
-            ? $rulesInput['borrower_safeguards']
-            : (is_array($input['borrower_safeguards'] ?? null) ? $input['borrower_safeguards'] : []);
-        $legacyBorrowerSafeguardsInput = is_array($input['_legacy_borrower_safeguards'] ?? null)
-            ? $input['_legacy_borrower_safeguards']
-            : [];
+        $d_demo = is_array($rulesInput['demographics'] ?? null) ? $rulesInput['demographics'] : [];
+        $d_afford = is_array($rulesInput['affordability'] ?? null) ? $rulesInput['affordability'] : [];
+        $d_guard = is_array($rulesInput['guardrails'] ?? null) ? $rulesInput['guardrails'] : [];
+        $d_expo = is_array($rulesInput['exposure'] ?? null) ? $rulesInput['exposure'] : [];
+
+        $def = $defaults['decision_rules'];
 
         $autoRejectFloor = $normalizeScore(
-            $scoreThresholdsInput['auto_reject_floor'] ?? $legacyScoreGuardrails['auto_reject_floor'] ?? null,
-            $defaults['decision_rules']['score_thresholds']['auto_reject_floor']
+            $d_guard['auto_reject_floor'] ?? null,
+            $def['guardrails']['auto_reject_floor']
         );
         $hardApprovalThreshold = $normalizeScore(
-            $scoreThresholdsInput['hard_approval_threshold'] ?? $legacyScoreGuardrails['approval_candidate_starts'] ?? null,
-            $defaults['decision_rules']['score_thresholds']['hard_approval_threshold']
+            $d_guard['hard_approval_threshold'] ?? null,
+            $def['guardrails']['hard_approval_threshold']
         );
         if ($hardApprovalThreshold < $autoRejectFloor) {
             $hardApprovalThreshold = $autoRejectFloor;
-        }
-
-        $allowedCiOptions = array_values(array_filter(array_map('strval', $ciOptions), static fn(string $value): bool => $value !== ''));
-        $normalizeCiValues = static function ($values) use ($allowedCiOptions): array {
-            if (empty($allowedCiOptions) || !is_array($values)) {
-                return [];
-            }
-
-            $filtered = [];
-            foreach ($values as $value) {
-                $option = (string)$value;
-                if ($option !== '' && in_array($option, $allowedCiOptions, true) && !in_array($option, $filtered, true)) {
-                    $filtered[] = $option;
-                }
-            }
-
-            return $filtered;
-        };
-
-        $legacyManualReviewStart = $normalizeScore(
-            $legacyScoreGuardrails['manual_review_starts'] ?? null,
-            max($autoRejectFloor, $hardApprovalThreshold - $defaults['decision_rules']['manual_review_overrides']['points_window'])
-        );
-        $derivedPointsWindow = max(0, $hardApprovalThreshold - $legacyManualReviewStart);
-
-        $manualReviewEnabled = $normalizeToggle(
-            $manualReviewInput['enabled'] ?? ($derivedPointsWindow > 0)
-        );
-        if ($approvalMode !== 'semi_automatic') {
-            $manualReviewEnabled = false;
         }
 
         return [
@@ -115,80 +78,38 @@ if (!function_exists('policy_console_decision_rules_normalize')) {
                 'approval_mode' => $approvalMode,
             ],
             'decision_rules' => [
-                'score_thresholds' => [
-                    'enabled' => $normalizeToggle(
-                        $scoreThresholdsInput['enabled'] ?? true
-                    ),
+                'demographics' => [
+                    'age_enabled' => $normalizeToggle($d_demo['age_enabled'] ?? $def['demographics']['age_enabled']),
+                    'min_age' => $normalizeInt($d_demo['min_age'] ?? null, $def['demographics']['min_age'], 18, 100),
+                    'max_age' => $normalizeInt($d_demo['max_age'] ?? null, $def['demographics']['max_age'], 18, 100),
+                    'employment_tenure_enabled' => $normalizeToggle($d_demo['employment_tenure_enabled'] ?? $def['demographics']['employment_tenure_enabled']),
+                    'min_employment_months' => $normalizeInt($d_demo['min_employment_months'] ?? null, $def['demographics']['min_employment_months'], 0, 1200),
+                    'residency_tenure_enabled' => $normalizeToggle($d_demo['residency_tenure_enabled'] ?? $def['demographics']['residency_tenure_enabled']),
+                    'min_residency_months' => $normalizeInt($d_demo['min_residency_months'] ?? null, $def['demographics']['min_residency_months'], 0, 1200),
+                    'employment_status_enabled' => $normalizeToggle($d_demo['employment_status_enabled'] ?? $def['demographics']['employment_status_enabled']),
+                    'eligible_statuses' => $normalizeArray($d_demo['eligible_statuses'] ?? null, $def['demographics']['eligible_statuses']),
+                ],
+                'affordability' => [
+                    'income_enabled' => $normalizeToggle($d_afford['income_enabled'] ?? $def['affordability']['income_enabled']),
+                    'min_monthly_income' => $normalizeDecimal($d_afford['min_monthly_income'] ?? null, $def['affordability']['min_monthly_income']),
+                    'dti_enabled' => $normalizeToggle($d_afford['dti_enabled'] ?? $def['affordability']['dti_enabled']),
+                    'max_dti_percentage' => $normalizeDecimal($d_afford['max_dti_percentage'] ?? null, $def['affordability']['max_dti_percentage'], 0, 100),
+                    'pti_enabled' => $normalizeToggle($d_afford['pti_enabled'] ?? $def['affordability']['pti_enabled']),
+                    'max_pti_percentage' => $normalizeDecimal($d_afford['max_pti_percentage'] ?? null, $def['affordability']['max_pti_percentage'], 0, 100),
+                ],
+                'guardrails' => [
+                    'score_thresholds_enabled' => $normalizeToggle($d_guard['score_thresholds_enabled'] ?? $def['guardrails']['score_thresholds_enabled']),
                     'auto_reject_floor' => $autoRejectFloor,
                     'hard_approval_threshold' => $hardApprovalThreshold,
+                    'cooling_period_enabled' => $normalizeToggle($d_guard['cooling_period_enabled'] ?? $def['guardrails']['cooling_period_enabled']),
+                    'rejected_cooling_days' => $normalizeInt($d_guard['rejected_cooling_days'] ?? null, $def['guardrails']['rejected_cooling_days'], 0, 3650),
                 ],
-                'ci' => [
-                    'enabled' => $normalizeToggle(
-                        $ciInput['enabled'] ?? $legacyCiRules['require_ci'] ?? $defaults['decision_rules']['ci']['enabled']
-                    ),
-                    'mandatory_ci_above_amount' => $normalizeDecimal(
-                        $ciInput['mandatory_ci_above_amount'] ?? $legacyCiRules['ci_required_above_amount'] ?? null,
-                        $defaults['decision_rules']['ci']['mandatory_ci_above_amount']
-                    ),
-                    'auto_approve_ci_values' => $normalizeCiValues(
-                        $ciInput['auto_approve_ci_values'] ?? $legacyCiRules['auto_approve_ci_values'] ?? []
-                    ),
-                    'review_ci_values' => $normalizeCiValues(
-                        $ciInput['review_ci_values'] ?? $legacyCiRules['review_ci_values'] ?? []
-                    ),
-                ],
-                'borrowing_access_rules' => [
-                    'enabled' => $normalizeToggle(
-                        $borrowingInput['enabled'] ?? true
-                    ),
-                    'allow_multiple_active_loans_within_remaining_limit' => $normalizeToggle(
-                        $borrowingInput['allow_multiple_active_loans_within_remaining_limit'] ?? false
-                    ),
-                    'stop_application_if_requested_amount_exceeds_remaining_limit' => $normalizeToggle(
-                        $borrowingInput['stop_application_if_requested_amount_exceeds_remaining_limit']
-                            ?? $legacyProductChecks['use_product_max_amount']
-                            ?? $defaults['decision_rules']['borrowing_access_rules']['stop_application_if_requested_amount_exceeds_remaining_limit']
-                    ),
-                ],
-                'manual_review_overrides' => [
-                    'enabled' => $manualReviewEnabled,
-                    'review_if_score_within_points_of_approval_threshold' => $normalizeToggle(
-                        $manualReviewInput['review_if_score_within_points_of_approval_threshold']
-                            ?? $defaults['decision_rules']['manual_review_overrides']['review_if_score_within_points_of_approval_threshold']
-                    ),
-                    'points_window' => $normalizeInt(
-                        $manualReviewInput['points_window'] ?? $derivedPointsWindow,
-                        $defaults['decision_rules']['manual_review_overrides']['points_window'],
-                        0,
-                        $scoreCeiling
-                    ),
-                ],
-                'borrower_safeguards' => [
-                    'enabled' => $normalizeToggle(
-                        $borrowerSafeguardsInput['enabled']
-                            ?? $legacyBorrowerSafeguardsInput['enabled']
-                            ?? $defaults['decision_rules']['borrower_safeguards']['enabled']
-                    ),
-                    'guarantor_required_above_amount' => $normalizeDecimal(
-                        $borrowerSafeguardsInput['guarantor_required_above_amount']
-                            ?? $legacyBorrowerSafeguardsInput['guarantor_required_above_amount']
-                            ?? null,
-                        $defaults['decision_rules']['borrower_safeguards']['guarantor_required_above_amount']
-                    ),
-                    'collateral_enabled' => $normalizeToggle(
-                        $borrowerSafeguardsInput['collateral_enabled']
-                            ?? $legacyBorrowerSafeguardsInput['collateral_enabled']
-                            ?? $defaults['decision_rules']['borrower_safeguards']['collateral_enabled']
-                    ),
-                    'risk_based_security_requirements' => substr(
-                        trim((string)(
-                            $borrowerSafeguardsInput['risk_based_security_requirements']
-                                ?? $legacyBorrowerSafeguardsInput['risk_based_security_requirements']
-                                ?? $defaults['decision_rules']['borrower_safeguards']['risk_based_security_requirements']
-                        )),
-                        0,
-                        1000
-                    ),
+                'exposure' => [
+                    'new_borrower_cap_enabled' => $normalizeToggle($d_expo['new_borrower_cap_enabled'] ?? $def['exposure']['new_borrower_cap_enabled']),
+                    'first_loan_max_amount' => $normalizeDecimal($d_expo['first_loan_max_amount'] ?? null, $def['exposure']['first_loan_max_amount']),
+                    'multiple_active_loans_enabled' => $normalizeToggle($d_expo['multiple_active_loans_enabled'] ?? $def['exposure']['multiple_active_loans_enabled']),
+                    'guarantor_required_enabled' => $normalizeToggle($d_expo['guarantor_required_enabled'] ?? $def['exposure']['guarantor_required_enabled']),
+                    'guarantor_required_above_amount' => $normalizeDecimal($d_expo['guarantor_required_above_amount'] ?? null, $def['exposure']['guarantor_required_above_amount']),
                 ],
             ],
         ];
@@ -259,39 +180,41 @@ if (!function_exists('policy_console_decision_rules_build_from_post')) {
     {
         $payload = [
             'workflow' => [
-                'approval_mode' => $source['pcdr_approval_mode'] ?? null,
+                'approval_mode' => 'semi_automatic',
             ],
             'decision_rules' => [
-                'score_thresholds' => [
-                    'enabled' => $source['pcdr_score_thresholds_enabled'] ?? 0,
+                'demographics' => [
+                    'age_enabled' => $source['pcdr_age_enabled'] ?? null,
+                    'min_age' => $source['pcdr_min_age'] ?? null,
+                    'max_age' => $source['pcdr_max_age'] ?? null,
+                    'employment_tenure_enabled' => $source['pcdr_employment_tenure_enabled'] ?? null,
+                    'min_employment_months' => $source['pcdr_min_employment_months'] ?? null,
+                    'residency_tenure_enabled' => $source['pcdr_residency_tenure_enabled'] ?? null,
+                    'min_residency_months' => $source['pcdr_min_residency_months'] ?? null,
+                    'employment_status_enabled' => $source['pcdr_employment_status_enabled'] ?? null,
+                    'eligible_statuses' => $source['pcdr_eligible_statuses'] ?? null,
+                ],
+                'affordability' => [
+                    'income_enabled' => $source['pcdr_income_enabled'] ?? null,
+                    'min_monthly_income' => $source['pcdr_min_monthly_income'] ?? null,
+                    'dti_enabled' => $source['pcdr_dti_enabled'] ?? null,
+                    'max_dti_percentage' => $source['pcdr_max_dti_percentage'] ?? null,
+                    'pti_enabled' => $source['pcdr_pti_enabled'] ?? null,
+                    'max_pti_percentage' => $source['pcdr_max_pti_percentage'] ?? null,
+                ],
+                'guardrails' => [
+                    'score_thresholds_enabled' => $source['pcdr_score_thresholds_enabled'] ?? null,
                     'auto_reject_floor' => $source['pcdr_auto_reject_floor'] ?? null,
                     'hard_approval_threshold' => $source['pcdr_hard_approval_threshold'] ?? null,
+                    'cooling_period_enabled' => $source['pcdr_cooling_period_enabled'] ?? null,
+                    'rejected_cooling_days' => $source['pcdr_rejected_cooling_days'] ?? null,
                 ],
-                'ci' => [
-                    'enabled' => $source['pcdr_ci_enabled'] ?? 0,
-                    'mandatory_ci_above_amount' => $source['pcdr_ci_required_above_amount'] ?? null,
-                    'auto_approve_ci_values' => isset($source['pcdr_auto_approve_ci_values']) && is_array($source['pcdr_auto_approve_ci_values'])
-                        ? $source['pcdr_auto_approve_ci_values']
-                        : [],
-                    'review_ci_values' => isset($source['pcdr_review_ci_values']) && is_array($source['pcdr_review_ci_values'])
-                        ? $source['pcdr_review_ci_values']
-                        : [],
-                ],
-                'borrowing_access_rules' => [
-                    'enabled' => $source['pcdr_borrowing_access_enabled'] ?? 0,
-                    'allow_multiple_active_loans_within_remaining_limit' => $source['pcdr_allow_multiple_active_loans'] ?? 0,
-                    'stop_application_if_requested_amount_exceeds_remaining_limit' => $source['pcdr_stop_if_exceeds_remaining_limit'] ?? 0,
-                ],
-                'manual_review_overrides' => [
-                    'enabled' => $source['pcdr_manual_review_overrides_enabled'] ?? 0,
-                    'review_if_score_within_points_of_approval_threshold' => $source['pcdr_review_if_within_points_window'] ?? 0,
-                    'points_window' => $source['pcdr_points_window'] ?? null,
-                ],
-                'borrower_safeguards' => [
-                    'enabled' => $source['pcdr_borrower_safeguards_enabled'] ?? 0,
+                'exposure' => [
+                    'new_borrower_cap_enabled' => $source['pcdr_new_borrower_cap_enabled'] ?? null,
+                    'first_loan_max_amount' => $source['pcdr_first_loan_max_amount'] ?? null,
+                    'multiple_active_loans_enabled' => $source['pcdr_multiple_active_loans_enabled'] ?? null,
+                    'guarantor_required_enabled' => $source['pcdr_guarantor_required_enabled'] ?? null,
                     'guarantor_required_above_amount' => $source['pcdr_guarantor_required_above_amount'] ?? null,
-                    'collateral_enabled' => $source['pcdr_collateral_enabled'] ?? 0,
-                    'risk_based_security_requirements' => $source['pcdr_risk_based_security_requirements'] ?? '',
                 ],
             ],
         ];

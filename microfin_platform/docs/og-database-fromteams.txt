@@ -297,7 +297,7 @@ CREATE TABLE `loan_products` (
   `min_amount` DECIMAL(12,2) NOT NULL,
   `max_amount` DECIMAL(12,2) NOT NULL,
   `interest_rate` DECIMAL(5,2) NOT NULL,
-  `interest_type` ENUM('Fixed','Diminishing','Flat') COLLATE utf8mb4_unicode_ci DEFAULT 'Diminishing',
+  `interest_type` ENUM('Declining Balance','Flat') COLLATE utf8mb4_unicode_ci DEFAULT 'Declining Balance',
   `min_term_months` INT NOT NULL,
   `max_term_months` INT NOT NULL,
   `processing_fee_percentage` DECIMAL(5,2) DEFAULT 0.00,

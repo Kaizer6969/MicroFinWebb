@@ -156,7 +156,7 @@ if ($method === 'POST' && ($action === 'post' || $action === '')) {
 
     // Fetch loan
     $loan_stmt = $pdo->prepare("
-        SELECT l.*, lp.interest_rate, lp.penalty_rate, lp.penalty_type, lp.grace_period_days
+        SELECT l.*, lp.interest_rate, lp.early_settlement_fee_type, lp.early_settlement_fee_value, lp.grace_period_days
         FROM loans l
         JOIN loan_products lp ON l.product_id = lp.product_id
         WHERE l.loan_id = ? AND l.tenant_id = ? AND l.loan_status IN ('Active', 'Overdue')

@@ -430,15 +430,15 @@ CREATE TABLE `loan_products` (
   `min_amount` decimal(12,2) NOT NULL,
   `max_amount` decimal(12,2) NOT NULL,
   `interest_rate` decimal(5,2) NOT NULL,
-  `interest_type` enum('Fixed','Diminishing','Flat') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Diminishing',
+  `interest_type` enum('Declining Balance','Flat') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Declining Balance',
   `min_term_months` int NOT NULL,
   `max_term_months` int NOT NULL,
   `processing_fee_percentage` decimal(5,2) DEFAULT '0.00',
   `service_charge` decimal(10,2) DEFAULT '0.00',
   `documentary_stamp` decimal(10,2) DEFAULT '0.00',
   `insurance_fee_percentage` decimal(5,2) DEFAULT '0.00',
-  `penalty_rate` decimal(5,2) DEFAULT '0.00',
-  `penalty_type` enum('Daily','Monthly','Flat') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Daily',
+  `early_settlement_fee_type` enum('Percentage','Fixed') DEFAULT 'Percentage',
+  `early_settlement_fee_value` decimal(10,2) DEFAULT '0.00',
   `grace_period_days` int DEFAULT '0',
   `minimum_credit_score` int DEFAULT '500',
   `required_documents` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
@@ -919,3 +919,4 @@ INSERT INTO `users` (`user_id`, `tenant_id`, `username`, `email`, `phone_number`
 ('1', NULL, 'rhob@microfin.com', 'gleomir28@gmail.com', NULL, '$2y$10$WAX5NHe0AGODm6k2skpJT.DrLQHrvwsmEofIb8LBN93x/gtuVYv5a', '0', NULL, NULL, NULL, NULL, NULL, '0', '1', 'Super Admin', 'Active', '0', NULL, NULL, NULL, '2026-04-08 06:08:34', '0', '0', NULL, NULL, 'light', NULL, '2026-04-08 03:45:26', '2026-04-08 06:08:42')
 
 SET FOREIGN_KEY_CHECKS = 1;
+

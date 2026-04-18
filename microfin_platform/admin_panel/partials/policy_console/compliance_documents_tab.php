@@ -16,9 +16,10 @@ foreach ($policy_console_compliance_rows as $policy_console_row) {
         }
     }
 }
-$policy_console_help = static function (string $text, string $label = 'More info'): string {
+$policy_console_help = static function (string $text, string ...$label): string {
+    $labelText = $label[0] ?? 'More info';
     return '<span class="policy-help" tabindex="0" role="button" aria-label="'
-        . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+        . htmlspecialchars($labelText, ENT_QUOTES, 'UTF-8')
         . '" data-help="'
         . htmlspecialchars($text, ENT_QUOTES, 'UTF-8')
         . '">!</span>';
@@ -29,6 +30,42 @@ $policy_console_owner_labels = [
     'branch_team' => 'Branch Team',
 ];
 ?>
+<style>
+.policy-governance-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.policy-governance-pill {
+    cursor: pointer;
+    margin: 0;
+}
+.policy-governance-pill input[type="checkbox"] {
+    display: none;
+}
+.policy-governance-pill__label {
+    display: inline-block;
+    padding: 6px 12px;
+    border: 1px solid var(--input-border, #4a5568);
+    background-color: transparent;
+    color: var(--text-muted, #a0aec0);
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+.policy-governance-pill input[type="checkbox"]:checked + .policy-governance-pill__label {
+    background-color: var(--primary-color, #0d6efd);
+    border-color: var(--primary-color, #0d6efd);
+    color: #ffffff;
+}
+.policy-governance-pill input[type="checkbox"]:disabled + .policy-governance-pill__label {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+</style>
+
 <form method="POST" action="admin.php" class="policy-tab-form">
     <input type="hidden" name="action" value="save_policy_console_compliance_documents">
     <input type="hidden" name="credit_policy_tab" value="compliance_documents">
@@ -39,12 +76,6 @@ $policy_console_owner_labels = [
                 <div class="policy-compact-toolbar-copy">
                     <h3>Compliance &amp; Documents</h3>
                     <p class="text-muted">Keep document governance, validity timing, and accepted submission types cleanly separated from scoring and collections.</p>
-                </div>
-                <div class="policy-compact-card-actions">
-                    <button type="submit" class="btn btn-primary">
-                        <span class="material-symbols-rounded">save</span>
-                        Save Compliance &amp; Documents
-                    </button>
                 </div>
             </div>
 
@@ -132,22 +163,25 @@ $policy_console_owner_labels = [
                                     <div class="policy-table-subtext"><?php echo $policy_console_row_disabled ? 'Currently excluded from the default required-document set.' : 'Active in the tenant document-governance baseline.'; ?></div>
                                 </td>
                                 <td>
-                                    <select class="form-control" name="pcd_requirement[<?php echo htmlspecialchars($policy_console_category_key); ?>]">
+                                    <select class="form-control compliance-req-select" name="pcd_requirement[<?php echo htmlspecialchars($policy_console_category_key); ?>]">
                                         <option value="required" <?php echo $policy_console_requirement === 'required' ? 'selected' : ''; ?>>Required</option>
+                                        <option value="conditional" <?php echo $policy_console_requirement === 'conditional' ? 'selected' : ''; ?>>Conditional</option>
                                         <option value="not_needed" <?php echo $policy_console_requirement === 'not_needed' ? 'selected' : ''; ?>>Not Needed</option>
                                     </select>
                                 </td>
                                 <td>
                                     <div class="policy-governance-options">
                                         <?php foreach ((array)($policy_console_row['document_options'] ?? []) as $policy_console_option): ?>
-                                            <label class="policy-governance-option">
+                                            <label class="policy-governance-pill <?php echo $policy_console_row_disabled ? 'is-disabled' : ''; ?>">
                                                 <input
                                                     type="checkbox"
+                                                    class="compliance-doc-checkbox"
                                                     name="pcd_docs[<?php echo htmlspecialchars($policy_console_category_key); ?>][]"
                                                     value="<?php echo htmlspecialchars((string)($policy_console_option['document_name'] ?? '')); ?>"
                                                     <?php echo !empty($policy_console_option['is_accepted']) ? 'checked' : ''; ?>
+                                                    <?php echo $policy_console_row_disabled ? 'disabled' : ''; ?>
                                                 >
-                                                <span><?php echo htmlspecialchars((string)($policy_console_option['document_name'] ?? 'Document Type')); ?></span>
+                                                <span class="policy-governance-pill__label"><?php echo htmlspecialchars((string)($policy_console_option['document_name'] ?? 'Document Type')); ?></span>
                                             </label>
                                         <?php endforeach; ?>
                                     </div>
@@ -158,5 +192,44 @@ $policy_console_owner_labels = [
                 </table>
             </div>
         </section>
+
+        <div class="floating-save-container">
+            <button type="submit" class="btn btn-primary" id="policy-compliance-save-btn">
+                <span class="material-symbols-rounded">save</span>
+                Save Changes
+            </button>
+        </div>
     </div>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selects = document.querySelectorAll('.compliance-req-select');
+    selects.forEach(select => {
+        select.addEventListener('change', function() {
+            const tr = this.closest('tr');
+            const subtext = tr.querySelector('.policy-table-subtext');
+            const checkboxes = tr.querySelectorAll('.compliance-doc-checkbox');
+            
+            if (this.value === 'not_needed') {
+                tr.classList.add('policy-governance-row-muted');
+                if(subtext) subtext.textContent = 'Currently excluded from the default required-document set.';
+                checkboxes.forEach(cb => {
+                    cb.dataset.wasChecked = cb.checked;
+                    cb.checked = false;
+                    cb.disabled = true;
+                });
+            } else {
+                tr.classList.remove('policy-governance-row-muted');
+                if(subtext) subtext.textContent = 'Active in the tenant document-governance baseline.';
+                checkboxes.forEach(cb => {
+                    cb.disabled = false;
+                    if(cb.dataset.wasChecked === 'true') {
+                        cb.checked = true;
+                    }
+                });
+            }
+        });
+    });
+});
+</script>

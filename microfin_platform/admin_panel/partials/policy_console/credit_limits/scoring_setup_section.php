@@ -80,12 +80,25 @@
                                 <strong>Successful Repayment Cycles</strong>
                                 <?php echo $policy_console_help('Borrower must complete at least this many successful repayment cycles before upgrade candidacy can begin.'); ?>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="hidden" name="pcc_upgrade_successful_repayment_enabled" value="0">
-                                <input type="checkbox" name="pcc_upgrade_successful_repayment_enabled" value="1" data-policy-rule-toggle <?php echo !empty($upgrade_success_cycles['enabled']) ? 'checked' : ''; ?>>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Enabled</span>
-                            </label>
+                            <div class="policy-decision-rule-switch">
+                                <input
+                                    type="hidden"
+                                    name="pcc_upgrade_successful_repayment_enabled"
+                                    value="<?php echo !empty($upgrade_success_cycles['enabled']) ? '1' : '0'; ?>"
+                                    data-policy-rule-toggle
+                                    data-policy-toggle-input="pcc_upgrade_successful_repayment_enabled"
+                                >
+                                <button
+                                    type="button"
+                                    class="policy-toggle-button <?php echo !empty($upgrade_success_cycles['enabled']) ? 'is-on' : ''; ?>"
+                                    data-policy-toggle-button="pcc_upgrade_successful_repayment_enabled"
+                                    aria-pressed="<?php echo !empty($upgrade_success_cycles['enabled']) ? 'true' : 'false'; ?>"
+                                    aria-label="Enable Successful Repayment Cycles"
+                                >
+                                    <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
+                                    <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($upgrade_success_cycles['enabled']) ? 'On' : 'Off'; ?></span>
+                                </button>
+                            </div>
                         </div>
                         <div class="policy-blueprint-grid policy-blueprint-grid--two">
                             <label class="policy-field">
@@ -106,12 +119,25 @@
                                 <strong>Maximum Late Payments Allowed Within Review Period</strong>
                                 <?php echo $policy_console_help('Upgrade passes when late payments inside the selected review period stay within this maximum.'); ?>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="hidden" name="pcc_upgrade_late_payments_enabled" value="0">
-                                <input type="checkbox" name="pcc_upgrade_late_payments_enabled" value="1" data-policy-rule-toggle <?php echo !empty($upgrade_late_payments['enabled']) ? 'checked' : ''; ?>>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Enabled</span>
-                            </label>
+                            <div class="policy-decision-rule-switch">
+                                <input
+                                    type="hidden"
+                                    name="pcc_upgrade_late_payments_enabled"
+                                    value="<?php echo !empty($upgrade_late_payments['enabled']) ? '1' : '0'; ?>"
+                                    data-policy-rule-toggle
+                                    data-policy-toggle-input="pcc_upgrade_late_payments_enabled"
+                                >
+                                <button
+                                    type="button"
+                                    class="policy-toggle-button <?php echo !empty($upgrade_late_payments['enabled']) ? 'is-on' : ''; ?>"
+                                    data-policy-toggle-button="pcc_upgrade_late_payments_enabled"
+                                    aria-pressed="<?php echo !empty($upgrade_late_payments['enabled']) ? 'true' : 'false'; ?>"
+                                    aria-label="Enable Maximum Late Payments Allowed Within Review Period"
+                                >
+                                    <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
+                                    <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($upgrade_late_payments['enabled']) ? 'On' : 'Off'; ?></span>
+                                </button>
+                            </div>
                         </div>
                         <div class="policy-blueprint-grid policy-blueprint-grid--three">
                             <label class="policy-field">
@@ -136,12 +162,25 @@
                                 <strong>No Active Overdue</strong>
                                 <?php echo $policy_console_help('Borrower must have no current overdue balance for this upgrade rule to pass.'); ?>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="hidden" name="pcc_upgrade_no_active_overdue_enabled" value="0">
-                                <input type="checkbox" name="pcc_upgrade_no_active_overdue_enabled" value="1" data-policy-rule-toggle <?php echo !empty($upgrade_no_overdue['enabled']) ? 'checked' : ''; ?>>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Enabled</span>
-                            </label>
+                            <div class="policy-decision-rule-switch">
+                                <input
+                                    type="hidden"
+                                    name="pcc_upgrade_no_active_overdue_enabled"
+                                    value="<?php echo !empty($upgrade_no_overdue['enabled']) ? '1' : '0'; ?>"
+                                    data-policy-rule-toggle
+                                    data-policy-toggle-input="pcc_upgrade_no_active_overdue_enabled"
+                                >
+                                <button
+                                    type="button"
+                                    class="policy-toggle-button <?php echo !empty($upgrade_no_overdue['enabled']) ? 'is-on' : ''; ?>"
+                                    data-policy-toggle-button="pcc_upgrade_no_active_overdue_enabled"
+                                    aria-pressed="<?php echo !empty($upgrade_no_overdue['enabled']) ? 'true' : 'false'; ?>"
+                                    aria-label="Enable No Active Overdue"
+                                >
+                                    <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
+                                    <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($upgrade_no_overdue['enabled']) ? 'On' : 'Off'; ?></span>
+                                </button>
+                            </div>
                         </div>
                         <div class="policy-blueprint-grid policy-blueprint-grid--two">
                             <label class="policy-field">
@@ -169,12 +208,25 @@
                                 <strong>Late Payments Count Within Review Period</strong>
                                 <?php echo $policy_console_help('Downgrade review is triggered when late payments reach at least this count within the selected review period.'); ?>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="hidden" name="pcc_downgrade_late_payments_enabled" value="0">
-                                <input type="checkbox" name="pcc_downgrade_late_payments_enabled" value="1" data-policy-rule-toggle <?php echo !empty($downgrade_late_payments['enabled']) ? 'checked' : ''; ?>>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Enabled</span>
-                            </label>
+                            <div class="policy-decision-rule-switch">
+                                <input
+                                    type="hidden"
+                                    name="pcc_downgrade_late_payments_enabled"
+                                    value="<?php echo !empty($downgrade_late_payments['enabled']) ? '1' : '0'; ?>"
+                                    data-policy-rule-toggle
+                                    data-policy-toggle-input="pcc_downgrade_late_payments_enabled"
+                                >
+                                <button
+                                    type="button"
+                                    class="policy-toggle-button <?php echo !empty($downgrade_late_payments['enabled']) ? 'is-on' : ''; ?>"
+                                    data-policy-toggle-button="pcc_downgrade_late_payments_enabled"
+                                    aria-pressed="<?php echo !empty($downgrade_late_payments['enabled']) ? 'true' : 'false'; ?>"
+                                    aria-label="Enable Late Payments Count Within Review Period"
+                                >
+                                    <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
+                                    <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($downgrade_late_payments['enabled']) ? 'On' : 'Off'; ?></span>
+                                </button>
+                            </div>
                         </div>
                         <div class="policy-blueprint-grid policy-blueprint-grid--three">
                             <label class="policy-field">
@@ -199,12 +251,25 @@
                                 <strong>Overdue Days Threshold</strong>
                                 <?php echo $policy_console_help('This is different from grace period. It measures how long the borrower stays overdue after already becoming overdue.'); ?>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="hidden" name="pcc_downgrade_overdue_days_enabled" value="0">
-                                <input type="checkbox" name="pcc_downgrade_overdue_days_enabled" value="1" data-policy-rule-toggle <?php echo !empty($downgrade_overdue['enabled']) ? 'checked' : ''; ?>>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Enabled</span>
-                            </label>
+                            <div class="policy-decision-rule-switch">
+                                <input
+                                    type="hidden"
+                                    name="pcc_downgrade_overdue_days_enabled"
+                                    value="<?php echo !empty($downgrade_overdue['enabled']) ? '1' : '0'; ?>"
+                                    data-policy-rule-toggle
+                                    data-policy-toggle-input="pcc_downgrade_overdue_days_enabled"
+                                >
+                                <button
+                                    type="button"
+                                    class="policy-toggle-button <?php echo !empty($downgrade_overdue['enabled']) ? 'is-on' : ''; ?>"
+                                    data-policy-toggle-button="pcc_downgrade_overdue_days_enabled"
+                                    aria-pressed="<?php echo !empty($downgrade_overdue['enabled']) ? 'true' : 'false'; ?>"
+                                    aria-label="Enable Overdue Days Threshold"
+                                >
+                                    <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
+                                    <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($downgrade_overdue['enabled']) ? 'On' : 'Off'; ?></span>
+                                </button>
+                            </div>
                         </div>
                         <div class="policy-blueprint-grid policy-blueprint-grid--two">
                             <label class="policy-field">

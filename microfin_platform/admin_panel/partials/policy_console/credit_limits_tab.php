@@ -16,9 +16,10 @@ $policy_console_limit_assignment = $policy_console_credit_limits_safe['limit_ass
 $policy_console_row_index = 0;
 $policy_console_workspace_name = strtoupper(trim((string)($settings['company_name'] ?? $tenant_name ?? 'Tenant Workspace')));
 
-$policy_console_help = static function (string $text, string $label = 'More info'): string {
+$policy_console_help = static function (string $text, string ...$label): string {
+    $labelText = $label[0] ?? 'More info';
     return '<span class="policy-help" tabindex="0" role="button" aria-label="'
-        . htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+        . htmlspecialchars($labelText, ENT_QUOTES, 'UTF-8')
         . '" data-help="'
         . htmlspecialchars($text, ENT_QUOTES, 'UTF-8')
         . '">!</span>';
@@ -110,8 +111,8 @@ $policy_console_assignment_status = 'Configured';
                 <input type="hidden" name="pcc_score_band_id[]" value="band___INDEX__">
                 <input type="text" class="form-control" name="pcc_score_band_label[]" value="" maxlength="60" required>
             </td>
-            <td><input type="number" class="form-control" name="pcc_score_band_min[]" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" value="0" required></td>
-            <td><input type="number" class="form-control" name="pcc_score_band_max[]" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" value="0" required></td>
+            <td><input type="number" class="form-control" name="pcc_score_band_min[]" min="0" value="0" required></td>
+            <td><input type="number" class="form-control" name="pcc_score_band_max[]" min="0" value="" placeholder="850+"></td>
             <td><input type="number" class="form-control" name="pcc_score_band_base_growth[]" min="0" max="100" step="0.001" value="0" required></td>
             <td><input type="number" class="form-control" name="pcc_score_band_micro_growth[]" min="0" max="10" step="0.001" value="0" required></td>
             <td class="policy-band-actions">
