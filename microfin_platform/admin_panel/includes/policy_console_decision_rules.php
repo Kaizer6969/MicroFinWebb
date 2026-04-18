@@ -111,6 +111,21 @@ if (!function_exists('policy_console_decision_rules_normalize')) {
                     'guarantor_required_enabled' => $normalizeToggle($d_expo['guarantor_required_enabled'] ?? $def['exposure']['guarantor_required_enabled']),
                     'guarantor_required_above_amount' => $normalizeDecimal($d_expo['guarantor_required_above_amount'] ?? null, $def['exposure']['guarantor_required_above_amount']),
                 ],
+                // Restored Legacy Keys for Onboarding & Credit Score Computation logic
+                'score_thresholds' => [
+                    'auto_reject_floor' => $autoRejectFloor,
+                    'hard_approval_threshold' => $hardApprovalThreshold,
+                ],
+                'loan_capital' => [
+                    'minimum_capital_requirement' => $normalizeDecimal($d_afford['min_monthly_income'] ?? null, 10000),
+                ],
+                'borrowing_access_rules' => [
+                    'allow_multiple_active_loans_within_remaining_limit' => $normalizeToggle($d_expo['multiple_active_loans_enabled'] ?? true),
+                ],
+                'demographic_guardrails' => [
+                    'min_age' => $normalizeInt($d_demo['min_age'] ?? null, 21, 18, 100),
+                    'max_age' => $normalizeInt($d_demo['max_age'] ?? null, 65, 18, 100),
+                ],
             ],
         ];
     }

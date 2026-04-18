@@ -47,20 +47,15 @@ function renderToggleHeader($label, $helpText, $name, $value) {
 }
 ?>
 <style>
-.policy-rules-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-    gap: 16px;
-    align-items: start;
-}
 .policy-decision-rule-list {
     display: flex;
     flex-direction: column;
 }
 .policy-decision-rule-item {
-    padding: 12px 16px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--border-color, #2d3748);
     transition: background-color 0.2s;
+    background-color: var(--card-bg, #1a202c);
 }
 .policy-decision-rule-item:last-child {
     border-bottom: none;
@@ -72,18 +67,18 @@ function renderToggleHeader($label, $helpText, $name, $value) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
 }
 .policy-decision-rule-label {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 14px;
+    font-size: 15px;
 }
 .policy-decision-input-group {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 16px;
     padding-top: 4px;
     transition: opacity 0.2s ease;
 }
@@ -92,12 +87,12 @@ function renderToggleHeader($label, $helpText, $name, $value) {
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    flex: 1;
-    min-width: 160px;
+    min-width: 200px;
 }
 .policy-decision-field-col {
     flex-direction: column;
     align-items: flex-start;
+    width: 100%;
 }
 .policy-decision-field-label {
     font-size: 13px;
@@ -110,16 +105,49 @@ function renderToggleHeader($label, $helpText, $name, $value) {
     border: 1px solid #4a5568;
     color: #fff;
     border-radius: 4px;
-    padding: 6px 10px;
-    font-size: 13px;
+    padding: 8px 12px;
+    font-size: 14px;
     width: 100%;
-    max-width: 160px;
+    max-width: 200px;
 }
-.policy-decision-field select.form-control[multiple] {
-    height: auto;
-    min-height: 100px;
-    max-width: 100%;
+
+/* Pill Checkbox Styles */
+.policy-pill-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
 }
+.policy-pill-label {
+    cursor: pointer;
+    display: inline-block;
+}
+.policy-pill-label input[type="checkbox"] {
+    display: none;
+}
+.policy-pill-button {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 20px;
+    background-color: #2d3748;
+    color: #a0aec0;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #4a5568;
+    transition: all 0.2s ease;
+    user-select: none;
+    opacity: 0.6;
+}
+.policy-pill-label input[type="checkbox"]:checked + .policy-pill-button {
+    background-color: #3182ce;
+    color: #ffffff;
+    border-color: #3182ce;
+    opacity: 1;
+}
+.policy-pill-label:hover .policy-pill-button {
+    opacity: 0.8;
+}
+
 .policy-help {
     position: relative; display: inline-flex; align-items: center; justify-content: center;
     width: 16px; height: 16px; border-radius: 50%; background-color: #4a5568; color: #cbd5e0;
@@ -143,167 +171,152 @@ function renderToggleHeader($label, $helpText, $name, $value) {
         <section class="policy-compact-card" style="margin-bottom: 16px;">
             <div class="policy-save-row">
                 <div class="policy-compact-toolbar-copy">
-                    <h3 style="margin-bottom: 4px;">Risk Tolerances</h3>
+                    <h3 style="margin-bottom: 4px;">Eligibility Criteria & Risk Tolerances</h3>
                     <p class="text-muted" style="font-size: 13px;">Manage fine-grained risk tolerances with independent master toggles.</p>
                 </div>
             </div>
         </section>
 
-        <div class="policy-rules-grid">
-
-            <!-- Demographics -->
-            <section class="policy-compact-card">
-                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Demographics</h4></div></div>
-                <div class="policy-decision-rule-list">
-                    
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Age Restrictions', 'Controls demographic age eligibility.', 'pcdr_age_enabled', $policy_console_demographics['age_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_age_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Age</span>
-                                <input type="number" class="form-control" name="pcdr_min_age" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_age'] ?? '')); ?>">
-                            </label>
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max Age</span>
-                                <input type="number" class="form-control" name="pcdr_max_age" value="<?php echo htmlspecialchars((string)($policy_console_demographics['max_age'] ?? '')); ?>">
-                            </label>
-                        </div>
+        <section class="policy-compact-card">
+            <div class="policy-decision-rule-list">
+                
+                <!-- Demographics block -->
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Age Restrictions', 'Controls demographic age eligibility.', 'pcdr_age_enabled', $policy_console_demographics['age_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_age_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Min Age</span>
+                            <input type="number" class="form-control" name="pcdr_min_age" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_age'] ?? '')); ?>">
+                        </label>
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Max Age</span>
+                            <input type="number" class="form-control" name="pcdr_max_age" value="<?php echo htmlspecialchars((string)($policy_console_demographics['max_age'] ?? '')); ?>">
+                        </label>
                     </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Employment Tenure', 'Minimum required months of employment.', 'pcdr_employment_tenure_enabled', $policy_console_demographics['employment_tenure_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_employment_tenure_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Months</span>
-                                <input type="number" class="form-control" name="pcdr_min_employment_months" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_employment_months'] ?? '')); ?>">
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Residency Tenure', 'Minimum required months of living at current residence.', 'pcdr_residency_tenure_enabled', $policy_console_demographics['residency_tenure_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_residency_tenure_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Months</span>
-                                <input type="number" class="form-control" name="pcdr_min_residency_months" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_residency_months'] ?? '')); ?>">
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Employment Status', 'Which employment statuses are allowed.', 'pcdr_employment_status_enabled', $policy_console_demographics['employment_status_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_employment_status_enabled">
-                            <label class="policy-decision-field policy-decision-field-col"><span class="policy-decision-field-label">Eligible Statuses (Hold Ctrl to select multiple)</span>
-                            <?php $selectedStatuses = is_array($policy_console_demographics['eligible_statuses'] ?? null) ? $policy_console_demographics['eligible_statuses'] : []; ?>
-                                <select multiple class="form-control" name="pcdr_eligible_statuses[]">
-                                    <option value="full_time" <?php echo in_array('full_time', $selectedStatuses) ? 'selected' : ''; ?>>Full Time</option>
-                                    <option value="part_time" <?php echo in_array('part_time', $selectedStatuses) ? 'selected' : ''; ?>>Part Time</option>
-                                    <option value="contract" <?php echo in_array('contract', $selectedStatuses) ? 'selected' : ''; ?>>Contract / Freelance</option>
-                                    <option value="self_employed" <?php echo in_array('self_employed', $selectedStatuses) ? 'selected' : ''; ?>>Self Employed (Business Owner)</option>
-                                    <option value="casual" <?php echo in_array('casual', $selectedStatuses) ? 'selected' : ''; ?>>Casual / Seasonal worker</option>
-                                    <option value="retired" <?php echo in_array('retired', $selectedStatuses) ? 'selected' : ''; ?>>Retired / Pensioner</option>
-                                    <option value="student" <?php echo in_array('student', $selectedStatuses) ? 'selected' : ''; ?>>Student</option>
-                                    <option value="unemployed" <?php echo in_array('unemployed', $selectedStatuses) ? 'selected' : ''; ?>>Unemployed</option>
-                                </select>
-                            </label>
-                        </div>
-                    </div>
-
                 </div>
-            </section>
 
-            <!-- Affordability -->
-            <section class="policy-compact-card">
-                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Affordability</h4></div></div>
-                <div class="policy-decision-rule-list">
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Minimum Income', 'Minimum gross monthly income requirement.', 'pcdr_income_enabled', $policy_console_affordability['income_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_income_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Min Income /mo</span>
-                                <input type="number" step="0.01" class="form-control" name="pcdr_min_monthly_income" value="<?php echo htmlspecialchars((string)($policy_console_affordability['min_monthly_income'] ?? '')); ?>">
-                            </label>
-                        </div>
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Employment Tenure', 'Minimum required months of employment.', 'pcdr_employment_tenure_enabled', $policy_console_demographics['employment_tenure_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_employment_tenure_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Min Months</span>
+                            <input type="number" class="form-control" name="pcdr_min_employment_months" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_employment_months'] ?? '')); ?>">
+                        </label>
                     </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Debt-to-Income (DTI)', 'Maximum DTI ratio percentage.', 'pcdr_dti_enabled', $policy_console_affordability['dti_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_dti_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max Ratio (%)</span>
-                                <input type="number" step="0.01" class="form-control" name="pcdr_max_dti_percentage" value="<?php echo htmlspecialchars((string)($policy_console_affordability['max_dti_percentage'] ?? '')); ?>">
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Payment-to-Income (PTI)', 'Maximum PTI ratio percentage.', 'pcdr_pti_enabled', $policy_console_affordability['pti_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_pti_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max Ratio (%)</span>
-                                <input type="number" step="0.01" class="form-control" name="pcdr_max_pti_percentage" value="<?php echo htmlspecialchars((string)($policy_console_affordability['max_pti_percentage'] ?? '')); ?>">
-                            </label>
-                        </div>
-                    </div>
-
                 </div>
-            </section>
 
-            <!-- Guardrails -->
-            <section class="policy-compact-card">
-                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Guardrails</h4></div></div>
-                <div class="policy-decision-rule-list">
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Score Thresholds', 'Reject and Hard Approval score limits.', 'pcdr_score_thresholds_enabled', $policy_console_guardrails['score_thresholds_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_score_thresholds_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Auto Reject Under</span>
-                                <input type="number" class="form-control" name="pcdr_auto_reject_floor" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['auto_reject_floor'] ?? '')); ?>">
-                            </label>
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Auto Approve Over</span>
-                                <input type="number" class="form-control" name="pcdr_hard_approval_threshold" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['hard_approval_threshold'] ?? '')); ?>">
-                            </label>
-                        </div>
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Residency Tenure', 'Minimum required months of living at current residence.', 'pcdr_residency_tenure_enabled', $policy_console_demographics['residency_tenure_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_residency_tenure_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Min Months</span>
+                            <input type="number" class="form-control" name="pcdr_min_residency_months" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_residency_months'] ?? '')); ?>">
+                        </label>
                     </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Cooling Period', 'Days required to wait after rejection.', 'pcdr_cooling_period_enabled', $policy_console_guardrails['cooling_period_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_cooling_period_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Penalty Days</span>
-                                <input type="number" class="form-control" name="pcdr_rejected_cooling_days" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['rejected_cooling_days'] ?? '')); ?>">
-                            </label>
-                        </div>
-                    </div>
-
                 </div>
-            </section>
 
-            <!-- Exposure -->
-            <section class="policy-compact-card">
-                <div class="policy-compact-card-head" style="padding: 14px 16px;"><div class="policy-compact-card-title"><h4 style="font-size: 15px; margin: 0;">Exposure</h4></div></div>
-                <div class="policy-decision-rule-list">
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('New Borrower Cap', 'Maximum amount allowed for a first-time borrower.', 'pcdr_new_borrower_cap_enabled', $policy_console_exposure['new_borrower_cap_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_new_borrower_cap_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max 1st Loan</span>
-                                <input type="number" step="0.01" class="form-control" name="pcdr_first_loan_max_amount" value="<?php echo htmlspecialchars((string)($policy_console_exposure['first_loan_max_amount'] ?? '')); ?>">
-                            </label>
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Employment Status', 'Which employment statuses are allowed.', 'pcdr_employment_status_enabled', $policy_console_demographics['employment_status_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_employment_status_enabled">
+                        <div class="policy-decision-field policy-decision-field-col">
+                            <span class="policy-decision-field-label">Eligible Statuses</span>
+                            <?php 
+                                $selectedStatuses = is_array($policy_console_demographics['eligible_statuses'] ?? null) ? $policy_console_demographics['eligible_statuses'] : []; 
+                                $statusOptions = [
+                                    'full_time' => 'Full Time',
+                                    'part_time' => 'Part Time',
+                                    'contract' => 'Contract / Freelance',
+                                    'self_employed' => 'Self Employed',
+                                    'casual' => 'Casual / Seasonal',
+                                    'retired' => 'Retired / Pensioner',
+                                    'student' => 'Student',
+                                    'unemployed' => 'Unemployed'
+                                ];
+                            ?>
+                            <div class="policy-pill-list">
+                                <?php foreach($statusOptions as $val => $text): ?>
+                                    <label class="policy-pill-label">
+                                        <input type="checkbox" name="pcdr_eligible_statuses[]" value="<?php echo $val; ?>" <?php echo in_array($val, $selectedStatuses) ? 'checked' : ''; ?>>
+                                        <span class="policy-pill-button"><?php echo $text; ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
                     </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Multiple Active Loans', 'Allow borrowers to have more than one active loan.', 'pcdr_multiple_active_loans_enabled', $policy_console_exposure['multiple_active_loans_enabled']); ?>
-                        <!-- No inputs required -->
-                    </div>
-
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Guarantor Required', 'Requires a guarantor if the loan amount exceeds a specific cap.', 'pcdr_guarantor_required_enabled', $policy_console_exposure['guarantor_required_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_guarantor_required_enabled">
-                            <label class="policy-decision-field"><span class="policy-decision-field-label">Max No-Guarantor</span>
-                                <input type="number" step="0.01" class="form-control" name="pcdr_guarantor_required_above_amount" value="<?php echo htmlspecialchars((string)($policy_console_exposure['guarantor_required_above_amount'] ?? '')); ?>">
-                            </label>
-                        </div>
-                    </div>
-
                 </div>
-            </section>
-        </div>
 
+                <!-- Affordability -->
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Minimum Income', 'Minimum gross monthly income requirement.', 'pcdr_income_enabled', $policy_console_affordability['income_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_income_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Min Income /mo</span>
+                            <input type="number" step="0.01" class="form-control" name="pcdr_min_monthly_income" value="<?php echo htmlspecialchars((string)($policy_console_affordability['min_monthly_income'] ?? '')); ?>">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Debt-to-Income (DTI)', 'Maximum DTI ratio percentage.', 'pcdr_dti_enabled', $policy_console_affordability['dti_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_dti_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Max Ratio (%)</span>
+                            <input type="number" step="0.01" class="form-control" name="pcdr_max_dti_percentage" value="<?php echo htmlspecialchars((string)($policy_console_affordability['max_dti_percentage'] ?? '')); ?>">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Payment-to-Income (PTI)', 'Maximum PTI ratio percentage.', 'pcdr_pti_enabled', $policy_console_affordability['pti_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_pti_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Max Ratio (%)</span>
+                            <input type="number" step="0.01" class="form-control" name="pcdr_max_pti_percentage" value="<?php echo htmlspecialchars((string)($policy_console_affordability['max_pti_percentage'] ?? '')); ?>">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Guardrails -->
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Score Thresholds', 'Reject and Hard Approval score limits.', 'pcdr_score_thresholds_enabled', $policy_console_guardrails['score_thresholds_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_score_thresholds_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Auto Reject Under</span>
+                            <input type="number" class="form-control" name="pcdr_auto_reject_floor" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['auto_reject_floor'] ?? '')); ?>">
+                        </label>
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Auto Approve Over</span>
+                            <input type="number" class="form-control" name="pcdr_hard_approval_threshold" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['hard_approval_threshold'] ?? '')); ?>">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Cooling Period', 'Days required to wait after rejection.', 'pcdr_cooling_period_enabled', $policy_console_guardrails['cooling_period_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_cooling_period_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Penalty Days</span>
+                            <input type="number" class="form-control" name="pcdr_rejected_cooling_days" value="<?php echo htmlspecialchars((string)($policy_console_guardrails['rejected_cooling_days'] ?? '')); ?>">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Exposure -->
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('New Borrower Cap', 'Maximum amount allowed for a first-time borrower.', 'pcdr_new_borrower_cap_enabled', $policy_console_exposure['new_borrower_cap_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_new_borrower_cap_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Max 1st Loan</span>
+                            <input type="number" step="0.01" class="form-control" name="pcdr_first_loan_max_amount" value="<?php echo htmlspecialchars((string)($policy_console_exposure['first_loan_max_amount'] ?? '')); ?>">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Multiple Active Loans', 'Allow borrowers to have more than one active loan.', 'pcdr_multiple_active_loans_enabled', $policy_console_exposure['multiple_active_loans_enabled']); ?>
+                    <!-- No inputs required -->
+                </div>
+
+                <div class="policy-decision-rule-item">
+                    <?php echo renderToggleHeader('Guarantor Required', 'Requires a guarantor if the loan amount exceeds a specific cap.', 'pcdr_guarantor_required_enabled', $policy_console_exposure['guarantor_required_enabled']); ?>
+                    <div class="policy-decision-input-group toggle-group-pcdr_guarantor_required_enabled">
+                        <label class="policy-decision-field"><span class="policy-decision-field-label">Max No-Guarantor</span>
+                            <input type="number" step="0.01" class="form-control" name="pcdr_guarantor_required_above_amount" value="<?php echo htmlspecialchars((string)($policy_console_exposure['guarantor_required_above_amount'] ?? '')); ?>">
+                        </label>
+                    </div>
+                </div>
+
+            </div>
+        </section>
     </div>
 </form>
 
@@ -328,5 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    // Handle label clicks manually to prevent bubbling/stealing focus when inside .policy-pill-list rows if needed
 });
 </script>
