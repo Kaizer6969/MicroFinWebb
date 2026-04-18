@@ -78,16 +78,16 @@ function renderToggleHeader($label, $helpText, $name, $value) {
 .policy-decision-input-group {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 20px;
     padding-top: 4px;
+    padding-bottom: 4px;
     transition: opacity 0.2s ease;
 }
 .policy-decision-field {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 12px;
-    min-width: 200px;
+    gap: 8px;
 }
 .policy-decision-field-col {
     flex-direction: column;
@@ -95,20 +95,41 @@ function renderToggleHeader($label, $helpText, $name, $value) {
     width: 100%;
 }
 .policy-decision-field-label {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
-    color: var(--text-muted, #a0aec0);
+    color: #cbd5e0;
     white-space: nowrap;
 }
 .policy-decision-field .form-control {
-    background-color: #1a202c;
-    border: 1px solid #4a5568;
-    color: #fff;
-    border-radius: 4px;
-    padding: 8px 12px;
-    font-size: 14px;
-    width: 100%;
-    max-width: 200px;
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px dashed #4a5568;
+    color: #63b3ed;
+    border-radius: 0;
+    padding: 4px 8px;
+    font-size: 15px;
+    font-weight: 600;
+    width: auto;
+    min-width: 60px;
+    max-width: 100px;
+    text-align: center;
+    transition: all 0.2s ease;
+    box-shadow: none;
+}
+.policy-decision-field .form-control:focus {
+    outline: none;
+    border-bottom: 1px solid #63b3ed;
+    background-color: rgba(255, 255, 255, 0.05);
+    box-shadow: none;
+}
+/* Hide number arrows for a cleaner minimalist text look */
+.policy-decision-field .form-control::-webkit-outer-spin-button,
+.policy-decision-field .form-control::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.policy-decision-field .form-control[type=number] {
+  -moz-appearance: textfield;
 }
 
 /* Pill Checkbox Styles */
@@ -161,6 +182,24 @@ function renderToggleHeader($label, $helpText, $name, $value) {
     z-index: 1000; pointer-events: none; white-space: normal; text-align: left; font-family: sans-serif; font-style: normal;
 }
 .is-visually-disabled { opacity: 0.35; pointer-events: none; filter: grayscale(1); }
+
+.policy-decision-category-header {
+    background-color: #2d3748;
+    color: #e2e8f0;
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #1a202c;
+    border-top: 1px solid #1a202c;
+    margin-top: 0;
+}
+.policy-decision-category-header:first-child {
+    border-top: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
 </style>
 
 <form method="POST" action="admin.php" class="policy-tab-form" id="policy-console-decision-rules-form">
@@ -180,7 +219,10 @@ function renderToggleHeader($label, $helpText, $name, $value) {
         <section class="policy-compact-card">
             <div class="policy-decision-rule-list">
                 
-                <!-- Demographics block -->
+                <div class="policy-decision-category-header">
+                    <svg style="width: 16px; height: 16px; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    Demographics
+                </div>
                 <div class="policy-decision-rule-item">
                     <?php echo renderToggleHeader('Age Restrictions', 'Controls demographic age eligibility.', 'pcdr_age_enabled', $policy_console_demographics['age_enabled']); ?>
                     <div class="policy-decision-input-group toggle-group-pcdr_age_enabled">
@@ -241,7 +283,10 @@ function renderToggleHeader($label, $helpText, $name, $value) {
                     </div>
                 </div>
 
-                <!-- Affordability -->
+                <div class="policy-decision-category-header">
+                    <svg style="width: 16px; height: 16px; fill: currentColor;" viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+                    Affordability
+                </div>
                 <div class="policy-decision-rule-item">
                     <?php echo renderToggleHeader('Minimum Income', 'Minimum gross monthly income requirement.', 'pcdr_income_enabled', $policy_console_affordability['income_enabled']); ?>
                     <div class="policy-decision-input-group toggle-group-pcdr_income_enabled">
@@ -269,7 +314,10 @@ function renderToggleHeader($label, $helpText, $name, $value) {
                     </div>
                 </div>
 
-                <!-- Guardrails -->
+                <div class="policy-decision-category-header">
+                    <svg style="width: 16px; height: 16px; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 8.94-7 10.02-3.87-1.08-7-5.35-7-10.02v-4.7l7-3.12zm-2 11.82l-3.5-3.5 1.41-1.41L10 12.17l6.59-6.59L18 7l-8 8z"/></svg>
+                    Guardrails
+                </div>
                 <div class="policy-decision-rule-item">
                     <?php echo renderToggleHeader('Score Thresholds', 'Reject and Hard Approval score limits.', 'pcdr_score_thresholds_enabled', $policy_console_guardrails['score_thresholds_enabled']); ?>
                     <div class="policy-decision-input-group toggle-group-pcdr_score_thresholds_enabled">
@@ -291,7 +339,10 @@ function renderToggleHeader($label, $helpText, $name, $value) {
                     </div>
                 </div>
 
-                <!-- Exposure -->
+                <div class="policy-decision-category-header">
+                    <svg style="width: 16px; height: 16px; fill: currentColor;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    Exposure
+                </div>
                 <div class="policy-decision-rule-item">
                     <?php echo renderToggleHeader('New Borrower Cap', 'Maximum amount allowed for a first-time borrower.', 'pcdr_new_borrower_cap_enabled', $policy_console_exposure['new_borrower_cap_enabled']); ?>
                     <div class="policy-decision-input-group toggle-group-pcdr_new_borrower_cap_enabled">
