@@ -617,7 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
         el('stat-inactive-users', data.inactive_users);
         el('stat-pending-apps', data.pending_applications ?? '0');
         el('stat-total-mrr', '₱' + data.total_mrr);
-        el('stat-revenue-total-mrr', '₱' + data.total_mrr);
+        el('stat-revenue-total', '₱' + (data.total_revenue || '0.00'));
 
         // Update sidebar pending badge (applications only)
         const badge = document.getElementById('sidebar-pending-badge');
@@ -1076,6 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const e = document.getElementById(id);
             if (e) e.textContent = val;
         };
+        el('stat-revenue-total', '₱' + (data.total_revenue || '0.00'));
         el('stat-revenue-transactions', data.total_transactions || '0');
         el('stat-revenue-avg-trans', '₱' + (data.avg_transaction || '0.00'));
 

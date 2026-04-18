@@ -132,9 +132,27 @@ $template_path = $templates_dir . basename($selected_template);
 if (!file_exists($template_path)) $template_path = $templates_dir . 'template1.php';
 
 // ==========================================
-// GLOBAL TOKENS (Prioritize JSON over DB)
+// GLOBAL TOKENS (Prioritize Local Files, then DB, then Default)
 // ==========================================
-$logo          = site_normalize_asset_path((string)($data['logo_path'] ?? ''));
+$base_upload_dir = dirname(__DIR__) . '/uploads';
+
+// Check local logo based on tenant_id
+$found_logo = false;
+$local_logo_path = '';
+$tenant_id_clean = preg_replace('/[^A-Za-z0-9_-]+/', '_', $data['tenant_id'] ?? '');
+
+if ($tenant_id_clean !== '') {
+    $possible_logo_exts = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+    foreach ($possible_logo_exts as $ext) {
+        if (file_exists($base_upload_dir . '/tenant_logos/' . $tenant_id_clean . 'logo.' . $ext)) {
+            $local_logo_path = '../uploads/tenant_logos/' . $tenant_id_clean . 'logo.' . $ext;
+            $found_logo = true;
+            break;
+        }
+    }
+}
+$logo = $found_logo ? site_normalize_asset_path($local_logo_path) : site_normalize_asset_path((string)($data['logo_path'] ?? ''));
+
 $primary       = $data['theme_primary_color'] ?: '#2563eb';
 $border_color  = $data['theme_border_color'] ?? '#e2e8f0';
 $border_radius = $pageData['border_radius'] ?? '16';
@@ -158,7 +176,21 @@ $site_slug        = $slug;
 $hero_title       = $pageData['hero_title'] ?? 'Empowering Your Financial Future';
 $hero_subtitle    = $pageData['hero_subtitle'] ?? 'Get flexible loans with fast approval and transparent terms.';
 $hero_badge_text  = $pageData['hero_badge_text'] ?? 'Verified Partner';
-$hero_image       = site_normalize_asset_path((string)($pageData['hero_image'] ?? ''));
+
+// Check local hero based on tenant_id
+$found_hero = false;
+$local_hero_path = '';
+if ($tenant_id_clean !== '') {
+    $possible_hero_exts = ['png', 'jpg', 'jpeg', 'webp'];
+    foreach ($possible_hero_exts as $ext) {
+        if (file_exists($base_upload_dir . '/hero/' . $tenant_id_clean . 'hero.' . $ext)) {
+            $local_hero_path = '../uploads/hero/' . $tenant_id_clean . 'hero.' . $ext;
+            $found_hero = true;
+            break;
+        }
+    }
+}
+$hero_image       = $found_hero ? site_normalize_asset_path($local_hero_path) : site_normalize_asset_path((string)($pageData['hero_image'] ?? ''));
 $display_image    = $hero_image ?: '';
 
 $about_body       = $pageData['about_body'] ?? 'We believe in empowering our community through accessible financial tools.';
@@ -265,6 +297,9 @@ $tenant_reference_qr_url = function_exists('mf_install_tenant_reference_qr_url')
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title><?php echo $e($company_name); ?> — Official Website</title>
+<?php if (!empty($logo)): ?>
+<link rel="icon" type="image/png" href="<?php echo htmlspecialchars($logo, ENT_QUOTES, 'UTF-8'); ?>">
+<?php endif; ?>
 <?php if ($meta_desc): ?><meta name="description" content="<?php echo $e($meta_desc); ?>"><?php endif; ?>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=<?php echo urlencode($headline_font); ?>:wght@400;600;700;800&family=<?php echo urlencode($body_font); ?>:wght@300;400;500;600&display=swap" rel="stylesheet"/>

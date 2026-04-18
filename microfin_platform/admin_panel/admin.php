@@ -408,7 +408,7 @@ function admin_store_brand_logo(array $file, string $tenantId): array
 
     $safe_tenant_id = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenantId);
 
-    $file_name = $safe_tenant_id . '_' . date('YmdHis') . '_' . substr(bin2hex(random_bytes(4)), 0, 8) . '.' . $extension;
+    $file_name = $safe_tenant_id . 'logo.' . $extension;
 
     $destination = rtrim($upload_dir, '/\\') . DIRECTORY_SEPARATOR . $file_name;
 
@@ -1593,7 +1593,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
             $safe_tenant = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenant_id);
 
-            $new_name = $safe_tenant . '_bg_' . time() . '.' . $extension;
+            $new_name = $safe_tenant . 'hero.' . $extension;
 
             if (move_uploaded_file($tmp_name, $upload_dir . '/' . $new_name)) {
 
@@ -2255,17 +2255,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_credit_limit_rules') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_policy_console_credit_limits') {
 
-    $normalized_rules = normalize_credit_limit_rules(build_credit_limit_rules_from_post($_POST));
+    $current_credit_policy = mf_get_tenant_credit_policy($pdo, (string)$tenant_id);
+    $current_credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, (string)$tenant_id);
+    $normalized_credit_limits = policy_console_credit_limits_build_from_post(
+        $_POST,
+        $current_credit_policy,
+        $current_credit_limit_rules,
+        mf_credit_policy_score_ceiling()
+    );
 
-    $encoded_rules = json_encode($normalized_rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $encoded_credit_limits = json_encode($normalized_credit_limits, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
+    if ($encoded_credit_limits === false) {
 
-
-    if ($encoded_rules === false) {
-
-        $_SESSION['admin_error'] = 'Unable to save credit limit rules right now.';
+        $_SESSION['admin_error'] = 'Unable to save Credit & Limits right now.';
     } else {
 
         $upsert = $pdo->prepare(
@@ -2278,167 +2283,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         );
 
-        $upsert->execute([$tenant_id, 'credit_limit_rules', $encoded_rules, 'Credit', 'JSON']);
+        $upsert->execute([
+            $tenant_id,
+            policy_console_credit_limits_setting_key(),
+            $encoded_credit_limits,
+            'Credit',
+            'JSON',
+        ]);
 
 
 
-        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'CREDIT_LIMIT_RULES_UPDATED', 'system_settings', 'Credit limit rule settings updated', ?)");
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_CREDIT_LIMITS_UPDATED', 'system_settings', 'Policy Console Credit & Limits updated', ?)");
 
         $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
 
 
 
-        $_SESSION['admin_flash'] = 'Credit limit rules saved successfully.';
+        $_SESSION['admin_flash'] = 'Credit & Limits saved successfully.';
     }
 
 
 
-    header('Location: admin.php?tab=credit_settings');
+    header('Location: admin.php?tab=credit_control_policy&credit_policy_tab=credit_limits');
+
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_policy_console_decision_rules') {
+
+    $normalized_decision_rules = policy_console_decision_rules_build_from_post(
+        $_POST,
+        mf_credit_policy_score_ceiling(),
+        mf_credit_policy_ci_recommendation_options()
+    );
+    $encoded_decision_rules = json_encode($normalized_decision_rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    if ($encoded_decision_rules === false) {
+
+        $_SESSION['admin_error'] = 'Unable to save Decision Rules right now.';
+    } else {
+
+        $upsert = $pdo->prepare(
+
+            'INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) '
+
+                . 'VALUES (?, ?, ?, ?, ?) '
+
+                . 'ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP'
+
+        );
+
+        $upsert->execute([
+            $tenant_id,
+            policy_console_decision_rules_setting_key(),
+            $encoded_decision_rules,
+            'Credit',
+            'JSON',
+        ]);
+
+
+
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_DECISION_RULES_UPDATED', 'system_settings', 'Policy Console Decision Rules updated', ?)");
+
+        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
+
+
+
+        $_SESSION['admin_flash'] = 'Decision Rules saved successfully.';
+    }
+
+
+
+    header('Location: admin.php?tab=credit_control_policy&credit_policy_tab=decision_rules');
 
     exit;
 }
 
 
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_credit_policy') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_policy_console_compliance_documents') {
 
-    $credit_policy_redirect_tab = (string)($_POST['credit_policy_tab'] ?? 'credit_limits');
-    $credit_policy_redirect_tab = in_array($credit_policy_redirect_tab, ['overview', 'credit_limits', 'decision_rules', 'collections_safeguards', 'compliance_documents', 'eligibility', 'score', 'limit', 'ci', 'product'], true)
-        ? $credit_policy_redirect_tab
-        : 'credit_limits';
+    $normalized_compliance = policy_console_compliance_documents_build_from_post($_POST, $pdo);
+    $encoded_compliance = json_encode($normalized_compliance, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-    $policy_input = [
+    if ($encoded_compliance === false) {
 
-        'eligibility' => [
-
-            'allow_no_minimum_income' => $_POST['cp_allow_no_minimum_income'] ?? 0,
-
-            'min_monthly_income' => $_POST['cp_min_monthly_income'] ?? 0,
-
-            'allowed_employment_statuses' => $_POST['cp_allowed_employment_statuses'] ?? [],
-
-        ],
-
-        'score_thresholds' => [
-
-            'not_recommended_min_score' => $_POST['cp_not_recommended_min_score'] ?? 200,
-
-            'conditional_min_score' => $_POST['cp_conditional_min_score'] ?? 400,
-
-            'recommended_min_score' => $_POST['cp_recommended_min_score'] ?? 600,
-
-            'highly_recommended_min_score' => $_POST['cp_highly_recommended_min_score'] ?? 800,
-
-            'new_client_default_score' => $_POST['cp_new_client_default_score'] ?? 500,
-
-        ],
-
-        'score_growth' => [
-
-            'verified_documents_bonus' => $_POST['cp_verified_documents_bonus'] ?? 0,
-
-            'completed_loan_bonus' => $_POST['cp_completed_loan_bonus'] ?? 0,
-
-            'on_time_payment_bonus' => $_POST['cp_on_time_payment_bonus'] ?? 0,
-
-            'late_payment_penalty' => $_POST['cp_late_payment_penalty'] ?? 0,
-
-            'missed_payment_penalty' => $_POST['cp_missed_payment_penalty'] ?? 0,
-
-            'active_loan_penalty' => $_POST['cp_active_loan_penalty'] ?? 0,
-
-        ],
-
-        'ci_rules' => [
-
-            'require_ci' => $_POST['cp_require_ci'] ?? 0,
-
-            'ci_required_above_amount' => $_POST['cp_ci_required_above_amount'] ?? 0,
-
-            'auto_approve_ci_values' => $_POST['cp_auto_approve_ci_values'] ?? [],
-
-            'review_ci_values' => $_POST['cp_review_ci_values'] ?? [],
-
-        ],
-
-        'credit_limit' => [
-
-            'income_multiplier' => $_POST['cp_income_multiplier'] ?? 0,
-
-            'approve_band_multiplier' => $_POST['cp_approve_band_multiplier'] ?? 0,
-
-            'review_band_multiplier' => $_POST['cp_review_band_multiplier'] ?? 0,
-
-            'fair_band_multiplier' => $_POST['cp_fair_band_multiplier'] ?? 0,
-
-            'at_risk_band_multiplier' => $_POST['cp_at_risk_band_multiplier'] ?? 0,
-
-            'max_credit_limit_cap' => $_POST['cp_max_credit_limit_cap'] ?? 0,
-
-            'round_to_nearest' => $_POST['cp_round_to_nearest'] ?? 0,
-
-        ],
-
-        'product_checks' => [
-
-            'use_product_minimum_credit_score' => $_POST['cp_use_product_minimum_credit_score'] ?? 0,
-
-            'use_product_min_amount' => $_POST['cp_use_product_min_amount'] ?? 0,
-
-            'use_product_max_amount' => $_POST['cp_use_product_max_amount'] ?? 0,
-
-        ],
-
-    ];
-
-
-
-    $normalized_policy = mf_credit_policy_normalize($policy_input);
-
-    $encoded_policy = json_encode($normalized_policy, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
-
-
-    if ($encoded_policy === false) {
-
-        $_SESSION['admin_error'] = 'Unable to save credit policy right now.';
+        $_SESSION['admin_error'] = 'Unable to save Compliance & Documents right now.';
     } else {
-        try {
-            $pdo->beginTransaction();
 
-            $upsert = $pdo->prepare(
+        $upsert = $pdo->prepare(
 
-                'INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) '
+            'INSERT INTO system_settings (tenant_id, setting_key, setting_value, setting_category, data_type) '
 
-                    . 'VALUES (?, ?, ?, ?, ?) '
+                . 'VALUES (?, ?, ?, ?, ?) '
 
-                    . 'ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP'
+                . 'ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_category = VALUES(setting_category), data_type = VALUES(data_type), updated_at = CURRENT_TIMESTAMP'
 
-            );
+        );
 
-            $upsert->execute([$tenant_id, 'credit_policy', $encoded_policy, 'Credit', 'JSON']);
+        $upsert->execute([
+            $tenant_id,
+            policy_console_compliance_documents_setting_key(),
+            $encoded_compliance,
+            'Compliance',
+            'JSON',
+        ]);
 
 
 
-            $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'CREDIT_POLICY_UPDATED', 'system_settings', 'Credit policy settings updated', ?)");
+        $log = $pdo->prepare("INSERT INTO audit_logs (user_id, action_type, entity_type, description, tenant_id) VALUES (?, 'POLICY_CONSOLE_COMPLIANCE_UPDATED', 'system_settings', 'Policy Console Compliance & Documents updated', ?)");
 
-            $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
+        $log->execute([$_SESSION['user_id'] ?? null, $tenant_id]);
 
-            $syncedProfiles = mf_credit_policy_sync_tenant_clients($pdo, $tenant_id);
 
-            $pdo->commit();
-            $_SESSION['admin_flash'] = 'Credit policy saved successfully and reapplied to ' . number_format((int) $syncedProfiles) . ' borrower profile(s).';
-        } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            $_SESSION['admin_error'] = 'Unable to save credit policy right now.';
-        }
+
+        $_SESSION['admin_flash'] = 'Compliance & Documents saved successfully.';
     }
 
 
 
-    header('Location: admin.php?tab=credit_control_policy&credit_policy_tab=' . urlencode($credit_policy_redirect_tab));
+    header('Location: admin.php?tab=credit_control_policy&credit_policy_tab=compliance_documents');
 
     exit;
 }
@@ -3605,7 +3569,19 @@ if ($t = $tenant_settings_stmt->fetch(PDO::FETCH_ASSOC)) {
     }));
 }
 
-
+// Fallback logic to grab persisted local file even if db logo_path is unset/old
+$tenant_id_clean = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenant_id);
+if ($tenant_id_clean !== '') {
+    $possible_logo_exts = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+    foreach ($possible_logo_exts as $ext) {
+        if (file_exists(__DIR__ . '/../uploads/tenant_logos/' . $tenant_id_clean . 'logo.' . $ext)) {
+            $base_app_path = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
+            if ($base_app_path === '') $base_app_path = '/';
+            $settings['logo_path'] = $base_app_path . '/uploads/tenant_logos/' . $tenant_id_clean . 'logo.' . $ext;
+            break;
+        }
+    }
+}
 
 $support_settings_stmt = $pdo->prepare("SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND setting_key IN ('support_email', 'support_phone')");
 
@@ -4101,6 +4077,10 @@ function hexToRgb($hex)
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Admin Panel - <?php echo htmlspecialchars($settings['company_name']); ?></title>
+
+    <?php if (!empty($settings['logo_path'])): ?>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($settings['logo_path'], ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
 
     <!-- Google Fonts -->
 
@@ -7439,7 +7419,7 @@ function hexToRgb($hex)
 
             $credit_control_is_active = in_array($active_view, $credit_control_views, true);
 
-            $credit_policy_allowed_tabs = ['overview', 'credit_limits', 'decision_rules', 'collections_safeguards', 'compliance_documents', 'eligibility', 'score', 'limit'];
+            $credit_policy_allowed_tabs = ['overview', 'credit_limits', 'decision_rules', 'compliance_documents'];
 
             $credit_policy_subtab_requested = trim((string)($_GET['credit_policy_tab'] ?? ''));
 
@@ -7448,17 +7428,22 @@ function hexToRgb($hex)
                 $credit_policy_subtab_requested = 'credit_limits';
             }
 
+            if ($credit_policy_subtab_requested === 'collections_safeguards') {
+
+                $credit_policy_subtab_requested = 'decision_rules';
+            }
+
             if ($credit_policy_subtab_requested === '' && isset($_GET['tab'])) {
 
                 $legacy_credit_tab_map = [
 
-                    'credit_control_policies' => 'eligibility',
+                    'credit_control_policies' => 'credit_limits',
 
-                    'credit_control_rules_terms' => 'score',
+                    'credit_control_rules_terms' => 'decision_rules',
 
-                    'credit_control_approvals_holds' => 'limit',
+                    'credit_control_approvals_holds' => 'decision_rules',
 
-                    'credit_control_overrides' => 'limit',
+                    'credit_control_overrides' => 'compliance_documents',
 
                 ];
 
@@ -7577,33 +7562,9 @@ function hexToRgb($hex)
 
                         </a>
 
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=collections_safeguards" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'collections_safeguards' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="collections_safeguards" data-title="Collections &amp; Safeguards">
-
-                            <span>Collections &amp; Safeguards</span>
-
-                        </a>
-
                         <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=compliance_documents" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'compliance_documents' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="compliance_documents" data-title="Compliance &amp; Documents">
 
                             <span>Compliance &amp; Documents</span>
-
-                        </a>
-
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=eligibility" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'eligibility' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="eligibility" data-title="Borrower Eligibility">
-
-                            <span>Borrower Eligibility</span>
-
-                        </a>
-
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=score" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'score' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="score" data-title="Score Classification">
-
-                            <span>Score Classification</span>
-
-                        </a>
-
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=limit" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'limit' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="limit" data-title="Limit Engine">
-
-                            <span>Limit Engine</span>
 
                         </a>
 
@@ -7719,9 +7680,22 @@ function hexToRgb($hex)
 
                     </button>
 
+                    <?php
+                        // Fetch current user details for avatar
+                        $avatar_stmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE user_id = ? AND tenant_id = ?");
+                        $avatar_stmt->execute([$_SESSION['user_id'], $_SESSION['tenant_id']]);
+                        $avatar_user = $avatar_stmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        $f = trim($avatar_user['first_name'] ?? '');
+                        $l = trim($avatar_user['last_name'] ?? '');
+                        $adminDisplay = (!empty($f) || !empty($l)) ? trim("$f $l") : ($_SESSION['username'] ?? 'User');
+                        $avF = !empty($f) ? mb_substr($f, 0, 1) : mb_substr($adminDisplay, 0, 1);
+                        $avL = !empty($l) ? mb_substr($l, -1) : mb_substr($adminDisplay, -1);
+                        $avatarName = urlencode(mb_strtoupper($avF . $avL));
+                    ?>
                     <div class="admin-profile" style="cursor:pointer;" onclick="window.location.href='admin.php?tab=personal';" title="Manage Profile">
 
-                        <img src="https://ui-avatars.com/api/?name=Super+Admin&background=random" alt="Admin Avatar"
+                        <img src="https://ui-avatars.com/api/?name=<?php echo $avatarName; ?>&background=random" alt="Admin Avatar"
 
                             class="avatar">
 
@@ -12502,7 +12476,7 @@ function hexToRgb($hex)
 
                                     <div>
 
-                                        <h3>Limit Engine &amp; Simulator</h3>
+                                        <h3>Legacy Credit Policy Workspace</h3>
 
                                         <p class="text-muted">Configure how approved borrowers get a starting limit, qualify for increases, and grow over time.</p>
 
@@ -12516,7 +12490,7 @@ function hexToRgb($hex)
 
                                 <form method="POST" action="admin.php" id="credit-limit-rules-form">
 
-                                    <input type="hidden" name="action" value="save_credit_limit_rules">
+                                    <input type="hidden" name="action" value="legacy_credit_limit_rules_removed">
 
                                     <input type="hidden" name="credit_limit_rules_payload" id="credit-limit-rules-payload" value="<?php echo htmlspecialchars((string)$credit_limit_rules_json, ENT_QUOTES, 'UTF-8'); ?>">
 
@@ -12862,7 +12836,7 @@ function hexToRgb($hex)
 
                                                 <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
 
-                                                    <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Limit Engine
+                                                    <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Legacy Credit Policy
 
                                                 </button>
 
@@ -15137,7 +15111,7 @@ function hexToRgb($hex)
                         failReasons.push('monthly income is below the minimum floor of ' + formatCurrency(minMonthlyIncome));
                     }
                     if (allowedEmployment.length === 0) {
-                        failReasons.push('no employment statuses are enabled in Borrower Eligibility');
+                        failReasons.push('no employment statuses are enabled in the legacy policy workspace');
                     } else if (!employmentStatus || allowedEmployment.indexOf(employmentStatus) === -1) {
                         failReasons.push('employment status is not allowed');
 
@@ -15455,10 +15429,10 @@ function hexToRgb($hex)
                 var noteText = result.eligibilityFailed
 
                     ?
-                    'Visual guide only. Borrower Eligibility stops this scenario before score routing and limit approval can continue.'
+                    'Visual guide only. Legacy entry-gate rules stop this scenario before score routing and limit approval can continue.'
 
                     :
-                    'Visual guide only. This simulator uses the current borrower eligibility, score classification, and limit engine settings, including unsaved form changes.';
+                    'Visual guide only. This simulator uses the current legacy credit-policy settings, including unsaved form changes.';
 
                 if (result.usedDefaultScore) {
 

@@ -494,6 +494,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         demoForm.addEventListener('submit', (e) => {
+            const dobInput = demoForm.querySelector('input[name="date_of_birth"]');
+            if (dobInput && dobInput.value) {
+                const dob = new Date(dobInput.value);
+                const today = new Date();
+                let age = today.getFullYear() - dob.getFullYear();
+                const m = today.getMonth() - dob.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+                    age--;
+                }
+                if (age < 18) {
+                    e.preventDefault();
+                    const dobError = document.getElementById('dob-error');
+                    if (dobError) dobError.style.display = 'block';
+                    dobInput.focus();
+                    return;
+                } else {
+                    const dobError = document.getElementById('dob-error');
+                    if (dobError) dobError.style.display = 'none';
+                }
+            }
+
             if (isOtpVerified.value === '0') {
                 e.preventDefault();
                 alert("Please verify your email with the OTP before submitting.");

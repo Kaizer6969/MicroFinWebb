@@ -312,7 +312,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tabId === 'builder' || tabId === 'simulator') {
             return 'overview';
         }
+        if (tabId === 'collections_safeguards') {
+            return 'decision_rules';
+        }
+        if (tabId === 'eligibility' || tabId === 'score' || tabId === 'limit') {
+            return 'credit_limits';
+        }
         return tabId || '';
+    }
+
+    function isDynamicCreditPolicySubtab(tabId) {
+        return ['overview', 'credit_limits', 'decision_rules', 'compliance_documents'].includes(normalizeCreditPolicySubtab(tabId));
     }
 
     function activateCreditPolicySubtab(tabId) {
@@ -359,6 +369,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         event.preventDefault();
 
+        if (isDynamicCreditPolicySubtab(targetTab) && typeof window.setCreditPolicyTab === 'function') {
+            window.setCreditPolicyTab(targetTab);
+            return;
+        }
+
         try {
             const targetUrl = new URL(window.location.href);
             targetUrl.searchParams.set('tab', 'credit_control_policy');
@@ -369,6 +384,419 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = `admin.php?tab=credit_control_policy&credit_policy_tab=${encodeURIComponent(targetTab)}#credit_settings`;
         }
     });
+
+    function initPolicyConsoleCreditLimits() {
+        const creditLimitsForm = document.getElementById('policy-console-credit-limits-form');
+        if (!creditLimitsForm) {
+            return;
+        }
+
+        let isFormDirty = false;
+        let intendedNavigationUrl = null;
+        let scoreBandOriginalState = null;
+        let rowToDelete = null;
+
+        const scoreBandWrap = creditLimitsForm.querySelector('[data-policy-score-band-wrap]');
+        const scoreBandBody = creditLimitsForm.querySelector('[data-policy-score-band-body]');
+        const scoreBandTemplate = document.getElementById('policy-console-score-band-row-template');
+        const flowButtons = creditLimitsForm.querySelectorAll('[data-policy-section-jump]');
+        
+        // Modal Selectors
+        const unsavedModal = document.getElementById('policy-unsaved-modal');
+        const deleteRowModal = document.getElementById('policy-delete-row-modal');
+
+        // Move modals to body to ensure fixed overlapping works correctly
+        if (unsavedModal && unsavedModal.parentElement !== document.body) {
+            document.body.appendChild(unsavedModal);
+        }
+        if (deleteRowModal && deleteRowModal.parentElement !== document.body) {
+            document.body.appendChild(deleteRowModal);
+        }
+
+        function setFormDirty() {
+            isFormDirty = true;
+        }
+
+        // Global dirty state listeners
+        creditLimitsForm.addEventListener('input', setFormDirty);
+        creditLimitsForm.addEventListener('change', setFormDirty);
+
+        // Save Button Handler
+        const globalSaveBtn = document.getElementById('policy-global-save-btn');
+        if (globalSaveBtn) {
+            globalSaveBtn.addEventListener('click', () => {
+                isFormDirty = false; // By-pass warning
+                creditLimitsForm.submit();
+            });
+        }
+
+        // Modal Dismissals
+        document.querySelectorAll('[data-modal-dismiss]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const modal = e.target.closest('.policy-blueprint-modal');
+                if (modal) modal.hidden = true;
+                intendedNavigationUrl = null;
+                rowToDelete = null;
+            });
+        });
+
+        const confirmDiscardBtn = document.getElementById('policy-unsaved-discard-btn');
+        if (confirmDiscardBtn) {
+            confirmDiscardBtn.addEventListener('click', () => {
+                isFormDirty = false;
+                if (intendedNavigationUrl) {
+                    window.location.href = intendedNavigationUrl;
+                }
+            });
+        }
+
+        const confirmDeleteBtn = document.getElementById('policy-delete-row-confirm-btn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', () => {
+                if (rowToDelete) {
+                    rowToDelete.remove();
+                    syncScoreBandEmptyState();
+                    setFormDirty();
+                }
+                rowToDelete = null;
+                deleteRowModal.hidden = true;
+            });
+        }
+
+        // Native Before Unload
+        window.addEventListener('beforeunload', (e) => {
+            if (isFormDirty) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        // Intercept internal clicks
+        document.body.addEventListener('click', (e) => {
+            if (!isFormDirty) return;
+            const a = e.target.closest('a[href]');
+            if (a) {
+                const href = a.getAttribute('href');
+                if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+                    e.preventDefault();
+                    intendedNavigationUrl = href;
+                    if (unsavedModal) unsavedModal.hidden = false;
+                }
+            }
+        });
+
+        const scoreBandEmpty = creditLimitsForm.querySelector('[data-policy-score-band-empty]');
+        // flowButtons already declared above
+
+        function syncScoreBandEmptyState() {
+            if (!scoreBandBody || !scoreBandEmpty) {
+                return;
+            }
+
+            const hasRows = Boolean(scoreBandBody.querySelector('[data-policy-score-band-row]'));
+            scoreBandEmpty.hidden = hasRows;
+        }
+
+        function syncRuleCardState(toggleInput) {
+            const card = toggleInput ? toggleInput.closest('[data-policy-rule-card]') : null;
+            if (!card) {
+                return;
+            }
+
+            card.classList.toggle('is-off', !toggleInput.checked);
+        }
+
+        function nextScoreBandIndex() {
+            if (!scoreBandWrap) {
+                return Date.now();
+            }
+
+            const current = Number.parseInt(scoreBandWrap.getAttribute('data-next-index') || '0', 10);
+            const next = Number.isNaN(current) ? 0 : current;
+            scoreBandWrap.setAttribute('data-next-index', String(next + 1));
+            return next;
+        }
+
+        function setActiveFlow(sectionId) {
+            flowButtons.forEach((button) => {
+                button.classList.toggle('is-active', button.getAttribute('data-policy-section-jump') === sectionId);
+            });
+        }
+
+        function syncPanelToggleButtons(panelId, isOpen) {
+            creditLimitsForm.querySelectorAll(`[data-policy-toggle-panel="${panelId}"]`).forEach((button) => {
+                const openLabel = button.getAttribute('data-panel-open-label') || 'Open';
+                const closeLabel = button.getAttribute('data-panel-close-label') || 'Close';
+                button.textContent = isOpen ? closeLabel : openLabel;
+            });
+        }
+
+        creditLimitsForm.addEventListener('click', (event) => {
+            const jumpTrigger = event.target.closest('[data-policy-section-jump]');
+            if (jumpTrigger) {
+                event.preventDefault();
+                const sectionId = jumpTrigger.getAttribute('data-policy-section-jump') || '';
+                const targetSection = sectionId ? document.getElementById(sectionId) : null;
+                if (targetSection) {
+                    setActiveFlow(sectionId);
+                    targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                return;
+            }
+
+            const panelToggleTrigger = event.target.closest('[data-policy-toggle-panel]');
+            if (panelToggleTrigger) {
+                event.preventDefault();
+                const panelId = panelToggleTrigger.getAttribute('data-policy-toggle-panel') || '';
+                const targetPanel = panelId ? document.getElementById(panelId) : null;
+                if (targetPanel) {
+                    targetPanel.hidden = !targetPanel.hidden;
+                    syncPanelToggleButtons(panelId, !targetPanel.hidden);
+                }
+                return;
+            }
+
+            const addBandTrigger = event.target.closest('[data-policy-score-band-add]');
+            if (addBandTrigger && scoreBandBody && scoreBandTemplate) {
+                event.preventDefault();
+                const nextIndex = nextScoreBandIndex();
+                scoreBandBody.insertAdjacentHTML(
+                    'beforeend',
+                    scoreBandTemplate.innerHTML.replace(/__INDEX__/g, String(nextIndex))
+                );
+                syncScoreBandEmptyState();
+                const newRow = scoreBandBody.querySelector(`[data-policy-row-index="${nextIndex}"] input[name="pcc_score_band_label[]"]`);
+                if (newRow) {
+                    newRow.focus();
+                }
+                return;
+            }
+
+            const deleteBandTrigger = event.target.closest('[data-policy-score-band-delete]');
+            if (deleteBandTrigger) {
+                event.preventDefault();
+                const row = deleteBandTrigger.closest('[data-policy-score-band-row]');
+                if (row) {
+                    rowToDelete = row;
+                    if (deleteRowModal) deleteRowModal.hidden = false;
+                }
+                return;
+            }
+
+            const customizeBtn = event.target.closest('#policy-score-band-customize-btn');
+            const cancelBtn = event.target.closest('#policy-score-band-cancel-btn');
+
+            if (customizeBtn || cancelBtn) {
+                event.preventDefault();
+                const customizeRealBtn = document.getElementById('policy-score-band-customize-btn');
+                const cancelRealBtn = document.getElementById('policy-score-band-cancel-btn');
+                
+                const table = document.getElementById('policy-score-band-table');
+                
+                if (customizeBtn) {
+                    const isEditing = customizeRealBtn.textContent.trim() === 'Done';
+                    const nextIsEditing = !isEditing;
+                    
+                    if (nextIsEditing) {
+                        // Entering Edit Mode: Save state
+                        if (table && table.parentElement) {
+                            scoreBandOriginalState = table.parentElement.innerHTML;
+                        }
+                    }
+
+                    customizeRealBtn.textContent = nextIsEditing ? 'Done' : 'Customize';
+                    if (cancelRealBtn) cancelRealBtn.style.display = nextIsEditing ? 'inline-flex' : 'none';
+                    
+                    const addBtn = creditLimitsForm.querySelector('[data-policy-score-band-add]');
+                    if (addBtn) addBtn.style.display = nextIsEditing ? 'inline-flex' : 'none';
+                    
+                    const cols = creditLimitsForm.querySelectorAll('.policy-band-col-actions');
+                    cols.forEach(col => col.style.display = nextIsEditing ? 'table-cell' : 'none');
+                    
+                    if (table) {
+                        const inputs = table.querySelectorAll('input.form-control');
+                        inputs.forEach(input => {
+                            if (nextIsEditing) {
+                                input.removeAttribute('readonly');
+                            } else {
+                                input.setAttribute('readonly', 'readonly');
+                            }
+                        });
+                    }
+                } else if (cancelBtn) {
+                    // Revert to original
+                    if (scoreBandOriginalState && table && table.parentElement) {
+                        table.parentElement.innerHTML = scoreBandOriginalState;
+                    }
+                    
+                    customizeRealBtn.textContent = 'Customize';
+                    cancelRealBtn.style.display = 'none';
+                    
+                    const addBtn = creditLimitsForm.querySelector('[data-policy-score-band-add]');
+                    if (addBtn) addBtn.style.display = 'none';
+                    
+                    const cols = creditLimitsForm.querySelectorAll('.policy-band-col-actions');
+                    cols.forEach(col => col.style.display = 'none');
+                    
+                    if (table) {
+                        const inputs = table.querySelectorAll('input.form-control');
+                        inputs.forEach(input => {
+                            input.setAttribute('readonly', 'readonly');
+                        });
+                    }
+                    
+                    isFormDirty = false;
+                }
+                return;
+            }
+        });
+
+        creditLimitsForm.addEventListener('change', (event) => {
+            const ruleToggle = event.target.closest('[data-policy-rule-toggle]');
+            if (ruleToggle) {
+                syncRuleCardState(ruleToggle);
+            }
+        });
+
+        creditLimitsForm.querySelectorAll('[data-policy-rule-toggle]').forEach((toggleInput) => {
+            syncRuleCardState(toggleInput);
+        });
+
+        syncScoreBandEmptyState();
+        if (flowButtons.length) {
+            setActiveFlow(flowButtons[0].getAttribute('data-policy-section-jump') || '');
+        }
+        const lifecyclePanel = document.getElementById('policy-lifecycle-panel');
+        syncPanelToggleButtons('policy-lifecycle-panel', lifecyclePanel ? !lifecyclePanel.hidden : false);
+        const limitAdvancedPanel = document.getElementById('policy-limit-assignment-advanced-panel');
+        syncPanelToggleButtons('policy-limit-assignment-advanced-panel', limitAdvancedPanel ? !limitAdvancedPanel.hidden : false);
+    }
+
+    initPolicyConsoleCreditLimits();
+
+    function initPolicyConsoleDecisionRules() {
+        const decisionRulesForm = document.getElementById('policy-console-decision-rules-form');
+        if (!decisionRulesForm) {
+            return;
+        }
+
+        const getToggleInput = (key) => decisionRulesForm.querySelector(`[data-policy-toggle-input="${key}"]`);
+        const getToggleButton = (key) => decisionRulesForm.querySelector(`[data-policy-toggle-button="${key}"]`);
+        const getToggleValue = (input) => String(input && typeof input.value !== 'undefined' ? input.value : '0') === '1';
+        const notifyToggleChange = (input) => {
+            if (!input) {
+                return;
+            }
+
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        const syncToggleButtonState = (key) => {
+            const hiddenInput = getToggleInput(key);
+            const button = getToggleButton(key);
+            if (!hiddenInput || !button) {
+                return;
+            }
+
+            const isOn = getToggleValue(hiddenInput) && !button.disabled;
+            const toggleLabel = button.querySelector('[data-policy-toggle-label]');
+
+            button.classList.toggle('is-on', isOn);
+            button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+
+            if (toggleLabel) {
+                toggleLabel.textContent = isOn ? 'On' : 'Off';
+            }
+        };
+
+        const syncRuleState = (toggleInput) => {
+            if (!toggleInput) {
+                return;
+            }
+
+            const ruleKey = toggleInput.getAttribute('data-decision-rule-toggle');
+            if (!ruleKey) {
+                return;
+            }
+
+            const item = toggleInput.closest('[data-decision-rule-item]');
+            const content = decisionRulesForm.querySelector(`[data-decision-rule-content="${ruleKey}"]`);
+            const relatedButton = getToggleButton(ruleKey);
+            const isDisabled = Boolean(relatedButton && relatedButton.disabled);
+            const isActive = getToggleValue(toggleInput) && !isDisabled;
+
+            if (item) {
+                item.classList.toggle('is-off', !isActive);
+                item.classList.toggle('is-disabled', isDisabled);
+            }
+
+            if (content) {
+                content.hidden = !isActive;
+            }
+        };
+
+        const workflowModeInput = decisionRulesForm.querySelector('[data-decision-workflow-mode]');
+        const manualReviewToggle = decisionRulesForm.querySelector('[data-decision-manual-review-toggle]');
+        const manualReviewInput = getToggleInput('manual_review_overrides');
+        const manualReviewNote = decisionRulesForm.querySelector('[data-decision-manual-review-note]');
+
+        const syncManualReviewAvailability = () => {
+            if (!workflowModeInput || !manualReviewToggle || !manualReviewInput) {
+                return;
+            }
+
+            const isSemiAutomatic = workflowModeInput.value === 'semi_automatic';
+            manualReviewToggle.disabled = !isSemiAutomatic;
+            if (!isSemiAutomatic) {
+                manualReviewInput.value = '0';
+                notifyToggleChange(manualReviewInput);
+            }
+
+            if (manualReviewNote) {
+                manualReviewNote.hidden = isSemiAutomatic;
+            }
+
+            syncToggleButtonState('manual_review_overrides');
+            syncRuleState(manualReviewInput);
+        };
+
+        decisionRulesForm.querySelectorAll('[data-policy-toggle-button]').forEach((toggleButton) => {
+            const toggleKey = toggleButton.getAttribute('data-policy-toggle-button');
+            const toggleInput = toggleKey ? getToggleInput(toggleKey) : null;
+            if (!toggleKey || !toggleInput) {
+                return;
+            }
+
+            toggleButton.addEventListener('click', () => {
+                if (toggleButton.disabled) {
+                    return;
+                }
+
+                toggleInput.value = getToggleValue(toggleInput) ? '0' : '1';
+                notifyToggleChange(toggleInput);
+                syncToggleButtonState(toggleKey);
+
+                if (toggleInput.hasAttribute('data-decision-rule-toggle')) {
+                    syncRuleState(toggleInput);
+                }
+            });
+
+            syncToggleButtonState(toggleKey);
+        });
+
+        decisionRulesForm.querySelectorAll('[data-decision-rule-toggle]').forEach((toggleInput) => {
+            syncRuleState(toggleInput);
+        });
+
+        if (workflowModeInput) {
+            workflowModeInput.addEventListener('change', syncManualReviewAvailability);
+        }
+
+        syncManualReviewAvailability();
+    }
+
+    initPolicyConsoleDecisionRules();
 
     function findPreferredNavItem(targetId, subTabId = '') {
         subTabId = normalizeCreditPolicySubtab(subTabId);

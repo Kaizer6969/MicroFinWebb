@@ -63,7 +63,17 @@ function builder_store_uploaded_asset(array $file, string $directoryName, string
     }
 
     $safeTenant = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenantId);
-    $filename = $prefix . '_' . $safeTenant . '_' . time() . '_' . substr(bin2hex(random_bytes(4)), 0, 8) . '.' . $extension;
+    
+    if ($prefix === 'logo') {
+        $filename = $safeTenant . 'logo.' . $extension;
+    } elseif ($prefix === 'hero') {
+        $filename = $safeTenant . 'hero.' . $extension;
+    } else {
+        $filename_without_ext = pathinfo((string)($file['name'] ?? ''), PATHINFO_FILENAME);
+        $safe_filename = preg_replace('/[^A-Za-z0-9_-]/', '_', $filename_without_ext);
+        $filename = $safeTenant . $safe_filename . '.' . $extension;
+    }
+    
     $destination = $targetDir . DIRECTORY_SEPARATOR . $filename;
     if (!move_uploaded_file((string)($file['tmp_name'] ?? ''), $destination)) {
         return '';
@@ -374,6 +384,11 @@ $save_endpoint = builder_app_base_path() . '/admin_panel/website_editor/index.ph
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Website Editor — <?php echo $e($company_name); ?></title>
+    
+    <?php if (!empty($logo)): ?>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($logo, ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Public+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0&display=swap" rel="stylesheet" />

@@ -54,6 +54,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $error = "Password must be at least 8 characters.";
     } elseif (empty($first_name) || empty($last_name) || empty($phone_number) || empty($date_of_birth)) {
         $error = "First Name, Last Name, Phone Number, and Date of Birth are required.";
+    } elseif (!empty($date_of_birth) && (new DateTime($date_of_birth))->diff(new DateTime())->y < 18) {
+        $error = "You must be 18 years or older.";
     } else {
         $tenant_id = $_SESSION['tenant_id'] ?? '';
 
@@ -166,8 +168,8 @@ if ($tenant_id) {
         label { display: block; margin-bottom: 8px; color: <?php echo htmlspecialchars($t_muted); ?>; font-weight: 500; font-size: 13px; }
         input[type="password"], input[type="text"], input[type="date"] { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-family: inherit; color: <?php echo htmlspecialchars($t_text); ?>; transition: all 0.2s; }
         input[type="password"]:focus, input[type="text"]:focus, input[type="date"]:focus { outline: none; border-color: <?php echo htmlspecialchars($t_primary); ?>; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-        button { width: 100%; padding: 12px; background: <?php echo htmlspecialchars($t_primary); ?>; color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 15px; cursor: pointer; transition: background 0.2s; margin-top: 16px; }
-        button:hover { filter: brightness(0.9); }
+        button[type="submit"] { width: 100%; padding: 12px; background: <?php echo htmlspecialchars($t_primary); ?>; color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 15px; cursor: pointer; transition: background 0.2s; margin-top: 16px; }
+        button[type="submit"]:hover { filter: brightness(0.9); }
         .error { color: #ef4444; background: #fef2f2; border: 1px solid #fecaca; padding: 12px; border-radius: 6px; margin-bottom: 24px; font-size: 14px; }
         .step-indicator { display: flex; gap: 8px; margin-bottom: 24px; justify-content: center; }
         .step { width: 44px; height: 4px; border-radius: 2px; background: #cbd5e1; }
@@ -182,8 +184,6 @@ if ($tenant_id) {
             <div class="step-indicator">
                 <div class="step active"></div>
                 <div class="step"></div>
-                <div class="step"></div>
-                <div class="step"></div>
             </div>
         <?php endif; ?>
         <h2>Complete Your Profile</h2>
@@ -193,7 +193,7 @@ if ($tenant_id) {
             <div class="error"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
         
-        <form method="POST" action="">
+        <form method="POST" action="" id="profile-form">
             <div class="form-section-title" style="margin-top: 0;">Account Security</div>
             <div class="form-row">
                 <div class="form-group">
@@ -244,7 +244,7 @@ if ($tenant_id) {
                 </div>
                 <div class="form-group">
                     <label for="date_of_birth">Date of Birth <span class="required-star">*</span></label>
-                    <input type="date" id="date_of_birth" name="date_of_birth" value="<?= htmlspecialchars($_POST['date_of_birth'] ?? $user['date_of_birth'] ?? '') ?>" required>
+                    <input type="date" id="date_of_birth" name="date_of_birth" value="<?= htmlspecialchars($_POST['date_of_birth'] ?? $user['date_of_birth'] ?? '') ?>" max="<?= date('Y-m-d', strtotime('-18 years')) ?>" required>
                 </div>
             </div>
             
@@ -252,5 +252,23 @@ if ($tenant_id) {
         </form>
     </div>
     <script src="../assets/password-toggle.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const p1 = document.getElementById('new_password');
+            const p2 = document.getElementById('confirm_password');
+            if (p1 && p2) {
+                const btn1 = p1.nextElementSibling;
+                const btn2 = p2.nextElementSibling;
+                if (btn1 && btn1.classList.contains('password-toggle-btn') && btn2 && btn2.classList.contains('password-toggle-btn')) {
+                    btn1.addEventListener('click', (e) => { 
+                        if (e.isTrusted && p1.type !== p2.type) btn2.click(); 
+                    });
+                    btn2.addEventListener('click', (e) => { 
+                        if (e.isTrusted && p2.type !== p1.type) btn1.click(); 
+                    });
+                }
+            }
+        });
+    </script>
 </body>
 </html>

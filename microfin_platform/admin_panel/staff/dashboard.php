@@ -177,8 +177,16 @@ $sidebar_text_muted = hex_is_dark($theme_sidebar) ? 'rgba(248,250,252,0.55)' : '
 $sidebar_hover_bg = hex_is_dark($theme_sidebar) ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 $sidebar_active_bg = $theme_color . '22';
 
-$name_parts = explode(' ', trim($_SESSION['username']));
-$initials = strtoupper(substr($name_parts[0], 0, 1) . (isset($name_parts[1]) ? substr($name_parts[1], 0, 1) : ''));
+$avatar_stmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE user_id = ? AND tenant_id = ?");
+$avatar_stmt->execute([$_SESSION['user_id'], $_SESSION['tenant_id']]);
+$avatar_user = $avatar_stmt->fetch(PDO::FETCH_ASSOC);
+
+$f = trim($avatar_user['first_name'] ?? '');
+$l = trim($avatar_user['last_name'] ?? '');
+$adminDisplay = (!empty($f) || !empty($l)) ? trim("$f $l") : ($_SESSION['username'] ?? 'User');
+$avF = !empty($f) ? mb_substr($f, 0, 1) : mb_substr($adminDisplay, 0, 1);
+$avL = !empty($l) ? mb_substr($l, -1) : mb_substr($adminDisplay, -1);
+$initials = mb_strtoupper($avF . $avL);
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo htmlspecialchars($ui_theme); ?>">

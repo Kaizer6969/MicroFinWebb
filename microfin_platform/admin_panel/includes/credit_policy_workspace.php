@@ -1,5 +1,9 @@
 <?php
 
+require_once __DIR__ . '/policy_console_credit_limits.php';
+require_once __DIR__ . '/policy_console_decision_rules.php';
+require_once __DIR__ . '/policy_console_compliance_documents.php';
+
 if (!function_exists('credit_limit_rule_defaults')) {
     function credit_limit_rule_defaults(): array
     {
@@ -159,6 +163,7 @@ if (!function_exists('admin_build_credit_policy_workspace_state')) {
     function admin_build_credit_policy_workspace_state(PDO $pdo, string $tenantId): array
     {
         $credit_policy = mf_get_tenant_credit_policy($pdo, $tenantId);
+        $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenantId);
         $credit_policy_defaults = mf_credit_policy_defaults();
         $credit_policy_score_ceiling = mf_credit_policy_score_ceiling();
         $credit_policy_employment_options = mf_credit_policy_employment_options();
@@ -210,9 +215,26 @@ if (!function_exists('admin_build_credit_policy_workspace_state')) {
             ENT_QUOTES,
             'UTF-8'
         );
+        $credit_limit_rules_json = (string)json_encode($credit_limit_rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $policy_console_credit_limits = policy_console_credit_limits_load(
+            $pdo,
+            $tenantId,
+            $credit_policy,
+            $credit_limit_rules,
+            $credit_policy_score_ceiling
+        );
+        $policy_console_decision_rules = policy_console_decision_rules_load(
+            $pdo,
+            $tenantId,
+            $credit_policy_score_ceiling,
+            $credit_policy_ci_configurable_options
+        );
+        $policy_console_compliance_documents = policy_console_compliance_documents_load($pdo, $tenantId);
 
         return [
             'credit_policy' => $credit_policy,
+            'credit_limit_rules' => $credit_limit_rules,
+            'credit_limit_rules_json' => $credit_limit_rules_json,
             'credit_policy_defaults' => $credit_policy_defaults,
             'credit_policy_score_ceiling' => $credit_policy_score_ceiling,
             'credit_policy_employment_options' => $credit_policy_employment_options,
@@ -239,6 +261,9 @@ if (!function_exists('admin_build_credit_policy_workspace_state')) {
             'credit_policy_ci_required_above_amount' => $credit_policy_ci_required_above_amount,
             'credit_policy_ci_mode_label' => $credit_policy_ci_mode_label,
             'credit_policy_defaults_json' => $credit_policy_defaults_json,
+            'policy_console_credit_limits' => $policy_console_credit_limits,
+            'policy_console_decision_rules' => $policy_console_decision_rules,
+            'policy_console_compliance_documents' => $policy_console_compliance_documents,
         ];
     }
 }

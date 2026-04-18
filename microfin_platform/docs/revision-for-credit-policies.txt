@@ -1,12 +1,33 @@
 INSERT INTO document_types (document_name, description, is_required, loan_purpose) VALUES
--- General identity
-('Valid ID Front', 'Front side of applicant government-issued ID', TRUE, NULL),
-('Valid ID Back', 'Back side of applicant government-issued ID', TRUE, NULL),
-('Passport', 'Passport as an accepted identity document', FALSE, NULL),
-('National ID', 'National ID as an accepted identity document', FALSE, NULL),
-('Driver''s License', 'Driver''s license as an accepted identity document', FALSE, NULL),
-('Postal ID', 'Postal ID as an accepted identity document', FALSE, NULL),
-('School ID', 'Valid school ID for student or education-related applications', FALSE, 'Education'),
+-- Required ID uploads
+('Valid ID Front', 'Front side of applicant valid government-issued or institution-accepted ID', TRUE, NULL),
+('Valid ID Back', 'Back side of applicant valid government-issued or institution-accepted ID', TRUE, NULL),
+
+-- Accepted identity documents
+('National ID (PhilID/ePhilID)', 'Philippine Identification System ID including PhilID or ePhilID', FALSE, NULL),
+('Passport', 'Philippine or foreign passport accepted as a valid identity document', FALSE, NULL),
+('Driver''s License', 'Driver''s license or electronic driver''s license accepted as a valid identity document', FALSE, NULL),
+('UMID', 'Unified Multi-Purpose ID accepted as a valid identity document', FALSE, NULL),
+('SSS ID', 'Social Security System ID or digitized SSS ID accepted as a valid identity document', FALSE, NULL),
+('GSIS e-Card', 'Government Service Insurance System e-Card accepted as a valid identity document', FALSE, NULL),
+('PRC ID', 'Professional Regulation Commission ID accepted as a valid identity document', FALSE, NULL),
+('Postal ID', 'Postal ID accepted as a valid identity document', FALSE, NULL),
+('Alien Certificate of Registration (ACR I-Card)', 'Alien Certificate of Registration or ACR I-Card for foreign nationals', FALSE, NULL),
+('Seaman''s Book / SIRB', 'Seaman''s Book or Seafarer''s Identification and Record Book', FALSE, NULL),
+('Senior Citizen ID', 'Senior Citizen ID accepted by some institutions as a valid identity document', FALSE, NULL),
+('PWD ID', 'Person with Disability ID or NCDA-issued ID accepted by some institutions', FALSE, NULL),
+('Voter''s ID', 'Voter''s ID, digitized voter''s ID, or similar voter registration ID accepted by some institutions', FALSE, NULL),
+('NBI Clearance', 'National Bureau of Investigation clearance accepted by some institutions as identity proof', FALSE, NULL),
+('Police Clearance', 'Police clearance with photo and signature accepted by some institutions', FALSE, NULL),
+('TIN ID', 'Tax Identification Number ID accepted by some institutions', FALSE, NULL),
+('School ID', 'Valid school ID accepted in some contexts, especially student-related applications', FALSE, 'Education'),
+('Company ID', 'Company ID accepted by some institutions but may not be valid for all loan or housing transactions', FALSE, NULL),
+('Barangay ID', 'Barangay ID accepted by some institutions but may not be valid for all loan or housing transactions', FALSE, NULL),
+('OFW ID', 'Overseas Filipino Worker ID accepted in some contexts', FALSE, NULL),
+('OWWA ID', 'Overseas Workers Welfare Administration ID accepted in some contexts', FALSE, NULL),
+('IBP ID', 'Integrated Bar of the Philippines ID accepted by some institutions', FALSE, NULL),
+('MARINA ID', 'Maritime Industry Authority ID accepted by some institutions', FALSE, NULL),
+('Government Office / GOCC ID', 'Government office or GOCC-issued ID such as AFP or similar government entity ID', FALSE, NULL);
 
 -- Income documents
 ('Certificate of Employment', 'Certificate of employment indicating position and tenure', FALSE, NULL),

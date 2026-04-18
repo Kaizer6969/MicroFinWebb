@@ -106,9 +106,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $institution_name = trim($_POST['institution_name'] ?? '');
     $contact_first_name = trim($_POST['contact_first_name'] ?? '');
     $contact_last_name = trim($_POST['contact_last_name'] ?? '');
-    $contact_mi = trim($_POST['contact_mi'] ?? '');
+    $contact_middle_name = trim($_POST['contact_middle_name'] ?? '');
     $contact_suffix = trim($_POST['contact_suffix'] ?? '');
     $contact_number = trim($_POST['contact_number'] ?? '');
+    $date_of_birth = trim($_POST['date_of_birth'] ?? '');
     $company_address = trim($_POST['location'] ?? '');
     $location = $company_address;
     $concern_category = trim($_POST['concern_category'] ?? '');
@@ -161,10 +162,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $is_otp_verified = true;
     }
 
-    if ($institution_name === '' || $company_email === '' || (!$is_talk_to_expert && $plan_tier === '') || ($is_talk_to_expert && $concern_category === '')) {
+    if ($institution_name === '' || $company_email === '' || (!$is_talk_to_expert && $plan_tier === '') || ($is_talk_to_expert && $concern_category === '') || $date_of_birth === '') {
         $form_error = $is_talk_to_expert
-            ? 'Institution Name, Work Email, and Category of Concern are required.'
-            : 'Institution Name, Work Email, and Subscription Plan are required.';
+            ? 'Institution Name, Work Email, Category of Concern, and Date of Birth are required.'
+            : 'Institution Name, Work Email, Subscription Plan, and Date of Birth are required.';
+    } elseif (!empty($date_of_birth) && (new DateTime($date_of_birth))->diff(new DateTime())->y < 18) {
+        $form_error = 'You must be 18 years or older to apply.';
     } elseif (!$is_talk_to_expert && ($document_count < 1 || $document_count > 5)) {
         $form_error = 'Please upload 1 to 5 proof of legitimacy documents.';
     } elseif (!$is_otp_verified) {
@@ -266,14 +269,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 } else {
                     $stmt = $pdo->prepare(" 
                         INSERT INTO tenants (
-                            tenant_id, tenant_name, first_name, last_name,
-                            mi, suffix, branch_name, plan_tier,
+                            tenant_id, tenant_name, branch_name, plan_tier,
                             email, mrr, max_clients, max_users, status
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ");
                     $stmt->execute([
-                        $tenant_id, $institution_name, null, null,
-                        null, null, $location, $plan_tier,
+                        $tenant_id, $institution_name, $location, $plan_tier,
                         $company_email, $mrr, $max_c, $max_u, $request_status
                     ]);
                 }
@@ -306,13 +307,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $password_hash = password_hash($temp_password, PASSWORD_DEFAULT);
                 $user_type = $is_talk_to_expert ? 'inquirer' : 'applicant';
                 $users_has_billing_column = demo_column_exists($pdo, 'users', 'can_manage_billing');
+                $users_has_dob_column = demo_column_exists($pdo, 'users', 'date_of_birth');
 
-                if ($users_has_billing_column) {
+                if ($users_has_billing_column && $users_has_dob_column) {
+                    $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, can_manage_billing, first_name, last_name, middle_name, suffix, date_of_birth) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', 1, ?, ?, ?, ?, ?)");
+                } elseif ($users_has_billing_column) {
                     $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, can_manage_billing, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', 1, ?, ?, ?, ?)");
+                } elseif ($users_has_dob_column) {
+                    $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix, date_of_birth) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', ?, ?, ?, ?, ?)");
                 } else {
                     $user_insert_stmt = $pdo->prepare("INSERT INTO users (tenant_id, username, email, phone_number, password_hash, force_password_change, role_id, user_type, status, first_name, last_name, middle_name, suffix) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, 'Inactive', ?, ?, ?, ?)");
                 }
-                $user_insert_stmt->execute([
+                
+                $user_bind_params = [
                     $tenant_id,
                     $username,
                     $company_email,
@@ -322,9 +329,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $user_type,
                     $contact_first_name !== '' ? $contact_first_name : null,
                     $contact_last_name !== '' ? $contact_last_name : null,
-                    $contact_mi !== '' ? $contact_mi : null,
+                    $contact_middle_name !== '' ? $contact_middle_name : null,
                     $contact_suffix !== '' ? $contact_suffix : null,
-                ]);
+                ];
+
+                if ($users_has_dob_column) {
+                    $user_bind_params[] = $date_of_birth !== '' ? $date_of_birth : null;
+                }
+
+                $user_insert_stmt->execute($user_bind_params);
                 mf_set_user_billing_access($pdo, (string)$tenant_id, (int)$pdo->lastInsertId(), true);
 
                 $upload_dir = __DIR__ . '/../uploads/business_permits/';
@@ -350,11 +363,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         }
 
                         $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+                        $filename_without_ext = pathinfo($original_name, PATHINFO_FILENAME);
                         if (!in_array($extension, $allowed_extensions, true)) {
                             throw new Exception('Unsupported file type detected in uploads.');
                         }
 
-                        $stored_name = $tenant_id . '_doc_' . $file_sequence . '_' . time() . '_' . bin2hex(random_bytes(2)) . '.' . $extension;
+                        // Save exactly as: tenant_id + originalfilename
+                        $stored_name = $tenant_id . $original_name;
                         $target_path = $upload_dir . $stored_name;
                         if (!move_uploaded_file((string)($file['tmp_name'] ?? ''), $target_path)) {
                             throw new Exception('Unable to save one of the uploaded documents.');
@@ -908,8 +923,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label>M.I.</label>
-                            <input type="text" class="input-field" name="contact_mi" maxlength="50">
+                            <label>Middle Name</label>
+                            <input type="text" class="input-field" name="contact_middle_name" placeholder="Optional" maxlength="50">
                         </div>
                         <div class="form-group">
                             <label>Suffix</label>
@@ -917,9 +932,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>Contact Number</label>
-                        <input type="text" class="input-field" name="contact_number" placeholder="e.g. 09171234567">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Contact Number</label>
+                            <input type="text" class="input-field" name="contact_number" placeholder="e.g. 09171234567">
+                        </div>
+                        <div class="form-group">
+                            <label>Date of Birth <span class="text-danger">*</span></label>
+                            <input type="date" class="input-field" name="date_of_birth" max="<?= date('Y-m-d', strtotime('-18 years')) ?>" required>
+                            <small class="location-helper text-danger" style="display:none;" id="dob-error">You must be 18 or older.</small>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -1868,6 +1890,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         // Submit guard
         demoForm.addEventListener('submit', (e) => {
+            const dobInput = demoForm.querySelector('input[name="date_of_birth"]');
+            const dobError = document.getElementById('dob-error');
+            if (dobInput && dobInput.value) {
+                const dob = new Date(dobInput.value);
+                const today = new Date();
+                let age = today.getFullYear() - dob.getFullYear();
+                const m = today.getMonth() - dob.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+                    age--;
+                }
+                if (age < 18) {
+                    e.preventDefault();
+                    dobError.style.display = 'block';
+                    dobInput.focus();
+                    return;
+                } else {
+                    dobError.style.display = 'none';
+                }
+            }
+
             if (isOtpVerified.value === '0') {
                 e.preventDefault();
                 alert("Please verify your email with the OTP before submitting.");

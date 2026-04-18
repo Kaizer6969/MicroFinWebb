@@ -287,8 +287,12 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tenant Login Portal</title>
+    <title><?php echo htmlspecialchars($tenant['tenant_name'] ?? 'Login'); ?> - Portal</title>
     
+    <?php if (!empty($tenant['logo_path'])): ?>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars($tenant['logo_path'], ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -549,8 +553,27 @@ $theme_font = $tenant['font_family'] ?? 'Inter';
             <?php endif; ?>
 
             <div class="brand-header">
-                <?php if (!empty($tenant['logo_path'])): ?>
-                <div class="brand-logo" id="logo-icon-container" style="background-image: url('<?php echo htmlspecialchars($tenant['logo_path']); ?>'); background-color: transparent;">
+                <?php
+                // Check local logo based on tenant_id
+                $tenant_id_clean = preg_replace('/[^A-Za-z0-9_-]+/', '_', $tenant['tenant_id']);
+                $found_logo = false;
+                $local_logo_path = '';
+                $base_upload_dir = dirname(__DIR__) . '/uploads';
+                
+                if ($tenant_id_clean !== '') {
+                    $possible_logo_exts = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
+                    foreach ($possible_logo_exts as $ext) {
+                        if (file_exists($base_upload_dir . '/tenant_logos/' . $tenant_id_clean . 'logo.' . $ext)) {
+                            $local_logo_path = '../uploads/tenant_logos/' . $tenant_id_clean . 'logo.' . $ext;
+                            $found_logo = true;
+                            break;
+                        }
+                    }
+                }
+                $final_logo_path = $found_logo ? $local_logo_path : ($tenant['logo_path'] ?? '');
+                
+                if (!empty($final_logo_path)): ?>
+                <div class="brand-logo" id="logo-icon-container" style="background-image: url('<?php echo htmlspecialchars($final_logo_path); ?>'); background-color: transparent;">
                 </div>
                 <?php else: ?>
                 <div class="brand-logo" id="logo-icon-container">

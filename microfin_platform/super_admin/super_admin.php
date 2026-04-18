@@ -1708,10 +1708,18 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                     <button type="button" class="icon-btn" id="theme-toggle" aria-label="Switch to dark mode" title="Switch to dark mode">
                         <span class="material-symbols-rounded" id="theme-toggle-icon">dark_mode</span>
                     </button>
+                    <?php
+                        $f = trim($profile_form['first_name'] ?? '');
+                        $l = trim($profile_form['last_name'] ?? '');
+                        $adminDisplay = (!empty($f) || !empty($l)) ? trim("$f $l") : ($_SESSION['super_admin_username'] ?? 'Admin');
+                        $avF = !empty($f) ? mb_substr($f, 0, 1) : mb_substr($adminDisplay, 0, 1);
+                        $avL = !empty($l) ? mb_substr($l, -1) : mb_substr($adminDisplay, -1);
+                        $avatarName = urlencode(mb_strtoupper($avF . $avL));
+                    ?>
                     <div class="admin-profile">
-                        <img src="https://ui-avatars.com/api/?name=System+Host&background=<?php echo $avatarBackground; ?>&color=fff" alt="Admin Avatar" class="avatar">
+                        <img src="https://ui-avatars.com/api/?name=<?php echo $avatarName; ?>&background=<?php echo $avatarBackground; ?>&color=fff" alt="Admin Avatar" class="avatar">
                         <div class="admin-info">
-                            <span class="admin-name"><?php echo htmlspecialchars($_SESSION['super_admin_username'] ?? 'Admin'); ?></span>
+                            <span class="admin-name"><?php echo htmlspecialchars($adminDisplay); ?></span>
                             <span class="admin-role">Admin</span>
                         </div>
                     </div>
@@ -2139,12 +2147,32 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                                 if (!empty($t['legitimacy_document_paths'])) {
                                                     $doc_paths = array_filter(explode('||', $t['legitimacy_document_paths']));
                                                 }
-                                                foreach ($doc_paths as $doc_index => $doc_path):
+                                                
+                                                // Scan directory for new manual naming conventions (tenant_id+originalfilename)
+                                                $tenant_id_clean = preg_replace('/[^A-Za-z0-9_-]+/', '_', $t['tenant_id']);
+                                                $permits_dir = dirname(__DIR__) . '/uploads/business_permits';
+                                                  $valid_doc_paths = [];
+                                                  if ($tenant_id_clean !== '' && is_dir($permits_dir)) {
+                                                      $files = glob($permits_dir . '/' . $t['tenant_id'] . '*.*'); // Raw tenant id search
+                                                      if ($files) {
+                                                          foreach ($files as $file) {
+                                                              $file_name = basename($file);
+                                                              // Encode filename portions (not path) safely so URLs don't break with spaces
+                                                              $url_ready_path = '../uploads/business_permits/' . str_replace('%2E', '.', rawurlencode($file_name));
+                                                              $valid_doc_paths[] = $url_ready_path;
+                                                          }
+                                                      }
+                                                  }
+                                                foreach ($valid_doc_paths as $doc_index => $doc_path):
                                                 ?>
                                                     <a href="<?php echo htmlspecialchars($doc_path); ?>" class="btn btn-outline btn-sm" target="_blank" rel="noopener" title="View legitimacy document <?php echo $doc_index + 1; ?>">
                                                         <span class="material-symbols-rounded" style="font-size:16px;">description</span> Doc <?php echo $doc_index + 1; ?>
                                                     </a>
                                                 <?php endforeach; ?>
+
+                                                <?php if (empty($valid_doc_paths) && !empty($t['legitimacy_document_paths'])): ?>
+                                                    <span class="badge bg-secondary" title="File not found on server">Lost on deploy</span>
+                                                <?php endif; ?>
 
 
 
@@ -2753,8 +2781,8 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                 <span class="material-symbols-rounded">payments</span>
                             </div>
                             <div class="stat-details">
-                                <p>Total MRR</p>
-                                <h3 id="stat-revenue-total-mrr">₱<?php echo htmlspecialchars($total_mrr); ?></h3>
+                                <p>Total Revenue</p>
+                                <h3 id="stat-revenue-total">₱<?php echo htmlspecialchars($total_revenue); ?></h3>
                             </div>
                         </div>
                         <div class="stat-card">

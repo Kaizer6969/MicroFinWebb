@@ -297,7 +297,29 @@ INSERT INTO `document_types` (`document_type_id`, `document_name`, `description`
 ('17', 'DTI/SEC Registration', 'Business registration documents', '0', '1', 'Business', '2026-04-08 03:45:36'),
 ('18', 'Barangay Clearance', 'Clearance from local barangay', '0', '1', NULL, '2026-04-08 03:45:36'),
 ('19', 'Marriage Certificate', 'For married applicants', '0', '1', NULL, '2026-04-08 03:45:36'),
-('20', 'Birth Certificate', 'Birth certificate copy', '0', '1', NULL, '2026-04-08 03:45:36');
+('20', 'Birth Certificate', 'Birth certificate copy', '0', '1', NULL, '2026-04-08 03:45:36'),
+('21', 'National ID (PhilID/ePhilID)', 'Philippine Identification System ID including PhilID or ePhilID', '0', '1', NULL, '2026-04-18 03:45:36'),
+('22', 'Passport', 'Philippine or foreign passport accepted as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('23', 'Driver''s License', 'Driver''s license or electronic driver''s license accepted as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('24', 'UMID', 'Unified Multi-Purpose ID accepted as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('25', 'SSS ID', 'Social Security System ID or digitized SSS ID accepted as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('26', 'GSIS e-Card', 'Government Service Insurance System e-Card accepted as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('27', 'PRC ID', 'Professional Regulation Commission ID accepted as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('28', 'Postal ID', 'Postal ID accepted as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('29', 'Alien Certificate of Registration (ACR I-Card)', 'Alien Certificate of Registration or ACR I-Card for foreign nationals', '0', '1', NULL, '2026-04-18 03:45:36'),
+('30', 'Seaman''s Book / SIRB', 'Seaman''s Book or Seafarer''s Identification and Record Book', '0', '1', NULL, '2026-04-18 03:45:36'),
+('31', 'Senior Citizen ID', 'Senior Citizen ID accepted by some institutions as a valid identity document', '0', '1', NULL, '2026-04-18 03:45:36'),
+('32', 'PWD ID', 'Person with Disability ID or NCDA-issued ID accepted by some institutions', '0', '1', NULL, '2026-04-18 03:45:36'),
+('33', 'Voter''s ID', 'Voter''s ID or similar voter registration ID accepted by some institutions', '0', '1', NULL, '2026-04-18 03:45:36'),
+('34', 'NBI Clearance', 'National Bureau of Investigation clearance accepted by some institutions as identity proof', '0', '1', NULL, '2026-04-18 03:45:36'),
+('35', 'Police Clearance', 'Police clearance with photo and signature accepted by some institutions', '0', '1', NULL, '2026-04-18 03:45:36'),
+('36', 'TIN ID', 'Tax Identification Number ID accepted by some institutions', '0', '1', NULL, '2026-04-18 03:45:36'),
+('37', 'Company ID', 'Company ID accepted by some institutions but may not be valid for all loan or housing transactions', '0', '1', NULL, '2026-04-18 03:45:36'),
+('38', 'Barangay ID', 'Barangay ID accepted by some institutions but may not be valid for all loan or housing transactions', '0', '1', NULL, '2026-04-18 03:45:36'),
+('39', 'OFW ID', 'Overseas Filipino Worker ID accepted in some contexts', '0', '1', NULL, '2026-04-18 03:45:36'),
+('40', 'OWWA ID', 'Overseas Workers Welfare Administration ID accepted in some contexts', '0', '1', NULL, '2026-04-18 03:45:36'),
+('41', 'IBP ID', 'Integrated Bar of the Philippines ID accepted by some institutions', '0', '1', NULL, '2026-04-18 03:45:36'),
+('42', 'Government Office / GOCC ID', 'Government office or GOCC-issued ID such as AFP or similar government entity ID', '0', '1', NULL, '2026-04-18 03:45:36');
 
 DROP TABLE IF EXISTS `email_delivery_logs`;
 CREATE TABLE `email_delivery_logs` (
