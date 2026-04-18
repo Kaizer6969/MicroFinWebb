@@ -67,19 +67,6 @@ CREATE TABLE `audit_logs` (
   CONSTRAINT `audit_logs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `audit_logs` (`log_id`, `user_id`, `tenant_id`, `action_type`, `entity_type`, `entity_id`, `description`, `ip_address`, `created_at`) VALUES
-('1', '1', NULL, 'SUPER_ADMIN_CREATED', 'user', NULL, 'Created new super admin account: gleo. Profile will be completed during onboarding.', NULL, '2026-04-08 03:46:36'),
-('2', '2', NULL, 'PASSWORD_CHANGED', 'user', NULL, 'Super admin completed forced password reset', NULL, '2026-04-08 03:47:56'),
-('3', '2', NULL, 'SUPER_ADMIN_ONBOARDING_COMPLETED', 'user', NULL, 'Super admin completed initial profile onboarding', NULL, '2026-04-08 03:48:09'),
-('4', '1', 'YRL5G6VV30', 'TENANT_PROVISIONED', 'tenant', NULL, 'rhob@microfin.com had provisioned Fundline (ID: YRL5G6VV30, Slug: fundline, Plan: Unlimited)', NULL, '2026-04-08 03:49:28'),
-('5', '3', 'YRL5G6VV30', 'STAFF_LOGIN', 'user', NULL, 'Staff logged into the system', NULL, '2026-04-08 03:49:52'),
-('6', NULL, 'YRL5G6VV30', 'PASSWORD_CHANGED', 'user', NULL, 'User completed forced password reset and profile setup', NULL, '2026-04-08 03:50:17'),
-('7', '3', 'YRL5G6VV30', 'BILLING_SETUP', 'tenant', NULL, 'Payment method added during onboarding', NULL, '2026-04-08 03:50:37'),
-('8', '3', 'YRL5G6VV30', 'BILLING_ACTIVATION', 'invoice', NULL, 'Generated initial activation billing records INV-20260408-7AF3E1 / SUB-7AF3E19124. Amount: 29999. Next billing date: 2026-05-08.', NULL, '2026-04-08 03:50:37'),
-('9', '3', 'YRL5G6VV30', 'STAFF_ADDED', 'user', NULL, 'New staff account created for  ', NULL, '2026-04-08 03:51:05'),
-('10', '4', 'YRL5G6VV30', 'STAFF_LOGIN', 'user', NULL, 'Staff logged into the system', NULL, '2026-04-08 03:52:11'),
-('11', '3', 'YRL5G6VV30', 'STAFF_ADDED', 'user', NULL, 'New staff account created for  ', NULL, '2026-04-08 03:52:36');
-
 DROP TABLE IF EXISTS `backup_logs`;
 CREATE TABLE `backup_logs` (
   `log_id` int NOT NULL AUTO_INCREMENT,
@@ -361,10 +348,6 @@ CREATE TABLE `employees` (
   CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `employees` (`employee_id`, `user_id`, `tenant_id`, `employee_code`, `first_name`, `middle_name`, `last_name`, `suffix`, `department`, `position`, `contact_number`, `alternate_contact`, `emergency_contact_name`, `emergency_contact_number`, `hire_date`, `employment_status`, `profile_picture`, `deleted_at`, `created_at`, `updated_at`) VALUES
-('1', '4', 'YRL5G6VV30', NULL, '', NULL, '', NULL, 'Admin', NULL, NULL, NULL, NULL, NULL, '2026-04-08', 'Active', NULL, NULL, '2026-04-08 03:51:05', '2026-04-08 03:51:05'),
-('2', '5', 'YRL5G6VV30', NULL, '', NULL, '', NULL, 'Admin', NULL, NULL, NULL, NULL, NULL, '2026-04-08', 'Active', NULL, NULL, '2026-04-08 03:52:36', '2026-04-08 03:52:36');
-
 DROP TABLE IF EXISTS `loan_applications`;
 CREATE TABLE `loan_applications` (
   `application_id` int NOT NULL AUTO_INCREMENT,
@@ -566,9 +549,6 @@ CREATE TABLE `otp_verifications` (
   KEY `idx_expires_at` (`expires_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `otp_verifications` (`otp_id`, `email`, `otp_code`, `status`, `expires_at`, `created_at`) VALUES
-('1', 'rhobrivera20@gmail.com', '511825', 'Verified', '2026-04-08 03:53:51', '2026-04-08 03:48:51');
-
 DROP TABLE IF EXISTS `payment_transactions`;
 CREATE TABLE `payment_transactions` (
   `transaction_id` int NOT NULL AUTO_INCREMENT,
@@ -675,19 +655,6 @@ CREATE TABLE `role_permissions` (
   CONSTRAINT `role_permissions_ibfk_2` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`permission_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `role_permissions` (`role_id`, `permission_id`, `assigned_at`) VALUES
-('3', '1', '2026-04-08 03:50:47'),
-('3', '2', '2026-04-08 03:50:47'),
-('3', '4', '2026-04-08 03:50:47'),
-('3', '5', '2026-04-08 03:50:47'),
-('3', '6', '2026-04-08 03:50:47'),
-('3', '7', '2026-04-08 03:50:47'),
-('3', '8', '2026-04-08 03:50:47'),
-('3', '9', '2026-04-08 03:50:47'),
-('3', '10', '2026-04-08 03:50:47'),
-('3', '11', '2026-04-08 03:50:47'),
-('3', '12', '2026-04-08 03:50:47'),
-('3', '13', '2026-04-08 03:50:47');
 
 DROP TABLE IF EXISTS `system_settings`;
 CREATE TABLE `system_settings` (
@@ -709,16 +676,6 @@ CREATE TABLE `system_settings` (
   CONSTRAINT `system_settings_ibfk_2` FOREIGN KEY (`updated_by`) REFERENCES `employees` (`employee_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `system_settings` (`setting_id`, `tenant_id`, `setting_key`, `setting_value`, `setting_category`, `description`, `data_type`, `is_editable`, `updated_by`, `updated_at`) VALUES
-('1', 'YRL5G6VV30', 'billing_access_user_3', '1', 'Billing', NULL, 'Boolean', '1', NULL, '2026-04-08 03:49:28'),
-('3', 'YRL5G6VV30', 'next_billing_date', '2026-05-08', 'Billing', NULL, 'String', '1', NULL, '2026-04-08 03:50:37'),
-('4', 'YRL5G6VV30', 'mobile_app_build_status', 'queued', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
-('5', 'YRL5G6VV30', 'mobile_app_build_message', 'The shared company mobile app is the only supported APK. Use the tenant QR or referral code to bind registration inside the app.', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
-('6', 'YRL5G6VV30', 'mobile_app_build_requested_at', '2026-04-08T03:51:44+00:00', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
-('7', 'YRL5G6VV30', 'mobile_app_build_slug', 'fundline', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
-('8', 'YRL5G6VV30', 'mobile_app_build_app_name', 'Fundline', 'Mobile App', NULL, 'String', '1', NULL, '2026-04-08 03:51:44'),
-('14', 'YRL5G6VV30', 'support_email', '', NULL, NULL, 'String', '1', NULL, '2026-04-08 03:51:55'),
-('15', 'YRL5G6VV30', 'support_phone', '', NULL, NULL, 'String', '1', NULL, '2026-04-08 03:51:55');
 
 DROP TABLE IF EXISTS `tenant_billing_invoices`;
 CREATE TABLE `tenant_billing_invoices` (
@@ -740,9 +697,6 @@ CREATE TABLE `tenant_billing_invoices` (
   CONSTRAINT `tenant_billing_invoices_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `tenant_billing_invoices` (`invoice_id`, `tenant_id`, `invoice_number`, `amount`, `billing_period_start`, `billing_period_end`, `due_date`, `status`, `stripe_invoice_id`, `pdf_url`, `created_at`, `paid_at`) VALUES
-('1', 'YRL5G6VV30', 'INV-20260408-7AF3E1', '29999.00', '2026-04-08', '2026-05-07', '2026-04-08', 'Paid', NULL, NULL, '2026-04-08 03:50:37', '2026-04-08 03:50:37');
-
 DROP TABLE IF EXISTS `tenant_billing_payment_methods`;
 CREATE TABLE `tenant_billing_payment_methods` (
   `method_id` int NOT NULL AUTO_INCREMENT,
@@ -759,9 +713,6 @@ CREATE TABLE `tenant_billing_payment_methods` (
   KEY `tenant_id` (`tenant_id`),
   CONSTRAINT `tenant_billing_payment_methods_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-INSERT INTO `tenant_billing_payment_methods` (`method_id`, `tenant_id`, `last_four_digits`, `card_brand`, `cardholder_name`, `exp_month`, `exp_year`, `card_number_encrypted`, `is_default`, `created_at`) VALUES
-('1', 'YRL5G6VV30', '1234', 'CARD', 'Bruce Wayne', '2', '2036', 'UzMNrvAUjfUpvdGcGLsrazo6Vh2p35/Vu2BDy/WhlIvsLiOiNA6mTFLnN0/mynw48Z8=', '1', '2026-04-08 03:50:37');
 
 DROP TABLE IF EXISTS `tenant_branding`;
 CREATE TABLE `tenant_branding` (
@@ -785,8 +736,6 @@ CREATE TABLE `tenant_branding` (
   CONSTRAINT `tenant_branding_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `tenant_branding` (`branding_id`, `tenant_id`, `logo_path`, `font_family`, `theme_primary_color`, `theme_secondary_color`, `theme_text_main`, `theme_text_muted`, `theme_bg_body`, `theme_bg_card`, `theme_border_color`, `card_border_width`, `card_shadow`, `created_at`, `updated_at`) VALUES
-('1', 'YRL5G6VV30', '/microfin_platform/uploads/tenant_logos/YRL5G6VV30_20260408035155_1944dcea.jpg', 'Inter', '#ff0202', '#991b1b', '#0f172a', '#64748b', '#ffebeb', '#ffffff', '#fa4444', '0', 'sm', '2026-04-08 03:51:39', '2026-04-08 03:51:55');
 
 DROP TABLE IF EXISTS `tenant_feature_toggles`;
 CREATE TABLE `tenant_feature_toggles` (
@@ -800,12 +749,6 @@ CREATE TABLE `tenant_feature_toggles` (
   CONSTRAINT `tenant_feature_toggles_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `tenant_feature_toggles` (`toggle_id`, `tenant_id`, `toggle_key`, `is_enabled`, `updated_at`) VALUES
-('1', 'YRL5G6VV30', 'public_website_enabled', '1', '2026-04-08 03:51:39'),
-('3', 'YRL5G6VV30', 'booking_system', '0', '2026-04-08 03:51:55'),
-('4', 'YRL5G6VV30', 'user_registration', '0', '2026-04-08 03:51:55'),
-('5', 'YRL5G6VV30', 'maintenance_mode', '0', '2026-04-08 03:51:55'),
-('6', 'YRL5G6VV30', 'email_notifications', '0', '2026-04-08 03:51:55');
 
 DROP TABLE IF EXISTS `tenant_legitimacy_documents`;
 CREATE TABLE `tenant_legitimacy_documents` (
@@ -819,8 +762,6 @@ CREATE TABLE `tenant_legitimacy_documents` (
   CONSTRAINT `tenant_legitimacy_documents_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `tenant_legitimacy_documents` (`document_id`, `tenant_id`, `original_file_name`, `file_path`, `uploaded_at`) VALUES
-('1', 'YRL5G6VV30', 'Reports_Analytics.pdf', '../uploads/business_permits/YRL5G6VV30_doc_1_1775620155_1830.pdf', '2026-04-08 03:49:15');
 
 DROP TABLE IF EXISTS `tenant_website_content`;
 CREATE TABLE `tenant_website_content` (
@@ -832,9 +773,6 @@ CREATE TABLE `tenant_website_content` (
   PRIMARY KEY (`tenant_id`),
   CONSTRAINT `fk_tenant_website_content_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-INSERT INTO `tenant_website_content` (`tenant_id`, `layout_template`, `website_data`, `created_at`, `updated_at`) VALUES
-('YRL5G6VV30', 'template1.php', '{\"company_name\":\"Fundline\",\"short_name\":\"\",\"hero_image\":\"https://images.unsplash.com/photo-1556742044-3c52d6e88c62?auto=format&fit=crop&w=600&h=800&q=80\",\"text_heading_color\":\"#0f172a\",\"text_body_color\":\"#64748b\",\"btn_bg_color\":\"#2563eb\",\"btn_text_color\":\"#ffffff\",\"border_radius\":\"16\",\"shadow_intensity\":\"0.1\",\"show_services\":true,\"show_calculator\":true,\"show_stats\":true,\"show_about\":true,\"show_download\":true,\"section_styles\":{\"sec_stats\":{\"bg\":\"#ff0202\",\"gradient\":false}},\"services\":[{\"icon\":\"person\",\"title\":\"Personal Loan\",\"description\":\"Fast approval for your personal needs.\"}],\"hero_badge_text\":\"VERIFIED PARTNER\",\"hero_title\":\"Empowering Your Financial Future\",\"hero_subtitle\":\"Get flexible loans with fast approval and transparent terms.\",\"about_body\":\"We believe in empowering our community through accessible financial tools.\",\"download_description\":\"Track your loans, submit applications, receive notifications...\",\"footer_desc\":\"Your trusted microfinance partner.\",\"contact_address\":\"123 Finance Ave, Business District\",\"contact_phone\":\"0900-123-4567\",\"contact_email\":\"hello@microfin.os\",\"contact_hours\":\"Mon-Fri: 8AM - 5PM\"}', '2026-04-08 03:51:39', '2026-04-08 03:51:55');
 
 DROP TABLE IF EXISTS `tenants`;
 CREATE TABLE `tenants` (
@@ -874,9 +812,6 @@ CREATE TABLE `tenants` (
   KEY `idx_assigned_expert_user` (`assigned_expert_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `tenants` (`tenant_id`, `tenant_name`, `tenant_slug`, `estimated_loans`, `onboarding_deadline`, `company_address`, `plan_tier`, `scheduled_plan_tier`, `scheduled_plan_effective_date`, `max_clients`, `max_users`, `storage_limit_gb`, `modules_enabled`, `mrr`, `billing_cycle`, `next_billing_date`, `setup_completed`, `setup_current_step`, `status`, `request_type`, `concern_category`, `assigned_expert_user_id`, `deleted_at`, `deleted_by`, `deletion_reason`, `created_at`, `updated_at`) VALUES
-('YRL5G6VV30', 'Fundline', 'fundline', NULL, '2026-05-08 03:49:28', 'Manila, Capital District, Metro Manila, Philippines', 'Unlimited', NULL, NULL, '-1', '-1', '5.00', NULL, '29999.00', 'Monthly', '2026-05-08', '1', '6', 'Active', 'tenant_application', NULL, NULL, NULL, NULL, NULL, '2026-04-08 03:49:15', '2026-04-08 03:50:37');
-
 DROP TABLE IF EXISTS `user_roles`;
 CREATE TABLE `user_roles` (
   `role_id` int NOT NULL AUTO_INCREMENT,
@@ -894,9 +829,7 @@ CREATE TABLE `user_roles` (
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `user_roles` (`role_id`, `tenant_id`, `role_name`, `role_description`, `is_system_role`, `deleted_at`, `deleted_by`, `created_at`, `updated_at`) VALUES
-('1', NULL, 'Super Admin', 'Master Platform Administrator', '1', NULL, NULL, '2026-04-08 03:45:21', '2026-04-08 03:45:21'),
-('2', 'YRL5G6VV30', 'Admin', 'Default system administrator', '1', NULL, NULL, '2026-04-08 03:49:15', '2026-04-08 03:49:15'),
-('3', 'YRL5G6VV30', 'Manager', 'Custom role', '0', NULL, NULL, '2026-04-08 03:50:47', '2026-04-08 03:50:47');
+('1', NULL, 'Super Admin', 'Master Platform Administrator', '1', NULL, NULL, '2026-04-08 03:45:21', '2026-04-08 03:45:21')
 
 DROP TABLE IF EXISTS `user_sessions`;
 CREATE TABLE `user_sessions` (
@@ -917,16 +850,6 @@ CREATE TABLE `user_sessions` (
   CONSTRAINT `user_sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE,
   CONSTRAINT `user_sessions_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-INSERT INTO `user_sessions` (`session_id`, `user_id`, `tenant_id`, `session_token`, `ip_address`, `user_agent`, `created_at`, `last_activity_at`, `expires_at`) VALUES
-('1', '1', NULL, '0b1df48273a5a8195edb30e9926c7b0dc997b8abe47a58e9327bcadb4cb773a8', NULL, NULL, '2026-04-08 03:45:58', '2026-04-08 03:48:26', '2026-04-08 03:48:26'),
-('2', '2', NULL, '7273dafbc32f309534c655ea3448af26b57862d4b44c7c92b8a39b27a4ece267', NULL, NULL, '2026-04-08 03:47:52', '2026-04-08 03:48:20', '2026-04-08 04:18:20'),
-('3', '1', NULL, 'f5a142b9ecfe01cf1273da80e03e4fba28d392d2b9ae50253d8ced6438dd6d5f', NULL, NULL, '2026-04-08 03:49:25', '2026-04-08 03:49:34', '2026-04-08 03:49:34'),
-('4', '3', 'YRL5G6VV30', '1ae3663aafb2019673aae02d71c20841f0bd73f9cae6604dbd27b44d8a43f7ca', NULL, NULL, '2026-04-08 03:49:52', '2026-04-08 03:52:36', '2026-04-08 04:22:36'),
-('5', '4', 'YRL5G6VV30', '86f8d0b4c597d3f295744a75f16a5365091f5f4f0eb8f9ab3701f8246d756779', NULL, NULL, '2026-04-08 03:52:11', '2026-04-08 03:52:25', '2026-04-08 04:22:25'),
-('6', '1', NULL, '5030aec0214e2a22c7dc590a6a06e3eafe775945d311fd72c8be772ffe325662', NULL, NULL, '2026-04-08 04:45:19', '2026-04-08 04:45:39', '2026-04-08 04:45:39'),
-('7', '1', NULL, '9c2eed59a856d902d850dec6bdc14e17dbb0fa593349547159200fa497f0712c', NULL, NULL, '2026-04-08 05:50:40', '2026-04-08 05:55:24', '2026-04-08 05:55:24'),
-('8', '1', NULL, 'f6f14a18d29e1d4a7f71c5cf1c90204d0602e2720ab46b46dcf21d9f3e15914e', NULL, NULL, '2026-04-08 06:08:34', '2026-04-08 06:08:46', '2026-04-08 06:38:46');
 
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
@@ -971,10 +894,6 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `users` (`user_id`, `tenant_id`, `username`, `email`, `phone_number`, `password_hash`, `email_verified`, `first_name`, `last_name`, `middle_name`, `suffix`, `date_of_birth`, `force_password_change`, `role_id`, `user_type`, `status`, `can_manage_billing`, `verification_token`, `reset_token`, `reset_token_expiry`, `last_login`, `failed_login_attempts`, `two_fa_enabled`, `two_fa_secret`, `two_fa_recovery_codes`, `ui_theme`, `deleted_at`, `created_at`, `updated_at`) VALUES
-('1', NULL, 'rhob@microfin.com', 'gleomir28@gmail.com', NULL, '$2y$10$WAX5NHe0AGODm6k2skpJT.DrLQHrvwsmEofIb8LBN93x/gtuVYv5a', '0', NULL, NULL, NULL, NULL, NULL, '0', '1', 'Super Admin', 'Active', '0', NULL, NULL, NULL, '2026-04-08 06:08:34', '0', '0', NULL, NULL, 'light', NULL, '2026-04-08 03:45:26', '2026-04-08 06:08:42'),
-('2', NULL, 'gleo', 'gleomir2005@gmail.com', '0987654321', '$2y$10$Dl3dzoXijugy69BsrZH9n.LEhfsYPXD7tsoZeFWWB0FX0iD1Q88Fi', '0', 'Rhob', 'Gleo', NULL, NULL, '2026-04-08', '0', '1', 'Super Admin', 'Active', '0', NULL, NULL, NULL, '2026-04-08 03:47:52', '0', '0', NULL, NULL, 'light', NULL, '2026-04-08 03:46:35', '2026-04-08 03:48:09'),
-('3', 'YRL5G6VV30', 'batman', 'rhobrivera20@gmail.com', '0987654321', '$2y$10$iOF/B2WQxfPFSOn7QCzFDeVeZW9oz8vgOWdwv6qWhxQz1w0URGoWW', '0', 'Bruce', 'Wayne', NULL, NULL, '2026-04-08', '0', '2', 'Admin', 'Active', '1', NULL, NULL, NULL, '2026-04-08 03:49:52', '0', '0', NULL, NULL, 'light', NULL, '2026-04-08 03:49:15', '2026-04-08 03:50:17'),
-('4', 'YRL5G6VV30', 'orekihoutarou123456789', 'orekihoutarou123456789@gmail.com', NULL, '$2y$10$/BFaNcRmBH6stGrH3ipTg.H5cY54lDoF5YzXW54g/FZIPD8IDmCxu', '0', NULL, NULL, NULL, NULL, NULL, '0', '3', 'Employee', 'Active', '0', NULL, NULL, NULL, '2026-04-08 03:52:11', '0', '0', NULL, NULL, 'light', NULL, '2026-04-08 03:51:05', '2026-04-08 03:52:16'),
-('5', 'YRL5G6VV30', 'lolololol2991882', 'lolololol2991882@gmail.com', NULL, '$2y$10$TRVTFAy1YqC2ehzINQ.Qxe3Bzg925ZIjOj9WsqL6C9DnFo6NYZFGG', '0', NULL, NULL, NULL, NULL, NULL, '1', '3', 'Employee', 'Active', '0', NULL, NULL, NULL, NULL, '0', '0', NULL, NULL, 'light', NULL, '2026-04-08 03:52:36', '2026-04-08 03:52:36');
+('1', NULL, 'rhob@microfin.com', 'gleomir28@gmail.com', NULL, '$2y$10$WAX5NHe0AGODm6k2skpJT.DrLQHrvwsmEofIb8LBN93x/gtuVYv5a', '0', NULL, NULL, NULL, NULL, NULL, '0', '1', 'Super Admin', 'Active', '0', NULL, NULL, NULL, '2026-04-08 06:08:34', '0', '0', NULL, NULL, 'light', NULL, '2026-04-08 03:45:26', '2026-04-08 06:08:42')
 
 SET FOREIGN_KEY_CHECKS = 1;

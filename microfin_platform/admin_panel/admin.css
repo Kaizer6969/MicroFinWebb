@@ -5882,6 +5882,467 @@ body.loan-products-modal-open .top-header {
     color: #ef4444;
 }
 
+/* Policy Console UI migration */
+.policy-console-shell,
+.policy-console-stage,
+.policy-console-workspace,
+.policy-console-content-grid,
+.policy-console-subpanels {
+    display: grid;
+    gap: 24px;
+}
+
+.policy-console-intro {
+    padding: 28px 32px;
+    border-radius: 22px;
+    border: 1px solid rgba(var(--primary-rgb), 0.14);
+    background:
+        radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.14), transparent 36%),
+        linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(var(--primary-rgb), 0.015)),
+        var(--bg-card);
+    box-shadow: var(--shadow-md);
+}
+
+.policy-console-intro .text-muted {
+    max-width: 760px;
+}
+
+.policy-console-intro-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.policy-console-tab-panel[hidden],
+.policy-console-subpanel[hidden] {
+    display: none !important;
+}
+
+.policy-console-story-card,
+.policy-console-card,
+.policy-console-module-card,
+.policy-console-formula-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    box-shadow: var(--shadow-sm);
+}
+
+.policy-console-story-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 24px 26px;
+}
+
+.policy-console-story-card-hero {
+    padding: 28px 30px;
+    border-color: rgba(var(--primary-rgb), 0.14);
+    background:
+        radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.12), transparent 34%),
+        linear-gradient(135deg, rgba(var(--primary-rgb), 0.04), rgba(var(--primary-rgb), 0.01)),
+        var(--bg-card);
+}
+
+.policy-console-story-copy h3,
+.policy-console-story-copy h4 {
+    margin: 6px 0 10px;
+    font-size: 1.3rem;
+    line-height: 1.2;
+}
+
+.policy-console-story-copy .text-muted,
+.policy-console-card .text-muted,
+.policy-console-module-card .text-muted,
+.policy-console-formula-card small,
+.policy-console-kpi-card small {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.policy-console-story-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 180px;
+}
+
+.policy-console-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(var(--primary-rgb), 0.12);
+    color: var(--primary-color);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.policy-console-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--primary-rgb), 0.16);
+    background: rgba(var(--primary-rgb), 0.08);
+    color: var(--primary-color);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.policy-console-kpi-grid,
+.policy-console-module-grid,
+.policy-console-band-grid {
+    display: grid;
+    gap: 16px;
+}
+
+.policy-console-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.policy-console-module-grid,
+.policy-console-band-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.policy-console-kpi-card,
+.policy-console-module-card,
+.policy-console-band-card {
+    padding: 20px;
+    border-radius: 18px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+}
+
+.policy-console-kpi-card span,
+.policy-console-band-card span,
+.policy-console-formula-card span {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.policy-console-kpi-card strong,
+.policy-console-band-card strong,
+.policy-console-formula-card strong {
+    display: block;
+    font-size: 1.12rem;
+    line-height: 1.3;
+    margin-bottom: 8px;
+    color: var(--text-main);
+}
+
+.policy-console-formula-card,
+.policy-console-card,
+.policy-console-module-card {
+    padding: 22px 24px;
+}
+
+.policy-console-split-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.policy-console-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.policy-console-card-head strong {
+    font-size: 1rem;
+}
+
+.policy-console-list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-muted);
+}
+
+.policy-console-list li + li {
+    margin-top: 8px;
+}
+
+.policy-console-stat-list {
+    display: grid;
+    gap: 12px;
+}
+
+.policy-console-stat-list div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(var(--primary-rgb), 0.08);
+}
+
+.policy-console-stat-list div:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.policy-console-stat-list span {
+    color: var(--text-muted);
+}
+
+.policy-console-stat-list strong {
+    font-weight: 800;
+}
+
+.policy-console-subtab-shell {
+    display: grid;
+    gap: 18px;
+}
+
+.policy-console-subtabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 18px;
+    border: 1px solid var(--border-color);
+    background: rgba(var(--primary-rgb), 0.03);
+}
+
+.policy-console-subtab {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-weight: 700;
+    padding: 12px 16px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.policy-console-subtab:hover {
+    color: var(--text-main);
+    background: rgba(var(--primary-rgb), 0.06);
+}
+
+.policy-console-subtab.is-active {
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary-color), rgba(var(--primary-rgb), 0.78));
+    border-color: transparent;
+    box-shadow: 0 8px 18px rgba(var(--primary-rgb), 0.24);
+}
+
+.policy-console-module-card .btn {
+    margin-top: 18px;
+}
+
+.policy-console-section-stack {
+    display: grid;
+    gap: 20px;
+}
+
+.policy-console-section-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.policy-console-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 24px 26px 20px;
+    border-bottom: 1px solid rgba(var(--primary-rgb), 0.08);
+    background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04), rgba(var(--primary-rgb), 0.01));
+}
+
+.policy-console-section-header h4 {
+    margin: 8px 0 8px;
+    font-size: 1.18rem;
+    line-height: 1.2;
+}
+
+.policy-console-section-body {
+    padding: 24px 26px 26px;
+    display: grid;
+    gap: 18px;
+}
+
+.policy-console-field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.policy-console-field {
+    display: grid;
+    gap: 8px;
+}
+
+.policy-console-field > span {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.policy-console-field > small {
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.policy-console-field input,
+.policy-console-field select,
+.policy-console-field textarea {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-body);
+    color: var(--text-main);
+    padding: 12px 14px;
+    font: inherit;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.policy-console-field input:focus,
+.policy-console-field select:focus,
+.policy-console-field textarea:focus {
+    outline: none;
+    border-color: rgba(var(--primary-rgb), 0.48);
+    box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.12);
+}
+
+.policy-console-field input:invalid,
+.policy-console-field select:invalid,
+.policy-console-field textarea:invalid {
+    border-color: rgba(239, 68, 68, 0.8);
+}
+
+.policy-console-detail {
+    border: 1px solid rgba(var(--primary-rgb), 0.12);
+    border-radius: 16px;
+    background: rgba(var(--primary-rgb), 0.03);
+    overflow: hidden;
+}
+
+.policy-console-detail summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 16px 18px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.policy-console-detail summary::-webkit-details-marker {
+    display: none;
+}
+
+.policy-console-detail-body {
+    padding: 0 18px 18px;
+    display: grid;
+    gap: 16px;
+}
+
+.policy-console-banner {
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(var(--primary-rgb), 0.12);
+    background: var(--bg-card);
+}
+
+.policy-console-banner strong {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.policy-console-table-wrap {
+    overflow-x: auto;
+}
+
+.policy-console-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+}
+
+.policy-console-table th,
+.policy-console-table td {
+    text-align: left;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(var(--primary-rgb), 0.08);
+    vertical-align: top;
+}
+
+.policy-console-table th {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: rgba(var(--primary-rgb), 0.04);
+}
+
+.policy-console-table td {
+    color: var(--text-main);
+}
+
+@media (max-width: 900px) {
+    .policy-console-intro,
+    .policy-console-story-card,
+    .policy-console-story-card-hero,
+    .policy-console-card,
+    .policy-console-module-card,
+    .policy-console-formula-card {
+        padding: 20px;
+    }
+
+    .policy-console-story-card,
+    .policy-console-card-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .policy-console-story-meta {
+        justify-content: flex-start;
+        min-width: 0;
+    }
+
+    .policy-console-subtabs {
+        padding: 6px;
+    }
+
+    .policy-console-subtab {
+        width: 100%;
+        text-align: left;
+    }
+
+    .policy-console-section-header,
+    .policy-console-section-body {
+        padding: 20px;
+    }
+
+    .policy-console-section-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
 /* Eligibility */
 #credit-policy-eligibility {
     padding: 0;

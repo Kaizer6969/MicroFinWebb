@@ -346,6 +346,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    document.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-credit-policy-nav-action]');
+        if (!trigger) {
+            return;
+        }
+
+        const targetTab = normalizeCreditPolicySubtab(trigger.getAttribute('data-credit-policy-nav-action') || '');
+        if (!targetTab) {
+            return;
+        }
+
+        event.preventDefault();
+
+        try {
+            const targetUrl = new URL(window.location.href);
+            targetUrl.searchParams.set('tab', 'credit_control_policy');
+            targetUrl.searchParams.set('credit_policy_tab', targetTab);
+            targetUrl.hash = 'credit_settings';
+            window.location.href = targetUrl.toString();
+        } catch (error) {
+            window.location.href = `admin.php?tab=credit_control_policy&credit_policy_tab=${encodeURIComponent(targetTab)}#credit_settings`;
+        }
+    });
+
     function findPreferredNavItem(targetId, subTabId = '') {
         subTabId = normalizeCreditPolicySubtab(subTabId);
         if (targetId === 'credit_settings' && subTabId !== '') {
@@ -855,6 +879,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const creditPolicySubtab = targetId === 'credit_settings' ? getCreditPolicySubtabFromItem(item, href) : '';
 
             if (!isSameAdminPageLink(href)) {
+                return;
+            }
+
+            if (targetId === 'credit_settings' && creditPolicySubtab) {
                 return;
             }
             
