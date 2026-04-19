@@ -1999,13 +1999,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     if ($form['product_name'] === '') {
 
         $_SESSION['admin_error'] = 'Product name is required.';
-    } elseif (!in_array($form['product_type'], array_merge($reference_loan_product_type_options, ['Others']), true)) {
+    } elseif (!in_array($form['product_type'], array_merge($loan_product_type_options, ['Others']), true)) {
 
         $_SESSION['admin_error'] = 'Invalid product type.';
     } elseif ($form['product_type'] === 'Others' && $form['custom_product_type'] === '') {
 
         $_SESSION['admin_error'] = 'Please provide a custom product type name.';
-    } elseif ($form['product_type'] === 'Others' && in_array(strtolower($form['custom_product_type']), array_map('strtolower', $reference_loan_product_type_options), true)) {
+    } elseif ($form['product_type'] === 'Others' && in_array(strtolower($form['custom_product_type']), array_map('strtolower', $loan_product_type_options), true)) {
     
         $_SESSION['admin_error'] = 'Custom product type cannot be one of the predefined types (Personal, Business, Emergency).';
     } elseif (!in_array($form['interest_type'], ['Flat', 'Declining Balance'], true)) {

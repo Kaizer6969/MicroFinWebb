@@ -269,6 +269,7 @@ try {
     }
     
     $policyMetadataArr = ['identity' => $id_metadata];
+    $potentialLimit = 0.0;
     $assignedCreditScore = 0;
     $assignedCreditRating = null;
     $scoringMetadata = null;
@@ -321,8 +322,8 @@ try {
             'timestamp' => date('Y-m-d H:i:s'),
         ]);
     }
-
     $initial_policy_metadata = json_encode($policyMetadataArr);
+    $client_has_policy_metadata = walk_in_client_table_has_column($pdo, 'policy_metadata');
 
     $client_insert_sql = '
         INSERT INTO clients (
@@ -331,8 +332,14 @@ try {
             present_house_no, present_street, present_barangay, present_city, present_province, present_postal_code,
             permanent_house_no, permanent_street, permanent_barangay, permanent_city, permanent_province, permanent_postal_code,
             same_as_present, employment_status, occupation, employer_name, employer_contact, monthly_income, id_type,
-            registration_date, registered_by, client_status, document_verification_status, policy_metadata, credit_limit, last_seen_credit_limit
+            registration_date, registered_by, client_status, document_verification_status
     ';
+
+    if ($client_has_policy_metadata) {
+        $client_insert_sql .= ', policy_metadata';
+    }
+
+    $client_insert_sql .= ', credit_limit, last_seen_credit_limit';
 
     if ($client_has_verification_status) {
         $client_insert_sql .= ', verification_status';
@@ -345,8 +352,14 @@ try {
             ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
-            CURDATE(), ?, ?, ?, ?, ?, ?
+            CURDATE(), ?, ?, ?
     ';
+
+    if ($client_has_policy_metadata) {
+        $client_insert_sql .= ', ?';
+    }
+
+    $client_insert_sql .= ', ?, ?';
 
     if ($client_has_verification_status) {
         $client_insert_sql .= ', ?';
@@ -389,10 +402,13 @@ try {
         $registered_by,
         'Active',
         'Approved',
-        $initial_policy_metadata,
         $potentialLimit,
         $potentialLimit
     ];
+
+    if ($client_has_policy_metadata) {
+        array_splice($client_params, 31, 0, [$initial_policy_metadata]);
+    }
 
     if ($client_has_verification_status) {
         $client_params[] = 'Approved';

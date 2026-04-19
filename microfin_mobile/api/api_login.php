@@ -20,6 +20,36 @@ function microfin_login_normalize_status(?string $status, ?string $documentStatu
     };
 }
 
+function microfin_login_has_client_column(mysqli $conn, string $column): bool
+{
+    static $cache = [];
+
+    if (array_key_exists($column, $cache)) {
+        return $cache[$column];
+    }
+
+    $stmt = $conn->prepare("
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+          AND COLUMN_NAME = ?
+        LIMIT 1
+    ");
+
+    if (!$stmt) {
+        $cache[$column] = false;
+        return false;
+    }
+
+    $stmt->bind_param('s', $column);
+    $stmt->execute();
+    $cache[$column] = $stmt->get_result()->num_rows === 1;
+    $stmt->close();
+
+    return $cache[$column];
+}
+
 $data = microfin_read_json_input();
 $password = (string) ($data['password'] ?? $data['pin'] ?? '');
 
@@ -39,21 +69,11 @@ $baseUsername = trim((string) ($context['base_username'] ?? ''));
 $canonicalLoginUsername = mf_mobile_identity_build_login_username($baseUsername, $tenantSlug);
 $isLegacyRequest = trim((string) ($data['login_username'] ?? '')) === '';
 
-$verificationColumnExists = false;
-if ($columnStmt = $conn->prepare("
-    SELECT 1
-    FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'clients'
-      AND COLUMN_NAME = 'verification_status'
-    LIMIT 1
-")) {
-    $columnStmt->execute();
-    $verificationColumnExists = $columnStmt->get_result()->num_rows === 1;
-    $columnStmt->close();
-}
+$verificationColumnExists = microfin_login_has_client_column($conn, 'verification_status');
+$policyMetadataColumnExists = microfin_login_has_client_column($conn, 'policy_metadata');
 
 $selectColumns = [
+    'c.client_id',
     'u.user_id',
     'u.username',
     'u.password_hash',
@@ -67,10 +87,12 @@ $selectColumns = [
     'c.last_name AS client_last_name',
     'c.document_verification_status',
     'c.credit_limit',
-    'c.policy_metadata'
 ];
 if ($verificationColumnExists) {
     $selectColumns[] = 'c.verification_status';
+}
+if ($policyMetadataColumnExists) {
+    $selectColumns[] = 'c.policy_metadata';
 }
 
 if ($isLegacyRequest) {

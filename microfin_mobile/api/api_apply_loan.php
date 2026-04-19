@@ -209,7 +209,8 @@ try {
         trim((string) ($client['comaker_city'] ?? ''))
     );
 
-    $policy_metadata = json_encode([
+    $app_data_decoded = json_decode($app_data, true) ?: [];
+    $app_data_decoded['product_snapshot'] = [
         'processing_fee_percentage' => (float) ($pRow['processing_fee_percentage'] ?? 0),
         'service_charge' => (float) ($pRow['service_charge'] ?? 0),
         'documentary_stamp' => (float) ($pRow['documentary_stamp'] ?? 0),
@@ -220,7 +221,8 @@ try {
         'grace_period_days' => (int) ($pRow['grace_period_days'] ?? 0),
         'interest_type' => trim((string) ($pRow['interest_type'] ?? 'Fixed')),
         'product_type' => trim((string) ($pRow['product_type'] ?? 'Loan Product')),
-    ]);
+    ];
+    $final_application_data = json_encode($app_data_decoded, JSON_UNESCAPED_UNICODE);
 
     $iaStmt = $conn->prepare("
         INSERT INTO loan_applications (
@@ -234,7 +236,6 @@ try {
             purpose_category,
             loan_purpose,
             application_data,
-            policy_metadata,
             application_status,
             submitted_date,
             has_comaker,
@@ -244,11 +245,11 @@ try {
             comaker_address,
             comaker_income
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', NOW(), ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', NOW(), ?, ?, ?, ?, ?, ?
         )
     ");
     $iaStmt->bind_param(
-        'sisidisssssissssd',
+        'sisidisssssisssd',
         $app_number,
         $client_id,
         $tenant_id,
@@ -258,8 +259,7 @@ try {
         $interest_rate,
         $category,
         $purpose,
-        $app_data,
-        $policy_metadata,
+        $final_application_data,
         $has_co,
         $co_name,
         $client['comaker_relationship'],

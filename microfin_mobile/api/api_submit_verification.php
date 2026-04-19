@@ -87,6 +87,16 @@ function microfin_has_client_column(mysqli $conn, string $column): bool
     return $exists;
 }
 
+function microfin_bind_stmt_params(mysqli_stmt $stmt, string $types, array $params): void
+{
+    $bindValues = [$types];
+    foreach ($params as $index => $value) {
+        $bindValues[] = &$params[$index];
+    }
+
+    call_user_func_array([$stmt, 'bind_param'], $bindValues);
+}
+
 function microfin_split_full_name(string $fullName): array
 {
     $parts = preg_split('/\s+/', trim($fullName)) ?: [];
@@ -481,6 +491,7 @@ try {
     $userStmt->execute();
     $userStmt->close();
 
+    $hasPolicyMetadataColumn = microfin_has_client_column($conn, 'policy_metadata');
     $clientUpdateSql = "
         UPDATE clients
         SET first_name = ?,
@@ -516,8 +527,16 @@ try {
             comaker_street = ?,
             id_type = ?,
             verification_rejection_reason = ?,
-            document_verification_status = '$finalVerificationStatus',
-            policy_metadata = ?,
+            document_verification_status = '$finalVerificationStatus'
+    ";
+
+    if ($hasPolicyMetadataColumn) {
+        $clientUpdateSql .= ",
+            policy_metadata = ?
+        ";
+    }
+
+    $clientUpdateSql .= ",
             credit_limit = ?,
             updated_at = NOW()
     ";
@@ -539,8 +558,7 @@ try {
         throw new RuntimeException('Failed to prepare client update.');
     }
 
-    $clientUpdateStmt->bind_param(
-        'ssssssssssssssssssssissssdsssdssssdis',
+    $clientUpdateParams = [
         $firstName,
         $middleName,
         $lastName,
@@ -574,11 +592,22 @@ try {
         $comakerAddress,
         $idType,
         $rejectionReason,
-        $policyMetadataStr,
+    ];
+    $clientUpdateTypes = 'ssssssssssssssssssssissssdsssdsss';
+
+    if ($hasPolicyMetadataColumn) {
+        $clientUpdateParams[] = $policyMetadataStr;
+        $clientUpdateTypes .= 's';
+    }
+
+    $clientUpdateParams = array_merge($clientUpdateParams, [
         $assignedCreditLimit,
         $client['client_id'],
         $tenantId
-    );
+    ]);
+    $clientUpdateTypes .= 'dis';
+
+    microfin_bind_stmt_params($clientUpdateStmt, $clientUpdateTypes, $clientUpdateParams);
 
     $clientUpdateStmt->execute();
     $clientUpdateStmt->close();

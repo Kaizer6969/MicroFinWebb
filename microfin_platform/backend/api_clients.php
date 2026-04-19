@@ -742,18 +742,27 @@ if ($method === 'POST' && $action === 'approve_client') {
         $pdo->prepare($client_approve_sql)->execute([$client_id, $tenant_id]);
         mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
 
-        // Read the client's policy_metadata to check for a pre-calculated limit
-        $meta_stmt = $pdo->prepare("SELECT policy_metadata, monthly_income, credit_limit FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
+        $hasPolicyMetadataColumn = client_table_has_column($pdo, 'policy_metadata');
+        $clientMetaFields = $hasPolicyMetadataColumn
+            ? 'policy_metadata, monthly_income, credit_limit'
+            : 'monthly_income, credit_limit';
+
+        // Read the client's approval inputs. policy_metadata is optional in older schemas.
+        $meta_stmt = $pdo->prepare("SELECT {$clientMetaFields} FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
         $meta_stmt->execute([$client_id, $tenant_id]);
         $client_row = $meta_stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($client_row) {
-            $policyMeta    = json_decode((string) ($client_row['policy_metadata'] ?? ''), true) ?: [];
+            $policyMeta    = $hasPolicyMetadataColumn
+                ? (json_decode((string) ($client_row['policy_metadata'] ?? ''), true) ?: [])
+                : [];
             $currentLimit  = (float) ($client_row['credit_limit'] ?? 0);
             $monthlyIncome = (float) ($client_row['monthly_income'] ?? 0);
 
-            // Use the pre-calculated potential_limit from verification submission
-            $promotedLimit = (float) ($policyMeta['potential_limit'] ?? 0);
+            // Use the pre-calculated potential_limit when the metadata snapshot exists.
+            $promotedLimit = $hasPolicyMetadataColumn
+                ? (float) ($policyMeta['potential_limit'] ?? 0)
+                : 0.0;
 
             // If no potential_limit exists (legacy client), calculate it now using the engine
             if ($promotedLimit <= 0 && $monthlyIncome > 0) {
@@ -773,12 +782,17 @@ if ($method === 'POST' && $action === 'approve_client') {
 
             // Promote the limit if we have one and it's greater than what's already there
             if ($promotedLimit > 0 && $promotedLimit > $currentLimit) {
-                $policyMeta['approved_by_user_id'] = $session_user_id;
-                $policyMeta['approved_at'] = date('Y-m-d H:i:s');
-                $metaJson = json_encode($policyMeta);
+                if ($hasPolicyMetadataColumn) {
+                    $policyMeta['approved_by_user_id'] = $session_user_id;
+                    $policyMeta['approved_at'] = date('Y-m-d H:i:s');
+                    $metaJson = json_encode($policyMeta);
 
-                $pdo->prepare("UPDATE clients SET credit_limit = ?, policy_metadata = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
-                    ->execute([$promotedLimit, $metaJson, $client_id, $tenant_id]);
+                    $pdo->prepare("UPDATE clients SET credit_limit = ?, policy_metadata = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                        ->execute([$promotedLimit, $metaJson, $client_id, $tenant_id]);
+                } else {
+                    $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                        ->execute([$promotedLimit, $client_id, $tenant_id]);
+                }
             }
         }
 
@@ -842,6 +856,13 @@ if ($method === 'POST' && $action === 'process_credit_action') {
         $scoreLog = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
         $effectiveScore = $scoreLog ? (float) ($scoreLog['total_score'] ?? 0) : (float) $scoreEngine->getStartingScore();
 
+        // Fetch borrower behaviour metrics needed by calculateNetScoreChange()
+        $upgrade_metrics   = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
+        $completedLoans    = (int) ($upgrade_metrics['completed_loans']  ?? 0);
+        $latePayments      = (int) ($upgrade_metrics['late_payments']    ?? 0);
+        $hasActiveOverdue  = ($upgrade_metrics['has_active_overdue']     ?? false) === true;
+        $maxOverdueDays    = (int) ($upgrade_metrics['max_overdue_days'] ?? 0);
+
         if ($type === 'upgrade') {
             $potentialLimitInfo = $limitEngine->calculateProgressiveGrowth($currentLimit, $effectiveScore);
             $new_limit = round(max($currentLimit, $potentialLimitInfo['new_limit'] ?? 0), 2);
@@ -856,7 +877,7 @@ if ($method === 'POST' && $action === 'process_credit_action') {
             $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_UPGRADED', 'client', ?, ?)")
                 ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit upgraded to {$new_limit} from {$currentLimit}"]);
                 
-            $scoreEngine->calculateNetScoreChange($client_id);
+            $scoreEngine->calculateNetScoreChange($completedLoans, $latePayments, $hasActiveOverdue, $maxOverdueDays);
             $msg = "Successfully upgraded borrower's credit limit to " . number_format($new_limit, 2) . ".";
         } else {
             // Downgrade: DECREASE the limit utilizing the opposite math of the micro-percentage matrix
@@ -876,7 +897,7 @@ if ($method === 'POST' && $action === 'process_credit_action') {
             $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_DOWNGRADED', 'client', ?, ?)")
                 ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit downgraded to {$new_limit} from {$currentLimit}"]);
                 
-            $scoreEngine->calculateNetScoreChange($client_id);
+            $scoreEngine->calculateNetScoreChange($completedLoans, $latePayments, $hasActiveOverdue, $maxOverdueDays);
             $msg = "Successfully downgraded borrower's credit limit to " . number_format($new_limit, 2) . ".";
         }
 

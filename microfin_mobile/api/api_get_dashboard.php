@@ -144,7 +144,6 @@ try {
         'c.credit_limit',
         'c.document_verification_status',
         'c.monthly_income',
-        'c.policy_metadata',
         'u.username',
         'u.first_name AS user_first_name',
         'u.last_name AS user_last_name'
@@ -152,6 +151,9 @@ try {
 
     if (microfin_dashboard_has_client_column($conn, 'verification_status')) {
         $clientColumns[] = 'c.verification_status';
+    }
+    if (microfin_dashboard_has_client_column($conn, 'policy_metadata')) {
+        $clientColumns[] = 'c.policy_metadata';
     }
 
     $clientSql = "
