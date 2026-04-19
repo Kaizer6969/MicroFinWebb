@@ -1975,6 +1975,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         'max_term_months' => trim($_POST['max_term_months'] ?? '24'),
 
+        'billing_cycle' => trim($_POST['billing_cycle'] ?? 'Monthly'),
+
         'processing_fee_percentage' => trim($_POST['processing_fee_percentage'] ?? '2.00'),
 
         'service_charge' => trim($_POST['service_charge'] ?? '0.00'),
@@ -2052,7 +2054,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         if ($existing_product) {
 
-            $stmt = $pdo->prepare('UPDATE loan_products SET product_name=?, product_type=?, description=?, min_amount=?, max_amount=?, interest_rate=?, interest_type=?, min_term_months=?, max_term_months=?, processing_fee_percentage=?, service_charge=?, documentary_stamp=?, insurance_fee_percentage=?, early_settlement_fee_type=?, early_settlement_fee_value=?, grace_period_days=? WHERE tenant_id=? AND product_id=?');
+            $stmt = $pdo->prepare('UPDATE loan_products SET product_name=?, product_type=?, description=?, min_amount=?, max_amount=?, interest_rate=?, interest_type=?, min_term_months=?, max_term_months=?, billing_cycle=?, processing_fee_percentage=?, service_charge=?, documentary_stamp=?, insurance_fee_percentage=?, early_settlement_fee_type=?, early_settlement_fee_value=?, grace_period_days=? WHERE tenant_id=? AND product_id=?');
 
             $stmt->execute([
 
@@ -2067,6 +2069,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $form['interest_type'],
                 (int)$form['min_term_months'],
                 (int)$form['max_term_months'],
+                $form['billing_cycle'],
 
                 (float)$form['processing_fee_percentage'],
                 (float)$form['service_charge'],
@@ -2083,7 +2086,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             ]);
         } else {
 
-            $stmt = $pdo->prepare('INSERT INTO loan_products (tenant_id, product_name, product_type, description, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, processing_fee_percentage, service_charge, documentary_stamp, insurance_fee_percentage, early_settlement_fee_type, early_settlement_fee_value, grace_period_days, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)');
+            $stmt = $pdo->prepare('INSERT INTO loan_products (tenant_id, product_name, product_type, description, min_amount, max_amount, interest_rate, interest_type, min_term_months, max_term_months, billing_cycle, processing_fee_percentage, service_charge, documentary_stamp, insurance_fee_percentage, early_settlement_fee_type, early_settlement_fee_value, grace_period_days, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)');
 
             $stmt->execute([
 
@@ -2099,6 +2102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $form['interest_type'],
                 (int)$form['min_term_months'],
                 (int)$form['max_term_months'],
+                $form['billing_cycle'],
 
                 (float)$form['processing_fee_percentage'],
                 (float)$form['service_charge'],
@@ -3732,6 +3736,8 @@ $lp_form = [
     'min_term_months' => $existing_product['min_term_months'] ?? '3',
 
     'max_term_months' => $existing_product['max_term_months'] ?? '24',
+
+    'billing_cycle' => $existing_product['billing_cycle'] ?? 'Monthly',
 
     'processing_fee_percentage' => $existing_product['processing_fee_percentage'] ?? '2.00',
 
@@ -11401,17 +11407,93 @@ function hexToRgb($hex)
                                                     </div>
 
                                                     <div class="form-group">
-
                                                         <label>Interest Type <span style="color:#dc2626;">*</span></label>
+                                                        
+                                                        <!-- Custom Select Dropdown -->
+                                                        <div class="custom-select-container" style="position: relative; user-select: none;">
+                                                            <!-- Hidden actual select for form submission and JS logic -->
+                                                            <select name="interest_type" id="hidden_interest_type" class="form-control" style="display: none;">
+                                                                <option value="Declining Balance" <?php echo $lp_form['interest_type'] === 'Declining Balance' ? 'selected' : ''; ?>>Declining Balance</option>
+                                                                <option value="Flat" <?php echo $lp_form['interest_type'] === 'Flat' ? 'selected' : ''; ?>>Flat</option>
+                                                            </select>
 
-                                                        <select class="form-control" name="interest_type">
+                                                            <!-- Visual Dropdown Trigger -->
+                                                            <div class="custom-select-trigger form-control" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: var(--bg-card); color: var(--text-color);">
+                                                                <span id="interest_type_display"><?php echo htmlspecialchars($lp_form['interest_type'] ?? 'Declining Balance'); ?></span>
+                                                                <span class="material-symbols-rounded" style="font-size: 20px; color: var(--text-muted);">keyboard_arrow_down</span>
+                                                            </div>
 
-                                                            <option value="Declining Balance" <?php echo $lp_form['interest_type'] === 'Declining Balance' ? 'selected' : ''; ?>>Declining Balance</option>
+                                                            <!-- Dropdown Options List -->
+                                                            <div class="custom-select-options-list" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100;">
+                                                                
+                                                                <div class="custom-select-option" data-value="Declining Balance" style="padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); transition: background 0.2s;">
+                                                                    <span>Declining Balance</span>
+                                                                    <div class="custom-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+                                                                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary-color, #3b82f6); color: #fff; font-size: 11px; font-weight: 800; font-family: monospace;">!</span>
+                                                                        <div class="custom-tooltip-text" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 10;">
+                                                                            Interest is calculated only on the remaining principal balance. The interest amount decreases over time as the principal is paid off.
+                                                                            <div style="position: absolute; top: 50%; right: -5px; transform: translateY(-50%); border-width: 5px; border-style: solid; border-color: transparent transparent transparent rgba(15, 23, 42, 0.95);"></div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
 
-                                                            <option value="Flat" <?php echo $lp_form['interest_type'] === 'Flat' ? 'selected' : ''; ?>>Flat</option>
+                                                                <div class="custom-select-option" data-value="Flat" style="padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;">
+                                                                    <span>Flat</span>
+                                                                    <div class="custom-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+                                                                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary-color, #3b82f6); color: #fff; font-size: 11px; font-weight: 800; font-family: monospace;">!</span>
+                                                                        <div class="custom-tooltip-text" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 10;">
+                                                                            Interest is calculated on the full original principal for the entire loan term, regardless of payments made.
+                                                                            <div style="position: absolute; top: 50%; right: -5px; transform: translateY(-50%); border-width: 5px; border-style: solid; border-color: transparent transparent transparent rgba(15, 23, 42, 0.95);"></div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
 
-                                                        </select>
+                                                            </div>
+                                                        </div>
+                                                        <style>
+                                                            .custom-select-option:hover { background: var(--bg-body); }
+                                                            .custom-select-option .custom-tooltip-wrapper:hover .custom-tooltip-text {
+                                                                opacity: 1 !important; visibility: visible !important;
+                                                            }
+                                                        </style>
+                                                        <script>
+                                                            document.addEventListener('DOMContentLoaded', function() {
+                                                                const container = document.querySelector('.custom-select-container');
+                                                                if(!container) return;
+                                                                const trigger = container.querySelector('.custom-select-trigger');
+                                                                const list = container.querySelector('.custom-select-options-list');
+                                                                const hiddenSelect = container.querySelector('#hidden_interest_type');
+                                                                const displaySpan = container.querySelector('#interest_type_display');
+                                                                
+                                                                trigger.addEventListener('click', function(e) {
+                                                                    e.stopPropagation();
+                                                                    list.style.display = list.style.display === 'none' ? 'block' : 'none';
+                                                                });
 
+                                                                const options = container.querySelectorAll('.custom-select-option');
+                                                                options.forEach(opt => {
+                                                                    opt.addEventListener('click', function(e) {
+                                                                        // Don't close if they just hovered/clicked the tooltip
+                                                                        if(e.target.closest('.custom-tooltip-wrapper')) return;
+                                                                        
+                                                                        const val = this.getAttribute('data-value');
+                                                                        hiddenSelect.value = val;
+                                                                        displaySpan.innerHTML = this.querySelector('span').innerHTML;
+                                                                        list.style.display = 'none';
+                                                                        
+                                                                        // Dispatch change event for JS bindings (like the simulator)
+                                                                        hiddenSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                                                        hiddenSelect.dispatchEvent(new Event('input', { bubbles: true }));
+                                                                    });
+                                                                });
+
+                                                                document.addEventListener('click', function(e) {
+                                                                    if (!container.contains(e.target)) {
+                                                                        list.style.display = 'none';
+                                                                    }
+                                                                });
+                                                            });
+                                                        </script>
                                                     </div>
 
 
@@ -11476,6 +11558,19 @@ function hexToRgb($hex)
 
                                                     </div>
 
+                                                    <div class="form-group" style="grid-column: span 2;">
+
+                                                        <label>Billing Cycle <span style="color:#dc2626;">*</span></label>
+
+                                                        <select name="billing_cycle" class="form-control" required style="cursor: pointer;">
+                                                            <option value="Monthly" <?php echo (($lp_form['billing_cycle'] ?? 'Monthly') === 'Monthly') ? 'selected' : ''; ?>>Monthly</option>
+                                                            <option value="Quarterly" <?php echo (($lp_form['billing_cycle'] ?? '') === 'Quarterly') ? 'selected' : ''; ?>>Quarterly</option>
+                                                            <option value="Semi-Annually" <?php echo (($lp_form['billing_cycle'] ?? '') === 'Semi-Annually') ? 'selected' : ''; ?>>Semi-Annually</option>
+                                                            <option value="Yearly" <?php echo (($lp_form['billing_cycle'] ?? '') === 'Yearly') ? 'selected' : ''; ?>>Yearly</option>
+                                                        </select>
+
+                                                    </div>
+
                                                 </div>
 
 
@@ -11535,7 +11630,22 @@ function hexToRgb($hex)
                                                 <!-- Early Settlement Fee Card -->
                                                 <div class="credit-policy-card" style="margin-top: 24px;">
                                                     <div class="credit-policy-card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                                                        <h3 class="credit-policy-card-title">Early Settlement Fee</h3>
+                                                        <h3 class="credit-policy-card-title" style="display: flex; align-items: center; gap: 8px; position: relative;">
+                                                            Early Settlement Fee
+                                                            <div class="custom-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center; cursor: help; margin-top: 1px;">
+                                                                <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary-color, #3b82f6); color: #fff; font-size: 11px; font-weight: 800; font-family: monospace;">!</span>
+                                                                <div class="custom-tooltip-text" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px; background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; width: 260px; text-align: center; line-height: 1.4; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 10;">
+                                                                    An early settlement fee is charged when a client pays off their loan before the scheduled maturity date.
+                                                                    <div style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 5px; border-style: solid; border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;"></div>
+                                                                </div>
+                                                            </div>
+                                                        </h3>
+                                                        <style>
+                                                            .custom-tooltip-wrapper:hover .custom-tooltip-text {
+                                                                opacity: 1 !important;
+                                                                visibility: visible !important;
+                                                            }
+                                                        </style>
                                                         <label class="switch" style="margin: 0;">
                                                             <input type="hidden" name="early_settlement_fee_enabled" value="0">
                                                             <input type="checkbox" id="esf_master_toggle" name="early_settlement_fee_enabled" value="1" <?php echo !empty($lp_form['early_settlement_fee_enabled']) ? 'checked' : ''; ?>>
@@ -11568,12 +11678,18 @@ function hexToRgb($hex)
                                                                     <span class="credit-input-prefix" id="early_settlement_fee_value_prefix"><?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage') ? '%' : '&#8369;'; ?></span>
                                                                     <input type="number" class="form-control" name="early_settlement_fee_value" value="<?php echo htmlspecialchars($lp_form['early_settlement_fee_value']); ?>" step="0.01" min="0" style="font-size: 1.05rem;">
                                                                 </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Script to toggle prefix -->
+                                                                  
+                                                                  <div id="esf_percentage_info" style="display: <?php echo (($lp_form['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage') ? 'flex' : 'none'; ?>; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 12px 14px; border-left: 3px solid var(--primary-color, #3b82f6); background: rgba(59, 130, 246, 0.05); color: var(--text-main); font-size: 12px; line-height: 1.5; border-radius: 0 6px 6px 0;">
+                                                                      <span class="material-symbols-rounded" style="color: var(--primary-color, #3b82f6); font-size: 18px; margin-top: 1px;">info</span>
+                                                                      <div>
+                                                                          <strong style="display: block; margin-bottom: 2px;">How Percentage Fees Are Calculated</strong>
+                                                                          Since this fee is set as a percentage, the actual Peso amount charged will vary based on the loan size and the chosen <strong>Interest Type</strong> (Flat or Declining Balance).
+                                                                      </div>
+                                                                  </div>
+                                                              </div>
+                                                          </div>
+                                                      </div>
+                                                  </div>
                                                 <script>
                                                     document.addEventListener('DOMContentLoaded', function() {
                                                         const masterToggle = document.getElementById('esf_master_toggle');
@@ -11605,29 +11721,109 @@ function hexToRgb($hex)
                                                         const prefixSpan = document.getElementById('early_settlement_fee_value_prefix');
                                                         const lblPct = document.getElementById('esf_lbl_pct');
                                                         const lblFixed = document.getElementById('esf_lbl_fixed');
+                                                          const percentageInfoBox = document.getElementById('esf_percentage_info');
 
-                                                        if(toggleSwitch && hiddenInput && prefixSpan) {
-                                                            toggleSwitch.addEventListener('change', function() {
-                                                                if(this.checked) {
-                                                                    hiddenInput.value = 'Fixed';
-                                                                    prefixSpan.innerHTML = '&#8369;';
-                                                                    lblFixed.style.color = 'var(--primary-color)';
-                                                                    lblFixed.style.fontWeight = '700';
-                                                                    lblPct.style.color = 'var(--text-muted)';
-                                                                    lblPct.style.fontWeight = '500';
-                                                                } else {
-                                                                    hiddenInput.value = 'Percentage';
-                                                                    prefixSpan.innerHTML = '%';
-                                                                    lblPct.style.color = 'var(--primary-color)';
-                                                                    lblPct.style.fontWeight = '700';
-                                                                    lblFixed.style.color = 'var(--text-muted)';
-                                                                    lblFixed.style.fontWeight = '500';
-                                                                }
-                                                                
-                                                                // Trigger update for preview calculations
-                                                                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                                            });
-                                                        }
+                                                          if(toggleSwitch && hiddenInput && prefixSpan) {
+                                                              toggleSwitch.addEventListener('change', function() {
+                                                                  if(this.checked) {
+                                                                      hiddenInput.value = 'Fixed';
+                                                                      prefixSpan.innerHTML = '&#8369;';
+                                                                      lblFixed.style.color = 'var(--primary-color)';
+                                                                      lblFixed.style.fontWeight = '700';
+                                                                      lblPct.style.color = 'var(--text-muted)';
+                                                                      lblPct.style.fontWeight = '500';
+                                                                      if(percentageInfoBox) percentageInfoBox.style.display = 'none';
+                                                                  } else {
+                                                                      hiddenInput.value = 'Percentage';
+                                                                      prefixSpan.innerHTML = '%';
+                                                                      lblPct.style.color = 'var(--primary-color)';
+                                                                      lblPct.style.fontWeight = '700';
+                                                                      lblFixed.style.color = 'var(--text-muted)';
+                                                                      lblFixed.style.fontWeight = '500';
+                                                                      if(percentageInfoBox) percentageInfoBox.style.display = 'flex';
+                                                                  }
+                                                              });
+                                                          }
+
+                                                          // Dynamic Term Validation based on Billing Cycle
+                                                          const billingCycleSelect = document.querySelector('select[name="billing_cycle"]');
+                                                          const minTermInput = document.querySelector('input[name="min_term_months"]');
+                                                          const maxTermInput = document.querySelector('input[name="max_term_months"]');
+                                                          const saveBtn = document.getElementById('save_loan_product_btn');
+
+                                                          if (billingCycleSelect && minTermInput && maxTermInput && saveBtn) {
+                                                              function validateTermsMatchCycle() {
+                                                                  const cycle = billingCycleSelect.value;
+                                                                  let baseMultiple = 1;
+
+                                                                  if (cycle === 'Yearly') {
+                                                                      baseMultiple = 12;
+                                                                  } else if (cycle === 'Semi-Annually') {
+                                                                      baseMultiple = 6;
+                                                                  } else if (cycle === 'Quarterly') {
+                                                                      baseMultiple = 3;
+                                                                  } else {
+                                                                      baseMultiple = 1;
+                                                                  }
+
+                                                                  minTermInput.step = baseMultiple;
+                                                                  maxTermInput.step = baseMultiple;
+                                                                  minTermInput.min = baseMultiple;
+                                                                  maxTermInput.min = baseMultiple;
+
+                                                                  // Validation
+                                                                  let isValid = true;
+                                                                  const minVal = parseInt(minTermInput.value) || 0;
+                                                                  const maxVal = parseInt(maxTermInput.value) || 0;
+
+                                                                  if (minVal % baseMultiple !== 0 || minVal === 0) {
+                                                                      minTermInput.style.borderColor = '#dc2626'; // Red
+                                                                      isValid = false;
+                                                                  } else {
+                                                                      minTermInput.style.borderColor = ''; // Default
+                                                                  }
+
+                                                                  if (maxVal % baseMultiple !== 0 || maxVal === 0 || maxVal < minVal) {
+                                                                      maxTermInput.style.borderColor = '#dc2626'; // Red
+                                                                      isValid = false;
+                                                                  } else {
+                                                                      maxTermInput.style.borderColor = ''; // Default
+                                                                  }
+
+                                                                  if (!isValid) {
+                                                                      saveBtn.disabled = true;
+                                                                      saveBtn.style.opacity = '0.5';
+                                                                      saveBtn.style.cursor = 'not-allowed';
+                                                                  } else {
+                                                                      saveBtn.disabled = false;
+                                                                      saveBtn.style.opacity = '1';
+                                                                      saveBtn.style.cursor = 'pointer';
+                                                                  }
+                                                              }
+
+                                                              function updateTermsToMatchCycle() {
+                                                                  const cycle = billingCycleSelect.value;
+                                                                  let baseMultiple = cycle === 'Yearly' ? 12 : cycle === 'Semi-Annually' ? 6 : cycle === 'Quarterly' ? 3 : 1;
+                                                                  
+                                                                  // Grab current values or default to base multiple
+                                                                  let minVal = parseInt(minTermInput.value) || baseMultiple;
+                                                                  let maxVal = parseInt(maxTermInput.value) || (baseMultiple * 2);
+
+                                                                  // Snap to closest valid multiple
+                                                                  minTermInput.value = Math.max(baseMultiple, Math.ceil(minVal / baseMultiple) * baseMultiple);
+                                                                  maxVal = Math.max(maxVal, parseInt(minTermInput.value));
+                                                                  maxTermInput.value = Math.max(baseMultiple, Math.ceil(maxVal / baseMultiple) * baseMultiple);
+
+                                                                  validateTermsMatchCycle();
+                                                              }
+
+                                                              billingCycleSelect.addEventListener('change', updateTermsToMatchCycle);
+                                                              minTermInput.addEventListener('input', validateTermsMatchCycle);
+                                                              maxTermInput.addEventListener('input', validateTermsMatchCycle);
+                                                              
+                                                              validateTermsMatchCycle();
+                                                          }
+
                                                     });
                                                 </script>
 
@@ -11635,17 +11831,11 @@ function hexToRgb($hex)
 
                                                 <div class="action-bar loan-products-action-bar" style="margin-top: 24px;">
 
-                                                    <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+                                                    <button type="submit" id="save_loan_product_btn" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
 
                                                         <span class="material-symbols-rounded" style="font-size:18px;">save</span> Save Loan Product
 
                                                     </button>
-
-                                                    <a href="admin.php?tab=loan_products" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none;">
-
-                                                        <span class="material-symbols-rounded" style="font-size:18px;">close</span> Cancel
-
-                                                    </a>
 
                                                 </div>
 
@@ -11937,13 +12127,7 @@ function hexToRgb($hex)
 
                                                     <span>Term</span>
 
-                                                    <strong><?php echo (int)($loan_product_record['min_term_months'] ?? 0); ?> to <?php echo (int)($loan_product_record['max_term_months'] ?? 0); ?> months</strong>
-
-                                                </div>
-
-                                                <div class="loan-product-record-metric">
-
-                                                    <span>Charges</span>
+                                                      <strong><?php echo (int)($loan_product_record['min_term_months'] ?? 0); ?> to <?php echo (int)($loan_product_record['max_term_months'] ?? 0); ?> months (<?php echo htmlspecialchars((string)($loan_product_record['billing_cycle'] ?? 'Monthly')); ?>)</strong>
 
                                                     <strong><?php echo number_format((float)($loan_product_record['processing_fee_percentage'] ?? 0), 2); ?>% processing</strong>
 

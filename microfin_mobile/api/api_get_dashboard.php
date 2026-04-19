@@ -144,6 +144,7 @@ try {
         'c.credit_limit',
         'c.document_verification_status',
         'c.monthly_income',
+        'c.policy_metadata',
         'u.username',
         'u.first_name AS user_first_name',
         'u.last_name AS user_last_name'
@@ -154,11 +155,15 @@ try {
     }
 
     $clientSql = "
-        SELECT " . implode(",\n            ", $clientColumns) . "
+        SELECT " . implode(",\n            ", $clientColumns) . ",
+            cs.credit_score,
+            cs.credit_rating
         FROM clients c
         INNER JOIN users u
             ON u.user_id = c.user_id
            AND u.tenant_id = c.tenant_id
+        LEFT JOIN credit_scores cs ON cs.client_id = c.client_id 
+            AND cs.score_id = (SELECT MAX(score_id) FROM credit_scores WHERE client_id = c.client_id)
         WHERE c.user_id = ?
           AND c.tenant_id = ?
           AND c.deleted_at IS NULL
@@ -318,9 +323,12 @@ try {
         'verification_status' => $verificationStatus,
         'document_verification_status' => $client['document_verification_status'] ?? 'Unverified',
         'credit_limit' => $computedLimit,
+        'credit_score' => $client['credit_score'] ?? 0,
+        'credit_rating' => $client['credit_rating'] ?? 'Unverified',
         'active_loan' => $activeLoan,
         'notifications' => $notifications,
         'featured_products' => $featuredProducts,
+        'policy_metadata' => json_decode($client['policy_metadata'] ?? '{}', true) ?: null,
     ]);
 } catch (Throwable $e) {
     http_response_code(500);

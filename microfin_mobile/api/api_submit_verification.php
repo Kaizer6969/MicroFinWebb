@@ -41,6 +41,7 @@ $comakerAddress = microfin_clean_string($data['comaker_address'] ?? '');
 $idType = microfin_clean_string($data['id_type'] ?? '');
 $idNumber = microfin_clean_string($data['id_number'] ?? '');
 $idExpiry = microfin_clean_string($data['id_expiry'] ?? '');
+$residencyMonths = (int) ($data['residency_months'] ?? 0);
 $documents = $data['documents'] ?? [];
 
 if ($userId <= 0 || $tenantId === '') {
@@ -295,7 +296,25 @@ try {
         }
     }
 
-    // 2. Minimum Income Check
+    // 2. Residency Check
+    if ($rejectionReason === null && !empty($demoRules['residency_tenure_enabled'])) {
+        $minResidency = (int)($demoRules['min_residency_months'] ?? 0);
+        if ($residencyMonths < $minResidency) {
+            $rejectionTriggers[] = "min_residency_months";
+            $rejectionReason = "Not eligible: Minimum residency tenure requirement is $minResidency months.";
+        }
+    }
+
+    // 3. Employment Status Check
+    if ($rejectionReason === null && !empty($demoRules['employment_status_enabled'])) {
+        $eligibleStatuses = $demoRules['eligible_statuses'] ?? [];
+        if (!in_array($employmentStatus, $eligibleStatuses, true)) {
+            $rejectionTriggers[] = "invalid_employment_status";
+            $rejectionReason = "Not eligible: Current employment status is not accepted.";
+        }
+    }
+
+    // 4. Minimum Income Check
     if ($rejectionReason === null && !empty($affordRules['income_enabled'])) {
         $minIncome = (float)($affordRules['min_monthly_income'] ?? 0);
         if ($monthlyIncome < $minIncome) {
@@ -317,6 +336,60 @@ try {
                 'can_apply' => false,
                 'reason' => 'Automatically rejected during verification.'
             ]
+        ]);
+    }
+
+    // ── AUTOMATED CREDITING LOGIC (FOR ELIGIBLE USERS) ──
+    $assignedCreditLimit = 0.00;
+    $assignedCreditScore = 0;
+    $assignedCreditRating = null;
+    $scoringMetadata = null;
+
+    if ($finalVerificationStatus !== 'Rejected') {
+        require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_credit_limits.php';
+        require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_limit_assignment.php';
+
+        $limitsStmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'policy_console_credit_limits'");
+        $limitsStmt->bind_param('s', $tenantId);
+        $limitsStmt->execute();
+        $limitsRaw = json_decode($limitsStmt->get_result()->fetch_assoc()['setting_value'] ?? '{}', true) ?: [];
+        $limitsStmt->close();
+
+        // Normalize using tenant policy logic
+        $creditLimits = policy_console_credit_limits_normalize($limitsRaw, [], [], 1000);
+        
+        // 1. Initial Score Assignment
+        $assignedCreditScore = (int)($creditLimits['scoring_setup']['core']['starting_credit_score'] ?? 320);
+
+        // 2. Initial Limit Assignment
+        $limitPercent = (float)($creditLimits['limit_assignment']['initial_limit_percent_of_income'] ?? 40);
+        $assignedCreditLimit = $monthlyIncome * ($limitPercent / 100);
+
+        // 3. Global Lending Cap
+        if (!empty($creditLimits['limit_assignment']['use_default_lending_cap'])) {
+            $capAmount = (float)($creditLimits['limit_assignment']['default_lending_cap_amount'] ?? 0);
+            if ($capAmount > 0 && $assignedCreditLimit > $capAmount) {
+                $assignedCreditLimit = $capAmount;
+            }
+        }
+
+        // 4. Matrix Band Mapping
+        $bands = $creditLimits['score_bands']['rows'] ?? [];
+        foreach ($bands as $band) {
+            $min = (int)($band['min_score'] ?? 0);
+            $max = $band['max_score'] === null ? 999999 : (int)$band['max_score'];
+            if ($assignedCreditScore >= $min && $assignedCreditScore <= $max) {
+                $assignedCreditRating = $band['label'] ?? 'Standard';
+                break;
+            }
+        }
+
+        $scoringMetadata = json_encode([
+            'basis' => 'Initial Assessment',
+            'income_at_submission' => $monthlyIncome,
+            'config_percent' => $limitPercent,
+            'applied_cap' => !empty($creditLimits['limit_assignment']['use_default_lending_cap']) ? (float)$creditLimits['limit_assignment']['default_lending_cap_amount'] : null,
+            'timestamp' => date('Y-m-d H:i:s')
         ]);
     }
 
@@ -372,7 +445,7 @@ try {
             file_size = ?,
             file_type = ?,
             upload_date = NOW(),
-            verification_status = 'Pending',
+            verification_status = '$finalVerificationStatus',
             verification_notes = ?,
             expiry_date = ?,
             is_active = 1
@@ -447,13 +520,16 @@ try {
             comaker_income = ?,
             comaker_street = ?,
             id_type = ?,
-            verification_rejection_reason = NULL,
+            verification_rejection_reason = ?,
+            document_verification_status = '$finalVerificationStatus',
+            policy_metadata = ?,
+            credit_limit = ?,
             updated_at = NOW()
     ";
 
     if (microfin_has_client_column($conn, 'verification_status')) {
         $clientUpdateSql .= ",
-            verification_status = 'Pending'
+            verification_status = '$finalVerificationStatus'
         ";
     }
 
@@ -469,7 +545,7 @@ try {
     }
 
     $clientUpdateStmt->bind_param(
-        'ssssssssssssssssssssissssdsssdssis',
+        'ssssssssssssssssssssissssdsssdssssisis',
         $firstName,
         $middleName,
         $lastName,
@@ -502,12 +578,47 @@ try {
         $comakerIncome,
         $comakerAddress,
         $idType,
+        $rejectionReason,
+        $policyMetadataStr,
+        $assignedCreditLimit,
         $client['client_id'],
         $tenantId
     );
 
     $clientUpdateStmt->execute();
     $clientUpdateStmt->close();
+
+    // ── CREATE INITIAL CREDIT SCORE RECORD ──
+    if ($finalVerificationStatus !== 'Rejected') {
+        $scoreInsertStmt = $conn->prepare("
+            INSERT INTO credit_scores (
+                client_id, 
+                tenant_id, 
+                credit_score, 
+                credit_rating, 
+                max_loan_amount, 
+                notes, 
+                score_metadata,
+                computation_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        
+        if ($scoreInsertStmt) {
+            $initialNote = "Automated initial score and limit assignment via Tenant Policy Engine.";
+            $scoreInsertStmt->bind_param(
+                'isisdss',
+                $client['client_id'],
+                $tenantId,
+                $assignedCreditScore,
+                $assignedCreditRating,
+                $assignedCreditLimit,
+                $initialNote,
+                $scoringMetadata
+            );
+            $scoreInsertStmt->execute();
+            $scoreInsertStmt->close();
+        }
+    }
 
     foreach ($documents as $document) {
         if (!is_array($document)) {
@@ -598,9 +709,9 @@ try {
 
     microfin_json_response([
         'success' => true,
-        'message' => 'Verification profile submitted successfully.',
-        'verification_status' => 'Pending',
-        'document_verification_status' => 'Pending',
+        'message' => $finalVerificationStatus === 'Rejected' ? ($rejectionReason ?? 'Verification profile submitted but flagged as ineligible.') : 'Verification profile submitted successfully.',
+        'verification_status' => $finalVerificationStatus,
+        'document_verification_status' => $finalVerificationStatus,
         'client_id' => (int) $client['client_id'],
     ]);
 } catch (Throwable $e) {

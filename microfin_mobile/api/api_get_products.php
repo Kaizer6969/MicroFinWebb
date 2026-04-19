@@ -131,6 +131,30 @@ if ($userId > 0) {
         ? microfin_build_client_loan_application_summary($conn, $clientProfile)
         : microfin_loan_rules_default_summary($tenantId);
 
+    // Fetch tenant rules
+    $rulesStmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'policy_console_decision_rules'");
+    $rulesStmt->bind_param('s', $tenantId);
+    $rulesStmt->execute();
+    $rulesRaw = json_decode($rulesStmt->get_result()->fetch_assoc()['setting_value'] ?? '{}', true) ?: [];
+    $rulesStmt->close();
+
+    require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_system_defaults.php';
+    require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_decision_rules.php';
+    $decisionRules = policy_console_decision_rules_normalize($rulesRaw, 850);
+    $guardRules = $decisionRules['decision_rules']['guardrails'] ?? [];
+    $expenseRules = $decisionRules['decision_rules']['exposure'] ?? [];
+    $affordRules = $decisionRules['decision_rules']['affordability'] ?? [];
+
+    $creditSummary['rules'] = [
+        'multiple_active_loans_enabled' => !empty($expenseRules['multiple_active_loans_enabled']),
+        'auto_reject_floor' => !empty($guardRules['score_thresholds_enabled']) ? (int)($guardRules['auto_reject_floor'] ?? 0) : 0,
+        // we'll pass dti/pti down to frontend later
+        'dti_enabled' => !empty($affordRules['dti_enabled']),
+        'max_dti_percentage' => (float)($affordRules['max_dti_percentage'] ?? 45.0),
+        'pti_enabled' => !empty($affordRules['pti_enabled']),
+        'max_pti_percentage' => (float)($affordRules['max_pti_percentage'] ?? 30.0),
+    ];
+
     $products = microfin_annotate_loan_products($products, $creditSummary);
     $loanAccessState = microfin_build_loan_access_state($products, $creditSummary);
 }

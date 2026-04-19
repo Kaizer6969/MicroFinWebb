@@ -123,8 +123,16 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
   // ─── Credit (live from DB via api_get_credit_info.php) ───────────────
   double _creditLimit = 0.0;
   double _usedCredit = 0.0;
+  double _monthlyIncome = 0.0;
   double get _remainingCredit =>
       (_creditLimit - _usedCredit).clamp(0.0, _creditLimit);
+
+  // ─── Tenant Rules (live from DB via api_get_products.php) ────────────
+  bool _dtiEnabled = false;
+  double _maxDti = 45.0;
+  bool _ptiEnabled = false;
+  double _maxPti = 30.0;
+
 
   // ─── Available Terms from product ──────────────────────────────────
   List<int> get _availableTerms {
@@ -262,11 +270,21 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
                 : null;
           }
 
-          setState(() {
+            setState(() {
             _products = products;
             _loanAccessState = loanAccessState;
             _creditLimit = _asDouble(creditSummary['credit_limit']);
             _usedCredit = _asDouble(creditSummary['used_credit']);
+            _monthlyIncome = _asDouble(creditSummary['monthly_income']);
+
+            final rules = creditSummary['rules'] ?? {};
+            _maxDti = _asDouble(rules['max_dti_percentage']);
+            if (_maxDti == 0) _maxDti = 45.0;
+            _maxPti = _asDouble(rules['max_pti_percentage']);
+            if (_maxPti == 0) _maxPti = 30.0;
+            _dtiEnabled = rules['dti_enabled'] == true;
+            _ptiEnabled = rules['pti_enabled'] == true;
+
             _selectedProductId = nextSelected;
             if (_selectedTerm != null &&
                 !_availableTerms.contains(_selectedTerm)) {
@@ -461,6 +479,18 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
         return _showSnack(
           'Please upload all required documents for ${_purposeCategory} loans.',
         );
+      }
+    }
+
+    if (_monthlyIncome > 0) {
+      final double currentDti = ((_usedCredit + _amount) / _monthlyIncome) * 100;
+      final double currentPti = _selectedTerm != null ? ((_monthly) / _monthlyIncome) * 100 : 0.0;
+
+      if (_dtiEnabled && currentDti > _maxDti) {
+         return _showSnack('Cannot proceed: Your DTI of ${currentDti.toStringAsFixed(1)}% exceeds the allowed $_maxDti%.');
+      }
+      if (_ptiEnabled && currentPti > _maxPti) {
+         return _showSnack('Cannot proceed: Your PTI of ${currentPti.toStringAsFixed(1)}% exceeds the allowed $_maxPti%.');
       }
     }
 
@@ -1700,6 +1730,64 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
                 ),
               ],
             ),
+            
+            // Limit Capacity Meter Validation Warnings
+            if (_monthlyIncome > 0 && (_dtiEnabled || _ptiEnabled)) ...[
+              const SizedBox(height: 12),
+              Builder(builder: (context) {
+                 final double currentDti = ((_usedCredit + _amount) / _monthlyIncome) * 100;
+                 final double currentPti = _selectedTerm != null ? ((_monthly) / _monthlyIncome) * 100 : 0.0;
+                 final bool dtiExceeded = _dtiEnabled && currentDti > _maxDti;
+                 final bool ptiExceeded = _ptiEnabled && currentPti > _maxPti;
+
+                 if (!dtiExceeded && !ptiExceeded) return const SizedBox.shrink();
+
+                 return Container(
+                   padding: const EdgeInsets.all(12),
+                   decoration: BoxDecoration(
+                     color: const Color(0xFFFEF2F2),
+                     border: Border.all(color: const Color(0xFFFCA5A5)),
+                     borderRadius: BorderRadius.circular(12),
+                   ),
+                   child: Row(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
+                       const SizedBox(width: 8),
+                       Expanded(
+                         child: Column(
+                           crossAxisAlignment: CrossAxisAlignment.start,
+                           children: [
+                             if (dtiExceeded) ...[
+                               const Text(
+                                 'Debt-to-Income (DTI) Limit Exceeded!',
+                                 style: TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w800, fontSize: 13),
+                               ),
+                               Text(
+                                 'Your Total Debt (${currentDti.toStringAsFixed(1)}%) exceeds the allowed $_maxDti%.',
+                                 style: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                               ),
+                               const SizedBox(height: 6),
+                             ],
+                             if (ptiExceeded) ...[
+                               const Text(
+                                 'Payment-to-Income (PTI) Limit Exceeded!',
+                                 style: TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w800, fontSize: 13),
+                               ),
+                               Text(
+                                 'Your Installment (${currentPti.toStringAsFixed(1)}%) exceeds the allowed $_maxPti%.',
+                                 style: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                               ),
+                             ],
+                           ],
+                         ),
+                       ),
+                     ],
+                   ),
+                 );
+              }),
+            ],
+
             const SizedBox(height: 16),
 
             // Purpose category

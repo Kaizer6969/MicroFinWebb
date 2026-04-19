@@ -35,7 +35,14 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     currentUser.value = null;
-    activeTenant.value = TenantBranding.defaultTenant;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (activeTenant.value.id != TenantBranding.defaultTenant.id) {
+        activeTenant.value = TenantBranding.defaultTenant;
+      }
+    });
 
     _controller = AnimationController(
       vsync: this,

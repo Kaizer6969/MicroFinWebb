@@ -18,9 +18,13 @@ if ($userId <= 0 || $tenantId === '') {
 
 try {
     $cStmt = $conn->prepare("
-        SELECT c.*, u.username, u.email
+        SELECT c.*, u.username, u.email,
+            cs.credit_score,
+            cs.credit_rating
         FROM clients c 
         LEFT JOIN users u ON c.user_id = u.user_id
+        LEFT JOIN credit_scores cs ON cs.client_id = c.client_id 
+            AND cs.score_id = (SELECT MAX(score_id) FROM credit_scores WHERE client_id = c.client_id)
         WHERE c.user_id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL LIMIT 1
     ");
     $cStmt->bind_param('is', $userId, $tenantId);
@@ -51,6 +55,7 @@ try {
         }
     }
     $client['member_since'] = $memberSince;
+    $client['policy_metadata'] = json_decode((string)($client['policy_metadata'] ?? '{}'), true) ?: null;
 
     echo json_encode(['success' => true, 'profile' => $client]);
 

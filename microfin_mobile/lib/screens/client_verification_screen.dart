@@ -48,6 +48,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   final _cityCtrl     = TextEditingController();
   final _provinceCtrl = TextEditingController();
   final _postalCtrl   = TextEditingController();
+  final _residencyMonthsCtrl = TextEditingController();
 
   // Permanent address
   bool  _sameAsPermanent  = true;
@@ -107,8 +108,10 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
     {'v': 'pagibig',  'l': 'Pag-IBIG Loyalty Plus',  'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': true,  'prof': false, 'rest': false},
   ];
 
-  Map<String, dynamic> get _activeIdType => _idTypes.firstWhere(
-      (t) => t['v'] == _selectedIdentityType, orElse: () => {});
+  List<Map<String, dynamic>> _availableIdTypes = List.from(_idTypes);
+
+  Map<String, dynamic> get _activeIdType => _availableIdTypes.firstWhere(
+      (t) => t['v'] == _selectedIdentityType, orElse: () => <String, dynamic>{});
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
   @override
@@ -126,13 +129,49 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
       ));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
-        if (data['success'] == true && data['allowed_employment_statuses'] != null) {
-          final List<dynamic> list = data['allowed_employment_statuses'];
+        if (data['success'] == true) {
+          final policy = data['policy'];
+          List<String>? newEmpList;
+          List<String>? newIdList;
+
+          if (policy != null) {
+            final demog = policy['decision_rules']?['decision_rules']?['demographics'];
+            final empList = demog?['eligible_statuses'] ?? data['allowed_employment_statuses'];
+            if (empList is List) {
+              newEmpList = empList.map((e) => e.toString()).toList();
+            }
+            final ids = policy['compliance_documents']?['identity_document']?['accepted_types'];
+            if (ids is List) {
+              newIdList = ids.map((e) => e.toString()).toList();
+            }
+          } else if (data['allowed_employment_statuses'] != null) {
+             newEmpList = (data['allowed_employment_statuses'] as List).map((e) => e.toString()).toList();
+          }
+
           if (mounted) {
             setState(() {
-              _allowedEmploymentStatuses = list.map((e) => e.toString()).toList();
-              if (_allowedEmploymentStatuses.isNotEmpty && !_allowedEmploymentStatuses.contains(_employmentStatus)) {
-                _employmentStatus = _allowedEmploymentStatuses.first;
+              if (newEmpList != null && newEmpList.isNotEmpty) {
+                _allowedEmploymentStatuses = newEmpList;
+                if (!_allowedEmploymentStatuses.contains(_employmentStatus)) {
+                  _employmentStatus = _allowedEmploymentStatuses.first;
+                }
+              }
+              if (newIdList != null && newIdList.isNotEmpty) {
+                _availableIdTypes = _idTypes.where((t) {
+                  final label = (t['l'] as String).toLowerCase();
+                  return newIdList!.any((allowed) {
+                     final a = allowed.toLowerCase();
+                     return a.contains(label) || label.contains(a.split(' ').first);
+                  });
+                }).toList();
+                if (_availableIdTypes.isEmpty) {
+                  _availableIdTypes = List.from(_idTypes);
+                }
+                
+                // Reset selected ID if it's no longer valid
+                if (_selectedIdentityType != null && !_availableIdTypes.any((t) => t['v'] == _selectedIdentityType)) {
+                  _selectedIdentityType = null;
+                }
               }
             });
           }
@@ -147,7 +186,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
     for (final c in [
       _phoneCtrl, _fullNameCtrl, _dobCtrl,
       _occupationCtrl, _employerCtrl, _employerContactCtrl, _monthlyIncomeCtrl,
-      _houseNoCtrl, _streetCtrl, _barangayCtrl, _cityCtrl, _provinceCtrl, _postalCtrl,
+      _houseNoCtrl, _streetCtrl, _barangayCtrl, _cityCtrl, _provinceCtrl, _postalCtrl, _residencyMonthsCtrl,
       _permHouseCtrl, _permStreetCtrl, _permBarangayCtrl, _permCityCtrl, _permProvinceCtrl, _permPostalCtrl,
       _comakerNameCtrl, _comakerRelCtrl, _comakerContactCtrl, _comakerIncomeCtrl, _comakerAddressCtrl,
       _idNumberCtrl, _idExpiryCtrl, _idIssueDateCtrl, _idPcnCtrl, _idCrnCtrl,
@@ -504,6 +543,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           'city':               _cityCtrl.text,
           'province':           _provinceCtrl.text,
           'postal':             _postalCtrl.text,
+          'residency_months':   _residencyMonthsCtrl.text,
           'same_as_permanent':  _sameAsPermanent ? '1' : '0',
           'perm_house_no':      _sameAsPermanent ? _houseNoCtrl.text    : _permHouseCtrl.text,
           'perm_street':        _sameAsPermanent ? _streetCtrl.text     : _permStreetCtrl.text,
@@ -728,7 +768,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
             isExpanded: true,
             icon: Icon(Icons.arrow_drop_down_rounded, color: primary),
             decoration: _dropDecor(primary),
-            items: _idTypes.map((idT) => DropdownMenuItem<String>(
+            items: _availableIdTypes.map((idT) => DropdownMenuItem<String>(
               value: idT['v'] as String,
               child: Text(idT['l'] as String,
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textMain),
@@ -880,6 +920,8 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
             ]),
             const SizedBox(height: 12),
             _inputField('Postal Code', _postalCtrl, keyboard: TextInputType.number),
+            const SizedBox(height: 12),
+            _inputField('Months at this address', _residencyMonthsCtrl, keyboard: TextInputType.number, icon: Icons.timer_outlined),
 
             // ── Permanent Address ──────────────────────────────────────
             const SizedBox(height: 20),

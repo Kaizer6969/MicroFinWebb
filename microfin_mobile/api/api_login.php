@@ -65,7 +65,8 @@ $selectColumns = [
     'c.first_name AS client_first_name',
     'c.last_name AS client_last_name',
     'c.document_verification_status',
-    'c.credit_limit'
+    'c.credit_limit',
+    'c.policy_metadata'
 ];
 if ($verificationColumnExists) {
     $selectColumns[] = 'c.verification_status';
@@ -134,4 +135,5 @@ microfin_json_response([
     'credit_limit' => (float) ($user['credit_limit'] ?? 0),
     'login_username' => mf_mobile_identity_build_login_username((string) ($user['username'] ?? ''), $tenantSlug),
     'tenant' => microfin_identity_branding_payload($tenant),
+    'policy_metadata' => json_decode($user['policy_metadata'] ?? '{}', true) ?: null,
 ]);

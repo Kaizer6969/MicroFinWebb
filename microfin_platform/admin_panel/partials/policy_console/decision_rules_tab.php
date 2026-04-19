@@ -490,12 +490,7 @@ function renderToggleHeader($label, $helpText, $name, $value) {
             </div>
         </section>
 
-        <!-- New location for Save Action -->
-        <div style="display: flex; justify-content: flex-end; padding: 16px 0;">
-            <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-size: 15px; font-weight: 600;">
-                <i class="fas fa-save" style="margin-right: 6px;"></i> Save Changes
-            </button>
-        </div>
+        <!-- New location for Save Action: Removed in favor of global saving action -->
 
     </div>
 </form>

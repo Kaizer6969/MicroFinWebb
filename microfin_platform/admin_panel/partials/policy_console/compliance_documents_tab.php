@@ -147,12 +147,7 @@ $policy_console_help = static function (string $text, string ...$label): string 
             </div>
         </section>
 
-        <div class="floating-save-container">
-            <button type="submit" class="btn btn-primary" id="policy-compliance-save-btn">
-                <span class="material-symbols-rounded">save</span>
-                Save Changes
-            </button>
-        </div>
+        <!-- Floating save removed in favor of global saving action -->
     </div>
 </form>
 

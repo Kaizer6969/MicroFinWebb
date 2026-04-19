@@ -59,6 +59,7 @@ function microfin_find_client_loan_profile(mysqli $conn, int $userId, string $te
             user_id,
             tenant_id,
             document_verification_status,
+            COALESCE(monthly_income, 0) AS monthly_income,
             COALESCE(credit_limit, 0) AS credit_limit
         FROM clients
         WHERE user_id = ?
@@ -103,6 +104,7 @@ function microfin_build_client_loan_application_summary(mysqli $conn, array $cli
         'client_id' => $clientId,
         'tenant_id' => $tenantId,
         'verification_status' => trim((string) ($clientProfile['document_verification_status'] ?? 'Unverified')) ?: 'Unverified',
+        'monthly_income' => (float) ($clientProfile['monthly_income'] ?? 0),
         'credit_limit' => (float) ($clientProfile['credit_limit'] ?? 0),
         'used_credit' => 0.0,
         'remaining_credit' => 0.0,
@@ -342,6 +344,27 @@ function microfin_build_loan_access_state(array $products, array $summary): arra
             'Complete or clear one product cycle before applying to that same product again.',
         ];
         $state['all_products_occupied'] = true;
+        return $state;
+    }
+
+    $multipleLoansEnabled = !empty($summary['rules']['multiple_active_loans_enabled']);
+    $hasExistingLoan = (float)($summary['used_credit'] ?? 0) > 0 || (int)($summary['occupied_product_count'] ?? 0) > 0;
+
+    if (!$multipleLoansEnabled && $hasExistingLoan) {
+        $state['show_notice'] = true;
+        $state['title'] = 'Multiple loans not allowed';
+        $state['message'] = 'Your tenant policy currently strictly restricts you to one active loan or application at a time.';
+        $state['criteria'] = [
+            'Clear your existing active loan or cancel pending applications first.',
+            'You cannot hold concurrent loans across different products under this policy.',
+        ];
+        $state['all_products_occupied'] = true; 
+        
+        foreach ($products as &$product) {
+            $product['is_available'] = false;
+            $product['availability_reason'] = 'Multiple active loans are not allowed.';
+        }
+        unset($product);
     }
 
     return $state;

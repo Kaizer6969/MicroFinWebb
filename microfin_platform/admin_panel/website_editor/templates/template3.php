@@ -426,7 +426,7 @@ $loan_calc_fee_total = ($loan_calc_amount_value * ($loan_calc_processing / 100))
         <div class="ms-auto" id="navbarNav">
             <ul class="navbar-nav align-items-center gap-3">
                 <li class="nav-item ms-lg-3">
-                    <a href="<?php echo $login_href; ?>" class="btn btn-outline-primary px-4 rounded-pill fw-bold" contenteditable="false">Client Login</a>
+                    <a href="<?php echo $login_href; ?>" class="btn btn-outline-primary px-4 rounded-pill fw-bold" contenteditable="false">Login</a>
                 </li>
             </ul>
         </div>

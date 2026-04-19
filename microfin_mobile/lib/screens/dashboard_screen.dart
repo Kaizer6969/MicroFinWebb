@@ -144,6 +144,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             _creditLimit = double.tryParse(rawLimit?.toString() ?? '0') ?? 0.0;
             currentUser.value?['credit_limit'] = _creditLimit;
 
+            final policyMeta = data['policy_metadata'];
+            if (policyMeta != null) {
+               currentUser.value?['policy_metadata'] = policyMeta;
+            }
+
             _isLoading = false;
           });
           _animController.forward();
@@ -753,6 +758,16 @@ class _DashboardScreenState extends State<DashboardScreen>
             status: _verificationStatus,
           );
         } else {
+          final policyMeta = currentUser.value?['policy_metadata'];
+          if (policyMeta != null && policyMeta['cooling_until'] != null) {
+            final coolingDate = DateTime.tryParse(policyMeta['cooling_until']);
+            if (coolingDate != null && coolingDate.isAfter(DateTime.now())) {
+              final daysLeft = coolingDate.difference(DateTime.now()).inDays;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('You are on a cooling period. Please try again in $daysLeft days.')));
+              return;
+            }
+          }
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const LoanApplicationScreen()),

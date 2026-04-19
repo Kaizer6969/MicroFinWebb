@@ -6,11 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'dart:async';
+
 
 import '../main.dart';
 import '../models/tenant_branding.dart';
 import '../theme.dart';
 import '../utils/api_config.dart';
+import '../widgets/microfin_logo.dart';
 import 'main_layout.dart';
 import 'splash_screen.dart';
 
@@ -125,6 +128,10 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  
+  Timer? _discoveryTimer;
+
+  String? _lastDiscoveredSlug;
 
   @override
   void initState() {
@@ -150,6 +157,64 @@ class _LoginScreenState extends State<LoginScreen>
           _showRegistrationModal();
         }
       });
+    }
+  }
+
+  void _handleUsernameDiscovery(String value) {
+    if (_discoveryTimer?.isActive ?? false) _discoveryTimer!.cancel();
+    _discoveryTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      
+      final text = value.trim();
+      if (!text.contains('@')) {
+        _revertToDefaultTenant();
+        return;
+      }
+
+      final parts = text.split('@');
+      if (parts.length < 2 || parts.last.length < 2) {
+        _revertToDefaultTenant();
+        return;
+      }
+
+      final slug = parts.last.toLowerCase();
+      if (slug == _lastDiscoveredSlug) return;
+      
+      _lastDiscoveredSlug = slug;
+      _discoverTenant(slug);
+    });
+  }
+
+  void _revertToDefaultTenant() {
+    if (activeTenant.value.id != TenantBranding.defaultTenant.id) {
+      activeTenant.value = TenantBranding.defaultTenant;
+      _lastDiscoveredSlug = null;
+    }
+  }
+
+  Future<void> _discoverTenant(String slug) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.getUrl('api_resolve_tenant_reference.php')),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'referral_code': slug,
+          'tenant_slug': slug,
+        }),
+      );
+
+      final data = _decodeApiMap(response.body);
+      if (data['success'] == true && mounted) {
+        final tenantPayload = _stringMap(data['tenant']);
+        final tenantBranding = TenantBranding.fromJson(tenantPayload);
+        
+        // Update the global theme context
+        if (activeTenant.value.id != tenantBranding.id) {
+          activeTenant.value = tenantBranding;
+        }
+      }
+    } catch (_) {
+      // Fail silently for discovery
     }
   }
 
@@ -356,21 +421,57 @@ class _LoginScreenState extends State<LoginScreen>
                               size: 20,
                             ),
                           ),
-                        ),
-                      ),
-                    ),
                     FadeTransition(
                       opacity: _fadeAnimation,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                        child: Text(
-                          'Sign in',
-                          style: GoogleFonts.outfit(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (tenant.logoPath.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.24),
+                                    ),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Image.network(
+                                      tenant.logoPath.startsWith('http')
+                                          ? tenant.logoPath
+                                          : '${ApiConfig.appBaseUrl}/microfin_platform/uploads/tenant_logos/${tenant.logoPath}',
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.business_rounded,
+                                        color: Colors.white,
+                                        size: 32,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else if (tenant.id == TenantBranding.defaultTenant.id)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 16),
+                                child: MicroFinLogo(size: 48, elevated: false),
+                              ),
+                            Text(
+                              'Sign in',
+                              style: GoogleFonts.outfit(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -481,6 +582,7 @@ class _LoginScreenState extends State<LoginScreen>
                                       hint: 'username@institution',
                                       controller: _loginUsernameController,
                                       primary: primary,
+                                      onChanged: _handleUsernameDiscovery,
                                       keyboardType: TextInputType.emailAddress,
                                       validator: (value) {
                                         final text = value?.trim() ?? '';
@@ -2287,6 +2389,8 @@ class _LegacyLoginField extends StatefulWidget {
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
 
+  final void Function(String)? onChanged;
+
   const _LegacyLoginField({
     required this.hint,
     required this.controller,
@@ -2295,6 +2399,7 @@ class _LegacyLoginField extends StatefulWidget {
     this.suffixIcon,
     this.validator,
     this.keyboardType,
+    this.onChanged,
   });
 
   @override
@@ -2333,6 +2438,7 @@ class _LegacyLoginFieldState extends State<_LegacyLoginField> {
           obscureText: widget.obscureText,
           keyboardType: widget.keyboardType,
           validator: widget.validator,
+          onChanged: widget.onChanged,
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.w500,

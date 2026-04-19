@@ -10,6 +10,8 @@ import 'live_chat_screen.dart';
 import 'splash_screen.dart';
 import 'manage_profile_screen.dart';
 import 'change_password_screen.dart';
+import 'credit_standing_screen.dart';
+
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -162,9 +164,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _statsRow(primary),
                   const SizedBox(height: 24),
 
-                  const SizedBox(height: 28),
-
+                  _sectionLabel('Credit & Account', primary),
                   const SizedBox(height: 14),
+                  _card([
+                    _navRow(
+                      Icons.insights_rounded,
+                      'My Credit Standing',
+                      primary,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CreditStandingScreen(),
+                        ),
+                      ),
+                    ),
+                  ], primary),
+
+                  const SizedBox(height: 28),
 
                   // Settings
                   _sectionLabel('Settings & Security', primary),

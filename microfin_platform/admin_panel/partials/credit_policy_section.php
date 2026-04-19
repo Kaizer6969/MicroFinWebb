@@ -19,5 +19,12 @@
                 </div>
             </div>
         </div>
+
+        <!-- Global Policy Simulator -->
+        <?php require __DIR__ . '/policy_console/simulator_sidebar.php'; ?>
+
+        <!-- Unsaved Changes Manager -->
+        <?php require __DIR__ . '/policy_console/unsaved_changes_manager.php'; ?>
+
     </div>
 </section>

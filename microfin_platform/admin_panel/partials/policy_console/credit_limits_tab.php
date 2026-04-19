@@ -65,12 +65,7 @@ $policy_console_assignment_status = 'Configured';
         </section>
     </div>
 
-    <div class="floating-save-container">
-        <button type="button" class="btn btn-primary" id="policy-global-save-btn">
-            <span class="material-symbols-rounded">save</span>
-            Save Changes
-        </button>
-    </div>
+    <!-- Floating save removed in favor of global saving action -->
 
     <!-- Custom Modals -->
     <div class="policy-blueprint-modal" id="policy-unsaved-modal" hidden>
