@@ -884,7 +884,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 // ==========================================
 
-// POST Handler — Update Subscription Plan
+// POST Handler â€” Update Subscription Plan
 
 // ==========================================
 
@@ -1053,7 +1053,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 
 // ==========================================
 
-// POST Handler — Update Payment Method
+// POST Handler â€” Update Payment Method
 
 // ==========================================
 
@@ -1165,7 +1165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 
 // ==========================================
 
-// POST Handler — Delete Payment Method
+// POST Handler â€” Delete Payment Method
 
 // ==========================================
 
@@ -1275,7 +1275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
 
 // ==========================================
 
-// POST Handler — Cancel Subscription
+// POST Handler â€” Cancel Subscription
 
 // ==========================================
 
@@ -1332,7 +1332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cance
 
 // ==========================================
 
-// POST Handler — Update Personal Profile
+// POST Handler â€” Update Personal Profile
 
 // ==========================================
 
@@ -1543,7 +1543,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 
 // ==========================================
 
-// POST Handler — Save Website Content
+// POST Handler â€” Save Website Content
 
 // ==========================================
 
@@ -1930,7 +1930,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 // ==========================================
 
-// POST Handler — Save Loan Products
+// POST Handler â€” Save Loan Products
 
 // ==========================================
 
@@ -2151,7 +2151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 // ==========================================
 
-// POST Handler — Save Credit Assessment Settings
+// POST Handler â€” Save Credit Assessment Settings
 
 // ==========================================
 
@@ -2364,7 +2364,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     if ($encoded_decision_rules === false) {
 
-        $_SESSION['admin_error'] = 'Unable to save Eligibility Criteria right now.';
+        $_SESSION['admin_error'] = 'Unable to save Rules & Requirements right now.';
     } else {
 
         $upsert = $pdo->prepare(
@@ -2386,7 +2386,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         ]);
 
         $diffs = policy_console_audit_diff($old_decision_rules, $normalized_decision_rules);
-        $desc = 'Policy Console Eligibility Criteria updated';
+        $desc = 'Policy Console Rules & Requirements updated';
         if (!empty($diffs)) {
             $desc .= ': ' . implode('; ', $diffs);
         }
@@ -2397,7 +2397,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 
 
-        $_SESSION['admin_flash'] = 'Eligibility Criteria saved successfully.';
+        $_SESSION['admin_flash'] = 'Rules & Requirements saved successfully.';
     }
 
 
@@ -2419,7 +2419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     if ($encoded_compliance === false) {
 
-        $_SESSION['admin_error'] = 'Unable to save Compliance & Documents right now.';
+        $_SESSION['admin_error'] = 'Unable to save Required Documents right now.';
     } else {
 
         $upsert = $pdo->prepare(
@@ -2441,7 +2441,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         ]);
 
         $diffs = policy_console_audit_diff($old_compliance_documents, $normalized_compliance);
-        $desc = 'Policy Console Compliance & Documents updated';
+        $desc = 'Policy Console Required Documents updated';
         if (!empty($diffs)) {
             $desc .= ': ' . implode('; ', $diffs);
         }
@@ -2452,7 +2452,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 
 
-        $_SESSION['admin_flash'] = 'Compliance & Documents saved successfully.';
+        $_SESSION['admin_flash'] = 'Required Documents saved successfully.';
     }
 
 
@@ -2741,7 +2741,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 
 
-        // ─── Toggle Staff Status ─────────────────────────────────
+        // â”€â”€â”€ Toggle Staff Status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         if ($action === 'toggle_staff_status') {
 
@@ -2770,7 +2770,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 
 
-        // ─── Edit Staff ──────────────────────────────────────────
+        // â”€â”€â”€ Edit Staff â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         if ($action === 'edit_staff') {
 
@@ -3667,7 +3667,7 @@ foreach ($toggles_stmt->fetchAll() as $row) {
 
 
 
-// ── Loan Products Data ──
+// â”€â”€ Loan Products Data â”€â”€
 
 $loan_products_stmt = $pdo->prepare('SELECT * FROM loan_products WHERE tenant_id = ? ORDER BY is_active DESC, updated_at DESC, product_id DESC');
 
@@ -3771,7 +3771,7 @@ if ($lp_form_product_type !== '' && !in_array($lp_form_product_type, $loan_produ
 
 
 
-// ── Credit Settings Data ──
+// â”€â”€ Credit Settings Data â”€â”€
 
 // TODO: Keep the current storage as-is for now, but split the Credit Assessment UI later into:
 
@@ -3789,7 +3789,7 @@ extract(admin_build_credit_policy_workspace_state($pdo, (string)$tenant_id), EXT
 
 
 
-// ── Website Editor Data ──
+// â”€â”€ Website Editor Data â”€â”€
 
 $ws_stmt = $pdo->prepare('SELECT * FROM tenant_website_content WHERE tenant_id = ?');
 
@@ -4218,7 +4218,7 @@ function hexToRgb($hex)
         }
 
         <?php endif; ?>
-        /* ── Website Editor ── */
+        /* â”€â”€ Website Editor â”€â”€ */
 
         .we-template-picker {
             display: grid;
@@ -7614,15 +7614,15 @@ function hexToRgb($hex)
 
                         </a>
 
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=decision_rules" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'decision_rules' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="decision_rules" data-title="Eligibility Criteria">
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=decision_rules" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'decision_rules' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="decision_rules" data-title="Rules &amp; Requirements">
 
-                            <span>Eligibility Criteria</span>
+                            <span>Rules &amp; Requirements</span>
 
                         </a>
 
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=compliance_documents" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'compliance_documents' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="compliance_documents" data-title="Compliance &amp; Documents">
+                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=compliance_documents" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'compliance_documents' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="compliance_documents" data-title="Required Documents">
 
-                            <span>Compliance &amp; Documents</span>
+                            <span>Required Documents</span>
 
                         </a>
 
@@ -9568,7 +9568,7 @@ function hexToRgb($hex)
 
                                         <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); padding: 8px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); text-align: right;">
 
-                                            <div style="font-weight: 800; font-size: 1.25rem;">₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 0); ?></div>
+                                            <div style="font-weight: 800; font-size: 1.25rem;">â‚±<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 0); ?></div>
 
                                             <div style="font-size: 0.75rem; opacity: 0.9;">per month</div>
 
@@ -9634,13 +9634,13 @@ function hexToRgb($hex)
 
                                                     <select name="new_plan" id="new-plan-select" style="flex: 1; min-width: 140px; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">
 
-                                                        <option value="Starter" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - ₱4,999/mo</option>
+                                                        <option value="Starter" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - â‚±4,999/mo</option>
 
-                                                        <option value="Pro" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - ₱14,999/mo</option>
+                                                        <option value="Pro" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - â‚±14,999/mo</option>
 
-                                                        <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱19,999/mo</option>
+                                                        <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - â‚±19,999/mo</option>
 
-                                                        <option value="Unlimited" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - ₱29,999/mo</option>
+                                                        <option value="Unlimited" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - â‚±29,999/mo</option>
 
                                                     </select>
 
@@ -9782,7 +9782,7 @@ function hexToRgb($hex)
 
                                                     <span style="font-size: 1.25rem; font-weight: 800; color: var(--text-color);"><?php echo number_format($current_total_clients); ?></span>
 
-                                                    <span class="text-muted" style="font-weight: 500; font-size: 0.9rem;"> / <?php echo $max_clients > 0 ? number_format($max_clients) : '∞'; ?></span>
+                                                    <span class="text-muted" style="font-weight: 500; font-size: 0.9rem;"> / <?php echo $max_clients > 0 ? number_format($max_clients) : 'âˆž'; ?></span>
 
                                                 </div>
 
@@ -9824,7 +9824,7 @@ function hexToRgb($hex)
 
                                                     <span style="font-size: 1.25rem; font-weight: 800; color: var(--text-color);"><?php echo number_format($current_active_staff); ?></span>
 
-                                                    <span class="text-muted" style="font-weight: 500; font-size: 0.9rem;"> / <?php echo $max_users > 0 ? number_format($max_users) : '∞'; ?></span>
+                                                    <span class="text-muted" style="font-weight: 500; font-size: 0.9rem;"> / <?php echo $max_users > 0 ? number_format($max_users) : 'âˆž'; ?></span>
 
                                                 </div>
 
@@ -9986,7 +9986,7 @@ function hexToRgb($hex)
 
                                                             <span class="material-symbols-rounded text-muted">credit_card</span>
 
-                                                            <span class="text-muted" style="font-weight: 500;">•••• <?php echo htmlspecialchars($pm['last_four_digits']); ?></span>
+                                                            <span class="text-muted" style="font-weight: 500;">â€¢â€¢â€¢â€¢ <?php echo htmlspecialchars($pm['last_four_digits']); ?></span>
 
                                                         </div>
 
@@ -11198,7 +11198,7 @@ function hexToRgb($hex)
 
 
 
-                <!-- ═══ WEBSITE EDITOR ═══ -->
+                <!-- â•â•â• WEBSITE EDITOR â•â•â• -->
 
                 <section id="website" class="view-section <?php echo $active_view === 'website' ? 'active' : ''; ?>">
 
@@ -11242,7 +11242,7 @@ function hexToRgb($hex)
 
                 </section>
 
-                <!-- ═══ LOAN PRODUCTS SETTINGS ═══ -->
+                <!-- â•â•â• LOAN PRODUCTS SETTINGS â•â•â• -->
 
                 <section id="loan_products" class="view-section <?php echo $active_view === 'loan_products' ? 'active' : ''; ?>">
 
@@ -11534,10 +11534,15 @@ function hexToRgb($hex)
 
                                                 <!-- Early Settlement Fee Card -->
                                                 <div class="credit-policy-card" style="margin-top: 24px;">
-                                                    <div class="credit-policy-card-header">
+                                                    <div class="credit-policy-card-header" style="display: flex; justify-content: space-between; align-items: center;">
                                                         <h3 class="credit-policy-card-title">Early Settlement Fee</h3>
+                                                        <label class="switch" style="margin: 0;">
+                                                            <input type="hidden" name="early_settlement_fee_enabled" value="0">
+                                                            <input type="checkbox" id="esf_master_toggle" name="early_settlement_fee_enabled" value="1" <?php echo !empty($lp_form['early_settlement_fee_enabled']) ? 'checked' : ''; ?>>
+                                                            <span class="slider round"></span>
+                                                        </label>
                                                     </div>
-                                                    <div class="credit-policy-card-body">
+                                                    <div class="credit-policy-card-body" id="esf_card_body" style="transition: opacity 0.2s ease, filter 0.2s ease;">
                                                         <div style="display: flex; flex-direction: column; gap: 16px;">
                                                             <div class="form-group" style="margin-bottom: 0;">
                                                                 <label style="margin-bottom: 12px; display: block; font-weight: 600; color: var(--text-color);">Fee Type</label>
@@ -11571,6 +11576,30 @@ function hexToRgb($hex)
                                                 <!-- Script to toggle prefix -->
                                                 <script>
                                                     document.addEventListener('DOMContentLoaded', function() {
+                                                        const masterToggle = document.getElementById('esf_master_toggle');
+                                                        const esfCardBody = document.getElementById('esf_card_body');
+                                                        const esfInputs = esfCardBody ? esfCardBody.querySelectorAll('input') : [];
+
+                                                        function updateESFState() {
+                                                            if (!masterToggle || !esfCardBody) return;
+                                                            const isEnabled = masterToggle.checked;
+                                                            esfCardBody.style.opacity = isEnabled ? '1' : '0.4';
+                                                            esfCardBody.style.pointerEvents = isEnabled ? 'auto' : 'none';
+                                                            esfCardBody.style.filter = isEnabled ? 'none' : 'grayscale(1)';
+                                                            esfInputs.forEach(input => {
+                                                                if (input !== masterToggle && input.name !== 'early_settlement_fee_enabled') {
+                                                                    // We disable them to prevent submission of data when off (unless backend handles it)
+                                                                    // actually we can just keep them enabled but visually hidden,
+                                                                    // but greyed out through pointer-events:none
+                                                                }
+                                                            });
+                                                        }
+
+                                                        if (masterToggle) {
+                                                            masterToggle.addEventListener('change', updateESFState);
+                                                            updateESFState();
+                                                        }
+
                                                         const toggleSwitch = document.getElementById('early_settlement_toggle_switch');
                                                         const hiddenInput = document.getElementById('early_settlement_fee_type_input');
                                                         const prefixSpan = document.getElementById('early_settlement_fee_value_prefix');
@@ -11674,7 +11703,7 @@ function hexToRgb($hex)
 
                                                             <span>Maximum amount</span>
 
-                                                            <strong data-loan-preview-bind="max-amount">₱100,000.00</strong>
+                                                            <strong data-loan-preview-bind="max-amount">â‚±100,000.00</strong>
 
                                                         </div>
 
@@ -11690,7 +11719,7 @@ function hexToRgb($hex)
 
                                                             <span>Est. cash release</span>
 
-                                                            <strong data-loan-preview-bind="cash-release">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="cash-release">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11708,7 +11737,7 @@ function hexToRgb($hex)
 
                                                             <strong>Sample loan amount</strong>
 
-                                                            <span data-loan-preview-bind="selected-amount">₱0.00</span>
+                                                            <span data-loan-preview-bind="selected-amount">â‚±0.00</span>
 
                                                         </div>
 
@@ -11716,9 +11745,9 @@ function hexToRgb($hex)
 
                                                         <div class="loan-preview-range-meta">
 
-                                                            <span data-loan-preview-bind="min-amount">₱0.00</span>
+                                                            <span data-loan-preview-bind="min-amount">â‚±0.00</span>
 
-                                                            <span data-loan-preview-bind="max-amount-range">₱0.00</span>
+                                                            <span data-loan-preview-bind="max-amount-range">â‚±0.00</span>
 
                                                         </div>
 
@@ -11756,7 +11785,7 @@ function hexToRgb($hex)
 
                                                             <span>Estimated installment</span>
 
-                                                            <strong data-loan-preview-bind="estimated-installment">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="estimated-installment">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11764,7 +11793,7 @@ function hexToRgb($hex)
 
                                                             <span>Total repayment</span>
 
-                                                            <strong data-loan-preview-bind="total-repayment">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="total-repayment">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11772,7 +11801,7 @@ function hexToRgb($hex)
 
                                                             <span>Total upfront charges</span>
 
-                                                            <strong data-loan-preview-bind="charges-total">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="charges-total">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11780,7 +11809,7 @@ function hexToRgb($hex)
 
                                                             <span>Estimated cash release</span>
 
-                                                            <strong data-loan-preview-bind="cash-release">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="cash-release">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11794,7 +11823,7 @@ function hexToRgb($hex)
 
                                                             <span>Processing fee</span>
 
-                                                            <strong data-loan-preview-bind="processing-fee-value">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="processing-fee-value">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11802,7 +11831,7 @@ function hexToRgb($hex)
 
                                                             <span>Insurance fee</span>
 
-                                                            <strong data-loan-preview-bind="insurance-fee-value">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="insurance-fee-value">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11810,7 +11839,7 @@ function hexToRgb($hex)
 
                                                             <span>Service charge</span>
 
-                                                            <strong data-loan-preview-bind="service-charge-value">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="service-charge-value">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11818,7 +11847,7 @@ function hexToRgb($hex)
 
                                                             <span>Documentary stamp</span>
 
-                                                            <strong data-loan-preview-bind="doc-stamp-value">₱0.00</strong>
+                                                            <strong data-loan-preview-bind="doc-stamp-value">â‚±0.00</strong>
 
                                                         </div>
 
@@ -11958,7 +11987,7 @@ function hexToRgb($hex)
 
                 <?php if (false): ?>
 
-                    <!-- ═══ CREDIT SETTINGS ═══ -->
+                    <!-- â•â•â• CREDIT SETTINGS â•â•â• -->
 
                     <?php
 
@@ -14003,7 +14032,7 @@ function hexToRgb($hex)
     </script>
 
     <script>
-        // ── Website Editor JS ──
+        // â”€â”€ Website Editor JS â”€â”€
 
         (function() {
 
@@ -14546,7 +14575,7 @@ function hexToRgb($hex)
 
                 } else if (defaultScoreRaw <= reviewBandEnd) {
 
-                    defaultBandLabel = 'New clients will land in the Review band (' + rejectBelow + '–' + reviewBandEnd + ')';
+                    defaultBandLabel = 'New clients will land in the Review band (' + rejectBelow + 'â€“' + reviewBandEnd + ')';
 
                     defaultBandColor = 'var(--warning-color, #f59e0b)';
 

@@ -46,7 +46,7 @@ if (!function_exists('policy_console_credit_limits_normalize')) {
         };
         $normalizeDays = static function ($value, $fallback): int {
             $days = is_numeric($value) ? (float)$value : (float)$fallback;
-            return (int)round(min(3650, max(1, $days)));
+            return $days <= 0 ? 0 : (int)round(min(3650, max(1, $days)));
         };
         $normalizeInt = static function ($value, $fallback, int $min = 0, int $max = 1000): int {
             $number = is_numeric($value) ? (float)$value : (float)$fallback;
@@ -138,6 +138,7 @@ if (!function_exists('policy_console_credit_limits_normalize')) {
                         ],
                         'no_active_overdue' => [
                             'enabled' => $normalizeToggle($detailed['upgrade']['no_active_overdue']['enabled'] ?? $defaults['scoring_setup']['detailed_rules']['upgrade']['no_active_overdue']['enabled']),
+                            'review_period_days' => $normalizeDays($detailed['upgrade']['no_active_overdue']['review_period_days'] ?? null, $defaults['scoring_setup']['detailed_rules']['upgrade']['no_active_overdue']['review_period_days']),
                             'score_points' => $normalizeInt($detailed['upgrade']['no_active_overdue']['score_points'] ?? null, $defaults['scoring_setup']['detailed_rules']['upgrade']['no_active_overdue']['score_points']),
                         ],
                     ],
@@ -209,8 +210,8 @@ if (!function_exists('policy_console_credit_limits_build_from_post')) {
             'scoring_setup' => [
                 'core' => [
                     'starting_credit_score' => $source['pcc_core_starting_credit_score'] ?? null,
-                    'repayment_score_bonus' => $source['pcc_core_repayment_score_bonus'] ?? null,
-                    'late_payment_score_penalty' => $source['pcc_core_late_payment_score_penalty'] ?? null,
+                    'repayment_score_bonus' => null, // Explicitly removed transactional mapping
+                    'late_payment_score_penalty' => null, // Explicitly removed transactional mapping
                 ],
                 'detailed_rules' => [
                     'upgrade' => [
@@ -227,6 +228,7 @@ if (!function_exists('policy_console_credit_limits_build_from_post')) {
                         ],
                         'no_active_overdue' => [
                             'enabled' => $source['pcc_upgrade_no_active_overdue_enabled'] ?? 0,
+                            'review_period_days' => $source['pcc_upgrade_no_active_overdue_review_days'] ?? null,
                             'score_points' => $source['pcc_upgrade_no_active_overdue_points'] ?? null,
                         ],
                     ],
@@ -253,7 +255,6 @@ if (!function_exists('policy_console_credit_limits_build_from_post')) {
                 'use_default_lending_cap' => $source['pcc_limit_use_default_lending_cap'] ?? 0,
                 'default_lending_cap_amount' => $source['pcc_limit_default_lending_cap_amount'] ?? null,
                 'apply_score_changes_immediately' => $source['pcc_limit_apply_score_changes_immediately'] ?? 0,
-                'maximum_dti_ratio' => $source['pcc_limit_maximum_dti_ratio'] ?? null,
             ],
         ];
 

@@ -100,12 +100,6 @@ if (!function_exists('policy_console_compliance_documents_normalize')) {
             return (int)round(min($max, max($min, $number)));
         };
 
-        $validOwners = ['compliance_team', 'operations_team', 'branch_team'];
-        $verificationOwner = (string)($input['validity_rules']['verification_owner'] ?? $defaults['validity_rules']['verification_owner']);
-        if (!in_array($verificationOwner, $validOwners, true)) {
-            $verificationOwner = $defaults['validity_rules']['verification_owner'];
-        }
-
         $inputRows = [];
         if (!empty($input['document_requirements']) && is_array($input['document_requirements'])) {
             foreach ($input['document_requirements'] as $row) {
@@ -183,21 +177,6 @@ if (!function_exists('policy_console_compliance_documents_normalize')) {
         }
 
         return [
-            'validity_rules' => [
-                'default_validity_days' => $normalizeInt(
-                    $input['validity_rules']['default_validity_days'] ?? null,
-                    $defaults['validity_rules']['default_validity_days'],
-                    1,
-                    3650
-                ),
-                'renewal_reminder_days' => $normalizeInt(
-                    $input['validity_rules']['renewal_reminder_days'] ?? null,
-                    $defaults['validity_rules']['renewal_reminder_days'],
-                    0,
-                    3650
-                ),
-                'verification_owner' => $verificationOwner,
-            ],
             'document_requirements' => $rows,
         ];
     }
@@ -223,9 +202,6 @@ if (!function_exists('policy_console_compliance_documents_build_from_post')) {
     function policy_console_compliance_documents_build_from_post(array $source, PDO $pdo): array
     {
         $catalog = policy_console_compliance_documents_catalog($pdo);
-        $requirements = isset($source['pcd_requirement']) && is_array($source['pcd_requirement'])
-            ? $source['pcd_requirement']
-            : [];
         $selectedDocs = isset($source['pcd_docs']) && is_array($source['pcd_docs'])
             ? $source['pcd_docs']
             : [];
@@ -239,17 +215,12 @@ if (!function_exists('policy_console_compliance_documents_build_from_post')) {
 
             $documentRequirements[] = [
                 'category_key' => $categoryKey,
-                'requirement' => $requirements[$categoryKey] ?? null,
+                'requirement' => 'required', // Always set to required since the column was removed
                 'accepted_document_names' => $acceptedNames,
             ];
         }
 
         $payload = [
-            'validity_rules' => [
-                'default_validity_days' => $source['pcd_default_validity_days'] ?? null,
-                'renewal_reminder_days' => $source['pcd_renewal_reminder_days'] ?? null,
-                'verification_owner' => $source['pcd_verification_owner'] ?? null,
-            ],
             'document_requirements' => $documentRequirements,
         ];
 

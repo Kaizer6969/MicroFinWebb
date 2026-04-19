@@ -80,11 +80,12 @@ $policy_console_assignment_status = 'Configured';
                 <p>You have unsaved changes on this page.</p>
             </div>
             <div class="policy-blueprint-modal-body">
-                <p>If you leave now, your recent edits to the Credit &amp; Limits configuration will be lost. Do you want to discard your changes?</p>
+                <p>If you leave now, your recent edits to the Credit &amp; Limits configuration will be lost. Do you want to save or discard your changes?</p>
             </div>
-            <div class="policy-blueprint-modal-footer">
+            <div class="policy-blueprint-modal-footer" style="display: flex; gap: 8px; justify-content: flex-end;">
                 <button type="button" class="btn btn-outline" data-modal-dismiss>Cancel</button>
-                <button type="button" class="btn btn-ghost-danger" id="policy-unsaved-discard-btn">Discard Changes</button>
+                <button type="button" class="btn btn-ghost-danger" id="policy-unsaved-discard-btn">Discard</button>
+                <button type="button" class="btn btn-primary" id="policy-unsaved-save-btn">Save</button>
             </div>
         </div>
     </div>

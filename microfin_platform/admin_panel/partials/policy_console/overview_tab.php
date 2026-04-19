@@ -157,8 +157,14 @@ $policy_console_simulator_config = htmlspecialchars((string)json_encode([
             </div>
             <div class="policy-metric-card">
                 <span>Guarantor Trigger</span>
-                <strong>PHP <?php echo number_format((float)($policy_console_decision_overview['decision_rules']['borrower_safeguards']['guarantor_required_above_amount'] ?? 0), 2); ?></strong>
-                <small>Borrower safeguard trigger inside Eligibility Criteria.</small>
+                <strong><?php 
+                    if (!empty($policy_console_decision_overview['decision_rules']['exposure']['guarantor_required_enabled'])) {
+                        echo 'PHP ' . number_format((float)($policy_console_decision_overview['decision_rules']['exposure']['guarantor_required_above_amount'] ?? 0), 2);
+                    } else {
+                        echo 'Disabled';
+                    }
+                ?></strong>
+                <small>Borrower safeguard trigger inside Rules &amp; Requirements.</small>
             </div>
         </div>
     </section>
@@ -191,7 +197,7 @@ $policy_console_simulator_config = htmlspecialchars((string)json_encode([
                         value="<?php echo $policy_console_starting_score; ?>"
                         data-simulator-score-input
                     >
-                    <small>Uses the tenant’s saved score bands to determine the current band level.</small>
+                    <small>Uses the tenantâ€™s saved score bands to determine the current band level.</small>
                 </label>
 
                 <label class="policy-playground-control">
@@ -265,19 +271,19 @@ $policy_console_simulator_config = htmlspecialchars((string)json_encode([
             </div>
             <div class="policy-console-module-card">
                 <div class="policy-console-card-head">
-                    <strong>Eligibility Criteria</strong>
+                    <strong>Rules &amp; Requirements</strong>
                     <span class="policy-console-chip"><?php echo number_format((int)($policy_console_decision_overview['decision_rules']['score_thresholds']['hard_approval_threshold'] ?? 0)); ?>+</span>
                 </div>
                 <p class="text-muted">Workflow mode, score guardrails, CI expectations, access rules, review overrides, and borrower safeguards.</p>
-                <button type="button" class="btn btn-outline" data-credit-policy-nav-action="decision_rules">Open Eligibility Criteria</button>
+                <button type="button" class="btn btn-outline" data-credit-policy-nav-action="decision_rules">Open Rules &amp; Requirements</button>
             </div>
             <div class="policy-console-module-card">
                 <div class="policy-console-card-head">
-                    <strong>Compliance &amp; Documents</strong>
+                    <strong>Required Documents</strong>
                     <span class="policy-console-chip"><?php echo number_format($policy_console_required_categories); ?> required</span>
                 </div>
                 <p class="text-muted">Document validity defaults and the Governance Matrix saved by document name.</p>
-                <button type="button" class="btn btn-outline" data-credit-policy-nav-action="compliance_documents">Open Compliance &amp; Documents</button>
+                <button type="button" class="btn btn-outline" data-credit-policy-nav-action="compliance_documents">Open Required Documents</button>
             </div>
         </div>
     </section>

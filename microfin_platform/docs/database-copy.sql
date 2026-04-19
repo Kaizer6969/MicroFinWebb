@@ -186,6 +186,7 @@ CREATE TABLE `clients` (
   `last_seen_credit_limit` decimal(15,2) DEFAULT '0.00',
   `seen_approval_modal` tinyint(1) DEFAULT '0',
   `credit_limit_tier` int DEFAULT '0',
+  `policy_metadata` json DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

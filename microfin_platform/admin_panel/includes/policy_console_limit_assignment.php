@@ -9,11 +9,9 @@ if (!function_exists('policy_console_limit_assignment_defaults')) {
         $limitAssignment = $defaults['limit_assignment'] ?? [];
 
         return [
-            'initial_limit_percent_of_income' => (float)($limitAssignment['initial_limit_percent_of_income'] ?? 45),
-            'maximum_dti_ratio' => (float)($limitAssignment['maximum_dti_ratio'] ?? 40),
+            'initial_limit_percent_of_income' => (float)($limitAssignment['initial_limit_percent_of_income'] ?? 40),
             'use_default_lending_cap' => !empty($limitAssignment['use_default_lending_cap']),
             'default_lending_cap_amount' => (float)($limitAssignment['default_lending_cap_amount'] ?? 0),
-            'score_change_steps' => array_values(array_map('intval', (array)($limitAssignment['score_change_steps'] ?? [5, 10, 15, 20]))),
             'apply_score_changes_immediately' => array_key_exists('apply_score_changes_immediately', $limitAssignment)
                 ? !empty($limitAssignment['apply_score_changes_immediately'])
                 : true,
@@ -37,32 +35,15 @@ if (!function_exists('policy_console_limit_assignment_normalize')) {
         $input = is_array($payload) ? array_replace($defaults, $payload) : $defaults;
 
         $initialLimitPercent = $input['initial_limit_percent_of_income'] ?? $input['new_borrower_utilization_percent'] ?? $defaults['initial_limit_percent_of_income'];
-        $maximumDtiRatio = $input['maximum_dti_ratio'] ?? $defaults['maximum_dti_ratio'];
         $useDefaultLendingCap = array_key_exists('use_default_lending_cap', $input)
             ? !empty($input['use_default_lending_cap'])
             : (!empty($input['max_absolute_exposure']) && (float)$input['max_absolute_exposure'] > 0);
         $defaultLendingCapAmount = $input['default_lending_cap_amount'] ?? $input['max_absolute_exposure'] ?? $defaults['default_lending_cap_amount'];
-        $scoreChangeSteps = isset($input['score_change_steps']) && is_array($input['score_change_steps'])
-            ? $input['score_change_steps']
-            : $defaults['score_change_steps'];
-
-        $normalizedSteps = [];
-        foreach ($scoreChangeSteps as $step) {
-            $stepValue = (int)$step;
-            if ($stepValue > 0) {
-                $normalizedSteps[$stepValue] = $stepValue;
-            }
-        }
-        if ($normalizedSteps === []) {
-            $normalizedSteps = [5 => 5, 10 => 10, 15 => 15, 20 => 20];
-        }
 
         return [
             'initial_limit_percent_of_income' => round(min(100, max(0, (float)$initialLimitPercent)), 2),
-            'maximum_dti_ratio' => round(min(100, max(0, (float)$maximumDtiRatio)), 2),
             'use_default_lending_cap' => $useDefaultLendingCap,
             'default_lending_cap_amount' => round(max(0, (float)$defaultLendingCapAmount), 2),
-            'score_change_steps' => array_values($normalizedSteps),
             'apply_score_changes_immediately' => array_key_exists('apply_score_changes_immediately', $input)
                 ? !empty($input['apply_score_changes_immediately'])
                 : $defaults['apply_score_changes_immediately'],

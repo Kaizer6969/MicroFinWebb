@@ -105,11 +105,11 @@ if (!function_exists('policy_console_decision_rules_normalize')) {
                     'rejected_cooling_days' => $normalizeInt($d_guard['rejected_cooling_days'] ?? null, $def['guardrails']['rejected_cooling_days'], 0, 3650),
                 ],
                 'exposure' => [
-                    'new_borrower_cap_enabled' => $normalizeToggle($d_expo['new_borrower_cap_enabled'] ?? $def['exposure']['new_borrower_cap_enabled']),
-                    'first_loan_max_amount' => $normalizeDecimal($d_expo['first_loan_max_amount'] ?? null, $def['exposure']['first_loan_max_amount']),
                     'multiple_active_loans_enabled' => $normalizeToggle($d_expo['multiple_active_loans_enabled'] ?? $def['exposure']['multiple_active_loans_enabled']),
                     'guarantor_required_enabled' => $normalizeToggle($d_expo['guarantor_required_enabled'] ?? $def['exposure']['guarantor_required_enabled']),
-                    'guarantor_required_above_amount' => $normalizeDecimal($d_expo['guarantor_required_above_amount'] ?? null, $def['exposure']['guarantor_required_above_amount']),
+                    'guarantor_required_above_amount' => (isset($d_expo['guarantor_required_above_amount']) && $d_expo['guarantor_required_above_amount'] !== '') ? $normalizeDecimal($d_expo['guarantor_required_above_amount'], $def['exposure']['guarantor_required_above_amount']) : null,
+                    'collateral_required_enabled' => $normalizeToggle($d_expo['collateral_required_enabled'] ?? $def['exposure']['collateral_required_enabled']),
+                    'collateral_required_above_amount' => (isset($d_expo['collateral_required_above_amount']) && $d_expo['collateral_required_above_amount'] !== '') ? $normalizeDecimal($d_expo['collateral_required_above_amount'], $def['exposure']['collateral_required_above_amount'] ?? 0.0) : null,
                 ],
                 // Restored Legacy Keys for Onboarding & Credit Score Computation logic
                 'score_thresholds' => [
@@ -225,11 +225,11 @@ if (!function_exists('policy_console_decision_rules_build_from_post')) {
                     'rejected_cooling_days' => $source['pcdr_rejected_cooling_days'] ?? null,
                 ],
                 'exposure' => [
-                    'new_borrower_cap_enabled' => $source['pcdr_new_borrower_cap_enabled'] ?? null,
-                    'first_loan_max_amount' => $source['pcdr_first_loan_max_amount'] ?? null,
                     'multiple_active_loans_enabled' => $source['pcdr_multiple_active_loans_enabled'] ?? null,
                     'guarantor_required_enabled' => $source['pcdr_guarantor_required_enabled'] ?? null,
                     'guarantor_required_above_amount' => $source['pcdr_guarantor_required_above_amount'] ?? null,
+                    'collateral_required_enabled' => $source['pcdr_collateral_required_enabled'] ?? null,
+                    'collateral_required_above_amount' => $source['pcdr_collateral_required_above_amount'] ?? null,
                 ],
             ],
         ];

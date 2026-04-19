@@ -575,7 +575,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        let isFormDirty = false;
         let intendedNavigationUrl = null;
         let scoreBandOriginalState = null;
         let rowToDelete = null;
@@ -637,19 +636,33 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(deleteRowModal);
         }
 
-        function setFormDirty() {
-            isFormDirty = true;
+        let isFormDirty = false;
+        
+        let initialFormState = new URLSearchParams(new FormData(creditLimitsForm)).toString();
+        function checkFormDirty() {
+            const currentState = new URLSearchParams(new FormData(creditLimitsForm)).toString();
+            isFormDirty = currentState !== initialFormState;
+            window._isPolicyFormDirty = isFormDirty;
         }
 
         // Global dirty state listeners
-        creditLimitsForm.addEventListener('input', setFormDirty);
-        creditLimitsForm.addEventListener('change', setFormDirty);
+        creditLimitsForm.addEventListener('input', checkFormDirty);
+        creditLimitsForm.addEventListener('change', checkFormDirty);
 
-        // Save Button Handler
         const globalSaveBtn = document.getElementById('policy-global-save-btn');
         if (globalSaveBtn) {
             globalSaveBtn.addEventListener('click', () => {
-                isFormDirty = false; // By-pass warning
+                isFormDirty = false;
+                window._isPolicyFormDirty = false;
+                creditLimitsForm.submit();
+            });
+        }
+        
+        const forceSaveBtn = document.getElementById('policy-unsaved-save-btn');
+        if (forceSaveBtn) {
+            forceSaveBtn.addEventListener('click', () => {
+                isFormDirty = false;
+                window._isPolicyFormDirty = false;
                 creditLimitsForm.submit();
             });
         }
@@ -668,8 +681,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirmDiscardBtn) {
             confirmDiscardBtn.addEventListener('click', () => {
                 isFormDirty = false;
-                if (intendedNavigationUrl) {
-                    window.location.href = intendedNavigationUrl;
+                window._isPolicyFormDirty = false;
+                
+                if (window._intendedPolicyNavigation) {
+                    window._intendedPolicyNavigation();
+                    window._intendedPolicyNavigation = null;
+                    const unsavedModal = document.getElementById('policy-unsaved-modal');
+                    if (unsavedModal) {
+                        unsavedModal.hidden = true;
+                    }
+                } else if (intendedNavigationUrl) {
+                    if (typeof intendedNavigationUrl === 'function') {
+                        intendedNavigationUrl();
+                        const unsavedModal = document.getElementById('policy-unsaved-modal');
+                        if (unsavedModal) unsavedModal.hidden = true;
+                    } else {
+                        window.location.href = intendedNavigationUrl;
+                    }
                 }
             });
         }
@@ -680,7 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (rowToDelete) {
                     rowToDelete.remove();
                     syncScoreBandEmptyState();
-                    setFormDirty();
+                    checkFormDirty();
                 }
                 rowToDelete = null;
                 deleteRowModal.hidden = true;
@@ -1535,11 +1563,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             e.preventDefault();
-            activateSection(targetId, { navItem: item, subTabId: creditPolicySubtab || subTabId || '' });
-            if (targetId === 'credit_settings' && creditPolicySubtab) {
-                activateCreditPolicySubtab(creditPolicySubtab);
+            
+            const processNavigation = () => {
+                activateSection(targetId, { navItem: item, subTabId: creditPolicySubtab || subTabId || '' });
+                if (targetId === 'credit_settings' && creditPolicySubtab) {
+                    activateCreditPolicySubtab(creditPolicySubtab);
+                }
+                replaceUrlForSection(targetId, creditPolicySubtab || subTabId || '', href);
+            };
+
+            if (window._isPolicyFormDirty) {
+                const unsavedModal = document.getElementById('policy-unsaved-modal');
+                if (unsavedModal) {
+                    unsavedModal.hidden = false;
+                    window._intendedPolicyNavigation = processNavigation;
+                    return;
+                }
             }
-            replaceUrlForSection(targetId, creditPolicySubtab || subTabId || '', href);
+
+            processNavigation();
         });
     });
 
@@ -3693,5 +3735,83 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCreateRoleSummary();
         updateCreateRoleModuleCounts();
     }
+
+    function initPolicyConsoleCrossTabWarnings() {
+        const limitPercentInput = document.getElementById('pcc_limit_initial_percent_of_income');
+        const dtiPercentInput = document.querySelector('input[name="pcdr_max_dti_percentage"]');
+        const dtiEnabledToggle = document.querySelector('input[name="pcdr_dti_enabled"]');
+
+        const limitWarningBox = document.getElementById('limit_dti_mapping_warning');
+        const limitWarningDTIValue = document.querySelector('.limit_warning_current_dti');
+
+        const dtiWarningBox = document.getElementById('dti_limit_mapping_warning');
+        const dtiWarningLimitValue = document.querySelector('.dti_warning_current_limit');
+
+        function checkLimtDTIOverlap() {
+            if (!limitPercentInput || !dtiPercentInput || !limitWarningBox || !dtiWarningBox) return;
+
+            const limitVal = parseFloat(limitPercentInput.value) || 0;
+            const dtiVal = parseFloat(dtiPercentInput.value) || 0;
+            const isDtiEnabled = dtiEnabledToggle ? dtiEnabledToggle.value === '1' : true;
+
+            if (isDtiEnabled && limitVal > dtiVal && dtiVal > 0) {
+                if (limitWarningDTIValue) limitWarningDTIValue.textContent = dtiVal.toFixed(2);
+                if (dtiWarningLimitValue) dtiWarningLimitValue.textContent = limitVal.toFixed(2);
+                
+                limitWarningBox.style.display = 'block';
+                dtiWarningBox.style.display = 'block';
+            } else {
+                limitWarningBox.style.display = 'none';
+                dtiWarningBox.style.display = 'none';
+            }
+        }
+
+        if (limitPercentInput) {
+            limitPercentInput.addEventListener('input', checkLimtDTIOverlap);
+            limitPercentInput.addEventListener('change', checkLimtDTIOverlap);
+        }
+        if (dtiPercentInput) {
+            dtiPercentInput.addEventListener('input', checkLimtDTIOverlap);
+            dtiPercentInput.addEventListener('change', checkLimtDTIOverlap);
+        }
+        if (dtiEnabledToggle) {
+            // Also need to observe toggle changes. Toggle changes dispatch 'change' event usually.
+            dtiEnabledToggle.addEventListener('change', checkLimtDTIOverlap);
+        }
+
+        // Run validation on load
+        checkLimtDTIOverlap();
+    }
+    
+    function initPolicyConsoleToggleDisableStates() {
+        function bindDisableToggle(toggleName, inputId) {
+            const toggleInput = document.querySelector(`input[name="${toggleName}"]`);
+            const inputField = document.getElementById(inputId);
+            
+            if (toggleInput && inputField) {
+                const updateState = () => {
+                    const isEnabled = toggleInput.value === '1';
+                    inputField.disabled = !isEnabled;
+                    
+                    const wrapper = inputField.parentElement;
+                    if (wrapper) {
+                        wrapper.classList.toggle('policy-field-disabled', !isEnabled);
+                        wrapper.style.opacity = isEnabled ? '1' : '0.4';
+                    }
+                };
+                
+                toggleInput.addEventListener('change', updateState);
+                toggleInput.addEventListener('input', updateState);
+                updateState();
+            }
+        }
+        
+        bindDisableToggle('pcc_limit_use_default_lending_cap', 'pcc_limit_default_lending_cap_input');
+        bindDisableToggle('pcdr_guarantor_required_enabled', 'pcdr_guarantor_amount_input');
+        bindDisableToggle('pcdr_collateral_required_enabled', 'pcdr_collateral_amount_input');
+    }
+    
+    initPolicyConsoleCrossTabWarnings();
+    initPolicyConsoleToggleDisableStates();
 
 });

@@ -26,6 +26,7 @@ if (!function_exists('policy_console_system_defaults')) {
                             ],
                             'no_active_overdue' => [
                                 'enabled' => true,
+                                'review_period_days' => 0,
                                 'score_points' => 5,
                             ],
                         ],
@@ -89,8 +90,7 @@ if (!function_exists('policy_console_system_defaults')) {
                     ],
                 ],
                 'limit_assignment' => [
-                    'initial_limit_percent_of_income' => 45,
-                    'maximum_dti_ratio' => 40,
+                    'initial_limit_percent_of_income' => 40,
                     'use_default_lending_cap' => false,
                     'default_lending_cap_amount' => 0,
                     'apply_score_changes_immediately' => true,
@@ -109,39 +109,37 @@ if (!function_exists('policy_console_system_defaults')) {
                         'min_employment_months' => 6,
                         'residency_tenure_enabled' => false,
                         'min_residency_months' => 6,
-                        'employment_status_enabled' => false,
-                        'eligible_statuses' => ['Permanent', 'Business Owner'],
+                        'employment_status_enabled' => true,
+                        'eligible_statuses' => [
+                            'full_time', 'part_time', 'contract', 'freelancer', 
+                            'self_employed', 'casual', 'retired', 'student', 'unemployed'
+                        ],
                     ],
                     'affordability' => [
                         'income_enabled' => false,
                         'min_monthly_income' => 10000,
                         'dti_enabled' => false,
-                        'max_dti_percentage' => 40,
+                        'max_dti_percentage' => 45,
                         'pti_enabled' => false,
                         'max_pti_percentage' => 20,
                     ],
                     'guardrails' => [
                         'score_thresholds_enabled' => true,
-                        'auto_reject_floor' => 250,
-                        'hard_approval_threshold' => 650,
+                        'auto_reject_floor' => 50,
+                        'hard_approval_threshold' => 900,
                         'cooling_period_enabled' => false,
                         'rejected_cooling_days' => 30,
                     ],
                     'exposure' => [
-                        'new_borrower_cap_enabled' => false,
-                        'first_loan_max_amount' => 5000,
                         'multiple_active_loans_enabled' => true,
-                        'guarantor_required_enabled' => true,
-                        'guarantor_required_above_amount' => 50000,
+                        'guarantor_required_enabled' => false,
+                        'guarantor_required_above_amount' => null,
+                        'collateral_required_enabled' => false,
+                        'collateral_required_above_amount' => null,
                     ],
                 ],
             ],
             'compliance_documents' => [
-                'validity_rules' => [
-                    'default_validity_days' => 365,
-                    'renewal_reminder_days' => 30,
-                    'verification_owner' => 'compliance_team',
-                ],
                 'document_requirements' => array_map(
                     static function (array $category): array {
                         return [
@@ -229,132 +227,7 @@ if (!function_exists('policy_console_compliance_document_categories')) {
                     'IBP ID',
                     'Government Office / GOCC ID',
                 ],
-            ],
-            [
-                'category_key' => 'proof_of_income',
-                'label' => 'Proof of Income',
-                'default_requirement' => 'required',
-                'allowed_document_names' => [
-                    'Proof of Income',
-                    'Certificate of Employment',
-                    'Latest Payslip',
-                    'Bank Statement',
-                    'Income Tax Return (ITR)',
-                    'Remittance Record',
-                    'Business Financial Statements',
-                    'Sales Records',
-                ],
-            ],
-            [
-                'category_key' => 'proof_of_address',
-                'label' => 'Proof of Address',
-                'default_requirement' => 'required',
-                'allowed_document_names' => [
-                    'Proof of Billing',
-                    'Utility Bill',
-                    'Barangay Certificate',
-                    'Lease Agreement',
-                    'Barangay Clearance',
-                ],
-            ],
-            [
-                'category_key' => 'personal_civil_document',
-                'label' => 'Personal Civil Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'Marriage Certificate',
-                    'Birth Certificate',
-                ],
-            ],
-            [
-                'category_key' => 'business_document',
-                'label' => 'Business Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'Proof of Legitimacy Document',
-                    'Business Permit',
-                    'DTI Registration',
-                    'SEC Registration',
-                    'BIR Registration',
-                    'Business Plan',
-                    'DTI/SEC Registration',
-                    'Business Financial Statements',
-                ],
-            ],
-            [
-                'category_key' => 'education_document',
-                'label' => 'Education Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'School Enrollment Certificate',
-                    'School ID',
-                    'Certificate of Enrollment',
-                    'Admission Letter',
-                    'Tuition Fee Assessment',
-                    'Statement of Account',
-                ],
-            ],
-            [
-                'category_key' => 'agricultural_document',
-                'label' => 'Agricultural Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'Land Title/Lease Agreement',
-                    'Land Title',
-                    'Farm Lease Agreement',
-                    'Farm Plan',
-                    'Farm Certification',
-                ],
-            ],
-            [
-                'category_key' => 'medical_document',
-                'label' => 'Medical Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'Medical Certificate',
-                    'Hospital Bill',
-                    'Prescription',
-                    'Treatment Plan',
-                    'Prescription/Treatment Plan',
-                ],
-            ],
-            [
-                'category_key' => 'housing_property_document',
-                'label' => 'Housing / Property Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'Property Documents',
-                    'Tax Declaration',
-                    'Contract to Sell',
-                    'Construction Estimate',
-                    'Building Permit',
-                    'Contractor Quotation',
-                ],
-            ],
-            [
-                'category_key' => 'guarantor_document',
-                'label' => 'Guarantor Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'Guarantor Proof of Income',
-                    'Guarantor Proof of Address',
-                    'Guarantor Consent Letter',
-                    'Guarantor Valid ID Front',
-                    'Guarantor Valid ID Back',
-                ],
-            ],
-            [
-                'category_key' => 'collateral_document',
-                'label' => 'Collateral Document',
-                'default_requirement' => 'not_needed',
-                'allowed_document_names' => [
-                    'Collateral Ownership Document',
-                    'Official Receipt (OR)',
-                    'Certificate of Registration (CR)',
-                    'Appraisal Report',
-                    'Collateral Photos',
-                ],
-            ],
+            ]
         ];
     }
 }

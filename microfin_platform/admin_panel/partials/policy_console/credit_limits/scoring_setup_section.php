@@ -1,39 +1,94 @@
-<section class="policy-blueprint-card" id="policy-credit-limits-scoring">
-    <div class="policy-blueprint-card-head">
-        <div class="policy-blueprint-card-title">
-            <h4>Scoring Setup</h4>
-            <p class="text-muted">Keep the base score engine in Core Setup and open Lifecycle Eligibility only when you want to work on reassessment rules.</p>
+<?php
+// Retrieve the pristine system defaults for comparison
+$system_defaults = policy_console_credit_limits_system_defaults();
+$default_scoring_setup = $system_defaults['scoring_setup'] ?? [];
+
+// Check if the current section perfectly matches the defaults
+$is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? []) == $default_scoring_setup);
+?>
+<div class="policy-blueprint-panel" id="policy-credit-limits-scoring">
+    <div class="policy-blueprint-panel-head" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span class="policy-blueprint-panel-kicker">Core Setup</span>
+            <h5 style="margin-bottom: 0;">Scoring Setup</h5>
+        </div>
+        <div>
+            <?php if ($is_scoring_default): ?>
+                <span style="font-size: 12px; padding: 4px 8px; border-radius: 12px; background: var(--bg-surface-secondary); color: var(--text-muted); border: 1px solid var(--border-color);">
+                    System Default
+                </span>
+            <?php else: ?>
+                <span style="font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;">
+                    Modified
+                </span>
+            <?php endif; ?>
         </div>
     </div>
 
-    <div class="policy-blueprint-panel">
-        <div class="policy-blueprint-panel-head">
-            <div>
-                <span class="policy-blueprint-panel-kicker">Core Setup</span>
-                <h5>Scoring defaults</h5>
-            </div>
-        </div>
+    <div style="margin-bottom: 16px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); font-size: 13px; padding: 8px 12px; border-radius: 6px; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; color: #ffffff; font-size: 11px; font-weight: bold; line-height: 1;">!</span>
+        <span style="color: var(--text-muted);"><strong style="color: var(--text-color, inherit);">CS</strong> stands for Credit Score</span>
+    </div>
 
-        <div class="policy-blueprint-grid policy-blueprint-grid--three">
+    <div class="policy-blueprint-grid policy-blueprint-grid--three">
             <label class="policy-field">
                 <span class="policy-field-label">Starting Credit Score <?php echo $policy_console_help('Default score assigned before repayment behavior moves the borrower up or down.'); ?></span>
                 <input type="number" class="form-control" name="pcc_core_starting_credit_score" min="0" max="<?php echo (int)$credit_policy_score_ceiling; ?>" value="<?php echo htmlspecialchars((string)($policy_console_core_setup['starting_credit_score'] ?? 540)); ?>">
             </label>
 
-            <label class="policy-field">
-                <span class="policy-field-label">Repayment Score Bonus <?php echo $policy_console_help('Points added after a successful repayment cycle.'); ?></span>
-                <input type="number" class="form-control" name="pcc_core_repayment_score_bonus" min="0" max="1000" value="<?php echo htmlspecialchars((string)($policy_console_core_setup['repayment_score_bonus'] ?? 10)); ?>">
+            <!-- Dynamic Injection Containers -->
+            <!-- Upgrade Rules (Bonus) -->
+            <label class="policy-field" id="sync-container-upgrade-success" style="display: none;">
+                <span class="policy-field-label">Successful Repayment CS Increase</span>
+                <input type="number" class="form-control" id="sync-input-upgrade-success" min="0" max="1000">
             </label>
 
-            <label class="policy-field">
-                <span class="policy-field-label">Late Payment Score Penalty <?php echo $policy_console_help('Points deducted when late-payment behavior is recorded.'); ?></span>
-                <input type="number" class="form-control" name="pcc_core_late_payment_score_penalty" min="0" max="1000" value="<?php echo htmlspecialchars((string)($policy_console_core_setup['late_payment_score_penalty'] ?? 15)); ?>">
+            <label class="policy-field" id="sync-container-upgrade-late" style="display: none;">
+                <span class="policy-field-label">Max Late Payments CS Increase</span>
+                <input type="number" class="form-control" id="sync-input-upgrade-late" min="0" max="1000">
+            </label>
+
+            <label class="policy-field" id="sync-container-upgrade-no-overdue" style="display: none;">
+                <span class="policy-field-label">No Active Overdue CS Increase</span>
+                <input type="number" class="form-control" id="sync-input-upgrade-no-overdue" min="0" max="1000">
+            </label>
+
+            <!-- Downgrade Rules (Penalty) -->
+            <label class="policy-field" id="sync-container-downgrade-late" style="display: none;">
+                <span class="policy-field-label">Late Payments Count CS Deduction</span>
+                <input type="number" class="form-control" id="sync-input-downgrade-late" min="0" max="1000">
+            </label>
+
+            <label class="policy-field" id="sync-container-downgrade-overdue" style="display: none;">
+                <span class="policy-field-label">Overdue Days CS Deduction</span>
+                <input type="number" class="form-control" id="sync-input-downgrade-overdue" min="0" max="1000">
             </label>
         </div>
 
-        <div class="policy-blueprint-note">
-            <strong>Balanced default scoring</strong>
-            <span>New tenants start with ready-to-use scoring behavior, then adjust only the values that need to fit their operation.</span>
+        <div class="policy-field" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="policy-field-label" style="margin-bottom: 0;">
+                    Apply Score Changes Immediately <?php echo $policy_console_help('If enabled, credit score upgrades/downgrades automatically recalculate and apply to active credit limits instead of waiting for the next manual review cycle.'); ?>
+                </span>
+                <div class="policy-decision-rule-switch">
+                    <input
+                        type="hidden"
+                        name="pcc_limit_apply_score_changes_immediately"
+                        value="<?php echo !empty($policy_console_limit_assignment['apply_score_changes_immediately']) ? '1' : '0'; ?>"
+                        data-policy-toggle-input="pcc_limit_apply_score_changes_immediately"
+                    >
+                    <button
+                        type="button"
+                        class="policy-toggle-button <?php echo !empty($policy_console_limit_assignment['apply_score_changes_immediately']) ? 'is-on' : ''; ?>"
+                        data-policy-toggle-button="pcc_limit_apply_score_changes_immediately"
+                        aria-pressed="<?php echo !empty($policy_console_limit_assignment['apply_score_changes_immediately']) ? 'true' : 'false'; ?>"
+                        aria-label="Apply Score Changes Immediately"
+                    >
+                        <span class="policy-toggle-button__track"><span class="policy-toggle-button__thumb"></span></span>
+                        <span class="policy-toggle-button__label" data-policy-toggle-label><?php echo !empty($policy_console_limit_assignment['apply_score_changes_immediately']) ? 'On' : 'Off'; ?></span>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="policy-blueprint-panel-actions">
@@ -41,9 +96,9 @@
                 type="button"
                 class="btn btn-outline"
                 data-policy-toggle-panel="policy-lifecycle-panel"
-                data-panel-open-label="Open Detailed Rules"
+                data-panel-open-label="View Advanced Rules"
                 data-panel-close-label="Close"
-            >Open Detailed Rules</button>
+            >View Advanced Rules</button>
         </div>
     </div>
 
@@ -54,13 +109,6 @@
                 <h5>Lifecycle Eligibility</h5>
                 <p class="text-muted">Use lifecycle toggles to define the conditions that make a borrower eligible for upgrade or downgrade review.</p>
             </div>
-            <button
-                type="button"
-                class="btn btn-outline"
-                data-policy-toggle-panel="policy-lifecycle-panel"
-                data-panel-open-label="Open Detailed Rules"
-                data-panel-close-label="Close"
-            >Close</button>
         </div>
 
         <div class="policy-lifecycle-columns">
@@ -146,7 +194,16 @@
                             </label>
                             <label class="policy-field">
                                 <span class="policy-field-label">Review Period <?php echo $policy_console_help('Lookback window used to check recent borrower activity, for example last 30, 60, or 90 days.'); ?></span>
-                                <input type="number" class="form-control" name="pcc_upgrade_late_payments_review_days" min="1" max="3650" value="<?php echo htmlspecialchars((string)($upgrade_late_payments['review_period_days'] ?? 90)); ?>">
+                                <select class="form-control" name="pcc_upgrade_late_payments_review_days">
+                                    <?php $review_days = $upgrade_late_payments['review_period_days'] ?? 90; ?>
+                                    <option value="0" <?php echo $review_days == 0 ? 'selected' : ''; ?>>All Time</option>
+                                    <option value="30" <?php echo $review_days == 30 ? 'selected' : ''; ?>>30 Days</option>
+                                    <option value="60" <?php echo $review_days == 60 ? 'selected' : ''; ?>>60 Days</option>
+                                    <option value="90" <?php echo $review_days == 90 ? 'selected' : ''; ?>>90 Days</option>
+                                    <option value="120" <?php echo $review_days == 120 ? 'selected' : ''; ?>>120 Days</option>
+                                    <option value="180" <?php echo $review_days == 180 ? 'selected' : ''; ?>>180 Days</option>
+                                    <option value="365" <?php echo $review_days == 365 ? 'selected' : ''; ?>>1 Year</option>
+                                </select>
                             </label>
                             <label class="policy-field">
                                 <span class="policy-field-label">CS Increase</span>
@@ -183,6 +240,19 @@
                             </div>
                         </div>
                         <div class="policy-blueprint-grid policy-blueprint-grid--two">
+                            <label class="policy-field">
+                                <span class="policy-field-label">Review Period <?php echo $policy_console_help('Lookback window used to check recent borrower activity, for example last 30, 60, or 90 days.'); ?></span>
+                                <select class="form-control" name="pcc_upgrade_no_active_overdue_review_days">
+                                    <?php $no_overdue_days = $upgrade_no_overdue['review_period_days'] ?? 0; ?>
+                                    <option value="0" <?php echo $no_overdue_days == 0 ? 'selected' : ''; ?>>All Time</option>
+                                    <option value="30" <?php echo $no_overdue_days == 30 ? 'selected' : ''; ?>>30 Days</option>
+                                    <option value="60" <?php echo $no_overdue_days == 60 ? 'selected' : ''; ?>>60 Days</option>
+                                    <option value="90" <?php echo $no_overdue_days == 90 ? 'selected' : ''; ?>>90 Days</option>
+                                    <option value="120" <?php echo $no_overdue_days == 120 ? 'selected' : ''; ?>>120 Days</option>
+                                    <option value="180" <?php echo $no_overdue_days == 180 ? 'selected' : ''; ?>>180 Days</option>
+                                    <option value="365" <?php echo $no_overdue_days == 365 ? 'selected' : ''; ?>>1 Year</option>
+                                </select>
+                            </label>
                             <label class="policy-field">
                                 <span class="policy-field-label">CS Increase</span>
                                 <input type="number" class="form-control" name="pcc_upgrade_no_active_overdue_points" min="0" max="1000" value="<?php echo htmlspecialchars((string)($upgrade_no_overdue['score_points'] ?? 5)); ?>">
@@ -235,7 +305,16 @@
                             </label>
                             <label class="policy-field">
                                 <span class="policy-field-label">Review Period <?php echo $policy_console_help('Lookback window used to check recent borrower activity, for example last 30, 60, or 90 days.'); ?></span>
-                                <input type="number" class="form-control" name="pcc_downgrade_late_payments_review_days" min="1" max="3650" value="<?php echo htmlspecialchars((string)($downgrade_late_payments['review_period_days'] ?? 90)); ?>">
+                                <select class="form-control" name="pcc_downgrade_late_payments_review_days">
+                                    <?php $dw_review_days = $downgrade_late_payments['review_period_days'] ?? 90; ?>
+                                    <option value="0" <?php echo $dw_review_days == 0 ? 'selected' : ''; ?>>All Time</option>
+                                    <option value="30" <?php echo $dw_review_days == 30 ? 'selected' : ''; ?>>30 Days</option>
+                                    <option value="60" <?php echo $dw_review_days == 60 ? 'selected' : ''; ?>>60 Days</option>
+                                    <option value="90" <?php echo $dw_review_days == 90 ? 'selected' : ''; ?>>90 Days</option>
+                                    <option value="120" <?php echo $dw_review_days == 120 ? 'selected' : ''; ?>>120 Days</option>
+                                    <option value="180" <?php echo $dw_review_days == 180 ? 'selected' : ''; ?>>180 Days</option>
+                                    <option value="365" <?php echo $dw_review_days == 365 ? 'selected' : ''; ?>>1 Year</option>
+                                </select>
                             </label>
                             <label class="policy-field">
                                 <span class="policy-field-label">CS Deduction</span>
@@ -286,4 +365,76 @@
             </section>
         </div>
     </div>
-</section>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Rule mapping definitions
+    const syncRules = [
+        {
+            toggleSelector: 'input[name="pcc_upgrade_successful_repayment_enabled"]',
+            inputSelector: 'input[name="pcc_upgrade_successful_repayment_points"]',
+            containerId: 'sync-container-upgrade-success',
+            syncInputId: 'sync-input-upgrade-success'
+        },
+        {
+            toggleSelector: 'input[name="pcc_upgrade_late_payments_enabled"]',
+            inputSelector: 'input[name="pcc_upgrade_late_payments_points"]',
+            containerId: 'sync-container-upgrade-late',
+            syncInputId: 'sync-input-upgrade-late'
+        },
+        {
+            toggleSelector: 'input[name="pcc_upgrade_no_active_overdue_enabled"]',
+            inputSelector: 'input[name="pcc_upgrade_no_active_overdue_points"]',
+            containerId: 'sync-container-upgrade-no-overdue',
+            syncInputId: 'sync-input-upgrade-no-overdue'
+        },
+        {
+            toggleSelector: 'input[name="pcc_downgrade_late_payments_enabled"]',
+            inputSelector: 'input[name="pcc_downgrade_late_payments_points"]',
+            containerId: 'sync-container-downgrade-late',
+            syncInputId: 'sync-input-downgrade-late'
+        },
+        {
+            toggleSelector: 'input[name="pcc_downgrade_overdue_days_enabled"]',
+            inputSelector: 'input[name="pcc_downgrade_overdue_days_points"]',
+            containerId: 'sync-container-downgrade-overdue',
+            syncInputId: 'sync-input-downgrade-overdue'
+        }
+    ];
+
+    // Set up bidirectional syncs
+    syncRules.forEach(rule => {
+        const sourceInput = document.querySelector(rule.inputSelector);
+        const syncInput = document.getElementById(rule.syncInputId);
+        
+        if (sourceInput && syncInput) {
+            syncInput.value = sourceInput.value;
+            sourceInput.addEventListener('input', () => { syncInput.value = sourceInput.value; });
+            syncInput.addEventListener('input', () => { sourceInput.value = syncInput.value; });
+        }
+    });
+    
+    function syncDynamicFields() {
+        syncRules.forEach(rule => {
+            const toggle = document.querySelector(rule.toggleSelector);
+            const container = document.getElementById(rule.containerId);
+            
+            if (toggle && container) {
+                container.style.display = toggle.value === '1' ? 'block' : 'none';
+            }
+        });
+    }
+
+    // Listen for toggle clicks
+    const toggleButtons = document.querySelectorAll('.policy-toggle-button');
+    toggleButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            setTimeout(syncDynamicFields, 50); // slight delay to let toggle hidden input update
+        });
+    });
+
+    // Run on load
+    syncDynamicFields();
+});
+</script>

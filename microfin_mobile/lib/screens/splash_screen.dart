@@ -125,7 +125,7 @@ class _SplashScreenState extends State<SplashScreen>
                       const SizedBox(height: 32),
                       // Main headline
                       Text(
-                        'Empowering your financial journey.',
+                        'Your Digital Gateway to Financial Growth.',
                         style: GoogleFonts.outfit(
                           color: Colors.white,
                           fontSize: 38,
@@ -137,7 +137,7 @@ class _SplashScreenState extends State<SplashScreen>
                       const SizedBox(height: 16),
                       // Sub‑headline
                       Text(
-                        'Access credit instantly, track your loans in real-time, and manage your financial profile with ease.',
+                        'Secure access to instant credit, real-time portfolio tracking, and professional financial management.',
                         style: GoogleFonts.inter(
                           color: Colors.white.withOpacity(0.86),
                           fontSize: 15,

@@ -6480,7 +6480,7 @@ body.loan-products-modal-open .top-header {
       border: none;
       border-bottom: 1px solid rgba(148, 163, 184, 0.15);
       background: transparent;
-      overflow: hidden;
+      overflow: visible;
       padding-bottom: 8px;
   }
   
@@ -6706,8 +6706,8 @@ body.loan-products-modal-open .top-header {
       left: 50%;
       top: calc(100% + 10px);
       transform: translateX(-50%);
-      min-width: 220px;
-      max-width: 280px;
+      width: max-content;
+      max-width: 250px;
       padding: 10px 12px;
       border-radius: 12px;
       border: 1px solid rgba(var(--primary-rgb), 0.16);
@@ -6717,10 +6717,20 @@ body.loan-products-modal-open .top-header {
       font-size: 0.75rem;
       font-weight: 500;
       line-height: 1.45;
+      text-transform: none;
+      white-space: normal;
+      text-align: center;
+      box-sizing: border-box;
+      word-break: break-word;
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
-      z-index: 30;
+      z-index: 9999;
+  }
+
+  .policy-help:hover,
+  .policy-help:focus-visible {
+      z-index: 9999;
   }
 
   .policy-help:hover::after,

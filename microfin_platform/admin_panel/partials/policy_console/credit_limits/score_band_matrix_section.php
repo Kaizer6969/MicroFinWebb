@@ -1,18 +1,36 @@
 <section id="policy-credit-limits-bands">
     <div class="policy-blueprint-panel policy-score-band-panel">
-        <div class="policy-blueprint-panel-head">
+        <?php
+        $default_score_bands = $system_defaults['score_bands'] ?? [];
+        $is_score_bands_default = (($policy_console_credit_limits_safe['score_bands'] ?? []) == $default_score_bands);
+        ?>
+        <div class="policy-blueprint-panel-head" style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
                 <span class="policy-blueprint-panel-kicker">Score Band Matrix</span>
-                <h5>Ordered score bands</h5>
-                <p class="text-muted">Define score bands and the growth settings used after onboarding. Leave the top-band max blank to keep it open-ended, like 850+.</p>
+                <h5 style="margin-bottom: 0;">Ordered score bands</h5>
+                <p class="text-muted" style="margin-top: 4px;">Define score bands and the growth settings used after onboarding. Leave the top-band max blank to keep it open-ended, like 850+.</p>
             </div>
-            <div class="policy-score-band-toolbar">
-                <button type="button" class="btn btn-outline" id="policy-score-band-cancel-btn" style="display: none;">Cancel</button>
-                <button type="button" class="btn btn-outline" id="policy-score-band-customize-btn">Customize</button>
-                <button type="button" class="btn btn-outline" data-policy-score-band-add style="display: none;">
-                    <span class="material-symbols-rounded">add</span>
-                    Add Score Band
-                </button>
+            
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                <div>
+                    <?php if ($is_score_bands_default): ?>
+                        <span style="font-size: 12px; padding: 4px 8px; border-radius: 12px; background: var(--bg-surface-secondary); color: var(--text-muted); border: 1px solid var(--border-color);">
+                            System Default
+                        </span>
+                    <?php else: ?>
+                        <span style="font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;">
+                            Modified
+                        </span>
+                    <?php endif; ?>
+                </div>
+                <div class="policy-score-band-toolbar" style="margin-top: 0;">
+                    <button type="button" class="btn btn-outline" id="policy-score-band-cancel-btn" style="display: none;">Cancel</button>
+                    <button type="button" class="btn btn-outline" id="policy-score-band-customize-btn">Customize</button>
+                    <button type="button" class="btn btn-outline" data-policy-score-band-add style="display: none;">
+                        <span class="material-symbols-rounded">add</span>
+                        Add Score Band
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -50,11 +68,6 @@
                 </tbody>
             </table>
             <p class="policy-empty-note" data-policy-score-band-empty <?php echo count($policy_console_score_band_rows) > 0 ? 'hidden' : ''; ?>>No score bands added yet.</p>
-        </div>
-
-        <div class="policy-blueprint-note">
-            <strong>Onboarding vs growth</strong>
-            <span>Initial credit assignment uses the onboarding income percentage once. After that, these score-band growth settings take over for future limit movement.</span>
         </div>
     </div>
 </section>

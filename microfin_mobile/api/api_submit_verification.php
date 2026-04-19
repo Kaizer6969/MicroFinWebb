@@ -263,6 +263,63 @@ try {
     $lastName = $parsedName['last_name'] !== '' ? $parsedName['last_name'] : (string) ($client['last_name'] ?? '');
     $emailAddress = microfin_clean_string($client['email'] ?? '');
 
+    // ── POLICY ENGINE INTERCEPTION (GATE 2) ──
+    $finalVerificationStatus = 'Pending';
+    $rejectionReason = null;
+    $policyMetadataStr = null;
+
+    require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_system_defaults.php';
+    require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_decision_rules.php';
+
+    $rulesStmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'policy_console_decision_rules'");
+    $rulesStmt->bind_param('s', $tenantId);
+    $rulesStmt->execute();
+    $rulesRaw = json_decode($rulesStmt->get_result()->fetch_assoc()['setting_value'] ?? '{}', true) ?: [];
+    $rulesStmt->close();
+
+    $decisionRules = policy_console_decision_rules_normalize($rulesRaw, 850);
+    $demoRules = $decisionRules['decision_rules']['demographics'] ?? [];
+    $affordRules = $decisionRules['decision_rules']['affordability'] ?? [];
+
+    $rejectionTriggers = [];
+
+    // 1. Age Check
+    if (!empty($demoRules['age_enabled'])) {
+        $age = date_diff(date_create($birthDate), date_create('now'))->y;
+        if ($age < $demoRules['min_age']) {
+            $rejectionTriggers[] = "min_age";
+            $rejectionReason = "Not eligible: Minimum age requirement is " . $demoRules['min_age'] . ".";
+        } elseif ($age > $demoRules['max_age']) {
+            $rejectionTriggers[] = "max_age";
+            $rejectionReason = "Not eligible: Maximum age limit is " . $demoRules['max_age'] . ".";
+        }
+    }
+
+    // 2. Minimum Income Check
+    if ($rejectionReason === null && !empty($affordRules['income_enabled'])) {
+        $minIncome = (float)($affordRules['min_monthly_income'] ?? 0);
+        if ($monthlyIncome < $minIncome) {
+            $rejectionTriggers[] = "min_monthly_income";
+            $rejectionReason = "Not eligible: Minimum monthly income requirement not met.";
+        }
+    }
+
+    if ($rejectionReason !== null) {
+        $finalVerificationStatus = 'Rejected';
+        $coolingDays = (int)($decisionRules['decision_rules']['guardrails']['rejected_cooling_days'] ?? 30);
+        $coolingUntil = date('Y-m-d H:i:s', strtotime("+$coolingDays days"));
+
+        $policyMetadataStr = json_encode([
+            'last_rejection_date' => date('Y-m-d H:i:s'),
+            'cooling_until' => $coolingUntil,
+            'rejection_triggers' => $rejectionTriggers,
+            'eligibility_flags' => [
+                'can_apply' => false,
+                'reason' => 'Automatically rejected during verification.'
+            ]
+        ]);
+    }
+
     $docTypeStmt = $conn->prepare("
         SELECT document_type_id
         FROM document_types
@@ -301,7 +358,7 @@ try {
             verification_notes,
             expiry_date,
             is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, 1)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '$finalVerificationStatus', ?, ?, 1)
     ");
     if (!$insertDocStmt) {
         throw new RuntimeException('Failed to prepare document insert.');
