@@ -264,7 +264,7 @@
 
         function buildAgentResponse() {
             return {
-                answer: 'Please wait while we connect you to our staff.',
+                answer: 'Our human staff is ready to help! Please fill out the ' + linkHtml('Talk to an Agent form', 'demo.php?expert=1') + ' with your institution\'s details, and an expert will reach out to you via email shortly.',
                 topic: 'agent',
                 suggestions: []
             };

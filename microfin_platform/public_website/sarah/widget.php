@@ -24,7 +24,7 @@
             <button type="button" class="sarah-chatbot-chip" data-prompt="Is our client data secure?">Is our client data secure?</button>
             <button type="button" class="sarah-chatbot-chip" data-prompt="How does migration and go-live work?">How does migration and go-live work?</button>
             <button type="button" class="sarah-chatbot-chip" data-prompt="What training and support do we get?">What training and support do we get?</button>
-            <button type="button" class="sarah-chatbot-chip" data-prompt="Can I talk to an agent?">Can I talk to an agent?</button>
+            <!-- <button type="button" class="sarah-chatbot-chip" data-prompt="Can I talk to an agent?">Can I talk to an agent?</button> -->
         </div>
         <form class="sarah-chatbot-form">
             <input type="text" class="sarah-chatbot-input" aria-label="Message Sarah" placeholder="Share your concern and ask Sarah" autocomplete="off">

@@ -60,7 +60,7 @@ function microfin_app_base_url(): string
 
 function microfin_database_config(bool $includeDatabase = true): array
 {
-    $defaultDatabaseUrl = 'mysql://root:zVULvPIbSyHVavTRnPFAkMWGVmvRwInd@centerbeam.proxy.rlwy.net:52624/railway';
+    $defaultDatabaseUrl = 'mysql://root:lcwnEQrUEDOrGugVxeAuwJHLKLSiHduh@maglev.proxy.rlwy.net:10111/railway';
     $databaseUrl = microfin_config('DATABASE_URL', $defaultDatabaseUrl);
     $parsedUrl = $databaseUrl ? parse_url($databaseUrl) : false;
 
@@ -72,11 +72,11 @@ function microfin_database_config(bool $includeDatabase = true): array
     $config = [
         'host' => microfin_config(
             'MYSQLHOST',
-            is_array($parsedUrl) && isset($parsedUrl['host']) ? (string) $parsedUrl['host'] : 'centerbeam.proxy.rlwy.net'
+            is_array($parsedUrl) && isset($parsedUrl['host']) ? (string) $parsedUrl['host'] : 'maglev.proxy.rlwy.net'
         ),
         'port' => (int) microfin_config(
             'MYSQLPORT',
-            is_array($parsedUrl) && isset($parsedUrl['port']) ? (string) $parsedUrl['port'] : '52624'
+            is_array($parsedUrl) && isset($parsedUrl['port']) ? (string) $parsedUrl['port'] : '10111'
         ),
         'username' => microfin_config(
             'MYSQLUSER',
@@ -84,7 +84,7 @@ function microfin_database_config(bool $includeDatabase = true): array
         ),
         'password' => microfin_config(
             'MYSQLPASSWORD',
-            is_array($parsedUrl) && isset($parsedUrl['pass']) ? (string) $parsedUrl['pass'] : 'zVULvPIbSyHVavTRnPFAkMWGVmvRwInd'
+            is_array($parsedUrl) && isset($parsedUrl['pass']) ? (string) $parsedUrl['pass'] : 'lcwnEQrUEDOrGugVxeAuwJHLKLSiHduh'
         ),
         'database' => microfin_config('MYSQLDATABASE', $databaseNameFromUrl !== '' ? $databaseNameFromUrl : 'railway'),
     ];

@@ -548,6 +548,24 @@ try {
     error_log('Subscription schedule apply warning: ' . $e->getMessage());
 }
 
+if (isset($_GET['action']) && $_GET['action'] === 'get_chat_messages') {
+    $tenant_id = $_GET['tenant_id'] ?? '';
+    header('Content-Type: application/json');
+    if ($tenant_id) {
+        $stmt = $pdo->prepare("SELECT * FROM chat_messages WHERE tenant_id = ? ORDER BY created_at ASC");
+        $stmt->execute([$tenant_id]);
+        
+        // Mark as read when super admin opens it
+        $update = $pdo->prepare("UPDATE chat_messages SET is_read = 1 WHERE tenant_id = ? AND receiver_id = ?");
+        $update->execute([$tenant_id, $_SESSION['super_admin_id'] ?? 0]);
+        
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    } else {
+        echo json_encode([]);
+    }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -829,6 +847,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: super_admin.php?section=tenants');
             exit;
         }
+    } elseif ($action === 'send_chat_message') {
+        $tenant_id = $_POST['tenant_id'] ?? '';
+        $message = trim($_POST['message'] ?? '');
+        $sender_id = $_SESSION['super_admin_id'] ?? 0;
+        
+        // Find the primary owner of the tenant to act as the receiver
+        $owner_stmt = $pdo->prepare("SELECT user_id FROM users WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY user_id ASC LIMIT 1");
+        $owner_stmt->execute([$tenant_id]);
+        $receiver_id = $owner_stmt->fetchColumn() ?: 0;
+        
+        if ($tenant_id !== '' && $message !== '') {
+            $stmt = $pdo->prepare("INSERT INTO chat_messages (sender_id, receiver_id, tenant_id, message, is_read, created_at) VALUES (?, ?, ?, ?, 0, NOW())");
+            $stmt->execute([$sender_id, $receiver_id, $tenant_id, $message]);
+            echo json_encode(['status' => 'success']);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'Empty message or tenant ID']);
+        }
+        exit;
     } elseif ($action === 'send_talk_email') {
         $tenant_id = trim((string)($_POST['tenant_id'] ?? ''));
         if ($tenant_id === '') {
@@ -1660,11 +1696,13 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                     <span>Tenants</span>
                     <span class="nav-badge" id="sidebar-pending-badge" <?php if ($pending_applications === 0) echo 'style="display:none;"'; ?>><?php echo $pending_applications; ?></span>
                 </a>
+                <!--
                 <a href="#inquiries" class="nav-item" data-target="inquiries">
                     <span class="material-symbols-rounded">support_agent</span>
-                    <span>Inquiries</span>
+                    <span>Talk to an Agent</span>
                     <span class="nav-badge" id="sidebar-inquiry-badge" <?php if ($pending_inquiries === 0) echo 'style="display:none;"'; ?>><?php echo $pending_inquiries; ?></span>
                 </a>
+                -->
                 <a href="#subscriptions" class="nav-item" data-target="subscriptions">
                     <span class="material-symbols-rounded">credit_card</span>
                     <span>Tenant Subscriptions</span>
@@ -1955,8 +1993,8 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
 
                             <div class="card">
                                 <div class="card-header-flex" style="margin-bottom: 16px;">
-                                    <h3 style="margin-bottom: 0;">Recent Inquiries</h3>
-                                    <a href="#inquiries" class="btn-text" onclick="document.querySelector('.nav-item[data-target=inquiries]').click();">View Inquiries</a>
+                                    <h3 style="margin-bottom: 0;">Recent Agent Requests</h3>
+                                    <a href="#inquiries" class="btn-text" onclick="document.querySelector('.nav-item[data-target=inquiries]').click();">View All Requests</a>
                                 </div>
                                 <div class="recent-tenants-list">
                                     <?php if (count($recent_inquiries) === 0): ?>
@@ -2270,8 +2308,8 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                     <div class="card">
                         <div class="card-header-flex mb-4">
                             <div>
-                                <h3>Inquiries</h3>
-                                <p class="text-muted">Manage all Talk to an Expert inquiries.</p>
+                                <h3>Talk to an Agent</h3>
+                                <p class="text-muted">Manage all incoming Talk to an Agent requests.</p>
                             </div>
                             <div class="actions-flex">
                                 <select id="inquiry-status-filter" class="form-control" style="width: 200px;">
@@ -2282,7 +2320,7 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                 </select>
                                 <div class="search-box">
                                     <span class="material-symbols-rounded">search</span>
-                                    <input type="text" id="inquiry-search" placeholder="Search inquiries...">
+                                    <input type="text" id="inquiry-search" placeholder="Search requests...">
                                 </div>
                             </div>
                         </div>
@@ -2307,7 +2345,7 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                     <tr>
                                         <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-muted);">
                                             <span class="material-symbols-rounded" style="font-size:40px; display:block; margin-bottom:0.5rem;">support_agent</span>
-                                            No inquiries found.
+                                            No 'Talk to an Agent' requests found.
                                         </td>
                                     </tr>
                                     <?php else: ?>
@@ -2346,6 +2384,9 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
                                         <td><?php echo date('M d, Y', strtotime($iq['created_at'])); ?></td>
                                         <td>
                                             <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
+                                                <button type="button" class="btn btn-outline btn-sm" onclick="openAgentChat('<?php echo htmlspecialchars($iq['tenant_id']); ?>', '<?php echo htmlspecialchars($iq['tenant_name'], ENT_QUOTES); ?>')">
+                                                    <span class="material-symbols-rounded" style="font-size:16px;">chat</span> Chat
+                                                </button>
                                                 <?php if (in_array($iq_status, ['Pending', 'Contacted', 'New', 'In Contact'])): ?>
                                                     <form method="POST" style="display:inline;">
                                                         <input type="hidden" name="action" value="send_talk_email">
@@ -3580,8 +3621,111 @@ $platformLogoUrl = '../public_website/logo/MicroFin-logo-transparent-temp.png?v=
         </div>
     </div>
 
+    <!-- Agent Chat Modal -->
+    <div id="agent-chat-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card" style="max-width: 500px; display: flex; flex-direction: column; height: 60vh; background: #fff; border-radius: 12px; padding: 20px;">
+            <div class="modal-header d-flex justify-content-between align-items-center mb-3" style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                <h3 id="chat-modal-title" style="margin: 0;">Chat with Institution</h3>
+                <button type="button" class="icon-btn" onclick="closeAgentChat()">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            
+            <div id="chat-messages-container" style="flex: 1; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: var(--bg-level-1);">
+                <!-- Messages will be injected here via JS -->
+            </div>
+
+            <form id="chat-reply-form" style="display: flex; gap: 0.5rem;" onsubmit="sendAgentMessage(event)">
+                <input type="hidden" id="chat-tenant-id" value="">
+                <input type="text" id="chat-message-input" class="form-control" placeholder="Type your message..." style="flex: 1;" required>
+                <button type="submit" class="btn btn-primary">
+                    <span class="material-symbols-rounded" style="font-size:18px;">send</span> Send
+                </button>
+            </form>
+        </div>
+    </div>
+
     <script src="super_admin.js"></script>
     <script>
+        let currentChatInterval = null;
+        const superAdminId = <?php echo json_encode($_SESSION['super_admin_id'] ?? 0); ?>;
+
+        function openAgentChat(tenantId, tenantName) {
+            document.getElementById('agent-chat-modal').style.display = 'flex';
+            document.getElementById('chat-modal-title').textContent = 'Chat: ' + tenantName;
+            document.getElementById('chat-tenant-id').value = tenantId;
+            
+            // Fetch immediately, then poll every 3 seconds
+            fetchChatMessages(tenantId);
+            currentChatInterval = setInterval(() => fetchChatMessages(tenantId), 3000);
+        }
+
+        function closeAgentChat() {
+            document.getElementById('agent-chat-modal').style.display = 'none';
+            clearInterval(currentChatInterval);
+        }
+
+        async function fetchChatMessages(tenantId) {
+            try {
+                const response = await fetch(`super_admin.php?action=get_chat_messages&tenant_id=${encodeURIComponent(tenantId)}`);
+                const messages = await response.json();
+                
+                const container = document.getElementById('chat-messages-container');
+                container.innerHTML = '';
+                
+                messages.forEach(msg => {
+                    const isMe = parseInt(msg.sender_id) === superAdminId;
+                    const align = isMe ? 'right' : 'left';
+                    const bg = isMe ? 'var(--accent-blue)' : '#fff';
+                    const color = isMe ? '#fff' : 'inherit';
+                    const border = isMe ? 'none' : '1px solid var(--border-color)';
+                    
+                    const msgDiv = document.createElement('div');
+                    msgDiv.style.cssText = `text-align: ${align}; margin-bottom: 10px;`;
+                    msgDiv.innerHTML = `
+                        <div style="display: inline-block; background: ${bg}; color: ${color}; border: ${border}; padding: 8px 12px; border-radius: 6px; max-width: 80%; text-align: left; word-break: break-word;">
+                            ${msg.message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                            ${new Date(msg.created_at).toLocaleString()}
+                        </div>
+                    `;
+                    container.appendChild(msgDiv);
+                });
+                
+                // Auto-scroll to bottom
+                container.scrollTop = container.scrollHeight;
+            } catch (e) {
+                console.error('Error fetching chats:', e);
+            }
+        }
+
+        async function sendAgentMessage(e) {
+            e.preventDefault();
+            const tenantId = document.getElementById('chat-tenant-id').value;
+            const input = document.getElementById('chat-message-input');
+            const message = input.value;
+            
+            if (!message.trim()) return;
+            
+            const formData = new URLSearchParams();
+            formData.append('action', 'send_chat_message');
+            formData.append('tenant_id', tenantId);
+            formData.append('message', message);
+            
+            input.value = ''; // clear input immediately
+            
+            await fetch('super_admin.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData.toString()
+            });
+            
+            fetchChatMessages(tenantId); // Refresh immediately after sending
+        }
+
         document.querySelectorAll('.site-alert').forEach(function(el) {
             setTimeout(function() {
                 el.style.transition = 'opacity 0.4s ease, margin 0.4s ease, padding 0.4s ease, max-height 0.4s ease';

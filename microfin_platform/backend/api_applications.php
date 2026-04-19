@@ -121,8 +121,10 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
             la.requested_amount, la.approved_amount, la.loan_term_months,
             la.interest_rate, la.loan_purpose, la.submitted_date, la.created_at,
             la.review_notes, la.approval_notes, la.rejection_reason,
-            c.client_id, c.first_name, c.last_name, c.contact_number, c.email_address,
-            lp.product_name, lp.product_type
+              la.policy_metadata,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type,
+              c.client_id, c.first_name, c.last_name, c.contact_number, c.email_address,
+              lp.product_name
         FROM loan_applications la
         JOIN clients c ON la.client_id = c.client_id
         JOIN loan_products lp ON la.product_id = lp.product_id
@@ -154,11 +156,19 @@ if ($method === 'GET' && $action === 'view') {
             c.date_of_birth, c.civil_status, c.occupation, c.employer_name,
             c.monthly_income, c.present_street, c.present_barangay, c.present_city,
             c.present_province, c.credit_limit, c.client_status, c.employment_status, c.document_verification_status,
-            lp.product_name, lp.product_type, lp.min_amount, lp.max_amount,
-            lp.interest_rate AS product_interest_rate, lp.interest_type,
-            lp.min_term_months, lp.max_term_months, lp.processing_fee_percentage,
-            lp.service_charge, lp.documentary_stamp, lp.insurance_fee_percentage,
-            lp.early_settlement_fee_type, lp.early_settlement_fee_value, lp.grace_period_days,
+              la.policy_metadata,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.interest_type')) AS interest_type,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.processing_fee_percentage')) AS processing_fee_percentage,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.service_charge')) AS service_charge,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.documentary_stamp')) AS documentary_stamp,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.insurance_fee_percentage')) AS insurance_fee_percentage,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.early_settlement_fee_type')) AS early_settlement_fee_type,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.early_settlement_fee_value')) AS early_settlement_fee_value,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.grace_period_days')) AS grace_period_days,
+              lp.product_name, lp.min_amount, lp.max_amount,
+              lp.interest_rate AS product_interest_rate,
+              lp.min_term_months, lp.max_term_months,
             (
                 SELECT cs.total_score
                 FROM credit_scores cs

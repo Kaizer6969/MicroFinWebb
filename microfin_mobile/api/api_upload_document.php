@@ -17,9 +17,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 }
 
 $tenantId = trim((string) ($_POST['tenant_id'] ?? ''));
+$clientId = (int) ($_POST['client_id'] ?? 0);
+$fileCategory = trim(strtolower((string) ($_POST['file_category'] ?? '')));
+
 if ($tenantId === '') {
     http_response_code(422);
     echo json_encode(['success' => false, 'message' => 'Missing tenant ID.']);
+    exit;
+}
+if ($clientId <= 0 || $fileCategory === '') {
+    http_response_code(422);
+    echo json_encode(['success' => false, 'message' => 'Missing client ID or file category.']);
     exit;
 }
 
@@ -132,7 +140,8 @@ if (!is_dir($uploadAbsoluteDir) && !mkdir($uploadAbsoluteDir, 0775, true) && !is
 }
 
 $safeOriginalName = preg_replace('/[^A-Za-z0-9._-]+/', '_', $originalName);
-$storedName = 'doc_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+$safeCategory = preg_replace('/[^A-Za-z0-9_-]+/', '_', $fileCategory);
+$storedName = rtrim($tenantId) . '_' . (int)$clientId . '_' . $safeCategory . '.' . $extension;
 $destinationPath = rtrim($uploadAbsoluteDir, '/\\') . DIRECTORY_SEPARATOR . $storedName;
 
 if (!move_uploaded_file($tmpName, $destinationPath)) {

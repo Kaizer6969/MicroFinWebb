@@ -262,13 +262,16 @@ try {
         SELECT
             product_id,
             product_name,
-            product_type,
-            description,
+            'Loan Product' AS product_type,
+            '' AS description,
             min_amount,
             max_amount,
             interest_rate,
             min_term_months,
-            max_term_months
+            max_term_months,
+            early_settlement_fee_type,
+            early_settlement_fee_value,
+            billing_cycle
         FROM loan_products
         WHERE tenant_id = ?
           AND is_active = 1

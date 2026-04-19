@@ -145,35 +145,19 @@ function microfin_resolve_document_type_id(mysqli $conn, $identifier): ?int
         return (int) $identifier;
     }
 
-    // Handle special markers
-    if ($identifier === 'scanned_id') {
-        // Look for "Scanned ID", "Valid ID Front", or similar document types
-        $stmt = $conn->prepare("
-            SELECT document_type_id FROM document_types 
-            WHERE is_active = 1 
-              AND (LOWER(document_name) LIKE '%scanned id%' 
-                   OR LOWER(document_name) LIKE '%valid id front%'
-                   OR LOWER(document_name) = 'valid government id')
-            ORDER BY 
-                CASE 
-                    WHEN LOWER(document_name) LIKE '%scanned id%' THEN 1
-                    WHEN LOWER(document_name) LIKE '%valid id front%' THEN 2
-                    ELSE 3
-                END
-            LIMIT 1
-        ");
-        if ($stmt) {
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $row = $result->fetch_assoc();
-            $stmt->close();
-            if ($row) {
-                return (int) $row['document_type_id'];
-            }
-        }
-        return null;
-    }
+    $stringMap = [
+        'id_front' => 1,
+        'scanned_id' => 1, // Fallback for old mobile app implementations
+        'id_back' => 2,
+        'proof_of_income' => 3,
+        'proof_of_billing' => 4,
+        'proof_of_legitimacy' => 5,
+    ];
 
+    if (isset($stringMap[$identifier])) {
+        return $stringMap[$identifier];
+    }
+    
     return null;
 }
 
@@ -340,57 +324,68 @@ try {
     }
 
     // ── AUTOMATED CREDITING LOGIC (FOR ELIGIBLE USERS) ──
-    $assignedCreditLimit = 0.00;
+    // The limit is calculated but stored ONLY in policy_metadata as 'potential_limit'.
+    // It will NOT be saved to credit_limit until the admin approves the client.
+    $assignedCreditLimit = 0.00; // Always 0 on submission — promoted on approval
     $assignedCreditScore = 0;
     $assignedCreditRating = null;
     $scoringMetadata = null;
 
     if ($finalVerificationStatus !== 'Rejected') {
-        require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_credit_limits.php';
-        require_once __DIR__ . '/../../microfin_platform/admin_panel/includes/policy_console_limit_assignment.php';
+        try {
+            require_once __DIR__ . '/../../microfin_platform/backend/engines/credit_limit_engine.php';
+            require_once __DIR__ . '/../../microfin_platform/backend/engines/credit_score_engine.php';
 
-        $limitsStmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE tenant_id = ? AND setting_key = 'policy_console_credit_limits'");
-        $limitsStmt->bind_param('s', $tenantId);
-        $limitsStmt->execute();
-        $limitsRaw = json_decode($limitsStmt->get_result()->fetch_assoc()['setting_value'] ?? '{}', true) ?: [];
-        $limitsStmt->close();
+            $limitEngine = new CreditLimitEngine($conn, $tenantId);
+            $scoreEngine = new CreditScoreEngine($conn, $tenantId);
 
-        // Normalize using tenant policy logic
-        $creditLimits = policy_console_credit_limits_normalize($limitsRaw, [], [], 1000);
-        
-        // 1. Initial Score Assignment
-        $assignedCreditScore = (int)($creditLimits['scoring_setup']['core']['starting_credit_score'] ?? 320);
+            // 1. Initial Score from tenant settings
+            $assignedCreditScore = $scoreEngine->getStartingScore();
 
-        // 2. Initial Limit Assignment
-        $limitPercent = (float)($creditLimits['limit_assignment']['initial_limit_percent_of_income'] ?? 40);
-        $assignedCreditLimit = $monthlyIncome * ($limitPercent / 100);
+            // 2. Initial Limit from tenant settings (stored as potential, NOT active)
+            $limitResult = $limitEngine->calculateInitialLimit($monthlyIncome);
+            $potentialLimit = (float) ($limitResult['limit'] ?? 0);
 
-        // 3. Global Lending Cap
-        if (!empty($creditLimits['limit_assignment']['use_default_lending_cap'])) {
-            $capAmount = (float)($creditLimits['limit_assignment']['default_lending_cap_amount'] ?? 0);
-            if ($capAmount > 0 && $assignedCreditLimit > $capAmount) {
-                $assignedCreditLimit = $capAmount;
-            }
+            // 3. Band Mapping
+            $band = $limitEngine->identifyScoreBand($assignedCreditScore);
+            $assignedCreditRating = $band ? ($band['label'] ?? 'Standard') : 'Standard';
+
+            // 4. Build policy_metadata with potential_limit (the "Scratchpad")
+            $policyMetadataStr = json_encode([
+                'potential_limit' => $potentialLimit,
+                'starting_score' => $assignedCreditScore,
+                'score_band' => $assignedCreditRating,
+                'limit_calculation' => $limitResult,
+                'config_snapshot' => $limitEngine->getConfigSnapshot(),
+                'scoring_snapshot' => $scoreEngine->getConfigSnapshot(),
+                'basis' => 'Initial Assessment via CreditLimitEngine',
+                'income_at_submission' => $monthlyIncome,
+                'timestamp' => date('Y-m-d H:i:s'),
+            ]);
+
+            $scoringMetadata = json_encode([
+                'basis' => 'Initial Assessment',
+                'income_at_submission' => $monthlyIncome,
+                'config_percent' => $limitResult['initial_limit_percent'] ?? 0,
+                'potential_limit' => $potentialLimit,
+                'engine_reason' => $limitResult['reason'] ?? '',
+                'timestamp' => date('Y-m-d H:i:s'),
+            ]);
+
+        } catch (\Throwable $engineErr) {
+            // Engine failed (settings not configured for this tenant) — fall back gracefully
+            // Log the error in policy_metadata so the admin can see what went wrong
+            $policyMetadataStr = json_encode([
+                'engine_error' => $engineErr->getMessage(),
+                'fallback' => true,
+                'timestamp' => date('Y-m-d H:i:s'),
+            ]);
+
+            $scoringMetadata = json_encode([
+                'basis' => 'Engine unavailable — settings not configured',
+                'timestamp' => date('Y-m-d H:i:s'),
+            ]);
         }
-
-        // 4. Matrix Band Mapping
-        $bands = $creditLimits['score_bands']['rows'] ?? [];
-        foreach ($bands as $band) {
-            $min = (int)($band['min_score'] ?? 0);
-            $max = $band['max_score'] === null ? 999999 : (int)$band['max_score'];
-            if ($assignedCreditScore >= $min && $assignedCreditScore <= $max) {
-                $assignedCreditRating = $band['label'] ?? 'Standard';
-                break;
-            }
-        }
-
-        $scoringMetadata = json_encode([
-            'basis' => 'Initial Assessment',
-            'income_at_submission' => $monthlyIncome,
-            'config_percent' => $limitPercent,
-            'applied_cap' => !empty($creditLimits['limit_assignment']['use_default_lending_cap']) ? (float)$creditLimits['limit_assignment']['default_lending_cap_amount'] : null,
-            'timestamp' => date('Y-m-d H:i:s')
-        ]);
     }
 
     $docTypeStmt = $conn->prepare("

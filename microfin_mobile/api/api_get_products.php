@@ -58,9 +58,9 @@ $productSql = "
         product_id AS id,
         product_name,
         product_name AS name,
-        product_type,
-        product_type AS type,
-        COALESCE(description, '') AS description,
+        'Loan Product' AS product_type,
+        'Loan Product' AS type,
+        '' AS description,
         min_amount,
         min_amount AS min,
         max_amount,
@@ -76,7 +76,9 @@ $productSql = "
         COALESCE(service_charge, 0) AS service_charge,
         COALESCE(documentary_stamp, 0) AS documentary_stamp,
         COALESCE(insurance_fee_percentage, 0) AS insurance_fee_percentage,
-        COALESCE(early_settlement_fee_percentage, 0) AS early_settlement_fee_percentage,
+        COALESCE(early_settlement_fee_type, 'Percentage') AS early_settlement_fee_type,
+        COALESCE(early_settlement_fee_value, 0) AS early_settlement_fee_value,
+        COALESCE(billing_cycle, 'Monthly') AS billing_cycle,
         COALESCE(grace_period_days, 0) AS grace_period_days,
         CAST(COALESCE(is_active, 1) AS CHAR) AS is_active
     FROM loan_products
@@ -115,7 +117,9 @@ while ($row = $result->fetch_assoc()) {
     $row['service_charge'] = (float) ($row['service_charge'] ?? 0);
     $row['documentary_stamp'] = (float) ($row['documentary_stamp'] ?? 0);
     $row['insurance_fee_percentage'] = (float) ($row['insurance_fee_percentage'] ?? 0);
-    $row['early_settlement_fee_percentage'] = (float) ($row['early_settlement_fee_percentage'] ?? 0);
+    $row['early_settlement_fee_type'] = (string) ($row['early_settlement_fee_type'] ?? 'Percentage');
+    $row['early_settlement_fee_value'] = (float) ($row['early_settlement_fee_value'] ?? 0);
+    $row['billing_cycle'] = (string) ($row['billing_cycle'] ?? 'Monthly');
     $row['grace_period_days'] = (int) ($row['grace_period_days'] ?? 0);
     $products[] = $row;
 }
@@ -127,6 +131,26 @@ $loanAccessState = null;
 
 if ($userId > 0) {
     $clientProfile = microfin_find_client_loan_profile($conn, $userId, $tenantId);
+
+    if ($clientProfile && $clientProfile['client_id'] > 0) {
+        try {
+            global $dbConfig;
+            $pdo = new PDO(
+                "mysql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};charset=utf8mb4",
+                $dbConfig['username'],
+                $dbConfig['password'],
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+            );
+            require_once __DIR__ . '/../../microfin_platform/backend/credit_policy.php';
+            $profileSync = mf_sync_client_credit_profile($pdo, $tenantId, (int) $clientProfile['client_id']);
+            if (isset($profileSync['client']['credit_limit'])) {
+                $clientProfile['credit_limit'] = (float) $profileSync['client']['credit_limit'];
+            }
+        } catch (\Throwable $pe) {
+            error_log('Failed syncing profile limit in mobile API: ' . $pe->getMessage());
+        }
+    }
+
     $creditSummary = $clientProfile
         ? microfin_build_client_loan_application_summary($conn, $clientProfile)
         : microfin_loan_rules_default_summary($tenantId);

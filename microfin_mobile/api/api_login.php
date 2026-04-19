@@ -58,6 +58,7 @@ $selectColumns = [
     'u.username',
     'u.password_hash',
     'u.status',
+    'u.force_password_change',
     'u.first_name AS user_first_name',
     'u.last_name AS user_last_name',
     'u.email',
@@ -124,6 +125,27 @@ $verificationStatus = microfin_login_normalize_status(
     $user['document_verification_status'] ?? null
 );
 
+$currentLimit = (float) ($user['credit_limit'] ?? 0);
+$clientId = (int) ($user['client_id'] ?? 0);
+if ($clientId > 0) {
+    try {
+        global $dbConfig;
+        $pdo = new PDO(
+            "mysql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};charset=utf8mb4",
+            $dbConfig['username'],
+            $dbConfig['password'],
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+        require_once __DIR__ . '/../../microfin_platform/backend/credit_policy.php';
+        $profileSync = mf_sync_client_credit_profile($pdo, $tenantId, $clientId);
+        if (isset($profileSync['client']['credit_limit'])) {
+            $currentLimit = (float) $profileSync['client']['credit_limit'];
+        }
+    } catch (\Throwable $pe) {
+        error_log('Failed syncing profile limit in login API: ' . $pe->getMessage());
+    }
+}
+
 microfin_json_response([
     'success' => true,
     'message' => 'Login successful!',
@@ -131,8 +153,9 @@ microfin_json_response([
     'first_name' => $firstName,
     'last_name' => $lastName,
     'email' => (string) ($user['email'] ?? ''),
+    'force_password_change' => (int) ($user['force_password_change'] ?? 0) === 1,
     'verification_status' => $verificationStatus,
-    'credit_limit' => (float) ($user['credit_limit'] ?? 0),
+    'credit_limit' => $currentLimit,
     'login_username' => mf_mobile_identity_build_login_username((string) ($user['username'] ?? ''), $tenantSlug),
     'tenant' => microfin_identity_branding_payload($tenant),
     'policy_metadata' => json_decode($user['policy_metadata'] ?? '{}', true) ?: null,

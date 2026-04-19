@@ -7,7 +7,7 @@ require_once '../backend/tenant_identity.php';
 $form_success = false;
 $form_error = '';
 
-$is_talk_to_expert = false; // Sarah replaces the retired talk-to-staff flow.
+$is_talk_to_expert = isset($_GET['expert']) && $_GET['expert'] === '1';
 $request_type = 'tenant_application';
 
 function demo_column_exists(PDO $pdo, $table, $column)

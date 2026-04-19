@@ -65,7 +65,7 @@ $is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? [
             </label>
         </div>
 
-        <div class="policy-field" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <div class="policy-field" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color); display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span class="policy-field-label" style="margin-bottom: 0;">
                     Apply Score Changes Immediately <?php echo $policy_console_help('If enabled, credit score upgrades/downgrades automatically recalculate and apply to active credit limits instead of waiting for the next manual review cycle.'); ?>
@@ -91,7 +91,7 @@ $is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? [
             </div>
         </div>
 
-        <div class="policy-blueprint-panel-actions">
+        <div class="policy-blueprint-panel-actions" style="display: flex;">
             <button
                 type="button"
                 class="btn btn-outline"
@@ -128,7 +128,7 @@ $is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? [
                                 <strong>Successful Repayment Cycles</strong>
                                 <?php echo $policy_console_help('Borrower must complete at least this many successful repayment cycles before upgrade candidacy can begin.'); ?>
                             </div>
-                            <div class="policy-decision-rule-switch">
+                            <div class="policy-decision-rule-switch" style="display: none;">
                                 <input
                                     type="hidden"
                                     name="pcc_upgrade_successful_repayment_enabled"
@@ -167,7 +167,7 @@ $is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? [
                                 <strong>Maximum Late Payments Allowed Within Review Period</strong>
                                 <?php echo $policy_console_help('Upgrade passes when late payments inside the selected review period stay within this maximum.'); ?>
                             </div>
-                            <div class="policy-decision-rule-switch">
+                            <div class="policy-decision-rule-switch" style="display: none;">
                                 <input
                                     type="hidden"
                                     name="pcc_upgrade_late_payments_enabled"
@@ -219,7 +219,7 @@ $is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? [
                                 <strong>No Active Overdue</strong>
                                 <?php echo $policy_console_help('Borrower must have no current overdue balance for this upgrade rule to pass.'); ?>
                             </div>
-                            <div class="policy-decision-rule-switch">
+                            <div class="policy-decision-rule-switch" style="display: none;">
                                 <input
                                     type="hidden"
                                     name="pcc_upgrade_no_active_overdue_enabled"
@@ -278,7 +278,7 @@ $is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? [
                                 <strong>Late Payments Count Within Review Period</strong>
                                 <?php echo $policy_console_help('Downgrade review is triggered when late payments reach at least this count within the selected review period.'); ?>
                             </div>
-                            <div class="policy-decision-rule-switch">
+                            <div class="policy-decision-rule-switch" style="display: none;">
                                 <input
                                     type="hidden"
                                     name="pcc_downgrade_late_payments_enabled"
@@ -330,7 +330,7 @@ $is_scoring_default = (($policy_console_credit_limits_safe['scoring_setup'] ?? [
                                 <strong>Overdue Days Threshold</strong>
                                 <?php echo $policy_console_help('This is different from grace period. It measures how long the borrower stays overdue after already becoming overdue.'); ?>
                             </div>
-                            <div class="policy-decision-rule-switch">
+                            <div class="policy-decision-rule-switch" style="display: none;">
                                 <input
                                     type="hidden"
                                     name="pcc_downgrade_overdue_days_enabled"

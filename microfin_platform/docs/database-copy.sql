@@ -180,7 +180,7 @@ CREATE TABLE `clients` (
   `profile_picture` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `registration_date` date NOT NULL,
   `registered_by` int DEFAULT NULL,
-  `document_verification_status` enum('Unverified','Verified','Approved','Rejected') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Unverified',
+  `document_verification_status` enum('Unverified','Pending','Verified','Approved','Rejected') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Unverified',
   `verification_rejection_reason` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `credit_limit` decimal(15,2) DEFAULT '0.00',
   `last_seen_credit_limit` decimal(15,2) DEFAULT '0.00',

@@ -58,9 +58,11 @@ function client_effective_verification_sql(PDO $pdo, string $alias = 'c'): strin
 
     return "
         CASE
-            WHEN {$alias}.document_verification_status IN ('Verified', 'Approved') THEN 'Approved'
+            WHEN {$alias}.document_verification_status = 'Approved' THEN 'Approved'
+            WHEN {$alias}.document_verification_status = 'Verified' THEN 'Verified'
             WHEN {$alias}.document_verification_status = 'Rejected' THEN 'Rejected'
-            ELSE 'Pending'
+            WHEN {$alias}.document_verification_status = 'Pending' THEN 'Pending'
+            ELSE 'Unverified'
         END
     ";
 }
@@ -145,25 +147,39 @@ if ($method === 'GET' && $action === 'credit_accounts') {
                c.occupation, c.employment_status, u.user_type
         FROM clients c
         LEFT JOIN users u ON c.user_id = u.user_id
-        WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.document_verification_status IN ('Verified', 'Approved') $where_extra
+        WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND c.document_verification_status IN ('Pending', 'Verified', 'Approved') $where_extra
         ORDER BY c.registration_date DESC
         LIMIT 200
     ");
     $stmt->execute($params);
     $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
-    $credit_policy = mf_get_tenant_credit_policy($pdo, $tenant_id);
+    require_once __DIR__ . '/engines/credit_limit_engine.php';
+    require_once __DIR__ . '/engines/credit_score_engine.php';
+
+    $limitEngine = new CreditLimitEngine($pdo, $tenant_id);
+    $scoreEngine = new CreditScoreEngine($pdo, $tenant_id);
+    $scoreConfig = $scoreEngine->getConfigSnapshot();
+
     $statusOrder = [
-        'eligible' => 0,
-        'not_yet_eligible' => 1,
-        'no_active_limit' => 2,
-        'at_max_limit' => 3,
+        'eligible_upgrade' => 0,
+        'eligible_downgrade' => 1,
+        'not_yet_eligible' => 2,
+        'no_active_limit' => 3,
+        'at_max_limit' => 4,
     ];
 
     $matchesFilter = static function (array $upgrade, string $selectedFilter): bool {
         if ($selectedFilter === 'all') {
             return true;
+        }
+
+        if ($selectedFilter === 'eligible_upgrade') {
+            return ($upgrade['is_eligible_upgrade'] ?? false) === true;
+        }
+
+        if ($selectedFilter === 'eligible_downgrade') {
+            return ($upgrade['is_eligible_downgrade'] ?? false) === true;
         }
 
         return (string) ($upgrade['status'] ?? '') === $selectedFilter;
@@ -174,16 +190,8 @@ if ($method === 'GET' && $action === 'credit_accounts') {
             return true;
         }
 
-        $label = strtolower(trim((string) ($limitSnapshot['recommendation_label'] ?? '')));
-        $labelMap = [
-            'high_credit' => 'high credit score',
-            'good_credit' => 'good credit score',
-            'standard_credit' => 'standard credit score',
-            'fair_credit' => 'fair credit score',
-            'at_risk_credit' => 'at-risk credit score',
-        ];
-
-        return $label !== '' && $label === ($labelMap[$selectedScoreFilter] ?? '');
+        $labelId = strtolower(trim((string) ($limitSnapshot['band_id'] ?? '')));
+        return $labelId === strtolower($selectedScoreFilter);
     };
 
     $rows = [];
@@ -193,25 +201,164 @@ if ($method === 'GET' && $action === 'credit_accounts') {
             continue;
         }
 
-        $profile = mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
-        if (array_key_exists('credit_limit', (array) ($profile['client'] ?? []))) {
-            $client['credit_limit'] = $profile['client']['credit_limit'];
-        }
-        if (array_key_exists('last_seen_credit_limit', (array) ($profile['client'] ?? []))) {
-            $client['last_seen_credit_limit'] = $profile['client']['last_seen_credit_limit'];
-        }
+        // READ-ONLY: Fetch exact current score from history or use starting default
+        $scoreLog = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
+        $effectiveScore = $scoreLog ? (float) ($scoreLog['total_score'] ?? 0) : (float) $scoreEngine->getStartingScore();
 
-        $score = $profile['score'] ?? null;
-        if ($score) {
-            $score['total_score'] = (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0, 0, false);
-        }
-
-        $ci = $profile['ci'] ?? mf_credit_policy_fetch_latest_ci($pdo, $tenant_id, $client_id);
         $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
-        $upgrade = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
-        $limit_snapshot = $profile['limit'] ?? mf_credit_policy_compute_limit_snapshot($credit_policy, $client, $score, $ci);
+        $completedLoans = (int) ($upgrade_metrics['completed_loans'] ?? 0);
+        $latePayments = (int) ($upgrade_metrics['late_payments'] ?? 0);
+        // Note: For full accuracy, you need these tracked on the borrower.
+        // If not available exactly in metrics, we approximate from existing data.
+        $hasActiveOverdue = ($upgrade_metrics['has_active_overdue'] ?? false) === true; 
+        $maxOverdueDays = (int) ($upgrade_metrics['max_overdue_days'] ?? 0);
 
-        if (!$matchesFilter($upgrade, $filter)) {
+        $currentLimit = (float) ($client['credit_limit'] ?? 0);
+
+        $limitBand = $limitEngine->identifyScoreBand($effectiveScore) ?: [];
+        $bandLabel = $limitBand['label'] ?? 'Unknown';
+        $bandId = $limitBand['id'] ?? 'unknown';
+
+        $potentialLimitInfo = $limitEngine->calculateProgressiveGrowth($currentLimit, $effectiveScore);
+
+        $limit_snapshot = [
+            'effective_score' => $effectiveScore,
+            'used_default_score' => !$scoreLog,
+            'computed_limit' => $potentialLimitInfo['new_limit'] ?? 0,
+            'can_compute_limit' => $currentLimit > 0,
+            'recommendation_label' => $bandLabel,
+            'band_id' => $bandId,
+        ];
+
+        // Build Upgrade Progress
+        $upgrade_progress = [];
+        $is_eligible_upgrade = false;
+
+        $cylRule = $scoreConfig['upgrade_rules']['successful_repayment_cycles'] ?? [];
+        if (!empty($cylRule['enabled'])) {
+            $reqCyc = (int) ($cylRule['required_cycles'] ?? 3);
+            $met = $completedLoans >= $reqCyc;
+            if ($met) $is_eligible_upgrade = true;
+            $upgrade_progress[] = [
+                'label' => 'Successful Repayment Cycles',
+                'current' => $completedLoans,
+                'target' => $reqCyc,
+                'met' => $met,
+                'points_amount' => (int) ($cylRule['score_points'] ?? 0)
+            ];
+        }
+
+        $lateRevRule = $scoreConfig['upgrade_rules']['maximum_late_payments_review'] ?? [];
+        if (!empty($lateRevRule['enabled'])) {
+            $maxAll = (int) ($lateRevRule['maximum_allowed'] ?? 1);
+            $met = $latePayments <= $maxAll && $completedLoans > 0; // Need at least some activity
+            if ($met) $is_eligible_upgrade = true;
+            $upgrade_progress[] = [
+                'label' => 'Maximum Late Payments (Allowed)',
+                'current' => $latePayments,
+                'target' => $maxAll,
+                'met' => $met,
+                'points_amount' => (int) ($lateRevRule['score_points'] ?? 0)
+            ];
+        }
+
+        $noActvRule = $scoreConfig['upgrade_rules']['no_active_overdue'] ?? [];
+        if (!empty($noActvRule['enabled'])) {
+            $met = !$hasActiveOverdue;
+            if ($met) $is_eligible_upgrade = true;
+            $upgrade_progress[] = [
+                'label' => 'No Active Overdue',
+                'current' => $hasActiveOverdue ? 1 : 0,
+                'target' => 0,
+                'met' => $met,
+                'points_amount' => (int) ($noActvRule['score_points'] ?? 0)
+            ];
+        }
+
+        // Build Downgrade Progress
+        $downgrade_progress = [];
+        $is_eligible_downgrade = false;
+
+        $downLateRule = $scoreConfig['downgrade_rules']['late_payments_review'] ?? [];
+        if (!empty($downLateRule['enabled'])) {
+            $trigCount = (int) ($downLateRule['trigger_count'] ?? 2);
+            $met = $latePayments >= $trigCount;
+            if ($met) $is_eligible_downgrade = true;
+            $downgrade_progress[] = [
+                'label' => 'Late Payments Trigger',
+                'current' => $latePayments,
+                'target' => $trigCount,
+                'met' => $met,
+                'points_amount' => (int) ($downLateRule['score_points'] ?? 0)
+            ];
+        }
+
+        $downOverdueRule = $scoreConfig['downgrade_rules']['overdue_days_threshold'] ?? [];
+        if (!empty($downOverdueRule['enabled'])) {
+            $daysThr = (int) ($downOverdueRule['days'] ?? 15);
+            $met = $maxOverdueDays >= $daysThr;
+            if ($met) $is_eligible_downgrade = true;
+            $downgrade_progress[] = [
+                'label' => 'Max Consecutive Overdue Days',
+                'current' => $maxOverdueDays,
+                'target' => $daysThr,
+                'met' => $met,
+                'points_amount' => (int) ($downOverdueRule['score_points'] ?? 0)
+            ];
+        }
+
+        $has_met_active_upgrade = false;
+        foreach ($upgrade_progress as $rule) {
+            if ($rule['met'] && $rule['target'] > 0) {
+                $has_met_active_upgrade = true;
+                break;
+            }
+        }
+        // Only allow upgrade if they actually met an active progress rule (e.g. 3/3 cycles). 
+        // Passive rules (like No Active Overdue 0/0) cannot trigger an upgrade alone.
+        if ($is_eligible_upgrade && !$has_met_active_upgrade) {
+             $is_eligible_upgrade = false; 
+        }
+        
+        $potential_new_limit = $potentialLimitInfo['new_limit'] ?? 0;
+        if ($is_eligible_upgrade && $potential_new_limit <= $currentLimit) {
+            $is_eligible_upgrade = false;
+        }
+
+        $has_met_active_downgrade = false;
+        foreach ($downgrade_progress as $rule) {
+            if ($rule['met'] && $rule['target'] > 0) {
+                $has_met_active_downgrade = true;
+                break;
+            }
+        }
+        if ($is_eligible_downgrade && !$has_met_active_downgrade) {
+             $is_eligible_downgrade = false; 
+        }
+
+        $status = 'not_yet_eligible';
+        if ($currentLimit <= 0) {
+            $status = 'no_active_limit';
+        } elseif ($is_eligible_upgrade) {
+            $status = 'eligible_upgrade';
+        } elseif ($is_eligible_downgrade) {
+            $status = 'eligible_downgrade';
+        }
+
+        $client['credit_upgrade'] = [
+            'status' => $status,
+            'is_eligible_upgrade' => $is_eligible_upgrade,
+            'is_eligible_downgrade' => $is_eligible_downgrade,
+            'current_limit' => $currentLimit,
+            'potential_upgraded_limit' => $potentialLimitInfo['new_limit'] ?? 0,
+            'upgrade_progress' => $upgrade_progress,
+            'downgrade_progress' => $downgrade_progress,
+        ];
+        
+        $client['limit_snapshot'] = $limit_snapshot;
+        $client['latest_score'] = $scoreLog ?: null;
+
+        if (!$matchesFilter($client['credit_upgrade'], $filter)) {
             continue;
         }
 
@@ -219,9 +366,6 @@ if ($method === 'GET' && $action === 'credit_accounts') {
             continue;
         }
 
-        $client['credit_upgrade'] = $upgrade;
-        $client['limit_snapshot'] = $limit_snapshot;
-        $client['latest_score'] = $score ?: null;
         $rows[] = $client;
     }
 
@@ -289,6 +433,8 @@ if ($method === 'GET' && $action === 'view') {
     $apps_stmt = $pdo->prepare("
         SELECT la.application_id, la.application_number, la.application_status,
                la.requested_amount, la.submitted_date, la.created_at,
+               la.loan_term_months, la.policy_metadata,
+               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type,
                lp.product_name
         FROM loan_applications la
         JOIN loan_products lp ON la.product_id = lp.product_id
@@ -300,7 +446,7 @@ if ($method === 'GET' && $action === 'view') {
 
     // load documents
     $docs_stmt = $pdo->prepare("
-        SELECT cd.client_document_id, cd.document_type_id, cd.file_path, cd.verification_status, cd.upload_date,
+        SELECT cd.client_document_id, cd.document_type_id, cd.file_path, cd.verification_status, cd.verification_notes, cd.upload_date,
                dt.document_name, dt.is_required
         FROM client_documents cd
         JOIN document_types dt ON cd.document_type_id = dt.document_type_id
@@ -313,18 +459,41 @@ if ($method === 'GET' && $action === 'view') {
         $docs_stmt->fetchAll(PDO::FETCH_ASSOC)
     );
 
-    $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
-    $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
-    $profile = mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
-    if (array_key_exists('credit_limit', (array) ($profile['client'] ?? []))) {
-        $client['credit_limit'] = $profile['client']['credit_limit'];
+    // Credit profile enrichment — READ-ONLY from what the mobile app / walk-in already inserted.
+    // No recalculation. The staff panel is a viewer, not a calculator.
+    try {
+        // 1. Read the latest score row (now includes score_metadata from the engine)
+        $latest_score = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
+        $client['latest_score'] = $latest_score;
+
+        // 2. Parse the engine data from score_metadata if available
+        if ($latest_score && !empty($latest_score['_engine_data'])) {
+            $client['engine_data'] = $latest_score['_engine_data'];
+        }
+
+        // 3. Upgrade metrics (read-only from loan history)
+        $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
+        $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
+        $client['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
+
+        // 4. Limit snapshot — read from the score row, not recalculated
+        $client['limit_snapshot'] = null;
+        if ($latest_score) {
+            $client['limit_snapshot'] = [
+                'computed_limit' => (float) ($latest_score['max_loan_amount'] ?? 0),
+                'can_compute_limit' => ((float) ($client['credit_limit'] ?? 0)) > 0,
+                'blocked_reason' => ((float) ($client['credit_limit'] ?? 0)) <= 0
+                    ? mf_credit_policy_limit_block_reason($client)
+                    : '',
+            ];
+        }
+    } catch (\Throwable $creditErr) {
+        // Log the error but still return the client data
+        $client['credit_upgrade'] = null;
+        $client['latest_score'] = null;
+        $client['limit_snapshot'] = null;
+        $client['_credit_policy_error'] = $creditErr->getMessage();
     }
-    if (array_key_exists('last_seen_credit_limit', (array) ($profile['client'] ?? []))) {
-        $client['last_seen_credit_limit'] = $profile['client']['last_seen_credit_limit'];
-    }
-    $client['credit_upgrade'] = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
-    $client['latest_score'] = $profile['score'] ?? null;
-    $client['limit_snapshot'] = $profile['limit'] ?? null;
 
     echo json_encode(['status' => 'success', 'data' => $client]);
     exit;
@@ -375,10 +544,20 @@ if ($method === 'POST' && $action === 'verify_document') {
 
     $doc_id = (int)($payload['document_id'] ?? 0);
     $status = trim((string)($payload['status'] ?? ''));
+    $rejection_reason = trim((string)($payload['rejection_reason'] ?? ''));
 
     if ($doc_id <= 0 || !in_array($status, ['Verified', 'Rejected'])) {
         echo json_encode(['status' => 'error', 'message' => 'Invalid input.']);
         exit;
+    }
+    
+    if ($status === 'Rejected' && $rejection_reason === '') {
+        echo json_encode(['status' => 'error', 'message' => 'A rejection reason is required when rejecting a document.']);
+        exit;
+    }
+    
+    if ($status === 'Verified') {
+        $rejection_reason = null;
     }
 
     try {
@@ -390,8 +569,8 @@ if ($method === 'POST' && $action === 'verify_document') {
         $emp = $emp_row->fetch(PDO::FETCH_ASSOC);
         $verified_by = $emp ? $emp['employee_id'] : null;
 
-        $pdo->prepare("UPDATE client_documents SET verification_status = ?, verified_by = ?, verification_date = NOW() WHERE client_document_id = ? AND tenant_id = ?")
-            ->execute([$status, $verified_by, $doc_id, $tenant_id]);
+        $pdo->prepare("UPDATE client_documents SET verification_status = ?, verification_notes = ?, verified_by = ?, verification_date = NOW() WHERE client_document_id = ? AND tenant_id = ?")
+            ->execute([$status, $rejection_reason, $verified_by, $doc_id, $tenant_id]);
 
         // Cascade update to clients table (document_verification_status)
         $pdo->prepare("
@@ -399,7 +578,7 @@ if ($method === 'POST' && $action === 'verify_document') {
             SET document_verification_status = (
                 CASE
                     WHEN (SELECT COUNT(*) FROM client_documents WHERE client_id = c.client_id AND tenant_id = c.tenant_id AND verification_status = 'Rejected') > 0 THEN 'Rejected'
-                    WHEN (SELECT COUNT(*) FROM client_documents WHERE client_id = c.client_id AND tenant_id = c.tenant_id AND verification_status IN ('Pending', 'Uploaded', 'CONSIDER')) > 0 THEN 'Unverified'
+                    WHEN (SELECT COUNT(*) FROM client_documents WHERE client_id = c.client_id AND tenant_id = c.tenant_id AND verification_status IN ('Pending', 'Uploaded', 'CONSIDER')) > 0 THEN 'Pending'
                     ELSE 'Verified'
                 END
             )
@@ -471,11 +650,77 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
         $emp2 = $emp_row2->fetch(PDO::FETCH_ASSOC);
         $verified_by2 = $emp2 ? $emp2['employee_id'] : null;
 
-        // Force ALL documents to be verified
-        $pdo->prepare("UPDATE client_documents SET verification_status = 'Verified', verified_by = ?, verification_date = NOW() WHERE client_id = ? AND tenant_id = ? AND verification_status != 'Verified'")
+        // Force ALL documents to be verified and clear rejection notes
+        $pdo->prepare("UPDATE client_documents SET verification_status = 'Verified', verification_notes = NULL, verified_by = ?, verification_date = NOW() WHERE client_id = ? AND tenant_id = ? AND verification_status != 'Verified'")
             ->execute([$verified_by2, $client_id, $tenant_id]);
 
         $client_verify_sql = "
+            UPDATE clients
+            SET document_verification_status = 'Verified',
+                updated_at = NOW()
+            WHERE client_id = ? AND tenant_id = ?
+        ";
+
+        if (client_table_has_column($pdo, 'verification_status')) {
+            $client_verify_sql = "
+                UPDATE clients
+                SET document_verification_status = 'Verified',
+                    verification_status = 'Verified',
+                    updated_at = NOW()
+                WHERE client_id = ? AND tenant_id = ?
+            ";
+        }
+
+        $pdo->prepare($client_verify_sql)->execute([$client_id, $tenant_id]);
+        mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
+        $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'DOCUMENTS_VERIFIED', 'client', ?, 'Admin verified all submitted documents')")
+            ->execute([$session_user_id, $tenant_id, $client_id]);
+
+        $pdo->commit();
+        echo json_encode(['status' => 'success', 'message' => 'Documents successfully verified. Awaiting final approval.']);
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        echo json_encode(['status' => 'error', 'message' => 'Unable to verify client documents: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ─── POST: apply final approval to client ────────────────────────────────────
+if ($method === 'POST' && $action === 'approve_client') {
+    if (!has_perm('CREATE_CLIENTS')) {
+        echo json_encode(['status' => 'error', 'message' => 'Permission denied.']);
+        exit;
+    }
+
+    $raw = file_get_contents('php://input');
+    $payload = json_decode($raw, true);
+    if (!is_array($payload)) $payload = $_POST;
+
+    $client_id = (int)($payload['client_id'] ?? 0);
+
+    if ($client_id <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid client ID.']);
+        exit;
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $client_status_stmt = $pdo->prepare("SELECT client_status, document_verification_status FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
+        $client_status_stmt->execute([$client_id, $tenant_id]);
+        $client_current = $client_status_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$client_current) {
+             throw new Exception("Client not found.");
+        }
+        
+        if ($client_current['document_verification_status'] !== 'Verified') {
+             throw new Exception("Client must be marked as Verified before they can be Approved.");
+        }
+
+        $client_approve_sql = "
             UPDATE clients
             SET document_verification_status = 'Approved',
                 client_status = CASE WHEN client_status = 'Inactive' THEN 'Active' ELSE client_status END,
@@ -484,7 +729,7 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
         ";
 
         if (client_table_has_column($pdo, 'verification_status')) {
-            $client_verify_sql = "
+            $client_approve_sql = "
                 UPDATE clients
                 SET document_verification_status = 'Approved',
                     client_status = CASE WHEN client_status = 'Inactive' THEN 'Active' ELSE client_status END,
@@ -494,30 +739,67 @@ if ($method === 'POST' && $action === 'verify_client_fully') {
             ";
         }
 
-        $pdo->prepare($client_verify_sql)->execute([$client_id, $tenant_id]);
+        $pdo->prepare($client_approve_sql)->execute([$client_id, $tenant_id]);
         mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
 
-        $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CLIENT_VERIFIED', 'client', ?, 'Admin manually verified client overall status')")
+        // Read the client's policy_metadata to check for a pre-calculated limit
+        $meta_stmt = $pdo->prepare("SELECT policy_metadata, monthly_income, credit_limit FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
+        $meta_stmt->execute([$client_id, $tenant_id]);
+        $client_row = $meta_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($client_row) {
+            $policyMeta    = json_decode((string) ($client_row['policy_metadata'] ?? ''), true) ?: [];
+            $currentLimit  = (float) ($client_row['credit_limit'] ?? 0);
+            $monthlyIncome = (float) ($client_row['monthly_income'] ?? 0);
+
+            // Use the pre-calculated potential_limit from verification submission
+            $promotedLimit = (float) ($policyMeta['potential_limit'] ?? 0);
+
+            // If no potential_limit exists (legacy client), calculate it now using the engine
+            if ($promotedLimit <= 0 && $monthlyIncome > 0) {
+                try {
+                    require_once __DIR__ . '/engines/credit_limit_engine.php';
+                    $engine = new CreditLimitEngine($pdo, $tenant_id);
+                    $result = $engine->calculateInitialLimit($monthlyIncome);
+                    $promotedLimit = (float) ($result['limit'] ?? 0);
+
+                    // Save the engine snapshot into policy_metadata for audit
+                    $policyMeta['engine_snapshot'] = $result;
+                    $policyMeta['snapshot_config'] = $engine->getConfigSnapshot();
+                } catch (\Throwable $engineErr) {
+                    $policyMeta['engine_error'] = $engineErr->getMessage();
+                }
+            }
+
+            // Promote the limit if we have one and it's greater than what's already there
+            if ($promotedLimit > 0 && $promotedLimit > $currentLimit) {
+                $policyMeta['approved_by_user_id'] = $session_user_id;
+                $policyMeta['approved_at'] = date('Y-m-d H:i:s');
+                $metaJson = json_encode($policyMeta);
+
+                $pdo->prepare("UPDATE clients SET credit_limit = ?, policy_metadata = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                    ->execute([$promotedLimit, $metaJson, $client_id, $tenant_id]);
+            }
+        }
+
+        $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CLIENT_APPROVED', 'client', ?, 'Admin manually approved and activated client')")
             ->execute([$session_user_id, $tenant_id, $client_id]);
 
         $pdo->commit();
-        $success_message = $current_client_status === 'Inactive'
-            ? 'Client fully verified, approved, and activated.'
-            : 'Client fully verified and approved!';
-        echo json_encode(['status' => 'success', 'message' => $success_message]);
+        echo json_encode(['status' => 'success', 'message' => 'Client has been fully Approved and Activated.']);
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        echo json_encode(['status' => 'error', 'message' => 'Unable to fully verify client: ' . $e->getMessage()]);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to approve client: ' . $e->getMessage()]);
     }
     exit;
 }
 
-// ─── POST: approve credit upgrade ────────────────────────────────────────────────
-if ($method === 'POST' && $action === 'approve_upgrade') {
+// ─── POST: process_credit_action ────────────────────────────────────────────────
+if ($method === 'POST' && $action === 'process_credit_action') {
     if (!has_perm('APPROVE_LOANS') && !has_perm('CREATE_CLIENTS') && !has_perm('VIEW_CREDIT_ACCOUNTS')) {
-        echo json_encode(['status' => 'error', 'message' => 'Permission denied. You do not have sufficient permissions to upgrade credit limits.']);
+        echo json_encode(['status' => 'error', 'message' => 'Permission denied. You do not have sufficient permissions to modify credit limits.']);
         exit;
     }
 
@@ -527,83 +809,84 @@ if ($method === 'POST' && $action === 'approve_upgrade') {
         $payload = $_POST;
     }
 
-    $client_ids = (array) ($payload['client_ids'] ?? []);
-    if (empty($client_ids)) {
-        echo json_encode(['status' => 'error', 'message' => 'No borrowers selected for upgrade.']);
+    $client_id = (int) ($payload['client_id'] ?? 0);
+    $type = trim((string) ($payload['type'] ?? ''));
+
+    if ($client_id <= 0 || !in_array($type, ['upgrade', 'downgrade'], true)) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid client ID or action type.']);
         exit;
     }
-
-    $credit_limit_rules = mf_get_tenant_credit_limit_rules($pdo, $tenant_id);
-    $upgraded_count = 0;
-    $skipped_reasons = [];
 
     try {
         $pdo->beginTransaction();
         
-        foreach ($client_ids as $client_id) {
-            $client_id = (int)$client_id;
-            
-            $stmt = $pdo->prepare("SELECT * FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
-            $stmt->execute([$client_id, $tenant_id]);
-            $client = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT * FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
+        $stmt->execute([$client_id, $tenant_id]);
+        $client = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$client) {
-                $skipped_reasons[] = "Client #$client_id not found.";
-                continue;
-            }
-
-            // Sync the client credit profile first, because some clients have dynamic rules applied
-            // that aren't materialized into the DB until accessed.
-            $profile = mf_sync_client_credit_profile($pdo, $tenant_id, $client_id);
-            if (array_key_exists('credit_limit', (array) ($profile['client'] ?? []))) {
-                $client['credit_limit'] = $profile['client']['credit_limit'];
-            }
-
-            $upgrade_metrics = mf_credit_policy_fetch_upgrade_metrics($pdo, $tenant_id, $client_id);
-            $upgrade = mf_credit_policy_compute_upgrade_snapshot($credit_limit_rules, $client, $upgrade_metrics);
-
-            $current_limit = (float)($client['credit_limit'] ?? 0);
-            $potential_limit = (float)($upgrade['potential_upgraded_limit'] ?? 0);
-            $is_eligible = ($upgrade['status'] ?? '') === 'eligible';
-
-            if ($is_eligible && $potential_limit > ($current_limit + 0.01)) {
-                $new_limit = round($potential_limit, 2);
-                
-                $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
-                    ->execute([$new_limit, $client_id, $tenant_id]);
-
-                $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_UPGRADED', 'client', ?, ?)")
-                    ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit upgraded to {$new_limit} from {$current_limit}"]);
-                    
-                $upgraded_count++;
-            } else {
-                if (!$is_eligible) {
-                    $skipped_reasons[] = $client['first_name'] . " " . $client['last_name'] . ": " . ($upgrade['status_note'] ?? 'Not eligible yet.');
-                } elseif ($potential_limit <= $current_limit + 0.01) {
-                    $skipped_reasons[] = $client['first_name'] . " " . $client['last_name'] . ": Recommended limit matches or is lower than current.";
-                }
-            }
+        if (!$client) {
+            throw new Exception("Client not found.");
         }
+
+        $currentLimit = (float)($client['credit_limit'] ?? 0);
+        if ($currentLimit <= 0) {
+            throw new Exception("Client has no active credit limit.");
+        }
+
+        require_once __DIR__ . '/engines/credit_limit_engine.php';
+        require_once __DIR__ . '/engines/credit_score_engine.php';
+
+        $limitEngine = new CreditLimitEngine($pdo, $tenant_id);
+        $scoreEngine = new CreditScoreEngine($pdo, $tenant_id);
         
-        $pdo->commit();
+        $scoreLog = mf_credit_policy_fetch_latest_score($pdo, $tenant_id, $client_id);
+        $effectiveScore = $scoreLog ? (float) ($scoreLog['total_score'] ?? 0) : (float) $scoreEngine->getStartingScore();
 
-        if ($upgraded_count === 0 && !empty($skipped_reasons)) {
-            echo json_encode([
-                'status' => 'info',
-                'message' => 'No borrowers were upgraded. Reasons: ' . implode(' ', array_unique($skipped_reasons))
-            ]);
-        } else {
-            $msg = "Successfully upgraded {$upgraded_count} borrower(s).";
-            if (!empty($skipped_reasons)) {
-                $msg .= " Some were skipped: " . implode(' ', array_unique($skipped_reasons));
+        if ($type === 'upgrade') {
+            $potentialLimitInfo = $limitEngine->calculateProgressiveGrowth($currentLimit, $effectiveScore);
+            $new_limit = round(max($currentLimit, $potentialLimitInfo['new_limit'] ?? 0), 2);
+
+            if ($new_limit <= $currentLimit + 0.01) {
+                throw new Exception("Recommended upgraded limit matches or is lower than current limit.");
             }
-            echo json_encode(['status' => 'success', 'message' => $msg]);
+
+            $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                ->execute([$new_limit, $client_id, $tenant_id]);
+
+            $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_UPGRADED', 'client', ?, ?)")
+                ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit upgraded to {$new_limit} from {$currentLimit}"]);
+                
+            $scoreEngine->calculateNetScoreChange($client_id);
+            $msg = "Successfully upgraded borrower's credit limit to " . number_format($new_limit, 2) . ".";
+        } else {
+            // Downgrade: DECREASE the limit utilizing the opposite math of the micro-percentage matrix
+            $limitBand = $limitEngine->identifyScoreBand($effectiveScore) ?: [];
+            $base_growth_percent = (float) ($limitBand['base_growth_percent'] ?? 0.05); // Default to 5% if none
+            $micro_percent_per_point = (float) ($limitBand['micro_percent_per_point'] ?? 0);
+            
+            $deduction = $base_growth_percent + ($effectiveScore * $micro_percent_per_point);
+            if ($deduction <= 0) $deduction = 0.10; // minimum 10% downgrade penalty
+            if ($deduction > 0.50) $deduction = 0.50; // clamp max downgrade penalty to 50%
+            
+            $new_limit = round(max(0, $currentLimit * (1 - $deduction)), 2);
+
+            $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                ->execute([$new_limit, $client_id, $tenant_id]);
+
+            $pdo->prepare("INSERT INTO audit_logs (user_id, tenant_id, action_type, entity_type, entity_id, description) VALUES (?, ?, 'CREDIT_LIMIT_DOWNGRADED', 'client', ?, ?)")
+                ->execute([$session_user_id, $tenant_id, $client_id, "Credit limit downgraded to {$new_limit} from {$currentLimit}"]);
+                
+            $scoreEngine->calculateNetScoreChange($client_id);
+            $msg = "Successfully downgraded borrower's credit limit to " . number_format($new_limit, 2) . ".";
         }
+
+        $pdo->commit();
+        echo json_encode(['status' => 'success', 'message' => $msg]);
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        echo json_encode(['status' => 'error', 'message' => 'Unable to upgrade borrowers: ' . $e->getMessage()]);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to process action: ' . $e->getMessage()]);
     }
     exit;
 }

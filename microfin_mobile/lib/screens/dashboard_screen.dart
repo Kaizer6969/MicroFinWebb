@@ -218,9 +218,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   const SizedBox(height: 16),
                                   _buildMakePaymentButton(primary),
                                   const SizedBox(height: 24),
-                                ] else if (_creditLimit > 0 ||
-                                    _verificationStatus == 'Approved' ||
-                                    _verificationStatus == 'Verified') ...[
+                                ] else if (_verificationStatus == 'Approved' &&
+                                    _creditLimit > 0) ...[
                                   _buildCreditLimitCard(primary),
                                   const SizedBox(height: 24),
                                 ] else ...[
@@ -1144,27 +1143,28 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ClientVerificationScreen()),
-              ).then((_) => _fetchDashboard());
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: textColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              minimumSize: const Size(0, 36),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          if (_verificationStatus != 'Pending')
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ClientVerificationScreen()),
+                ).then((_) => _fetchDashboard());
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: textColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                minimumSize: const Size(0, 36),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Go',
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
-            child: const Text(
-              'Go',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
         ],
       ),
     );

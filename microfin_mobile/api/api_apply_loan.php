@@ -94,11 +94,20 @@ try {
     $pStmt = $conn->prepare("
         SELECT
             interest_rate,
-            product_type,
+            'Loan Product' AS product_type,
             min_amount,
             max_amount,
             min_term_months,
-            max_term_months
+            max_term_months,
+            early_settlement_fee_type,
+            early_settlement_fee_value,
+            billing_cycle,
+            processing_fee_percentage,
+            service_charge,
+            documentary_stamp,
+            insurance_fee_percentage,
+            grace_period_days,
+            interest_type
         FROM loan_products
         WHERE product_id = ?
           AND tenant_id = ?
@@ -200,6 +209,19 @@ try {
         trim((string) ($client['comaker_city'] ?? ''))
     );
 
+    $policy_metadata = json_encode([
+        'processing_fee_percentage' => (float) ($pRow['processing_fee_percentage'] ?? 0),
+        'service_charge' => (float) ($pRow['service_charge'] ?? 0),
+        'documentary_stamp' => (float) ($pRow['documentary_stamp'] ?? 0),
+        'insurance_fee_percentage' => (float) ($pRow['insurance_fee_percentage'] ?? 0),
+        'early_settlement_fee_type' => trim((string) ($pRow['early_settlement_fee_type'] ?? '')),
+        'early_settlement_fee_value' => (float) ($pRow['early_settlement_fee_value'] ?? 0),
+        'billing_cycle' => trim((string) ($pRow['billing_cycle'] ?? '')),
+        'grace_period_days' => (int) ($pRow['grace_period_days'] ?? 0),
+        'interest_type' => trim((string) ($pRow['interest_type'] ?? 'Fixed')),
+        'product_type' => trim((string) ($pRow['product_type'] ?? 'Loan Product')),
+    ]);
+
     $iaStmt = $conn->prepare("
         INSERT INTO loan_applications (
             application_number,
@@ -212,6 +234,7 @@ try {
             purpose_category,
             loan_purpose,
             application_data,
+            policy_metadata,
             application_status,
             submitted_date,
             has_comaker,
@@ -221,11 +244,11 @@ try {
             comaker_address,
             comaker_income
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', NOW(), ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', NOW(), ?, ?, ?, ?, ?, ?
         )
     ");
     $iaStmt->bind_param(
-        'sisidissssissssd',
+        'sisidisssssissssd',
         $app_number,
         $client_id,
         $tenant_id,
@@ -236,6 +259,7 @@ try {
         $category,
         $purpose,
         $app_data,
+        $policy_metadata,
         $has_co,
         $co_name,
         $client['comaker_relationship'],

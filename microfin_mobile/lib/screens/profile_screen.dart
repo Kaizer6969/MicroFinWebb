@@ -167,17 +167,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _sectionLabel('Credit & Account', primary),
                   const SizedBox(height: 14),
                   _card([
-                    _navRow(
-                      Icons.insights_rounded,
-                      'My Credit Standing',
-                      primary,
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CreditStandingScreen(),
+                    if ((currentUser.value?['verification_status'] ?? 'Unverified') == 'Approved')
+                      _navRow(
+                        Icons.insights_rounded,
+                        'My Credit Standing',
+                        primary,
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CreditStandingScreen(),
+                          ),
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Icon(Icons.lock_outline_rounded, color: Colors.grey[400], size: 22),
+                            const SizedBox(width: 16),
+                            Text(
+                              'Credit Standing (Locked)',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
                   ], primary),
 
                   const SizedBox(height: 28),

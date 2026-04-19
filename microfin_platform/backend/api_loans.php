@@ -65,10 +65,13 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
             l.days_overdue, l.payment_frequency, l.total_paid,
             l.loan_term_months, l.interest_rate,
             c.client_id, c.first_name, c.last_name, c.contact_number, c.email_address,
-            lp.product_name, lp.product_type
-        FROM loans l
-        JOIN clients c ON l.client_id = c.client_id
-        JOIN loan_products lp ON l.product_id = lp.product_id
+              lp.product_name,
+              la.policy_metadata,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type
+          FROM loans l
+          JOIN clients c ON l.client_id = c.client_id
+          JOIN loan_products lp ON l.product_id = lp.product_id
+          LEFT JOIN loan_applications la ON l.application_id = la.application_id
         WHERE l.tenant_id = ? $where_extra
         ORDER BY l.release_date DESC
         LIMIT 200
@@ -93,7 +96,9 @@ if ($method === 'GET' && $action === 'approved_applications') {
             la.requested_amount, la.approved_amount, la.approval_date, la.submitted_date,
             la.loan_term_months, la.interest_rate, la.application_data,
             c.client_id, c.first_name, c.last_name, c.contact_number,
-            lp.product_name, lp.product_type
+              lp.product_name,
+              la.policy_metadata,
+              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type
         FROM loan_applications la
         JOIN clients c ON la.client_id = c.client_id
         JOIN loan_products lp ON la.product_id = lp.product_id
@@ -154,10 +159,13 @@ if ($method === 'GET' && $action === 'view') {
     $stmt = $pdo->prepare("
         SELECT l.*, 
                c.first_name, c.last_name, c.contact_number, c.email_address,
-               lp.product_name, lp.product_type
+               lp.product_name,
+               la.policy_metadata,
+               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type
         FROM loans l
         JOIN clients c ON l.client_id = c.client_id
         JOIN loan_products lp ON l.product_id = lp.product_id
+        LEFT JOIN loan_applications la ON l.application_id = la.application_id
         WHERE l.loan_id = ? AND l.tenant_id = ?
         LIMIT 1
     ");
@@ -254,9 +262,12 @@ if ($method === 'POST' && $action === 'release') {
 
     // Fetch the approved application
     $app_stmt = $pdo->prepare("
-        SELECT la.*, lp.interest_rate, lp.interest_type,
-               lp.processing_fee_percentage, lp.service_charge,
-               lp.documentary_stamp, lp.insurance_fee_percentage
+        SELECT la.*, lp.interest_rate,
+               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.interest_type')) AS interest_type,
+               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.processing_fee_percentage')) AS processing_fee_percentage,
+               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.service_charge')) AS service_charge,
+               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.documentary_stamp')) AS documentary_stamp,
+               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.insurance_fee_percentage')) AS insurance_fee_percentage
         FROM loan_applications la
         JOIN loan_products lp ON la.product_id = lp.product_id
         WHERE la.application_id = ? AND la.tenant_id = ? AND la.application_status = 'Approved'

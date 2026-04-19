@@ -37,9 +37,12 @@ if (!function_exists('statusBadgePHP')) {
     </div>
     <div class="page-header-actions">
         <?php if (has_permission('CREATE_CLIENTS')): ?>
+            <!-- Hiding the New Client button temporarily -->
+            <!--
             <button class="btn-primary" onclick="openModal('walkInModal')">
                 <span class="material-symbols-rounded ms">person_add</span> New Client
             </button>
+            -->
         <?php endif; ?>
     </div>
 </div>
@@ -69,7 +72,6 @@ if (!function_exists('statusBadgePHP')) {
                     <th>Phone</th>
                     <th>Registered</th>
                     <th>Status</th>
-                    <th>Action</th>
                 </tr>
             </thead>
             <tbody id="clientsTbody">
@@ -91,18 +93,8 @@ if (!function_exists('statusBadgePHP')) {
                             <td class="td-muted">
                                 <?php echo date('M d, Y', strtotime($c['registration_date'])); ?></td>
                             <td>
-                                <?php
-                                $disp_status = $c['client_status'];
-                                $doc_status = $c['document_verification_status'] ?? '';
-                                if ($doc_status !== 'Verified' && $doc_status !== 'Approved' && $disp_status === 'Active') {
-                                    $disp_status = 'Inactive';
-                                }
-                                echo statusBadgePHP($disp_status);
-                                ?>
+                                <?php echo statusBadgePHP($c['effective_status'] ?? 'Unverified'); ?>
                             </td>
-                            <td><button class="btn btn-sm btn-outline"
-                                    onclick="viewClient(<?php echo (int) $c['client_id']; ?>)">View
-                                    Profile</button></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

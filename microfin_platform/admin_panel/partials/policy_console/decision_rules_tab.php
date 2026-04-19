@@ -264,19 +264,7 @@ function renderToggleHeader($label, $helpText, $name, $value) {
                         </div>
                     </div>
 
-                    <!-- Rule: Employment Tenure: Prevents applications if the user has been employed for fewer than the specified months. -->
-                    <div class="policy-decision-rule-item">
-                        <?php echo renderToggleHeader('Employment Tenure', 'Minimum required months of employment.', 'pcdr_employment_tenure_enabled', $policy_console_demographics['employment_tenure_enabled']); ?>
-                        <div class="policy-decision-input-group toggle-group-pcdr_employment_tenure_enabled">
-                            <div class="policy-decision-field policy-decision-field-col">
-                                <span class="policy-decision-field-label">Minimum Employment</span>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="number" class="form-control" name="pcdr_min_employment_months" value="<?php echo htmlspecialchars((string)($policy_console_demographics['min_employment_months'] ?? '')); ?>" placeholder="6">
-                                    <span class="text-muted" style="font-size: 13px;">months</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Rule: allowed Demographics go here -->
 
                     <!-- // Residency Tenure: (App Flow) Rejects during verification if address tenure requirement isn't met. Requires proof of billing/ID. -->
                     <div class="policy-decision-rule-item">

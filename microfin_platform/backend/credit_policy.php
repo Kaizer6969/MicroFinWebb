@@ -560,9 +560,29 @@ if (!function_exists('mf_credit_policy_fetch_upgrade_metrics')) {
         $latePaymentsStmt->execute($lateParams);
         $latePayments = (int) $latePaymentsStmt->fetchColumn();
 
+        // Check for active overdue loans
+        $overdueStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM loans 
+            WHERE tenant_id = ? AND client_id = ? AND loan_status = 'Overdue'
+        ");
+        $overdueStmt->execute([$tenantId, $clientId]);
+        $hasActiveOverdue = ((int) $overdueStmt->fetchColumn()) > 0;
+
+        // Find max overdue days
+        $maxOverdueDaysStmt = $pdo->prepare("
+            SELECT COALESCE(MAX(days_late), 0)
+            FROM amortization_schedule sched
+            INNER JOIN loans l ON l.loan_id = sched.loan_id AND l.tenant_id = sched.tenant_id
+            WHERE l.tenant_id = ? AND l.client_id = ?
+        ");
+        $maxOverdueDaysStmt->execute([$tenantId, $clientId]);
+        $maxOverdueDays = (int) $maxOverdueDaysStmt->fetchColumn();
+
         return [
             'completed_loans' => $completedLoans,
             'late_payments' => $latePayments,
+            'has_active_overdue' => $hasActiveOverdue,
+            'max_overdue_days' => $maxOverdueDays,
         ];
     }
 }
@@ -673,10 +693,6 @@ if (!function_exists('mf_credit_policy_fetch_client')) {
         $stmt->execute([$tenantId, $clientId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($row) {
-            $row['total_score'] = mf_credit_policy_normalize_score_value($row['total_score'] ?? 0);
-        }
-
         return $row ?: null;
     }
 }
@@ -685,8 +701,8 @@ if (!function_exists('mf_credit_policy_fetch_latest_score')) {
     function mf_credit_policy_fetch_latest_score(PDO $pdo, string $tenantId, int $clientId): ?array
     {
         $stmt = $pdo->prepare("
-            SELECT score_id, ci_id, total_score, credit_rating, max_loan_amount,
-                   recommended_interest_rate, computation_date
+            SELECT score_id, ci_id, credit_score AS total_score, credit_rating, max_loan_amount,
+                   recommended_interest_rate, computation_date, notes, score_metadata
             FROM credit_scores
             WHERE tenant_id = ? AND client_id = ?
             ORDER BY computation_date DESC, score_id DESC
@@ -694,6 +710,10 @@ if (!function_exists('mf_credit_policy_fetch_latest_score')) {
         ");
         $stmt->execute([$tenantId, $clientId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row && !empty($row['score_metadata'])) {
+            $row['_engine_data'] = json_decode($row['score_metadata'], true);
+        }
 
         return $row ?: null;
     }
@@ -838,11 +858,19 @@ if (!function_exists('mf_credit_policy_compute_score_snapshot')) {
     function mf_credit_policy_compute_score_snapshot(array $policy, array $client, array $metrics): array
     {
         $scoreGrowth = is_array($policy['score_growth'] ?? null) ? $policy['score_growth'] : [];
-        $baseScore = max(0, (int) mf_credit_policy_normalize_score_value(
-            $policy['score_thresholds']['new_client_default_score'] ?? 500,
-            500,
-            false
-        ));
+        
+        // Dynamically fetch starting score from the engine
+        $engineStartingScore = 320; // safe fallback
+        try {
+            global $pdo;
+            if (isset($pdo) && !empty($client['tenant_id'])) {
+                require_once __DIR__ . '/engines/credit_score_engine.php';
+                $scoreEngine = new CreditScoreEngine($pdo, $client['tenant_id']);
+                $engineStartingScore = (int) $scoreEngine->getStartingScore();
+            }
+        } catch (\Throwable $e) {}
+        
+        $baseScore = max(0, $engineStartingScore);
 
         $verifiedDocumentsBonus = !empty($metrics['verified_documents'])
             ? max(0, (int) ($scoreGrowth['verified_documents_bonus'] ?? 0))
@@ -947,7 +975,7 @@ if (!function_exists('mf_credit_policy_store_score_snapshot')) {
             $stmt = $pdo->prepare("
                 UPDATE credit_scores
                 SET ci_id = ?,
-                    total_score = ?,
+                    credit_score = ?,
                     credit_rating = ?,
                     recommended_interest_rate = NULL,
                     computed_by = ?,
@@ -970,7 +998,7 @@ if (!function_exists('mf_credit_policy_store_score_snapshot')) {
                     client_id,
                     tenant_id,
                     ci_id,
-                    total_score,
+                    credit_score,
                     credit_rating,
                     max_loan_amount,
                     recommended_interest_rate,
@@ -1004,9 +1032,9 @@ if (!function_exists('mf_credit_policy_ensure_default_score_record')) {
         ?int $computedBy = null
     ): ?array {
         $existing = mf_credit_policy_fetch_latest_score($pdo, $tenantId, $clientId);
-        if ($existing) {
-            return $existing;
-        }
+        
+        // Always recalculate and update the score to keep it in sync with the engine
+        // instead of returning stale data
 
         $policy = $policy ?? mf_get_tenant_credit_policy($pdo, $tenantId);
         $client = $client ?? mf_credit_policy_fetch_client($pdo, $tenantId, $clientId);
@@ -1034,7 +1062,7 @@ if (!function_exists('mf_credit_policy_ensure_default_score_record')) {
                 client_id,
                 tenant_id,
                 ci_id,
-                total_score,
+                credit_score,
                 credit_rating,
                 max_loan_amount,
                 recommended_interest_rate,
@@ -1146,7 +1174,25 @@ if (!function_exists('mf_credit_policy_compute_limit_snapshot')) {
     function mf_credit_policy_compute_limit_snapshot(array $policy, array $client, ?array $score, ?array $ci): array
     {
         $monthlyIncome = (float) ($client['monthly_income'] ?? 0);
-        $defaultScore = (float) ($policy['score_thresholds']['new_client_default_score'] ?? 500);
+        
+        // Dynamically fetch from engine instead of hardcoding 500
+        $defaultScore = 320; // safe fallback just in case
+        $bandMultiplier = 1.0;
+        $blockedReason = '';
+        
+        try {
+            global $pdo; // Hack for legacy function signature
+            if (isset($pdo) && !empty($client['tenant_id'])) {
+                require_once __DIR__ . '/engines/credit_score_engine.php';
+                require_once __DIR__ . '/engines/credit_limit_engine.php';
+                $scoreEngine = new CreditScoreEngine($pdo, $client['tenant_id']);
+                $limitEngine = new CreditLimitEngine($pdo, $client['tenant_id']);
+                
+                $defaultScore = (float) $scoreEngine->getStartingScore();
+            }
+        } catch (\Throwable $e) {
+            // retain fallback if engine fails
+        }
 
         $hasScore = $score !== null && isset($score['total_score']);
         $totalScore = $hasScore
@@ -1251,53 +1297,13 @@ if (!function_exists('mf_sync_client_credit_profile')) {
         ];
         $snapshot = mf_credit_policy_compute_limit_snapshot($policy, $client, $scoreForLimit, $ci);
 
-        $newLimit = $snapshot['can_compute_limit']
-            ? (float) ($snapshot['computed_limit'] ?? 0)
-            : 0.0;
         $currentLimit = (float) ($client['credit_limit'] ?? 0);
 
-        // If staff has manually upgraded this client, the staff-approved limit is the Gold Standard.
-        $lastUpgradeStmt = $pdo->prepare("
-            SELECT description FROM audit_logs
-            WHERE tenant_id = ? AND entity_type = 'client' AND entity_id = ? AND action_type = 'CREDIT_LIMIT_UPGRADED'
-            ORDER BY created_at DESC LIMIT 1
-        ");
-        $lastUpgradeStmt->execute([$tenantId, $clientId]);
-        $lastUpgradeDesc = $lastUpgradeStmt->fetchColumn();
-        if ($lastUpgradeDesc) {
-            // Extract the upgraded-to amount (handles formats like 4800 or 4,800.00)
-            if (preg_match('/upgraded to ([\d,.]+)/', $lastUpgradeDesc, $m)) {
-                $rawStaffLimit = str_replace(',', '', $m[1]);
-                $staffUpgradedLimit = (float) $rawStaffLimit;
-                
-                // If the staff set a limit, it overrides the auto-computed score limit.
-                // This also'corrects' borrowers who were hit by the 44,000 bug.
-                $newLimit = $staffUpgradedLimit;
-            }
-        }
-
-        if (abs($newLimit - $currentLimit) > 0.001) {
-            $update = $pdo->prepare("
-                UPDATE clients
-                SET last_seen_credit_limit = credit_limit,
-                    credit_limit = ?,
-                    updated_at = NOW()
-                WHERE tenant_id = ? AND client_id = ?
-            ");
-            $update->execute([$newLimit, $tenantId, $clientId]);
-        }
-
-        if ($score && !empty($score['score_id'])) {
-            $updateScore = $pdo->prepare("
-                UPDATE credit_scores
-                SET max_loan_amount = ?
-                WHERE score_id = ? AND tenant_id = ?
-            ");
-            $updateScore->execute([$newLimit, (int) $score['score_id'], $tenantId]);
-        }
+        // We no longer automatically overwrite the active credit_limit here.
+        // It strictly follows the Engines -> Potential Limit -> Approval flow.
 
         $client['last_seen_credit_limit'] = $currentLimit;
-        $client['credit_limit'] = $newLimit;
+        $client['credit_limit'] = $currentLimit;
 
         return [
             'policy' => $policy,
@@ -1427,7 +1433,15 @@ if (!function_exists('mf_evaluate_application_policy')) {
         $productMinAmount = (float) ($application['min_amount'] ?? 0);
         $productMaxAmount = (float) ($application['max_amount'] ?? 0);
         $productMinimumScore = (float) mf_credit_policy_normalize_score_value($application['minimum_credit_score'] ?? 0);
-        $defaultScore = (float) ($policy['score_thresholds']['new_client_default_score'] ?? 500);
+        
+        // Dynamically fetch from engine instead of hardcoding 500
+        $defaultScore = 320;
+        try {
+            require_once __DIR__ . '/engines/credit_score_engine.php';
+            $scoreEngine = new CreditScoreEngine($pdo, $tenantId);
+            $defaultScore = (float) $scoreEngine->getStartingScore();
+        } catch (\Throwable $e) {}
+
         $hasLatestScore = $score !== null && isset($score['total_score']);
         $totalScore = $hasLatestScore
             ? (float) mf_credit_policy_normalize_score_value($score['total_score'] ?? 0)

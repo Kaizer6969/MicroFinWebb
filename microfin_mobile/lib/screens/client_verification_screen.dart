@@ -27,7 +27,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   final PageController _pageCtrl = PageController();
   int _currentStep = 0;
   final int _totalSteps = 4;
-  final List<String> _stepLabels = ['Scan ID', 'Co-maker', 'Documents', 'Review'];
+  final List<String> _stepLabels = ['Personal Info', 'Co-maker', 'Documents', 'Review'];
 
   // ── STEP 0: ID scan + contact + personal ──────────────────────────────
   final _phoneCtrl         = TextEditingController();
@@ -71,13 +71,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   final _idRestrictionCtrl = TextEditingController();
   String? _idPath;
   bool _isUploadingId  = false;
-  bool _isVerifyingId  = false;
-  String? _idExtractedName;
-  String? _idExtractedNumber;
-  String? _idExtractedDob;
-  String? _idExtractedGender;
-  String? _idExtractedAddress; // kept for review display
-  bool _showScannedFields = false;
+  bool _showScannedFields = true;
 
   // ── STEP 1: Co-maker ──────────────────────────────────────────────────
   bool _hasComaker = false;
@@ -379,14 +373,12 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
     ]) { c.clear(); }
     setState(() {
       _idPath = null;
-      _idExtractedName = _idExtractedNumber = _idExtractedDob =
-          _idExtractedGender = _idExtractedAddress = null;
-      _showScannedFields = false;
+      _showScannedFields = true;
     });
   }
 
-  // ── Upload + Scan ID ───────────────────────────────────────────────────
-  Future<void> _pickUploadAndVerifyId() async {
+  // ── Upload ID ───────────────────────────────────────────────────
+  Future<void> _pickUploadId() async {
     try {
       final result = await FilePicker.platform.pickFiles(
           type: FileType.custom, allowedExtensions: ['jpg', 'jpeg', 'png'], withData: true);
@@ -395,7 +387,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
       final bytes = file.bytes;
       if (bytes == null) { _showSnack('Cannot read file.'); return; }
 
-      setState(() { _isUploadingId = true; _isVerifyingId = false; });
+      setState(() { _isUploadingId = true; });
 
       // 1) Upload for storage
       var upReq = http.MultipartRequest('POST', Uri.parse(ApiConfig.getUrl('api_upload_document.php')));
@@ -408,134 +400,13 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
       );
       if (upJson['success'] != true) { _showSnack(upJson['message'] ?? 'Upload failed'); return; }
 
-      setState(() { _idPath = upJson['file_path']; _isUploadingId = false; _isVerifyingId = true; });
+      setState(() { _idPath = upJson['file_path']; _isUploadingId = false; _showScannedFields = true; });
 
-      // 2) Verify with Gemini Vision
-      var vReq = http.MultipartRequest('POST', Uri.parse(ApiConfig.getUrl('api_verify_id_idnorm.php')));
-      vReq.files.add(http.MultipartFile.fromBytes('front_image', bytes, filename: file.name));
-      final vRes  = await vReq.send();
-      final vJson = await _readStreamedJson(
-        vRes,
-        fallbackMessage: 'Unable to scan the ID details right now.',
-      );
-
-      if (vJson['success'] == true) {
-        setState(() {
-          // ── Personal fields ──────────────────────────────────────────
-          _idExtractedName   = vJson['full_name']       ?? vJson['name']      ?? '';
-          _idExtractedNumber = vJson['document_number'] ?? vJson['id_number'] ?? '';
-          _idExtractedDob    = vJson['date_of_birth']   ?? '';
-          _idExtractedGender = vJson['gender']          ?? '';
-
-          if ((_idExtractedName ?? '').isNotEmpty) {
-            _fullNameCtrl.text = _idExtractedName!;
-          } else {
-            // Fallback: If AI fails to extract name, pre-fill from registration
-            final u = currentUser.value;
-            if (u != null) {
-              final first = u['first_name'] ?? '';
-              final last = u['last_name'] ?? '';
-              if (first.isNotEmpty || last.isNotEmpty) {
-                _fullNameCtrl.text = '$first $last'.trim();
-              }
-            }
-          }
-          if ((_idExtractedDob    ?? '').isNotEmpty) _dobCtrl.text      = _idExtractedDob!;
-          if ((_idExtractedGender ?? '').isNotEmpty) {
-            final g = _idExtractedGender!.trim().toLowerCase();
-            _gender = (g == 'female' || g == 'f') ? 'Female' : 'Male';
-          }
-          if (_idNumberCtrl.text.isEmpty && (_idExtractedNumber ?? '').isNotEmpty) {
-            _idNumberCtrl.text = _idExtractedNumber!;
-          }
-
-          // ── Address: populate each individual field directly ─────────
-          // PHP returns separate keys: address_street, address_barangay,
-          // address_city, address_province, address_postal_code
-          final street   = (vJson['address_street']      ?? '').toString().trim();
-          final barangay = (vJson['address_barangay']    ?? '').toString().trim();
-          final city     = (vJson['address_city']        ?? '').toString().trim();
-          final province = (vJson['address_province']    ?? '').toString().trim();
-          final postal   = (vJson['address_postal_code'] ?? '').toString().trim();
-
-          if (street.isNotEmpty)   _streetCtrl.text   = street;
-          if (barangay.isNotEmpty) _barangayCtrl.text = barangay;
-          if (city.isNotEmpty)     _cityCtrl.text     = city;
-          if (province.isNotEmpty) _provinceCtrl.text = province;
-          if (postal.isNotEmpty)   _postalCtrl.text   = postal;
-
-          // Combine for review card display
-          _idExtractedAddress = [street, barangay, city, province, postal]
-              .where((s) => s.isNotEmpty)
-              .join(', ');
-
-          _showScannedFields = true;
-        });
-        if (mounted) _showScanDialog();
-      } else {
-        setState(() { 
-          _showScannedFields = true; 
-          // Fallback: Even on complete AI failure, pre-fill from registration
-          final u = currentUser.value;
-          if (u != null) {
-            final first = u['first_name'] ?? '';
-            final last = u['last_name'] ?? '';
-            if (first.isNotEmpty || last.isNotEmpty) {
-              _fullNameCtrl.text = '$first $last'.trim();
-            }
-          }
-        });
-        if (mounted) {
-          _showScanDialog(errorMsg: 'We couldn\'t clearly read the details from the ID. Your ID photo was saved successfully, but please fill in the details manually.');
-        }
-      }
     } catch (e) {
       _showSnack('Error: $e');
     } finally {
-      if (mounted) setState(() { _isUploadingId = false; _isVerifyingId = false; });
+      if (mounted) setState(() { _isUploadingId = false; });
     }
-  }
-
-  void _showScanDialog({String? errorMsg}) {
-    final primary = AppColors.primary;
-    final ok = errorMsg == null;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: const EdgeInsets.all(24),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircleAvatar(
-              radius: 30,
-              backgroundColor: (ok ? Colors.green : Colors.orange).withOpacity(0.12),
-              child: Icon(ok ? Icons.verified_rounded : Icons.info_outline_rounded,
-                  color: ok ? Colors.green : Colors.orange, size: 30)),
-          const SizedBox(height: 16),
-          Text(ok ? 'ID Scanned Successfully' : 'Manual Entry Required',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          Text(
-             ok
-                ? 'Your details were auto-filled from the ID. Please review and correct anything if necessary.'
-                : errorMsg,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: AppColors.textMain, height: 1.4),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.w700)),
-            ),
-          ),
-        ]),
-      ),
-    );
   }
 
   // ── Fetch doc types ────────────────────────────────────────────────────
@@ -657,10 +528,6 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           'id_mid':             _idMidNumberCtrl.text,
           'id_profession':      _idProfessionCtrl.text,
           'id_restriction':     _idRestrictionCtrl.text,
-          'id_extracted_name':    _idExtractedName    ?? '',
-          'id_extracted_number':  _idExtractedNumber  ?? '',
-          'id_extracted_dob':     _idExtractedDob     ?? '',
-          'id_extracted_address': _idExtractedAddress ?? '',
           'documents': [
             if (_idPath != null && _idPath!.isNotEmpty) 
               {'document_type_id': 'scanned_id', 'file_name': 'Scanned_ID', 'file_path': _idPath},
@@ -859,7 +726,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
 
         // ① ID Type selector
         _infoChip(primary, Icons.credit_card_rounded, 'Identity Verification',
-            'Select your government-issued ID and upload a photo. Your details will be auto-filled.'),
+            'Select your government-issued ID and upload a photo.'),
         const SizedBox(height: 16),
         _formCard([
           _sectionLabel('Select ID Type *'),
@@ -887,7 +754,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
             _sectionLabel('Upload ID Photo *'),
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: (_isUploadingId || _isVerifyingId) ? null : _pickUploadAndVerifyId,
+              onTap: _isUploadingId ? null : _pickUploadId,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 width: double.infinity,
@@ -900,17 +767,15 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
                       width: 2),
                   boxShadow: _idPath != null ? [BoxShadow(color: primary.withOpacity(0.1), blurRadius: 15)] : null,
                 ),
-                child: (_isUploadingId || _isVerifyingId)
+                child: _isUploadingId
                     ? Column(mainAxisSize: MainAxisSize.min, children: [
                         SizedBox(width: 40, height: 40,
                             child: CircularProgressIndicator(color: primary, strokeWidth: 3)),
                         const SizedBox(height: 18),
-                        Text(_isUploadingId ? 'Uploading…' : 'Scanning ID Details…',
+                        Text('Uploading…',
                             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.textMain, letterSpacing: -0.3)),
                         const SizedBox(height: 6),
-                        Text(_isUploadingId
-                            ? 'Please wait while we secure your photo'
-                            : 'Extracting data using AI verification',
+                        Text('Please wait while we secure your photo',
                             style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w500),
                             textAlign: TextAlign.center),
                       ])
@@ -925,14 +790,14 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
                               color: _idPath != null ? primary : AppColors.textMuted, size: 36),
                         ),
                         const SizedBox(height: 14),
-                        Text(_idPath != null ? 'ID EXTRACTED ✓' : 'TAP TO SCAN ID',
+                        Text(_idPath != null ? 'ID UPLOADED ✓' : 'TAP TO UPLOAD ID',
                             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900,
                                 color: _idPath != null ? primary : AppColors.textMain, letterSpacing: 1.2)),
                         const SizedBox(height: 6),
                         Text(
                           _idPath != null
-                              ? 'Tap to rescanned if details are unclear'
-                              : 'Place your ID in good lighting for auto-fill',
+                              ? 'Tap to re-upload if needed'
+                              : 'Upload a clear photo of your ID',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
                               color: AppColors.textMuted),
                           textAlign: TextAlign.center,
@@ -963,9 +828,9 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           const SizedBox(height: 20),
           _infoChip(
               primary,
-              (_idExtractedName ?? '').isNotEmpty ? Icons.auto_fix_high_rounded : Icons.edit_note_rounded,
-              (_idExtractedName ?? '').isNotEmpty ? 'Details from your ID' : 'Personal Information',
-              (_idExtractedName ?? '').isNotEmpty ? 'These were filled in automatically. Edit if anything looks wrong.' : 'Please enter your personal details below.'),
+              Icons.edit_note_rounded,
+              'Personal Information',
+              'Please enter your personal details below.'),
           const SizedBox(height: 14),
 
           // Personal
@@ -987,7 +852,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           // ── Present Address ──────────────────────────────────────────
           const SizedBox(height: 16),
           _formCard([
-            // Header row with "From ID" badge when address was scanned
+            // Header row
             Row(children: [
               Container(width: 36, height: 36,
                   decoration: BoxDecoration(
@@ -995,21 +860,6 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
                   child: Icon(Icons.home_outlined, color: primary, size: 18)),
               const SizedBox(width: 10),
               _sectionLabel('Present Address'),
-              if ((_idExtractedAddress ?? '').isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                      color: primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.verified_rounded, size: 11, color: primary),
-                    const SizedBox(width: 4),
-                    Text('From ID',
-                        style: TextStyle(fontSize: 10, color: primary, fontWeight: FontWeight.w700)),
-                  ]),
-                ),
-              ],
             ]),
             const SizedBox(height: 14),
             // Individual address fields — pre-filled from scan, fully editable
@@ -1214,10 +1064,6 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
         _reviewCard('Identity', Icons.badge_outlined, primary, [
           _reviewRow('ID Type', _activeIdType.isNotEmpty ? _activeIdType['l'] as String : '—'),
           _reviewRow('ID Photo', _idPath != null ? 'Uploaded ✓' : 'Not uploaded'),
-          if ((_idExtractedName    ?? '').isNotEmpty) _reviewHighlight('Full Name',     _idExtractedName!,    primary),
-          if ((_idExtractedNumber  ?? '').isNotEmpty) _reviewHighlight('ID Number',     _idExtractedNumber!,  primary),
-          if ((_idExtractedDob     ?? '').isNotEmpty) _reviewHighlight('Date of Birth', _idExtractedDob!,     primary),
-          if ((_idExtractedAddress ?? '').isNotEmpty) _reviewHighlight('Address (ID)',  _idExtractedAddress!, primary),
         ]),
         const SizedBox(height: 12),
         _reviewCard('Personal', Icons.person_outline_rounded, primary, [

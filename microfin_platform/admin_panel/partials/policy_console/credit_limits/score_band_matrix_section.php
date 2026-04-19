@@ -25,7 +25,7 @@
                 </div>
                 <div class="policy-score-band-toolbar" style="margin-top: 0;">
                     <button type="button" class="btn btn-outline" id="policy-score-band-cancel-btn" style="display: none;">Cancel</button>
-                    <button type="button" class="btn btn-outline" id="policy-score-band-customize-btn">Customize</button>
+                    <!-- <button type="button" class="btn btn-outline" id="policy-score-band-customize-btn">Customize</button> -->
                     <button type="button" class="btn btn-outline" data-policy-score-band-add style="display: none;">
                         <span class="material-symbols-rounded">add</span>
                         Add Score Band
