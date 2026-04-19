@@ -66,8 +66,8 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
             l.loan_term_months, l.interest_rate,
             c.client_id, c.first_name, c.last_name, c.contact_number, c.email_address,
               lp.product_name,
-              la.policy_metadata,
-              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type
+              la.application_data,
+              JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.product_type')) AS product_type
           FROM loans l
           JOIN clients c ON l.client_id = c.client_id
           JOIN loan_products lp ON l.product_id = lp.product_id
@@ -97,8 +97,8 @@ if ($method === 'GET' && $action === 'approved_applications') {
             la.loan_term_months, la.interest_rate, la.application_data,
             c.client_id, c.first_name, c.last_name, c.contact_number,
               lp.product_name,
-              la.policy_metadata,
-              JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type
+              la.application_data,
+              JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.product_type')) AS product_type
         FROM loan_applications la
         JOIN clients c ON la.client_id = c.client_id
         JOIN loan_products lp ON la.product_id = lp.product_id
@@ -160,8 +160,8 @@ if ($method === 'GET' && $action === 'view') {
         SELECT l.*, 
                c.first_name, c.last_name, c.contact_number, c.email_address,
                lp.product_name,
-               la.policy_metadata,
-               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type
+               la.application_data,
+               JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.product_type')) AS product_type
         FROM loans l
         JOIN clients c ON l.client_id = c.client_id
         JOIN loan_products lp ON l.product_id = lp.product_id
@@ -263,11 +263,11 @@ if ($method === 'POST' && $action === 'release') {
     // Fetch the approved application
     $app_stmt = $pdo->prepare("
         SELECT la.*, lp.interest_rate,
-               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.interest_type')) AS interest_type,
-               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.processing_fee_percentage')) AS processing_fee_percentage,
-               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.service_charge')) AS service_charge,
-               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.documentary_stamp')) AS documentary_stamp,
-               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.insurance_fee_percentage')) AS insurance_fee_percentage
+               JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.interest_type')) AS interest_type,
+               JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.processing_fee_percentage')) AS processing_fee_percentage,
+               JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.service_charge')) AS service_charge,
+               JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.documentary_stamp')) AS documentary_stamp,
+               JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.insurance_fee_percentage')) AS insurance_fee_percentage
         FROM loan_applications la
         JOIN loan_products lp ON la.product_id = lp.product_id
         WHERE la.application_id = ? AND la.tenant_id = ? AND la.application_status = 'Approved'

@@ -190,11 +190,11 @@ if (!function_exists('mf_resolve_db_targets')) {
     {
         if (mf_is_railway_runtime()) {
             $target = [
-                'host' => 'centerbeam.proxy.rlwy.net',
-                'port' => 52624,
+                'host' => 'maglev.proxy.rlwy.net',
+                'port' => 10111,
                 'db' => 'railway',
                 'user' => 'root',
-                'pass' => 'zVULvPIbSyHVavTRnPFAkMWGVmvRwInd',
+                'pass' => 'lcwnEQrUEDOrGugVxeAuwJHLKLSiHduh',
             ];
 
             $databaseUrl = mf_env_first(['DATABASE_URL', 'MYSQL_URL', 'MYSQL_PUBLIC_URL', 'MYSQL_PRIVATE_URL']);

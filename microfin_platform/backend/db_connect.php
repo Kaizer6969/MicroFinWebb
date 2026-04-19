@@ -7,11 +7,11 @@ $charset = 'utf8mb4';
 // ---------------------------------------------------------------
 // Primary (local) DB defaults — Localhost (XAMPP/WAMP) credentials.
 // ---------------------------------------------------------------
-$host = 'centerbeam.proxy.rlwy.net';
-$port = 52624;
+$host = 'maglev.proxy.rlwy.net';
+$port = 10111;
 $db = 'railway';
 $user = 'root';
-$pass = 'zVULvPIbSyHVavTRnPFAkMWGVmvRwInd';
+$pass = 'lcwnEQrUEDOrGugVxeAuwJHLKLSiHduh';
 
 // (Old local fallback variables removed as the primary is now localhost)
 

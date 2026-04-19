@@ -433,8 +433,8 @@ if ($method === 'GET' && $action === 'view') {
     $apps_stmt = $pdo->prepare("
         SELECT la.application_id, la.application_number, la.application_status,
                la.requested_amount, la.submitted_date, la.created_at,
-               la.loan_term_months, la.policy_metadata,
-               JSON_UNQUOTE(JSON_EXTRACT(la.policy_metadata, '$.product_type')) AS product_type,
+               la.loan_term_months, la.application_data,
+               JSON_UNQUOTE(JSON_EXTRACT(la.application_data, '$.product_type')) AS product_type,
                lp.product_name
         FROM loan_applications la
         JOIN loan_products lp ON la.product_id = lp.product_id
