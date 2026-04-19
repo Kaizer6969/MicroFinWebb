@@ -80,122 +80,228 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
+    const forms = Array.from(document.querySelectorAll(".credit-policy-tab-panel form"));
     const storedForms = new Map();
-    let hasUnsavedChanges = false;
     let pendingNavTargetUrl = null;
+    let initialStateCaptured = false;
+
+    if (typeof window._isPolicyFormDirty === "undefined") {
+        window._isPolicyFormDirty = false;
+    }
+    if (typeof window._policyConsoleSubmitting === "undefined") {
+        window._policyConsoleSubmitting = false;
+    }
+    if (typeof window._policyConsoleBypassBeforeUnload === "undefined") {
+        window._policyConsoleBypassBeforeUnload = false;
+    }
+
+    function getFormKey(formElement, index = 0) {
+        if (!formElement.dataset.policyDirtyKey) {
+            formElement.dataset.policyDirtyKey = formElement.id || `policy-console-form-${index}`;
+        }
+        return formElement.dataset.policyDirtyKey;
+    }
 
     function serializeForm(formElement) {
         const formData = new FormData(formElement);
         const dataObj = {};
+
         for (const [key, value] of formData.entries()) {
-            if (!dataObj[key]) dataObj[key] = [];
+            if (!dataObj[key]) {
+                dataObj[key] = [];
+            }
             dataObj[key].push(typeof value === "string" ? value.trim() : value);
         }
+
         const ordered = {};
-        Object.keys(dataObj).sort().forEach(key => ordered[key] = dataObj[key].sort());
+        Object.keys(dataObj).sort().forEach((key) => {
+            ordered[key] = dataObj[key].slice().sort();
+        });
+
         return JSON.stringify(ordered);
     }
 
-    const policyPanels = document.querySelectorAll(".credit-policy-tab-panel form");
-    policyPanels.forEach(form => {
-        setTimeout(() => storedForms.set(form.id, serializeForm(form)), 500);
+    function updateSaveButtonVisuals(isDirty) {
+        const saveBtn = document.getElementById("global-save-policy-btn");
+        if (!saveBtn) {
+            return;
+        }
 
-        const lazyCheck = () => {
-            const originalState = storedForms.get(form.id);
-            if (!originalState) return;
-            const currentState = serializeForm(form);
-            const wasDirty = hasUnsavedChanges;
-            hasUnsavedChanges = (originalState !== currentState);
-            
-            // Visual indicator on save button globally
-            const saveBtn = document.getElementById("global-save-policy-btn");
-            if (saveBtn) {
-                if (hasUnsavedChanges) {
-                    saveBtn.style.transform = "scale(1.05)";
-                    saveBtn.style.boxShadow = "0 6px 16px rgba(59, 130, 246, 0.5)";
-                    setTimeout(() => { saveBtn.style.transform = ""; }, 300);
-                } else {
-                    saveBtn.style.boxShadow = "";
-                }
+        if (isDirty) {
+            saveBtn.style.transform = "scale(1.05)";
+            saveBtn.style.boxShadow = "0 6px 16px rgba(59, 130, 246, 0.5)";
+            setTimeout(() => {
+                saveBtn.style.transform = "";
+            }, 300);
+            return;
+        }
+
+        saveBtn.style.boxShadow = "";
+    }
+
+    function captureFormState(formElement) {
+        storedForms.set(getFormKey(formElement), serializeForm(formElement));
+    }
+
+    function captureAllFormStates() {
+        forms.forEach((form, index) => {
+            getFormKey(form, index);
+            captureFormState(form);
+        });
+        initialStateCaptured = true;
+        recomputeDirtyState();
+    }
+
+    function recomputeDirtyState() {
+        if (!initialStateCaptured) {
+            return window._isPolicyFormDirty;
+        }
+
+        const isDirty = forms.some((form, index) => {
+            const formKey = getFormKey(form, index);
+            const originalState = storedForms.get(formKey);
+            if (typeof originalState === "undefined") {
+                return false;
             }
+            return originalState !== serializeForm(form);
+        });
+
+        window._isPolicyFormDirty = isDirty;
+        updateSaveButtonVisuals(isDirty);
+        return isDirty;
+    }
+
+    function restoreAllForms() {
+        forms.forEach((form) => {
+            if (typeof form._policyConsoleRestoreOriginal === "function") {
+                form._policyConsoleRestoreOriginal();
+            } else {
+                form.reset();
+            }
+
+            if (typeof form._policyConsoleRefreshUi === "function") {
+                form._policyConsoleRefreshUi();
+            }
+        });
+
+        window._policyConsoleSubmitting = false;
+        recomputeDirtyState();
+    }
+
+    window.policyConsoleUnsavedManager = {
+        captureAllStates: captureAllFormStates,
+        captureFormState,
+        clearDirty() {
+            window._isPolicyFormDirty = false;
+            updateSaveButtonVisuals(false);
+            return false;
+        },
+        isDirty() {
+            return Boolean(recomputeDirtyState());
+        },
+        markSubmitting() {
+            window._policyConsoleSubmitting = true;
+            window._policyConsoleBypassBeforeUnload = false;
+            window._isPolicyFormDirty = false;
+            updateSaveButtonVisuals(false);
+        },
+        allowConfirmedNavigation() {
+            window._policyConsoleSubmitting = false;
+            window._policyConsoleBypassBeforeUnload = true;
+            window._isPolicyFormDirty = false;
+            updateSaveButtonVisuals(false);
+        },
+        recompute: recomputeDirtyState,
+        resetSubmitting() {
+            window._policyConsoleSubmitting = false;
+            window._policyConsoleBypassBeforeUnload = false;
+        },
+        restoreAllForms,
+    };
+
+    forms.forEach((form, index) => {
+        getFormKey(form, index);
+
+        const onFormMutation = () => {
+            window._policyConsoleSubmitting = false;
+            window._policyConsoleBypassBeforeUnload = false;
+            recomputeDirtyState();
         };
 
-        form.addEventListener("input", lazyCheck);
-        form.addEventListener("change", lazyCheck);
+        form.addEventListener("input", onFormMutation);
+        form.addEventListener("change", onFormMutation);
     });
 
     const modal = document.getElementById("unsaved-changes-modal");
     const backdrop = document.getElementById("unsaved-changes-backdrop");
 
-    // Automatically move backdrop and modal to document.body to break out of container restrictions
     if (backdrop && modal) {
         document.body.appendChild(backdrop);
         document.body.appendChild(modal);
     }
 
-    function showModal(url) {
-        pendingNavTargetUrl = url;
-        if (backdrop) backdrop.classList.add("is-active");
-        modal.classList.add("is-active");
-    }
-
     function hideModal() {
-        modal.classList.remove("is-active");
-        if (backdrop) backdrop.classList.remove("is-active");
+        if (modal) {
+            modal.classList.remove("is-active");
+        }
+        if (backdrop) {
+            backdrop.classList.remove("is-active");
+        }
         pendingNavTargetUrl = null;
     }
 
-    document.getElementById("unsaved-cancel-btn").addEventListener("click", hideModal);
+    const cancelBtn = document.getElementById("unsaved-cancel-btn");
+    if (cancelBtn) {
+        cancelBtn.addEventListener("click", hideModal);
+    }
 
-    document.getElementById("unsaved-discard-btn").addEventListener("click", () => {
-        hasUnsavedChanges = false; // Trust the discard
-        if (pendingNavTargetUrl) {
-            window.location.href = pendingNavTargetUrl;
-        } else {
+    const discardBtn = document.getElementById("unsaved-discard-btn");
+    if (discardBtn) {
+        discardBtn.addEventListener("click", () => {
+            window.policyConsoleUnsavedManager.restoreAllForms();
+            hideModal();
+
+            if (pendingNavTargetUrl) {
+                window.policyConsoleUnsavedManager.allowConfirmedNavigation();
+                window.location.href = pendingNavTargetUrl;
+                return;
+            }
+
+            window.policyConsoleUnsavedManager.allowConfirmedNavigation();
             window.location.reload();
-        }
-    });
+        });
+    }
 
-    document.getElementById("unsaved-save-btn").addEventListener("click", () => {
-        hideModal();
-        const activeForm = document.querySelector(".credit-policy-tab-panel:not([hidden]) form");
-        if(activeForm) {
-            hasUnsavedChanges = false;
-            
-            // Re-render button logic natively
+    const saveBtn = document.getElementById("unsaved-save-btn");
+    if (saveBtn) {
+        saveBtn.addEventListener("click", () => {
+            hideModal();
+
+            const activeForm = document.querySelector(".credit-policy-tab-panel:not([hidden]) form");
+            if (!activeForm) {
+                return;
+            }
+
+            window.policyConsoleUnsavedManager.markSubmitting();
+
             const globalSaveBtn = document.getElementById("global-save-policy-btn");
-            if(globalSaveBtn) {
+            if (globalSaveBtn) {
                 globalSaveBtn.innerHTML = "<i class=\"fas fa-spinner fa-spin\" style=\"margin-right: 6px;\"></i><span>Saving...</span>";
                 globalSaveBtn.style.pointerEvents = "none";
             }
+
             activeForm.submit();
-        }
-    });
+        });
+    }
 
-    document.body.addEventListener("click", (e) => {
-        const link = e.target.closest("a");
-        if (!link) return;
-        if (link.getAttribute("target") === "_blank" || link.hasAttribute("download") || link.href.includes("javascript:void(0)")) return;
+    setTimeout(captureAllFormStates, 0);
 
-        // If the link is just a hash (tab switching or same-page anchor), don't show the modal
-        if (link.getAttribute("href").startsWith("#") || link.href.includes(window.location.pathname + "#")) return;
-
-        // Allow free navigation between Policy Console tabs (Overview, Credit & Limits, Rules & Requirements, Required Documents)
-        if (link.hasAttribute("data-credit-policy-subtab") || link.href.includes("tab=credit_control_policy") || link.href.includes("credit_policy_tab=")) {
-            // Disarm beforeunload if they're deliberately navigating within the console
-            hasUnsavedChanges = false;
+    window.addEventListener("beforeunload", (e) => {
+        if (window._policyConsoleSubmitting || window._policyConsoleBypassBeforeUnload) {
             return;
         }
 
-        if (hasUnsavedChanges) {
-            e.preventDefault();
-            e.stopPropagation();
-            showModal(link.href);
-        }
-    }, true);
-
-    window.addEventListener("beforeunload", (e) => {
-        if (hasUnsavedChanges && !pendingNavTargetUrl) {
+        if (recomputeDirtyState() && !pendingNavTargetUrl) {
             e.preventDefault();
             e.returnValue = "";
             return "";

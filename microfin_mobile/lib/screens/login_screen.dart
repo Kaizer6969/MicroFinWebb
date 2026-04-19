@@ -406,25 +406,29 @@ class _LoginScreenState extends State<LoginScreen>
                         child: GestureDetector(
                           onTap: _goBack,
                           child: Container(
-                            width: 40,
-                            height: 40,
+                            width: 44,
+                            height: 44,
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.18),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
+                                color: Colors.white.withOpacity(0.35),
+                                width: 1,
                               ),
                             ),
                             child: const Icon(
                               Icons.arrow_back_rounded,
                               color: Colors.white,
-                              size: 20,
+                              size: 22,
                             ),
                           ),
+                        ),
+                      ),
+                    ),
                     FadeTransition(
                       opacity: _fadeAnimation,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                        padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

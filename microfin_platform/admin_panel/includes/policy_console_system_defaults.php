@@ -189,7 +189,10 @@ if (!function_exists('policy_console_compliance_documents_system_defaults')) {
 if (!function_exists('policy_console_compliance_document_excluded_names')) {
     function policy_console_compliance_document_excluded_names(): array
     {
-        return [];
+        return [
+            'Valid ID Front',
+            'Valid ID Back'
+        ];
     }
 }
 
@@ -202,8 +205,6 @@ if (!function_exists('policy_console_compliance_document_categories')) {
                 'label' => 'Identity Document',
                 'default_requirement' => 'required',
                 'allowed_document_names' => [
-                    'Valid ID Front',
-                    'Valid ID Back',
                     'National ID (PhilID/ePhilID)',
                     'Passport',
                     'Driver\'s License',

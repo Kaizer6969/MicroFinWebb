@@ -225,6 +225,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (activePanel) {
                 const form = activePanel.querySelector('form');
                 if (form) {
+                    const unsavedManager = window.policyConsoleUnsavedManager;
+                    if (unsavedManager && typeof unsavedManager.markSubmitting === 'function') {
+                        unsavedManager.markSubmitting();
+                    } else {
+                        window._policyConsoleSubmitting = true;
+                        window._isPolicyFormDirty = false;
+                    }
+
                     const originalHTML = this.innerHTML;
                     this.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 6px;"></i><span>Saving...</span>';
                     this.style.pointerEvents = 'none';
@@ -378,4 +386,3 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 </script>
-

@@ -23,11 +23,12 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
   final _dobCtrl = TextEditingController();
   String _gender = 'Male';
   String _civilStatus = 'Single';
-  String _employmentStatus = 'Employed';
+  String _employmentStatus = 'Full Time';
   final _occupationCtrl = TextEditingController();
   final _employerCtrl = TextEditingController();
   final _employerContactCtrl = TextEditingController();
   final _monthlyIncomeCtrl = TextEditingController();
+  List<String> _allowedEmploymentStatuses = ['Full Time', 'Part Time', 'Contract', 'Self Employed'];
 
   // Address
   final _houseNoCtrl = TextEditingController();
@@ -52,6 +53,39 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
   void initState() {
     super.initState();
     _fetchFullProfile();
+    _fetchTenantConfig();
+  }
+
+  Future<void> _fetchTenantConfig() async {
+    try {
+      final tId = activeTenant.value.id;
+      final url = Uri.parse(ApiConfig.getUrl('api_get_tenant_config.php?tenant_id=$tId'));
+      final resp = await http.get(url);
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data['success'] == true) {
+          List<String>? newEmpList;
+          final policy = data['policy'];
+          if (policy != null && policy['decision_rules'] != null) {
+            final empList = policy['decision_rules']['demographics']?['eligible_statuses'];
+            if (empList is List) {
+              newEmpList = empList.map((e) => e.toString()).toList();
+            }
+          } else if (data['allowed_employment_statuses'] != null) {
+            newEmpList = (data['allowed_employment_statuses'] as List).map((e) => e.toString()).toList();
+          }
+
+          if (mounted && newEmpList != null && newEmpList.isNotEmpty) {
+            setState(() {
+              _allowedEmploymentStatuses = newEmpList!;
+              if (!_allowedEmploymentStatuses.contains(_employmentStatus)) {
+                _employmentStatus = _allowedEmploymentStatuses.first;
+              }
+            });
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchFullProfile() async {
@@ -202,6 +236,40 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Premium Hero Section
+                  Center(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 10),
+                        Hero(
+                          tag: 'profile_avatar',
+                          child: Container(
+                            width: 100, height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: primary.withOpacity(0.12),
+                              border: Border.all(color: primary.withOpacity(0.3), width: 3),
+                              boxShadow: [
+                                BoxShadow(color: primary.withOpacity(0.15), blurRadius: 30, spreadRadius: 2)
+                              ],
+                            ),
+                            child: Icon(Icons.person_rounded, size: 60, color: primary),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '${currentUser.value?['first_name'] ?? ''} ${currentUser.value?['last_name'] ?? ''}',
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.textMain, letterSpacing: -0.5),
+                        ),
+                        Text(
+                          currentUser.value?['email'] ?? '',
+                          style: TextStyle(fontSize: 14, color: AppColors.textMuted, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+
                   _formCard([
                     _sectionLabel('Contact Details'),
                     SizedBox(height: 14),
@@ -215,7 +283,7 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
                   _formCard([
                     _sectionLabel('Personal Info'),
                     SizedBox(height: 14),
-                    _dropdownField('Gender', _gender, ['Male', 'Female', 'Other'], (v) => setState(() => _gender = v!), icon: Icons.wc_outlined),
+                    _dropdownField('Gender', _gender, ['Male', 'Female'], (v) => setState(() => _gender = v!), icon: Icons.wc_outlined),
                     SizedBox(height: 12),
                     _dropdownField('Civil Status', _civilStatus, ['Single', 'Married', 'Widowed', 'Divorced', 'Separated'], (v) => setState(() => _civilStatus = v!), icon: Icons.people_outline_rounded),
                   ]),
@@ -223,7 +291,7 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
                   _formCard([
                     _sectionLabel('Employment & Income'),
                     SizedBox(height: 14),
-                    _dropdownField('Employment Status', _employmentStatus, ['Employed', 'Self-Employed', 'Unemployed', 'Retired'], (v) => setState(() => _employmentStatus = v!), icon: Icons.work_outline_rounded),
+                    _dropdownField('Employment Status', _employmentStatus, _allowedEmploymentStatuses, (v) => setState(() => _employmentStatus = v!), icon: Icons.work_outline_rounded),
                     SizedBox(height: 12),
                     _inputField('Occupation / Job Title', _occupationCtrl, icon: Icons.badge_outlined),
                     SizedBox(height: 12),
@@ -307,11 +375,15 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
     );
   }
 
-  Widget _sectionLabel(String t) => Text(t, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textMain));
+  Widget _sectionLabel(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(t, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.primary, letterSpacing: -0.3)),
+  );
 
   Widget _formCard(List<Widget> children) => Container(
-    padding: EdgeInsets.all(18),
-    decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border), boxShadow: AppColors.cardShadow),
+    margin: const EdgeInsets.only(bottom: 20),
+    padding: const EdgeInsets.all(24),
+    decoration: AppPremium.cardDecoration(),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
   );
 
@@ -319,28 +391,22 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboard,
-      style: TextStyle(fontSize: 14, color: AppColors.textMain),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(fontSize: 13, color: AppColors.textMuted),
-        prefixIcon: icon != null ? Icon(icon, size: 18, color: AppColors.textMuted) : null,
-      ),
+      style: TextStyle(fontSize: 14, color: AppColors.textMain, fontWeight: FontWeight.w600),
+      decoration: AppPremium.fieldDecoration(label: label, icon: icon),
     );
   }
 
   Widget _dropdownField(String label, String value, List<String> items, void Function(String?) onChanged, {IconData? icon}) {
-    // Make sure the value exists in the items list, otherwise fallback to the first item
     final activeValue = items.contains(value) ? value : items.first;
     return DropdownButtonFormField<String>(
       value: activeValue,
       onChanged: onChanged,
-      style: TextStyle(fontSize: 14, color: AppColors.textMain),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(fontSize: 13, color: AppColors.textMuted),
-        prefixIcon: icon != null ? Icon(icon, size: 18, color: AppColors.textMuted) : null,
-      ),
-      items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+      style: TextStyle(fontSize: 14, color: AppColors.textMain, fontWeight: FontWeight.w600),
+      decoration: AppPremium.fieldDecoration(label: label, icon: icon),
+      items: items.map((e) => DropdownMenuItem(
+        value: e,
+        child: Text(AppFormat.normalizeLabel(e)),
+      )).toList(),
     );
   }
 

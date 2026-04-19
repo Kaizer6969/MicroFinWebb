@@ -545,7 +545,7 @@ try {
     }
 
     $clientUpdateStmt->bind_param(
-        'ssssssssssssssssssssissssdsssdssssisis',
+        'ssssssssssssssssssssissssdsssdssssdis',
         $firstName,
         $middleName,
         $lastName,

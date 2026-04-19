@@ -35,7 +35,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   final _dobCtrl           = TextEditingController();
   String _gender           = 'Male';
   String _civilStatus      = 'Single';
-  String _employmentStatus = 'Employed';
+  String _employmentStatus = 'Full Time';
   final _occupationCtrl      = TextEditingController();
   final _employerCtrl        = TextEditingController();
   final _employerContactCtrl = TextEditingController();
@@ -48,7 +48,6 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   final _cityCtrl     = TextEditingController();
   final _provinceCtrl = TextEditingController();
   final _postalCtrl   = TextEditingController();
-  final _residencyMonthsCtrl = TextEditingController();
 
   // Permanent address
   bool  _sameAsPermanent  = true;
@@ -94,18 +93,42 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   final Map<int, String?> _selectedDocs = {};
 
   bool _isSubmitting = false;
-  List<String> _allowedEmploymentStatuses = ['Employed', 'Self-Employed', 'Unemployed', 'Retired'];
+  List<String> _allowedEmploymentStatuses = [
+    'Full Time',
+    'Part Time',
+    'Contract',
+    'Freelancer / Gig',
+    'Self Employed',
+    'Casual / Seasonal',
+    'Retired / Pensioner',
+    'Student',
+    'Unemployed'
+  ];
 
   // ── ID type definitions ────────────────────────────────────────────────
-  static const _idTypes = [
-    {'v': 'philsys',  'l': 'National ID (PhilSys)',  'pcn': true,  'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+  static const List<Map<String, dynamic>> _idTypes = [
+    {'v': 'philsys',  'l': 'National ID (PhilID/ePhilID)', 'pcn': true,  'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
     {'v': 'passport', 'l': 'Passport',               'pcn': false, 'expiry': true,  'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
     {'v': 'dl',       'l': "Driver's License",       'pcn': false, 'expiry': true,  'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': true},
     {'v': 'umid',     'l': 'UMID',                   'pcn': false, 'expiry': false, 'issue': false, 'crn': true,  'sss': false, 'mid': false, 'prof': false, 'rest': false},
     {'v': 'sss',      'l': 'SSS ID',                 'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': true,  'mid': false, 'prof': false, 'rest': false},
+    {'v': 'gsis',     'l': 'GSIS e-Card',            'pcn': false, 'expiry': false, 'issue': false, 'crn': true,  'sss': false, 'mid': false, 'prof': false, 'rest': false},
     {'v': 'prc',      'l': 'PRC ID',                 'pcn': false, 'expiry': true,  'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': true,  'rest': false},
-    {'v': 'postal',   'l': 'Philippine Postal ID',   'pcn': false, 'expiry': false, 'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
-    {'v': 'pagibig',  'l': 'Pag-IBIG Loyalty Plus',  'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': true,  'prof': false, 'rest': false},
+    {'v': 'postal',   'l': 'Postal ID',              'pcn': false, 'expiry': false, 'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'seaman',   'l': "Seaman's Book / SIRB",   'pcn': false, 'expiry': true,  'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'senior',   'l': 'Senior Citizen ID',      'pcn': false, 'expiry': false, 'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'pwd',      'l': 'PWD ID',                 'pcn': false, 'expiry': false, 'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'voter',    'l': "Voter's ID",             'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'nbi',      'l': 'NBI Clearance',          'pcn': false, 'expiry': true,  'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'police',   'l': 'Police Clearance',       'pcn': false, 'expiry': true,  'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'tin',      'l': 'TIN ID',                 'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'school',   'l': 'School ID',              'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'company',  'l': 'Company ID',             'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'barangay', 'l': 'Barangay ID',            'pcn': false, 'expiry': false, 'issue': true,  'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'ofw',      'l': 'OFW ID',                 'pcn': false, 'expiry': true,  'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'owwa',     'l': 'OWWA ID',                'pcn': false, 'expiry': true,  'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'ibp',      'l': 'IBP ID',                 'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
+    {'v': 'govt',     'l': 'Government Office / GOCC ID', 'pcn': false, 'expiry': false, 'issue': false, 'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false},
   ];
 
   List<Map<String, dynamic>> _availableIdTypes = List.from(_idTypes);
@@ -123,9 +146,10 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   }
 
   Future<void> _fetchTenantConfig() async {
+    final tenantId = currentUser.value?['tenant_id'] ?? activeTenant.value.id;
     try {
       final resp = await http.get(Uri.parse(
-        ApiConfig.getUrl('api_get_tenant_config.php?tenant_id=${activeTenant.value.id}'),
+        ApiConfig.getUrl('api_get_tenant_config.php?tenant_id=$tenantId'),
       ));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
@@ -140,30 +164,66 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
             if (empList is List) {
               newEmpList = empList.map((e) => e.toString()).toList();
             }
-            final ids = policy['compliance_documents']?['identity_document']?['accepted_types'];
-            if (ids is List) {
-              newIdList = ids.map((e) => e.toString()).toList();
+
+            final compList = policy['compliance_documents']?['document_requirements'];
+            if (compList is List) {
+              final idReq = compList.firstWhere(
+                (r) => r['category_key'] == 'identity_document',
+                orElse: () => null,
+              );
+              if (idReq != null && idReq['accepted_document_names'] is List) {
+                newIdList = (idReq['accepted_document_names'] as List)
+                    .map((e) => e.toString())
+                    .toList();
+              } else if (idReq != null && idReq['document_options'] is List) {
+                // Fallback for nested object arrays if used
+                newIdList = (idReq['document_options'] as List)
+                    .where((e) => e['is_accepted'] == true)
+                    .map((e) => e['document_name'].toString())
+                    .toList();
+              }
             }
           } else if (data['allowed_employment_statuses'] != null) {
-             newEmpList = (data['allowed_employment_statuses'] as List).map((e) => e.toString()).toList();
+              newEmpList = (data['allowed_employment_statuses'] as List).map((e) => e.toString()).toList();
           }
 
           if (mounted) {
             setState(() {
               if (newEmpList != null && newEmpList.isNotEmpty) {
                 _allowedEmploymentStatuses = newEmpList;
+                // Normalize selection to the raw key
                 if (!_allowedEmploymentStatuses.contains(_employmentStatus)) {
                   _employmentStatus = _allowedEmploymentStatuses.first;
                 }
               }
               if (newIdList != null && newIdList.isNotEmpty) {
-                _availableIdTypes = _idTypes.where((t) {
-                  final label = (t['l'] as String).toLowerCase();
-                  return newIdList!.any((allowed) {
-                     final a = allowed.toLowerCase();
-                     return a.contains(label) || label.contains(a.split(' ').first);
-                  });
+                // Rebuild the ID array exactly 1:1 with the institutional settings
+                _availableIdTypes = newIdList!.map((allowedName) {
+                  final a = allowedName.toLowerCase();
+                  
+                  // Map to an existing known type for UI flags if possible
+                  final predefinedMatch = _idTypes.firstWhere((t) {
+                    final label = (t['l'] as String).toLowerCase();
+                    return a.contains(label) || label.contains(a.split(' ').first);
+                  }, orElse: () => <String, dynamic>{});
+                  
+                  if (predefinedMatch.isNotEmpty) {
+                    return {
+                      ...predefinedMatch,
+                      'l': allowedName, // Override to match institutional labeling exactly
+                      'v': allowedName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_'),
+                    };
+                  } else {
+                    // Create a generic fallback for custom defined IDs
+                    return {
+                      'v': allowedName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_'),
+                      'l': allowedName,
+                      'pcn': false, 'expiry': false, 'issue': false, 
+                      'crn': false, 'sss': false, 'mid': false, 'prof': false, 'rest': false
+                    };
+                  }
                 }).toList();
+                
                 if (_availableIdTypes.isEmpty) {
                   _availableIdTypes = List.from(_idTypes);
                 }
@@ -186,7 +246,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
     for (final c in [
       _phoneCtrl, _fullNameCtrl, _dobCtrl,
       _occupationCtrl, _employerCtrl, _employerContactCtrl, _monthlyIncomeCtrl,
-      _houseNoCtrl, _streetCtrl, _barangayCtrl, _cityCtrl, _provinceCtrl, _postalCtrl, _residencyMonthsCtrl,
+      _houseNoCtrl, _streetCtrl, _barangayCtrl, _cityCtrl, _provinceCtrl, _postalCtrl,
       _permHouseCtrl, _permStreetCtrl, _permBarangayCtrl, _permCityCtrl, _permProvinceCtrl, _permPostalCtrl,
       _comakerNameCtrl, _comakerRelCtrl, _comakerContactCtrl, _comakerIncomeCtrl, _comakerAddressCtrl,
       _idNumberCtrl, _idExpiryCtrl, _idIssueDateCtrl, _idPcnCtrl, _idCrnCtrl,
@@ -200,6 +260,13 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
     final u = currentUser.value;
     if (u == null) return;
     _phoneCtrl.text = u['phone_number'] ?? '';
+    
+    // Auto-populate full name from registration
+    final first = u['first_name'] ?? '';
+    final last = u['last_name'] ?? '';
+    if (first.isNotEmpty || last.isNotEmpty) {
+      _fullNameCtrl.text = '$first $last'.trim();
+    }
   }
 
   void _showSnack(String msg) {
@@ -360,11 +427,23 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           _idExtractedDob    = vJson['date_of_birth']   ?? '';
           _idExtractedGender = vJson['gender']          ?? '';
 
-          if ((_idExtractedName   ?? '').isNotEmpty) _fullNameCtrl.text = _idExtractedName!;
+          if ((_idExtractedName ?? '').isNotEmpty) {
+            _fullNameCtrl.text = _idExtractedName!;
+          } else {
+            // Fallback: If AI fails to extract name, pre-fill from registration
+            final u = currentUser.value;
+            if (u != null) {
+              final first = u['first_name'] ?? '';
+              final last = u['last_name'] ?? '';
+              if (first.isNotEmpty || last.isNotEmpty) {
+                _fullNameCtrl.text = '$first $last'.trim();
+              }
+            }
+          }
           if ((_idExtractedDob    ?? '').isNotEmpty) _dobCtrl.text      = _idExtractedDob!;
           if ((_idExtractedGender ?? '').isNotEmpty) {
             final g = _idExtractedGender!.trim().toLowerCase();
-            _gender = (g == 'female' || g == 'f') ? 'Female' : g == 'other' ? 'Other' : 'Male';
+            _gender = (g == 'female' || g == 'f') ? 'Female' : 'Male';
           }
           if (_idNumberCtrl.text.isEmpty && (_idExtractedNumber ?? '').isNotEmpty) {
             _idNumberCtrl.text = _idExtractedNumber!;
@@ -394,7 +473,18 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
         });
         if (mounted) _showScanDialog();
       } else {
-        setState(() { _showScannedFields = true; });
+        setState(() { 
+          _showScannedFields = true; 
+          // Fallback: Even on complete AI failure, pre-fill from registration
+          final u = currentUser.value;
+          if (u != null) {
+            final first = u['first_name'] ?? '';
+            final last = u['last_name'] ?? '';
+            if (first.isNotEmpty || last.isNotEmpty) {
+              _fullNameCtrl.text = '$first $last'.trim();
+            }
+          }
+        });
         if (mounted) {
           _showScanDialog(errorMsg: 'We couldn\'t clearly read the details from the ID. Your ID photo was saved successfully, but please fill in the details manually.');
         }
@@ -543,7 +633,6 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           'city':               _cityCtrl.text,
           'province':           _provinceCtrl.text,
           'postal':             _postalCtrl.text,
-          'residency_months':   _residencyMonthsCtrl.text,
           'same_as_permanent':  _sameAsPermanent ? '1' : '0',
           'perm_house_no':      _sameAsPermanent ? _houseNoCtrl.text    : _permHouseCtrl.text,
           'perm_street':        _sameAsPermanent ? _streetCtrl.text     : _permStreetCtrl.text,
@@ -614,7 +703,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   Widget build(BuildContext context) {
     final primary = AppColors.primary;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: const Color(0xFFF3F4F6),
       body: SafeArea(child: Column(children: [
         _buildHeader(context, primary),
         Expanded(child: PageView(
@@ -635,112 +724,125 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   // ── Header ─────────────────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context, Color primary) {
     final tenant = activeTenant.value;
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Row(children: [
-            GestureDetector(
-              onTap: _goBack,
-              child: Container(
-                  width: 48, height: 48,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F2937)),
-                  child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22)),
-            ),
-            const SizedBox(width: 14),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(tenant.appName,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800,
-                      color: Color(0xFF111827), height: 1.1, letterSpacing: -0.5)),
-              Text(_stepLabels[_currentStep],
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: primary, height: 1.1)),
+    return Container(
+      padding: const EdgeInsets.only(bottom: 12),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF3F4F6),
+      ),
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Row(children: [
+              GestureDetector(
+                onTap: _goBack,
+                child: Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black,
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))]
+                    ),
+                    child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20)),
+              ),
+              const SizedBox(width: 14),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tenant.appName,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
+                        color: activeTenant.value.themePrimaryColor, height: 1.1, letterSpacing: -0.7)),
+                const SizedBox(height: 2),
+                Text(_stepLabels[_currentStep],
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF111827), height: 1.1)),
+              ]),
             ]),
-          ]),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(12)),
-            child: Text('${_currentStep + 1} / $_totalSteps',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF1F2937))),
-          ),
-        ]),
-      ),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(children: [
-          Stack(children: [
-            Container(height: 6, decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB), borderRadius: BorderRadius.circular(10))),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300), height: 6,
-              width: (MediaQuery.of(context).size.width - 40) * ((_currentStep + 0.3) / _totalSteps),
-              decoration: BoxDecoration(color: primary, borderRadius: BorderRadius.circular(10)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.black.withOpacity(0.1))
+              ),
+              child: Text('${_currentStep + 1} / $_totalSteps',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.black)),
             ),
           ]),
-          const SizedBox(height: 12),
-          SizedBox(height: 30, child: Row(
-            children: List.generate(_totalSteps, (i) {
-              final active = i == _currentStep;
-              final done   = i < _currentStep;
-              return Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text(_stepLabels[i], style: TextStyle(fontSize: 10,
-                    fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                    color: active ? const Color(0xFF1F2937)
-                        : (done ? primary.withOpacity(0.7) : AppColors.textMuted))),
-                const SizedBox(height: 4),
-                AnimatedContainer(duration: const Duration(milliseconds: 300),
-                    height: 2, width: active ? 24 : 0,
-                    decoration: BoxDecoration(color: primary, borderRadius: BorderRadius.circular(2))),
-              ]));
-            }),
-          )),
-        ]),
+        ),
+        _buildProgressBar(context, primary),
+      ]),
+    );
+  }
+
+  Widget _buildProgressBar(BuildContext context, Color primary) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: List.generate(_totalSteps, (i) {
+          final active = i == _currentStep;
+          final done   = i < _currentStep;
+          return Expanded(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: EdgeInsets.only(right: i == _totalSteps - 1 ? 0 : 8),
+              height: 6,
+              decoration: BoxDecoration(
+                color: active || done ? Colors.black : Colors.black.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }),
       ),
-      const SizedBox(height: 12),
-      Divider(height: 1, color: AppColors.border.withOpacity(0.5)),
-    ]);
+    );
   }
 
   // ── Bottom nav ─────────────────────────────────────────────────────────
   Widget _buildBottomNav(Color primary) {
     final isLast = _currentStep == _totalSteps - 1;
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 14, 20, MediaQuery.of(context).padding.bottom + 14),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
       decoration: BoxDecoration(
-          color: AppColors.card, border: Border(top: BorderSide(color: AppColors.border))),
+          color: AppColors.card,
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -4))]),
       child: Row(children: [
         if (_currentStep > 0) ...[
           Expanded(flex: 1, child: OutlinedButton(
             onPressed: _goBack,
             style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF1F2937)),
+                side: BorderSide(color: AppColors.textMain, width: 2),
                 padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-            child: const Text('Back',
-                style: TextStyle(color: Color(0xFF1F2937), fontWeight: FontWeight.w700)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppPremium.radius - 8))),
+            child: Text('Back',
+                style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w800, fontSize: 16)),
           )),
           const SizedBox(width: 12),
         ],
-        Expanded(flex: 2, child: ElevatedButton(
-          onPressed: _isSubmitting ? null : () {
-            if (!_validateStep()) { _showSnack('Please fill in all required fields'); return; }
-            isLast ? _submit() : _goNext();
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1F2937), foregroundColor: Colors.white,
-            disabledBackgroundColor: const Color(0xFF1F2937).withOpacity(0.5),
-            elevation: 4, shadowColor: Colors.black.withOpacity(0.2),
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        Expanded(flex: 2, child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppPremium.radius - 8),
+            gradient: LinearGradient(colors: [primary, primary.withOpacity(0.8)]),
+            boxShadow: [BoxShadow(color: primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]
           ),
-          child: _isSubmitting
-              ? const SizedBox(width: 22, height: 22,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-              : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(isLast ? 'Submit Profile' : 'Continue',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_rounded, size: 18),
-                ]),
+          child: ElevatedButton(
+            onPressed: _isSubmitting ? null : () {
+              if (!_validateStep()) { _showSnack('Please fill in all required fields'); return; }
+              isLast ? _submit() : _goNext();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent, foregroundColor: Colors.white,
+              shadowColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppPremium.radius - 8)),
+            ),
+            child: _isSubmitting
+                ? const SizedBox(width: 22, height: 22,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text(isLast ? 'Submit Profile' : 'Continue',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: -0.5)),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, size: 20),
+                  ]),
+          ),
         )),
       ]),
     );
@@ -783,50 +885,56 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           const SizedBox(height: 16),
           _formCard([
             _sectionLabel('Upload ID Photo *'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             GestureDetector(
               onTap: (_isUploadingId || _isVerifyingId) ? null : _pickUploadAndVerifyId,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: const Duration(milliseconds: 300),
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+                padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: _idPath != null ? primary.withOpacity(0.05) : AppColors.bg,
-                  borderRadius: BorderRadius.circular(16),
+                  color: _idPath != null ? primary.withOpacity(0.06) : AppColors.bg.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(AppPremium.radius - 8),
                   border: Border.all(
-                      color: _idPath != null ? primary : AppColors.border,
-                      width: _idPath != null ? 2 : 1),
+                      color: _idPath != null ? primary : Colors.transparent,
+                      width: 2),
+                  boxShadow: _idPath != null ? [BoxShadow(color: primary.withOpacity(0.1), blurRadius: 15)] : null,
                 ),
                 child: (_isUploadingId || _isVerifyingId)
                     ? Column(mainAxisSize: MainAxisSize.min, children: [
-                        SizedBox(width: 32, height: 32,
-                            child: CircularProgressIndicator(color: primary, strokeWidth: 2.5)),
-                        const SizedBox(height: 14),
-                        Text(_isUploadingId ? 'Uploading…' : 'Scanning ID…',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMain)),
-                        const SizedBox(height: 4),
+                        SizedBox(width: 40, height: 40,
+                            child: CircularProgressIndicator(color: primary, strokeWidth: 3)),
+                        const SizedBox(height: 18),
+                        Text(_isUploadingId ? 'Uploading…' : 'Scanning ID Details…',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.textMain, letterSpacing: -0.3)),
+                        const SizedBox(height: 6),
                         Text(_isUploadingId
-                            ? 'Please wait while your photo is being uploaded'
-                            : 'Extracting your details from the ID',
-                            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                            ? 'Please wait while we secure your photo'
+                            : 'Extracting data using AI verification',
+                            style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w500),
                             textAlign: TextAlign.center),
                       ])
                     : Column(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(_idPath != null ? Icons.credit_card_rounded : Icons.add_photo_alternate_outlined,
-                            color: _idPath != null ? primary : AppColors.textMuted, size: 40),
-                        const SizedBox(height: 10),
-                        Text(_idPath != null ? 'ID Uploaded ✓' : 'Tap to Upload ID Photo',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-                                color: _idPath != null ? primary : AppColors.textMain)),
-                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _idPath != null ? primary.withOpacity(0.12) : AppColors.bg.withOpacity(0.6),
+                          ),
+                          child: Icon(_idPath != null ? Icons.verified_user_rounded : Icons.add_a_photo_rounded,
+                              color: _idPath != null ? primary : AppColors.textMuted, size: 36),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(_idPath != null ? 'ID EXTRACTED ✓' : 'TAP TO SCAN ID',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900,
+                                color: _idPath != null ? primary : AppColors.textMain, letterSpacing: 1.2)),
+                        const SizedBox(height: 6),
                         Text(
                           _idPath != null
-                              ? ((_idExtractedName ?? '').isNotEmpty
-                                  ? 'Scanned: $_idExtractedName  •  Tap to re-upload'
-                                  : 'Uploaded  •  Tap to re-upload')
-                              : 'JPG or PNG  •  Front side of your ID',
-                          style: TextStyle(fontSize: 12,
-                              color: _idPath != null ? primary.withOpacity(0.8) : AppColors.textMuted),
+                              ? 'Tap to rescanned if details are unclear'
+                              : 'Place your ID in good lighting for auto-fill',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                              color: AppColors.textMuted),
                           textAlign: TextAlign.center,
                         ),
                       ]),
@@ -871,7 +979,7 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
                   first: DateTime(1900), last: DateTime.now(),
                   initial: DateTime.now().subtract(const Duration(days: 365 * 18)))),
               const SizedBox(width: 12),
-              Expanded(child: _dropdownField('Gender', _gender, ['Male', 'Female', 'Other'],
+              Expanded(child: _dropdownField('Gender', _gender, ['Male', 'Female'],
                   (v) => setState(() => _gender = v!), icon: Icons.wc_outlined)),
             ]),
           ]),
@@ -920,8 +1028,6 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
             ]),
             const SizedBox(height: 12),
             _inputField('Postal Code', _postalCtrl, keyboard: TextInputType.number),
-            const SizedBox(height: 12),
-            _inputField('Months at this address', _residencyMonthsCtrl, keyboard: TextInputType.number, icon: Icons.timer_outlined),
 
             // ── Permanent Address ──────────────────────────────────────
             const SizedBox(height: 20),
@@ -986,14 +1092,38 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           const SizedBox(height: 12),
           _dropdownField('Employment Status', _employmentStatus,
               _allowedEmploymentStatuses.isNotEmpty ? _allowedEmploymentStatuses : ['Employed'],
-              (v) => setState(() => _employmentStatus = v!), icon: Icons.work_outline_rounded),
-          const SizedBox(height: 12),
-          _inputField('Occupation / Job Title', _occupationCtrl, icon: Icons.badge_outlined),
-          const SizedBox(height: 12),
-          _inputField('Employer / Business Name', _employerCtrl, icon: Icons.business_outlined),
-          const SizedBox(height: 12),
-          _inputField('Employer Contact Number', _employerContactCtrl,
-              icon: Icons.phone_outlined, keyboard: TextInputType.phone),
+              (v) {
+                setState(() {
+                  _employmentStatus = v!;
+                  final s = _employmentStatus?.toLowerCase() ?? '';
+                  
+                  // Rule 1: Hide all 3 for non-employed
+                  if (['retired', 'student', 'unemployed'].contains(s)) {
+                    _occupationCtrl.clear();
+                    _employerCtrl.clear();
+                    _employerContactCtrl.clear();
+                  } 
+                  // Rule 2: Hide employer for independent/casual
+                  else if (['freelancer', 'self_employed'].contains(s)) {
+                    _employerCtrl.clear();
+                    _employerContactCtrl.clear();
+                  }
+                });
+              }, icon: Icons.work_outline_rounded),
+          
+          if (!['retired', 'student', 'unemployed'].contains(_employmentStatus?.toLowerCase() ?? '')) ...[
+            const SizedBox(height: 12),
+            _inputField('Occupation / Job Title', _occupationCtrl, icon: Icons.badge_outlined),
+          ],
+          
+          if (!['freelancer', 'self_employed', 'retired', 'student', 'unemployed'].contains(_employmentStatus?.toLowerCase() ?? '')) ...[
+            const SizedBox(height: 12),
+            _inputField('Employer / Business Name', _employerCtrl, icon: Icons.business_outlined),
+            const SizedBox(height: 12),
+            _inputField('Employer Contact Number', _employerContactCtrl,
+                icon: Icons.phone_outlined, keyboard: TextInputType.phone),
+          ],
+          
           const SizedBox(height: 12),
           _inputField('Monthly Income (₱) *', _monthlyIncomeCtrl,
               icon: Icons.payments_outlined, keyboard: TextInputType.number),
@@ -1135,31 +1265,34 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   Widget _infoChip(Color primary, IconData icon, String title, String sub) =>
       Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: primary.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(16), border: Border.all(color: primary.withOpacity(0.2))),
+        decoration: BoxDecoration(color: Colors.black.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.black.withOpacity(0.1))),
         child: Row(children: [
           Container(width: 48, height: 48,
-              decoration: BoxDecoration(color: primary.withOpacity(0.12), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, color: primary, size: 24)),
+              decoration: BoxDecoration(color: Colors.black.withOpacity(0.06), borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, color: Colors.black, size: 24)),
           const SizedBox(width: 14),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primary)),
+            Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black)),
             const SizedBox(height: 2),
             Text(sub, style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
           ])),
         ]),
       );
 
-  Widget _sectionLabel(String t) =>
-      Text(t, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textMain));
+  Widget _sectionLabel(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 2),
+    child: Text(t, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF111827), letterSpacing: -0.3)),
+  );
 
   Widget _formCard(List<Widget> children) => Container(
-    padding: const EdgeInsets.all(18),
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(24),
     decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border.withOpacity(0.6)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 16, offset: const Offset(0, 4))]),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.black, width: 1.2),
+    ),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
   );
 
@@ -1176,40 +1309,20 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
       {IconData? icon, TextInputType keyboard = TextInputType.text, int maxLines = 1}) =>
       TextFormField(
         controller: ctrl, keyboardType: keyboard, maxLines: maxLines,
-        style: TextStyle(fontSize: 14, color: AppColors.textMain, fontWeight: FontWeight.w600),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w500),
-          prefixIcon: icon != null ? Icon(icon, size: 18, color: AppColors.textMuted) : null,
-          floatingLabelBehavior: FloatingLabelBehavior.auto,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-          filled: true, fillColor: AppColors.bg,
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.border.withOpacity(0.5), width: 1)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
-          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.error, width: 1)),
-        ),
+        style: TextStyle(fontSize: 14, color: AppColors.textMain, fontWeight: FontWeight.w700),
+        decoration: AppPremium.fieldDecoration(label: label, icon: icon),
       );
 
   Widget _dropdownField(String label, String value, List<String> items,
       void Function(String?) onChanged, {IconData? icon}) =>
       DropdownButtonFormField<String>(
         value: value, onChanged: onChanged,
-        style: TextStyle(fontSize: 14, color: AppColors.textMain, fontWeight: FontWeight.w600),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w500),
-          prefixIcon: icon != null ? Icon(icon, size: 18, color: AppColors.textMuted) : null,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          filled: true, fillColor: AppColors.bg,
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.border.withOpacity(0.5), width: 1)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
-        ),
-        items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+        style: TextStyle(fontSize: 14, color: AppColors.textMain, fontWeight: FontWeight.w700),
+        decoration: AppPremium.fieldDecoration(label: label, icon: icon),
+        items: items.map((e) => DropdownMenuItem(
+          value: e,
+          child: Text(AppFormat.normalizeLabel(e)),
+        )).toList(),
       );
 
   Widget _dateTap(TextEditingController ctrl, String label, IconData icon, Color primary,
@@ -1247,8 +1360,8 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
           const SizedBox(width: 14),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(d['document_name'],
-                style: TextStyle(fontWeight: FontWeight.w700,
-                    color: isSel ? primary : AppColors.textMain, fontSize: 13)),
+                style: const TextStyle(fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827), fontSize: 13)),
             const SizedBox(height: 2),
             Text(isSel ? 'File selected ✓' : 'Tap to upload',
                 style: TextStyle(
@@ -1262,9 +1375,8 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   Widget _reviewCard(String title, IconData icon, Color primary, List<Widget> rows) =>
       Container(
         decoration: BoxDecoration(
-            color: AppColors.card, borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.border.withOpacity(0.5)),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]),
+            color: Colors.white, borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.black, width: 1.2)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(children: [
@@ -1289,16 +1401,16 @@ class _ClientVerificationScreenState extends State<ClientVerificationScreen> {
   Widget _reviewHighlight(String label, String value, Color primary) => Container(
     margin: const EdgeInsets.only(top: 10),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    decoration: BoxDecoration(color: primary.withOpacity(0.07), borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: primary.withOpacity(0.2))),
+    decoration: BoxDecoration(color: Colors.black.withOpacity(0.03), borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.black.withOpacity(0.1))),
     child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       Row(children: [
-        Icon(Icons.verified_rounded, size: 13, color: primary), const SizedBox(width: 5),
-        Text(label, style: TextStyle(fontSize: 12, color: primary, fontWeight: FontWeight.w600)),
+        const Icon(Icons.verified_rounded, size: 13, color: Colors.black), const SizedBox(width: 5),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.w600)),
       ]),
       const SizedBox(width: 12),
       Expanded(child: Text(value, textAlign: TextAlign.right,
-          style: TextStyle(fontSize: 13, color: primary, fontWeight: FontWeight.w800))),
+          style: const TextStyle(fontSize: 13, color: Colors.black, fontWeight: FontWeight.w800))),
     ]),
   );
 }

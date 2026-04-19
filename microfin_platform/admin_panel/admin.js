@@ -636,14 +636,58 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(deleteRowModal);
         }
 
+        const getPolicyUnsavedManager = () => {
+            const manager = window.policyConsoleUnsavedManager;
+            return manager && typeof manager.recompute === 'function' ? manager : null;
+        };
+        const dispatchSyntheticFormStateEvents = (formElement) => {
+            if (!formElement) {
+                return;
+            }
+
+            Array.from(formElement.elements || []).forEach((field) => {
+                if (!(field instanceof HTMLElement) || !field.matches('input, select, textarea')) {
+                    return;
+                }
+
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        };
+        const beginPolicySubmit = () => {
+            const manager = getPolicyUnsavedManager();
+            if (manager && typeof manager.markSubmitting === 'function') {
+                manager.markSubmitting();
+            } else {
+                window._policyConsoleSubmitting = true;
+                window._policyConsoleBypassBeforeUnload = false;
+                window._isPolicyFormDirty = false;
+            }
+            isFormDirty = false;
+        };
+
         let isFormDirty = false;
-        
-        let initialFormState = new URLSearchParams(new FormData(creditLimitsForm)).toString();
+        let initialFormState = '';
+        const initialScoreBandBodyHtml = scoreBandBody ? scoreBandBody.innerHTML : '';
+        const initialScoreBandNextIndex = scoreBandWrap ? (scoreBandWrap.getAttribute('data-next-index') || '0') : '0';
         function checkFormDirty() {
+            const manager = getPolicyUnsavedManager();
+            if (manager) {
+                isFormDirty = Boolean(manager.recompute());
+                window._isPolicyFormDirty = isFormDirty;
+                return isFormDirty;
+            }
+
             const currentState = new URLSearchParams(new FormData(creditLimitsForm)).toString();
             isFormDirty = currentState !== initialFormState;
             window._isPolicyFormDirty = isFormDirty;
+            return isFormDirty;
         }
+
+        setTimeout(() => {
+            initialFormState = new URLSearchParams(new FormData(creditLimitsForm)).toString();
+            checkFormDirty();
+        }, 0);
 
         // Global dirty state listeners
         creditLimitsForm.addEventListener('input', checkFormDirty);
@@ -652,18 +696,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const globalSaveBtn = document.getElementById('policy-global-save-btn');
         if (globalSaveBtn) {
             globalSaveBtn.addEventListener('click', () => {
-                isFormDirty = false;
-                window._isPolicyFormDirty = false;
-                creditLimitsForm.submit();
+                beginPolicySubmit();
+                let activeForm = document.querySelector(".credit-policy-tab-panel:not([hidden]) form");
+                if (activeForm) {
+                    activeForm.submit();
+                } else if (creditLimitsForm) {
+                    creditLimitsForm.submit();
+                }
             });
         }
         
         const forceSaveBtn = document.getElementById('policy-unsaved-save-btn');
         if (forceSaveBtn) {
             forceSaveBtn.addEventListener('click', () => {
-                isFormDirty = false;
-                window._isPolicyFormDirty = false;
-                creditLimitsForm.submit();
+                beginPolicySubmit();
+                let activeForm = document.querySelector(".credit-policy-tab-panel:not([hidden]) form");
+                if (activeForm) {
+                    activeForm.submit();
+                } else if (creditLimitsForm) {
+                    creditLimitsForm.submit();
+                }
             });
         }
 
@@ -674,30 +726,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (modal) modal.hidden = true;
                 intendedNavigationUrl = null;
                 rowToDelete = null;
+                window._intendedPolicyNavigationUrl = null;
             });
         });
 
         const confirmDiscardBtn = document.getElementById('policy-unsaved-discard-btn');
         if (confirmDiscardBtn) {
             confirmDiscardBtn.addEventListener('click', () => {
+                const pendingNavigation = window._intendedPolicyNavigation;
+                const pendingNavigationUrl = window._intendedPolicyNavigationUrl
+                    || (typeof intendedNavigationUrl === 'string' ? intendedNavigationUrl : '');
+                const manager = getPolicyUnsavedManager();
+                const unsavedModal = document.getElementById('policy-unsaved-modal');
+
                 isFormDirty = false;
                 window._isPolicyFormDirty = false;
-                
-                if (window._intendedPolicyNavigation) {
-                    window._intendedPolicyNavigation();
-                    window._intendedPolicyNavigation = null;
-                    const unsavedModal = document.getElementById('policy-unsaved-modal');
-                    if (unsavedModal) {
-                        unsavedModal.hidden = true;
+                window._policyConsoleSubmitting = false;
+                window._intendedPolicyNavigation = null;
+                window._intendedPolicyNavigationUrl = null;
+                rowToDelete = null;
+                intendedNavigationUrl = null;
+
+                if (unsavedModal) {
+                    unsavedModal.hidden = true;
+                }
+
+                if (manager && typeof manager.restoreAllForms === 'function') {
+                    manager.restoreAllForms();
+                } else {
+                    document.querySelectorAll(".credit-policy-tab-panel form").forEach((form) => form.reset());
+                    if (creditLimitsForm) {
+                        creditLimitsForm.reset();
                     }
-                } else if (intendedNavigationUrl) {
-                    if (typeof intendedNavigationUrl === 'function') {
-                        intendedNavigationUrl();
-                        const unsavedModal = document.getElementById('policy-unsaved-modal');
-                        if (unsavedModal) unsavedModal.hidden = true;
+                    checkFormDirty();
+                }
+
+                if (pendingNavigationUrl) {
+                    if (manager && typeof manager.allowConfirmedNavigation === 'function') {
+                        manager.allowConfirmedNavigation();
                     } else {
-                        window.location.href = intendedNavigationUrl;
+                        window._policyConsoleSubmitting = false;
+                        window._policyConsoleBypassBeforeUnload = true;
+                        window._isPolicyFormDirty = false;
                     }
+                    window.location.href = pendingNavigationUrl;
+                    return;
+                }
+
+                if (typeof pendingNavigation === 'function') {
+                    pendingNavigation();
+                    return;
                 }
             });
         }
@@ -717,7 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Native Before Unload
         window.addEventListener('beforeunload', (e) => {
-            if (isFormDirty) {
+            if (!window._policyConsoleSubmitting && !window._policyConsoleBypassBeforeUnload && checkFormDirty()) {
                 e.preventDefault();
                 e.returnValue = '';
             }
@@ -725,13 +803,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Intercept internal clicks
         document.body.addEventListener('click', (e) => {
-            if (!isFormDirty) return;
+            if (!checkFormDirty()) return;
             const a = e.target.closest('a[href]');
             if (a) {
+                // If it's a subtab inside policy console, do not prompt.
+                let isCreditTarget = false;
+                try {
+                    const url = new URL(a.href, window.location.href);
+                    const tabParam = url.searchParams.get('tab');
+                    if (tabParam === 'credit_settings' || tabParam === 'credit_control_policy') {
+                        isCreditTarget = true;
+                    }
+                } catch (err) {}
+
+                if (a.getAttribute('data-target') === 'credit_settings' || a.hasAttribute('data-credit-policy-nav-action') || isCreditTarget) {
+                    return; // Allow inner JS UI switching without blocking
+                }
+
                 const href = a.getAttribute('href');
                 if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
                     e.preventDefault();
+                    e.stopPropagation(); // prevent duplicate modals
                     intendedNavigationUrl = href;
+                    window._intendedPolicyNavigationUrl = href;
                     if (unsavedModal) unsavedModal.hidden = false;
                 }
             }
@@ -782,6 +876,72 @@ document.addEventListener('DOMContentLoaded', () => {
                 button.textContent = isOpen ? closeLabel : openLabel;
             });
         }
+
+        creditLimitsForm._policyConsoleRestoreOriginal = () => {
+            creditLimitsForm.reset();
+
+            if (scoreBandBody) {
+                scoreBandBody.innerHTML = initialScoreBandBodyHtml;
+            }
+            if (scoreBandWrap) {
+                scoreBandWrap.setAttribute('data-next-index', initialScoreBandNextIndex);
+            }
+
+            scoreBandOriginalState = null;
+            rowToDelete = null;
+
+            const customizeRealBtn = document.getElementById('policy-score-band-customize-btn');
+            const cancelRealBtn = document.getElementById('policy-score-band-cancel-btn');
+            const addBtn = creditLimitsForm.querySelector('[data-policy-score-band-add]');
+            const table = document.getElementById('policy-score-band-table');
+            const lifecyclePanel = document.getElementById('policy-lifecycle-panel');
+            const limitAdvancedPanel = document.getElementById('policy-limit-assignment-advanced-panel');
+
+            if (customizeRealBtn) {
+                customizeRealBtn.textContent = 'Customize';
+            }
+            if (cancelRealBtn) {
+                cancelRealBtn.style.display = 'none';
+            }
+            if (addBtn) {
+                addBtn.style.display = 'none';
+            }
+            creditLimitsForm.querySelectorAll('.policy-band-col-actions').forEach((col) => {
+                col.style.display = 'none';
+            });
+            if (table) {
+                table.querySelectorAll('input.form-control').forEach((input) => {
+                    input.setAttribute('readonly', 'readonly');
+                });
+            }
+            if (lifecyclePanel) {
+                lifecyclePanel.hidden = true;
+            }
+            if (limitAdvancedPanel) {
+                limitAdvancedPanel.hidden = true;
+            }
+        };
+        creditLimitsForm._policyConsoleRefreshUi = () => {
+            creditLimitsForm.querySelectorAll('[data-policy-rule-toggle]').forEach((toggleInput) => {
+                syncRuleCardState(toggleInput);
+            });
+            creditLimitsForm.querySelectorAll('[data-policy-toggle-button]').forEach((toggleButton) => {
+                const toggleKey = toggleButton.getAttribute('data-policy-toggle-button');
+                if (toggleKey) {
+                    syncToggleButtonState(toggleKey);
+                }
+            });
+
+            syncScoreBandEmptyState();
+
+            const lifecyclePanel = document.getElementById('policy-lifecycle-panel');
+            syncPanelToggleButtons('policy-lifecycle-panel', lifecyclePanel ? !lifecyclePanel.hidden : false);
+
+            const limitAdvancedPanel = document.getElementById('policy-limit-assignment-advanced-panel');
+            syncPanelToggleButtons('policy-limit-assignment-advanced-panel', limitAdvancedPanel ? !limitAdvancedPanel.hidden : false);
+
+            dispatchSyntheticFormStateEvents(creditLimitsForm);
+        };
 
         creditLimitsForm.addEventListener('click', (event) => {
             const toggleButton = event.target.closest('[data-policy-toggle-button]');
@@ -845,6 +1005,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (newRow) {
                     newRow.focus();
                 }
+                checkFormDirty();
                 return;
             }
 
@@ -920,8 +1081,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             input.setAttribute('readonly', 'readonly');
                         });
                     }
-                    
-                    isFormDirty = false;
+
+                    checkFormDirty();
                 }
                 return;
             }
@@ -1017,6 +1178,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 content.hidden = !isActive;
             }
         };
+        const syncDecisionRulesUi = () => {
+            decisionRulesForm.querySelectorAll('[data-policy-toggle-button]').forEach((toggleButton) => {
+                const toggleKey = toggleButton.getAttribute('data-policy-toggle-button');
+                if (toggleKey) {
+                    syncToggleButtonState(toggleKey);
+                }
+            });
+
+            decisionRulesForm.querySelectorAll('[data-decision-rule-toggle]').forEach((toggleInput) => {
+                syncRuleState(toggleInput);
+            });
+        };
+
+        decisionRulesForm._policyConsoleRestoreOriginal = () => {
+            decisionRulesForm.reset();
+        };
+        decisionRulesForm._policyConsoleRefreshUi = () => {
+            syncDecisionRulesUi();
+
+            Array.from(decisionRulesForm.elements || []).forEach((field) => {
+                if (!(field instanceof HTMLElement) || !field.matches('input, select, textarea')) {
+                    return;
+                }
+
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        };
 
         decisionRulesForm.querySelectorAll('[data-policy-toggle-button]').forEach((toggleButton) => {
             const toggleKey = toggleButton.getAttribute('data-policy-toggle-button');
@@ -1038,13 +1227,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     syncRuleState(toggleInput);
                 }
             });
-
-            syncToggleButtonState(toggleKey);
         });
 
-        decisionRulesForm.querySelectorAll('[data-decision-rule-toggle]').forEach((toggleInput) => {
-            syncRuleState(toggleInput);
-        });
+        syncDecisionRulesUi();
 
     }
 
@@ -1538,6 +1723,12 @@ document.addEventListener('DOMContentLoaded', () => {
         navItems.forEach((nav) => nav.classList.toggle('active', nav === navItem));
         viewSections.forEach((section) => section.classList.toggle('active', section.id === targetId));
 
+        // Manage floating top controls visibility
+        const globalTopControls = document.getElementById('global-top-controls');
+        if (globalTopControls) {
+            globalTopControls.style.display = (targetId === 'dashboard' || targetId === 'personal') ? 'none' : 'flex';
+        }
+
         if (effectiveSubTabId !== '') {
             activateTabInSection(targetEl, effectiveSubTabId);
         }
@@ -1565,6 +1756,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             
             const processNavigation = () => {
+                window._intendedPolicyNavigationUrl = null;
                 activateSection(targetId, { navItem: item, subTabId: creditPolicySubtab || subTabId || '' });
                 if (targetId === 'credit_settings' && creditPolicySubtab) {
                     activateCreditPolicySubtab(creditPolicySubtab);
@@ -1572,11 +1764,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 replaceUrlForSection(targetId, creditPolicySubtab || subTabId || '', href);
             };
 
-            if (window._isPolicyFormDirty) {
+            const policyUnsavedManager = window.policyConsoleUnsavedManager;
+            const hasPolicyChanges = policyUnsavedManager && typeof policyUnsavedManager.isDirty === 'function'
+                ? policyUnsavedManager.isDirty()
+                : Boolean(window._isPolicyFormDirty);
+
+            if (hasPolicyChanges && targetId !== 'credit_settings') {
                 const unsavedModal = document.getElementById('policy-unsaved-modal');
                 if (unsavedModal) {
                     unsavedModal.hidden = false;
                     window._intendedPolicyNavigation = processNavigation;
+                    window._intendedPolicyNavigationUrl = href || '';
                     return;
                 }
             }
@@ -2909,16 +3107,16 @@ document.addEventListener('DOMContentLoaded', () => {
         activateRolePanel(initiallyActiveRole.getAttribute('data-role-id'), false);
     }
 
-    const themeToggleBtn = document.getElementById('theme-toggle');
+    const themeToggleBtns = document.querySelectorAll('.theme-toggle');
 
     function applyTheme(theme) {
         htmlElement.setAttribute('data-theme', theme);
-        if (themeToggleBtn) {
-            const icon = themeToggleBtn.querySelector('span');
+        themeToggleBtns.forEach(btn => {
+            const icon = btn.querySelector('span');
             if (icon) {
                 icon.textContent = theme === 'light' ? 'dark_mode' : 'light_mode';
             }
-        }
+        });
     }
 
     async function persistTheme(theme) {
@@ -2933,13 +3131,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    if (themeToggleBtn) {
+    if (themeToggleBtns.length > 0) {
         applyTheme(htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
-        themeToggleBtn.addEventListener('click', () => {
-            const currentTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            applyTheme(newTheme);
-            persistTheme(newTheme);
+        themeToggleBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const currentTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                applyTheme(newTheme);
+                persistTheme(newTheme);
+            });
         });
     }
 
@@ -3175,6 +3375,40 @@ document.addEventListener('DOMContentLoaded', () => {
         return Math.min(Math.max(value, min), max);
     }
 
+    function getLoanPreviewBillingCycleMeta(cycle) {
+        switch (cycle) {
+        case 'Quarterly':
+            return {
+                months: 3,
+                paymentLabelSingular: 'quarterly payment',
+                paymentLabelPlural: 'quarterly payments',
+                paymentDescriptor: 'quarterly'
+            };
+        case 'Semi-Annually':
+            return {
+                months: 6,
+                paymentLabelSingular: 'semi-annual payment',
+                paymentLabelPlural: 'semi-annual payments',
+                paymentDescriptor: 'semi-annual'
+            };
+        case 'Yearly':
+            return {
+                months: 12,
+                paymentLabelSingular: 'annual payment',
+                paymentLabelPlural: 'annual payments',
+                paymentDescriptor: 'annual'
+            };
+        case 'Monthly':
+        default:
+            return {
+                months: 1,
+                paymentLabelSingular: 'monthly payment',
+                paymentLabelPlural: 'monthly payments',
+                paymentDescriptor: 'monthly'
+            };
+        }
+    }
+
     function updateLoanProductsPreview() {
         if (!loanProductsForm || !loanPreviewRoot) {
             return;
@@ -3195,12 +3429,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const minAmount = Math.max(0, normalizeLoanPreviewNumber(getField('min_amount')?.value, 0));
         const maxAmount = Math.max(minAmount, normalizeLoanPreviewNumber(getField('max_amount')?.value, minAmount));
-        const minTerm = Math.max(1, normalizeLoanPreviewInteger(getField('min_term_months')?.value, 1));
-        const maxTerm = Math.max(minTerm, normalizeLoanPreviewInteger(getField('max_term_months')?.value, minTerm));
+        const billingCycle = getField('billing_cycle')?.value || 'Monthly';
+        const billingCycleMeta = getLoanPreviewBillingCycleMeta(billingCycle);
+        const billingCycleMonths = billingCycleMeta.months;
+        const rawMinTerm = Math.max(1, normalizeLoanPreviewInteger(getField('min_term_months')?.value, billingCycleMonths));
+        const rawMaxTerm = Math.max(rawMinTerm, normalizeLoanPreviewInteger(getField('max_term_months')?.value, rawMinTerm));
+        const minTerm = Math.max(billingCycleMonths, Math.ceil(rawMinTerm / billingCycleMonths) * billingCycleMonths);
+        const maxTerm = Math.max(minTerm, Math.floor(rawMaxTerm / billingCycleMonths) * billingCycleMonths || minTerm);
 
         const interestRate = Math.max(0, normalizeLoanPreviewNumber(getField('interest_rate')?.value, 0));
         const interestType = getField('interest_type')?.value || 'Declining Balance';
-        const earlySettlementFeeType = getField('early_settlement_fee_type')?.value || 'Percentage';
+        const earlySettlementFeeToggle = loanProductsForm.querySelector('#esf_master_toggle');
+        const earlySettlementTypeSwitch = loanProductsForm.querySelector('#early_settlement_toggle_switch');
+        const earlySettlementFeeEnabled = earlySettlementFeeToggle ? earlySettlementFeeToggle.checked : false;
+        const earlySettlementFeeType = earlySettlementTypeSwitch
+            ? (earlySettlementTypeSwitch.checked ? 'Fixed' : 'Percentage')
+            : (getField('early_settlement_fee_type')?.value || 'Percentage');
         const earlySettlementFeeValue = Math.max(0, normalizeLoanPreviewNumber(getField('early_settlement_fee_value')?.value, 0));
         const gracePeriodDays = Math.max(0, normalizeLoanPreviewInteger(getField('grace_period_days')?.value, 0));
 
@@ -3212,7 +3456,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const amountSpan = Math.max(0, maxAmount - minAmount);
         const amountStep = amountSpan >= 1000000 ? 5000 : amountSpan >= 100000 ? 1000 : amountSpan >= 10000 ? 500 : 100;
         const defaultAmount = amountSpan > 0 ? minAmount + (amountSpan / 2) : minAmount;
-        const defaultTerm = Math.max(minTerm, Math.round((minTerm + maxTerm) / 2));
+        const midpointTerm = Math.max(minTerm, Math.round((minTerm + maxTerm) / 2));
+        const defaultTerm = loanPreviewClamp(
+            Math.round(midpointTerm / billingCycleMonths) * billingCycleMonths,
+            minTerm,
+            maxTerm
+        );
 
         if (loanPreviewAmountInput) {
             loanPreviewAmountInput.min = String(minAmount);
@@ -3224,16 +3473,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (loanPreviewTermInput) {
             loanPreviewTermInput.min = String(minTerm);
             loanPreviewTermInput.max = String(maxTerm);
-            loanPreviewTermInput.step = '1';
+            loanPreviewTermInput.step = String(billingCycleMonths);
             loanPreviewTermInput.disabled = maxTerm <= minTerm;
         }
 
         const selectedAmount = loanPreviewAmountInput
             ? loanPreviewClamp(normalizeLoanPreviewNumber(loanPreviewAmountInput.value, defaultAmount), minAmount, maxAmount)
             : defaultAmount;
-        const selectedTerm = loanPreviewTermInput
-            ? loanPreviewClamp(normalizeLoanPreviewInteger(loanPreviewTermInput.value, defaultTerm), minTerm, maxTerm)
+        const selectedTermValue = loanPreviewTermInput
+            ? normalizeLoanPreviewInteger(loanPreviewTermInput.value, defaultTerm)
             : defaultTerm;
+        const selectedTerm = loanPreviewTermInput
+            ? loanPreviewClamp(
+                Math.round(selectedTermValue / billingCycleMonths) * billingCycleMonths,
+                minTerm,
+                maxTerm
+            )
+            : defaultTerm;
+        const paymentCount = Math.max(1, Math.round(selectedTerm / billingCycleMonths));
+        const paymentLabel = paymentCount === 1
+            ? billingCycleMeta.paymentLabelSingular
+            : billingCycleMeta.paymentLabelPlural;
 
         if (loanPreviewAmountInput) {
             loanPreviewAmountInput.value = String(selectedAmount);
@@ -3243,38 +3503,56 @@ document.addEventListener('DOMContentLoaded', () => {
             loanPreviewTermInput.value = String(selectedTerm);
         }
 
-        let estimatedInstallment = selectedTerm > 0 ? selectedAmount / selectedTerm : selectedAmount;
+        let estimatedInstallment = paymentCount > 0 ? selectedAmount / paymentCount : selectedAmount;
+        let totalInterest = 0;
         if (interestType === 'Declining Balance') {
-            const monthlyRate = (interestRate / 100) / 12;
-            estimatedInstallment = monthlyRate > 0
-                ? (selectedAmount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -selectedTerm))
-                : (selectedAmount / selectedTerm);
+            const periodicRate = (interestRate / 100) * (billingCycleMonths / 12);
+            estimatedInstallment = periodicRate > 0
+                ? (selectedAmount * periodicRate) / (1 - Math.pow(1 + periodicRate, -paymentCount))
+                : (selectedAmount / paymentCount);
         } else {
-            const totalInterest = selectedAmount * (interestRate / 100) * (selectedTerm / 12);
-            estimatedInstallment = (selectedAmount + totalInterest) / selectedTerm;
+            totalInterest = selectedAmount * (interestRate / 100) * (selectedTerm / 12);
+            estimatedInstallment = (selectedAmount + totalInterest) / paymentCount;
         }
 
         const processingFeeValue = selectedAmount * (processingFeeRate / 100);
         const insuranceFeeValue = selectedAmount * (insuranceFeeRate / 100);
         const totalUpfrontCharges = processingFeeValue + insuranceFeeValue + serviceCharge + documentaryStamp;
         const cashRelease = Math.max(0, selectedAmount - totalUpfrontCharges);
-        const totalRepayment = estimatedInstallment * selectedTerm;
+        const totalRepayment = estimatedInstallment * paymentCount;
+        totalInterest = interestType === 'Declining Balance'
+            ? Math.max(0, totalRepayment - selectedAmount)
+            : totalInterest;
+        const earlySettlementFeeAmount = !earlySettlementFeeEnabled || earlySettlementFeeValue <= 0
+            ? 0
+            : (earlySettlementFeeType === 'Fixed'
+                ? earlySettlementFeeValue
+                : selectedAmount * (earlySettlementFeeValue / 100));
+        const earlySettlementFeePreview = !earlySettlementFeeEnabled || earlySettlementFeeValue <= 0
+            ? 'Not applied'
+            : formatLoanPreviewCurrency(earlySettlementFeeAmount);
+        const earlySettlementFeeChip = !earlySettlementFeeEnabled || earlySettlementFeeValue <= 0
+            ? 'No early settlement fee'
+            : (earlySettlementFeeType === 'Fixed'
+                ? `${formatLoanPreviewCurrency(earlySettlementFeeValue)} early settlement fee`
+                : `${earlySettlementFeeValue.toFixed(2)}% of sample loan (${formatLoanPreviewCurrency(earlySettlementFeeAmount)})`);
 
         setPreviewText('product-name', productName);
         setPreviewText('product-type', productType);
         setPreviewText('description', description);
-        setPreviewText('interest-chip', `${interestRate.toFixed(2)}% ${interestType}`);
+        setPreviewText('interest-chip', `${interestRate.toFixed(2)}% ${interestType} | ${billingCycle}`);
         setPreviewText('grace-chip', gracePeriodDays > 0 ? `${gracePeriodDays} day${gracePeriodDays === 1 ? '' : 's'} grace period` : 'No grace period');
         setPreviewText('max-amount', formatLoanPreviewCurrency(maxAmount));
-        setPreviewText('term-range', `${minTerm}-${maxTerm} months`);
-        setPreviewText('penalty', earlySettlementFeeValue > 0 ? (earlySettlementFeeType === 'Fixed' ? `₱${earlySettlementFeeValue.toFixed(2)} early settlement fee` : `${earlySettlementFeeValue.toFixed(2)}% early settlement fee`) : 'No early settlement fee');
+        setPreviewText('term-range', `${minTerm}-${maxTerm} months | ${billingCycle}`);
 
         setPreviewText('selected-amount', formatLoanPreviewCurrency(selectedAmount));
-        setPreviewText('selected-term', `${selectedTerm} month${selectedTerm === 1 ? '' : 's'}`);
+        setPreviewText('penalty', earlySettlementFeeChip);
+        setPreviewText('selected-term', `${selectedTerm} months (${paymentCount} ${paymentLabel})`);
         setPreviewText('min-amount', formatLoanPreviewCurrency(minAmount));
         setPreviewText('max-amount-range', formatLoanPreviewCurrency(maxAmount));
         setPreviewText('min-term', `${minTerm} mo`);
         setPreviewText('max-term', `${maxTerm} mo`);
+        setPreviewText('installment-label', `Estimated ${billingCycleMeta.paymentDescriptor} payment`);
 
         setPreviewText('estimated-installment', formatLoanPreviewCurrency(estimatedInstallment));
         setPreviewText('cash-release', formatLoanPreviewCurrency(cashRelease));
@@ -3284,6 +3562,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setPreviewText('insurance-fee-value', formatLoanPreviewCurrency(insuranceFeeValue));
         setPreviewText('service-charge-value', formatLoanPreviewCurrency(serviceCharge));
         setPreviewText('doc-stamp-value', formatLoanPreviewCurrency(documentaryStamp));
+        setPreviewText('early-settlement-fee-value', earlySettlementFeePreview);
     }
 
     function syncLoanProductTypeField() {
@@ -3473,11 +3752,30 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLogoPreview();
 
     if (loanProductsForm && loanPreviewRoot) {
+        const earlySettlementPreviewCardTemplate = document.getElementById('loan-preview-early-settlement-card-template');
+        const loanPreviewFeesGrid = loanPreviewRoot.querySelector('.loan-preview-fees-grid');
         const loanPreviewFields = Array.from(loanProductsForm.querySelectorAll(
-            '[name="product_name"], [name="product_type"], [name="custom_product_type"], [name="description"], [name="min_amount"], [name="max_amount"], [name="interest_rate"], [name="interest_type"], [name="min_term_months"], [name="max_term_months"], [name="processing_fee_percentage"], [name="service_charge"], [name="documentary_stamp"], [name="insurance_fee_percentage"], [name="early_settlement_fee_type"], [name="early_settlement_fee_value"], [name="grace_period_days"]'
+            '[name="product_name"], [name="product_type"], [name="custom_product_type"], [name="description"], [name="min_amount"], [name="max_amount"], [name="interest_rate"], [name="interest_type"], [name="min_term_months"], [name="max_term_months"], [name="billing_cycle"], [name="processing_fee_percentage"], [name="service_charge"], [name="documentary_stamp"], [name="insurance_fee_percentage"], [name="early_settlement_fee_type"], [name="early_settlement_fee_value"], [name="grace_period_days"]'
         ));
+        const earlySettlementPreviewControls = [
+            loanProductsForm.querySelector('#esf_master_toggle'),
+            loanProductsForm.querySelector('#early_settlement_toggle_switch')
+        ].filter(Boolean);
+
+        if (
+            earlySettlementPreviewCardTemplate
+            && loanPreviewFeesGrid
+            && !loanPreviewFeesGrid.querySelector('[data-loan-preview-bind="early-settlement-fee-value"]')
+        ) {
+            loanPreviewFeesGrid.insertAdjacentHTML('beforeend', earlySettlementPreviewCardTemplate.innerHTML.trim());
+        }
 
         loanPreviewFields.forEach((field) => {
+            field.addEventListener('input', updateLoanProductsPreview);
+            field.addEventListener('change', updateLoanProductsPreview);
+        });
+
+        earlySettlementPreviewControls.forEach((field) => {
             field.addEventListener('input', updateLoanProductsPreview);
             field.addEventListener('change', updateLoanProductsPreview);
         });

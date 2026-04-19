@@ -404,81 +404,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: primary,
-        borderRadius: BorderRadius.circular(28),
+        color: AppColors.textMain, // Sleek Midnight/Brand Dark
+        borderRadius: BorderRadius.circular(AppPremium.radius),
         boxShadow: [
           BoxShadow(
-            color: primary.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: AppColors.textMain.withOpacity(0.2),
+            blurRadius: 30,
+            offset: const Offset(0, 12),
           ),
         ],
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.textMain, AppColors.textMain.withOpacity(0.85)],
+        ),
       ),
       child: Stack(
         children: [
           Positioned(
-            right: -20,
-            top: -20,
+            right: -30,
+            bottom: -30,
             child: Icon(
-              Icons.person_rounded,
-              size: 140,
-              color: Colors.white.withOpacity(0.06),
+              Icons.shield_moon_rounded,
+              size: 160,
+              color: Colors.white.withOpacity(0.04),
             ),
           ),
           Column(
             children: [
-              // Avatar
-              Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.15),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 2,
+              // Avatar with Halo
+              Hero(
+                tag: 'profile_avatar',
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 2.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(color: Colors.white.withOpacity(0.1), blurRadius: 20)
+                    ],
                   ),
-                ),
-                child: Center(
-                  child: Text(
-                    _initials,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -1,
+                  child: Center(
+                    child: Text(
+                      _initials,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1.5,
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               Text(
                 _fullName,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 24,
+                  fontSize: 26,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: -0.8,
+                  letterSpacing: -1,
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                _clientCode.isNotEmpty
-                    ? 'Member Code: $_clientCode'
-                    : 'Active Member',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _clientCode.isNotEmpty ? _clientCode : 'ACTIVE MEMBER',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _profileBadge(Icons.verified_rounded, 'Verified', primary),
                   const SizedBox(width: 12),
-                  _profileBadge(Icons.star_rounded, 'Excellent', primary),
+                  _profileBadge(Icons.auto_awesome_rounded, 'Elite Status', primary),
                 ],
               ),
             ],
@@ -519,17 +536,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       {
         'label': 'Active Loans',
         'value': '$_activeLoans',
-        'icon': Icons.account_balance_wallet_outlined,
+        'icon': Icons.account_balance_wallet_rounded,
       },
       {
         'label': 'Applications',
         'value': '$_totalApplications',
-        'icon': Icons.description_outlined,
+        'icon': Icons.analytics_rounded,
       },
       {
         'label': 'Member Since',
         'value': _memberSince.isNotEmpty ? _memberSince.split('-').first : '—',
-        'icon': Icons.calendar_today_outlined,
+        'icon': Icons.auto_graph_rounded,
       },
     ];
     return Row(
@@ -538,42 +555,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final s = e.value;
         return Expanded(
           child: Container(
-            margin: EdgeInsets.only(right: i < stats.length - 1 ? 10 : 0),
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: primary.withOpacity(0.12)),
-              boxShadow: [
-                BoxShadow(
-                  color: primary.withOpacity(0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
+            margin: EdgeInsets.only(right: i < stats.length - 1 ? 12 : 0),
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+            decoration: AppPremium.cardDecoration(),
             child: Column(
               children: [
-                Icon(s['icon'] as IconData, color: primary, size: 20),
-                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: primary.withOpacity(0.08), shape: BoxShape.circle),
+                  child: Icon(s['icon'] as IconData, color: primary, size: 18),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   s['value'] as String,
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF111827),
-                    letterSpacing: -0.5,
+                    color: AppColors.textMain,
+                    letterSpacing: -1,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  s['label'] as String,
+                  (s['label'] as String).toUpperCase(),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF6B7280),
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
@@ -585,44 +595,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _sectionLabel(String title, Color primary) {
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 20,
-          decoration: BoxDecoration(
-            color: primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          color: primary,
+          letterSpacing: 1.2,
         ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF111827),
-            letterSpacing: -0.4,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _card(List<Widget> children, Color primary) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: AppPremium.cardDecoration(),
       child: Column(children: children),
     );
   }
@@ -772,29 +761,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color primary,
     VoidCallback onTap,
   ) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         child: Row(
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: primary, size: 18),
+              child: Icon(icon, color: AppColors.textMain, size: 20),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textMain,
+                  letterSpacing: -0.3,
                 ),
               ),
             ),

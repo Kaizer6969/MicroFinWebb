@@ -65,39 +65,8 @@ if (has_permission('VIEW_APPLICATIONS') || has_permission('MANAGE_APPLICATIONS')
     $pending_applications = $apps_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Fetch Clients — ORDER BY registration_date (clients has no created_at column)
-$all_clients = [];
-$_client_debug = [
-    'tenant_id' => $tenant_id,
-    'has_perm' => (has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')),
-    'query_error' => null,
-    'row_count' => 0,
-    'raw_count_check' => null,
-];
-if (has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')) {
-    try {
-        // Raw count first — simplest possible query to verify tenant_id match
-        $cnt = $pdo->prepare("SELECT COUNT(*) FROM clients WHERE tenant_id = ?");
-        $cnt->execute([$tenant_id]);
-        $_client_debug['raw_count_check'] = $cnt->fetchColumn();
+// Fetch Clients block has been moved to functions/db_clients.php and is only loaded on ?tab=clients
 
-        $clients_stmt = $pdo->prepare("
-            SELECT c.client_id, c.first_name, c.last_name, c.email_address,
-                   c.contact_number, c.client_status, c.document_verification_status, c.registration_date,
-                   u.user_type,
-                   (SELECT COUNT(*) FROM loans l WHERE l.client_id = c.client_id AND l.tenant_id = c.tenant_id) as total_loans
-            FROM clients c
-            JOIN users u ON c.user_id = u.user_id
-            WHERE c.tenant_id = ?
-            ORDER BY c.registration_date DESC
-        ");
-        $clients_stmt->execute([$tenant_id]);
-        $all_clients = $clients_stmt->fetchAll(PDO::FETCH_ASSOC);
-        $_client_debug['row_count'] = count($all_clients);
-    } catch (\Throwable $e) {
-        $_client_debug['query_error'] = $e->getMessage();
-    }
-}
 
 $loan_products = [];
 $loan_products_stmt = $pdo->prepare("SELECT product_id, product_name, product_type, min_amount, max_amount, min_term_months, max_term_months, interest_rate FROM loan_products WHERE tenant_id = ? AND is_active = 1 ORDER BY product_name ASC");
@@ -187,6 +156,8 @@ $adminDisplay = (!empty($f) || !empty($l)) ? trim("$f $l") : ($_SESSION['usernam
 $avF = !empty($f) ? mb_substr($f, 0, 1) : mb_substr($adminDisplay, 0, 1);
 $avL = !empty($l) ? mb_substr($l, -1) : mb_substr($adminDisplay, -1);
 $initials = mb_strtoupper($avF . $avL);
+
+$name_parts = explode(' ', $adminDisplay);
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="<?php echo htmlspecialchars($ui_theme); ?>">
@@ -1509,121 +1480,28 @@ $initials = mb_strtoupper($avF . $avL);
     <!-- ════════════════════════════════════════════
      SIDEBAR
 ═══════════════════════════════════════════════ -->
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-logo">
-            <div class="logo-mark">
-                <?php if ($logo_path): ?>
-                    <img src="<?php echo htmlspecialchars($logo_path); ?>" alt="Logo">
-                <?php else: ?>
-                    <span class="material-symbols-rounded ms">account_balance</span>
-                <?php endif; ?>
-            </div>
-            <div class="logo-text">
-                <h2><?php echo htmlspecialchars($_SESSION['tenant_name']); ?></h2>
-                <p>Employee Portal</p>
-            </div>
-        </div>
-
-        <nav style="flex:1; padding: 8px 10px;">
-            <div class="nav-section">
-                <div class="nav-label">Workspace</div>
-                <a class="nav-item active" data-target="home" data-title="Home" data-subtitle="Dashboard" href="#home">
-                    <span class="material-symbols-rounded ms">home</span> Home
-                </a>
-
-                <?php if (has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')): ?>
-                    <a class="nav-item" data-target="clients" data-title="Client Management" data-subtitle="Profiles"
-                        href="#clients">
-                        <span class="material-symbols-rounded ms">group</span> Client Management
-                    </a>
-                <?php endif; ?>
-
-                <?php if (has_permission('VIEW_CREDIT_ACCOUNTS') || has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')): ?>
-                    <a class="nav-item" data-target="credit-accounts" data-title="Credit Accounts Management"
-                        data-subtitle="Limits & Growth" href="#credit-accounts">
-                        <span class="material-symbols-rounded ms">credit_card</span> Credit Accounts Management
-                    </a>
-                <?php endif; ?>
-
-                <?php if (has_permission('VIEW_APPLICATIONS') || has_permission('MANAGE_APPLICATIONS')): ?>
-                    <a class="nav-item" data-target="applications" data-title="Loan Applications" data-subtitle="Pipeline"
-                        href="#applications">
-                        <span class="material-symbols-rounded ms">description</span>
-                        Loan Applications
-                        <span class="nav-badge" id="navPendingAppsBadge"
-                            style="<?php echo count($pending_applications) > 0 ? '' : 'display:none;'; ?>"><?php echo count($pending_applications); ?></span>
-                    </a>
-                <?php endif; ?>
-
-                <?php if (has_permission('VIEW_LOANS') || has_permission('CREATE_LOANS') || has_permission('APPROVE_LOANS')): ?>
-                    <a class="nav-item" data-target="loans" data-title="Loans Management" data-subtitle="Servicing"
-                        href="#loans">
-                        <span class="material-symbols-rounded ms">real_estate_agent</span> Loans Management
-                    </a>
-                <?php endif; ?>
-
-                <?php if (has_permission('PROCESS_PAYMENTS')): ?>
-                    <a class="nav-item" data-target="payments" data-title="Receipts & Transactions"
-                        data-subtitle="Collections" href="#payments">
-                        <span class="material-symbols-rounded ms">receipt_long</span> Receipts & Transactions
-                    </a>
-                <?php endif; ?>
-                <?php if (has_permission('VIEW_USERS')): ?>
-                    <a class="nav-item" data-target="users" data-title="Team Directory" data-subtitle="Staff" href="#users">
-                        <span class="material-symbols-rounded ms">badge</span> Team Directory
-                    </a>
-                <?php endif; ?>
-            </div>
-
-            <div class="nav-section" style="margin-top:8px;">
-                <div class="nav-label">Insights</div>
-                <?php if (has_permission('VIEW_REPORTS')): ?>
-                    <a class="nav-item" data-target="reports" data-title="Reports & Analytics" data-subtitle="Insights"
-                        href="#reports">
-                        <span class="material-symbols-rounded ms">bar_chart</span> Reports & Analytics
-                    </a>
-                <?php endif; ?>
-            </div>
-        </nav>
-
-        <div class="sidebar-footer">
-            <a class="nav-item" href="../../tenant_login/logout.php" style="color:#f87171;">
-                <span class="material-symbols-rounded ms" style="color:#f87171;">logout</span> Sign Out
-            </a>
-        </div>
-    </aside>
+    <?php
+    $current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'home';
+    include __DIR__ . '/components/sidebar.php';
+    ?>
 
     <!-- ════════════════════════════════════════════
      MAIN
 ═══════════════════════════════════════════════ -->
     <div class="main-wrap">
-        <header class="topbar">
-            <div class="topbar-title" id="pageTitle">Home <span>Dashboard</span></div>
-
-            <button class="icon-btn" id="themeToggle" title="Toggle dark mode">
-                <span
-                    class="material-symbols-rounded ms"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
-            </button>
-
-            <?php if (has_permission('CREATE_CLIENTS')): ?>
-                <button class="btn-primary" onclick="openModal('walkInModal')">
-                    <span class="material-symbols-rounded ms">person_add</span> Walk-In
-                </button>
-            <?php endif; ?>
-
-            <div class="user-chip">
-                <div class="avatar"><?php echo $initials; ?></div>
-                <div>
-                    <div class="user-chip-name"><?php echo htmlspecialchars($_SESSION['username']); ?></div>
-                    <div class="user-chip-role"><?php echo htmlspecialchars($_SESSION['role'] ?? 'Employee'); ?></div>
-                </div>
-            </div>
-        </header>
+        <?php include __DIR__ . '/components/header.php'; ?>
 
         <div class="content">
 
+            <?php
+            $tab_path = __DIR__ . '/tabs/' . basename($current_tab) . '.php';
+            if (file_exists($tab_path)) {
+                include $tab_path;
+            } else {
+            ?>
+
             <!-- ── HOME ── -->
-            <section id="home" class="view active">
+            <section id="home" class="view <?= $current_tab === 'home' || !$current_tab ? 'active' : '' ?>">
                 <div class="welcome-banner">
                     <h1>Good <?php echo date('H') < 12 ? 'morning' : (date('H') < 17 ? 'afternoon' : 'evening'); ?>,
                         <?php echo htmlspecialchars($name_parts[0]); ?>!</h1>
@@ -1751,123 +1629,7 @@ $initials = mb_strtoupper($avF . $avL);
                 </div>
             </section>
 
-            <!-- ── CLIENTS ── -->
-            <?php if (has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')): ?>
-                <section id="clients" class="view">
-                    <div class="page-header">
-                        <div class="page-icon" style="background:rgba(16,185,129,.1);color:#10b981;">
-                            <span class="material-symbols-rounded ms" style="font-size:22px;">group</span>
-                        </div>
-                        <div>
-                            <h1>Client Management</h1>
-                            <p>View, search, and manage all registered borrowers.</p>
-                        </div>
-                        <div class="page-header-actions">
-                            <?php if (has_permission('CREATE_CLIENTS')): ?>
-                                <button class="btn-primary" onclick="openModal('walkInModal')">
-                                    <span class="material-symbols-rounded ms">person_add</span> New Client
-                                </button>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <!-- ══ TEMPORARY DEBUG PANEL — remove after fixing ══ -->
-                    <?php if (false): ?>
-                        <div
-                            style="background:#1e293b;color:#7dd3fc;font-family:monospace;font-size:.8rem;padding:14px 18px;border-radius:8px;margin-bottom:16px;border:1px solid #334155;">
-                            <strong style="color:#f8fafc;">🔍 Client Fetch Debug</strong><br><br>
-                            Tenant ID in session: <strong
-                                style="color:#fbbf24;"><?php echo htmlspecialchars((string) $_client_debug['tenant_id']); ?></strong><br>
-                            Has VIEW_CLIENTS permission: <strong
-                                style="color:<?php echo $_client_debug['has_perm'] ? '#4ade80' : '#f87171'; ?>"><?php echo $_client_debug['has_perm'] ? 'YES' : 'NO — this is why nothing shows'; ?></strong><br>
-                            Raw COUNT(*) from clients WHERE tenant_id matches: <strong
-                                style="color:#fbbf24;"><?php echo var_export($_client_debug['raw_count_check'], true); ?></strong><br>
-                            Rows returned by full JOIN query: <strong
-                                style="color:#fbbf24;"><?php echo $_client_debug['row_count']; ?></strong><br>
-                            Query error: <strong
-                                style="color:#f87171;"><?php echo htmlspecialchars((string) ($_client_debug['query_error'] ?? 'none')); ?></strong><br><br>
-                            <?php
-                            // Also show what tenant_ids exist in clients table
-                            try {
-                                $tid_check = $pdo->query("SELECT DISTINCT tenant_id, COUNT(*) as cnt FROM clients GROUP BY tenant_id");
-                                $tids = $tid_check->fetchAll(PDO::FETCH_ASSOC);
-                                echo 'All tenant_ids in clients table: ';
-                                foreach ($tids as $t) {
-                                    echo '<strong style="color:#a78bfa">' . htmlspecialchars($t['tenant_id']) . '</strong> (' . $t['cnt'] . ' rows)  ';
-                                }
-                            } catch (\Throwable $e) {
-                                echo 'Could not check tenant_ids: ' . htmlspecialchars($e->getMessage());
-                            }
-                            ?>
-                        </div>
-                        <!-- ══ END DEBUG PANEL ══ -->
-
-                    <?php endif; ?>
-                    <div class="search-bar">
-                        <div class="search-input-wrap">
-                            <span class="material-symbols-rounded ms">search</span>
-                            <input type="text" id="clientSearch" placeholder="Search by name, email, phone…"
-                                oninput="debounce(() => loadClients(document.getElementById('clientSearch').value), 350)()">
-                        </div>
-                    </div>
-                    <div class="filter-tabs" id="clientFilterTabs">
-                        <button class="filter-tab active" data-client-filter="all" onclick="loadClients(document.getElementById('clientSearch').value, 'all', this)">All</button>
-                        <button class="filter-tab" data-client-filter="Active" onclick="loadClients(document.getElementById('clientSearch').value, 'Active', this)">Active</button>
-                        <button class="filter-tab" data-client-filter="Inactive" onclick="loadClients(document.getElementById('clientSearch').value, 'Inactive', this)">Inactive</button>
-                        <button class="filter-tab" data-client-filter="Pending" onclick="loadClients(document.getElementById('clientSearch').value, 'Pending', this)">Pending</button>
-                    </div>
-                    <div class="card">
-                        <div class="table-wrap">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Client Name</th>
-                                        <th>Email</th>
-                                        <th>Phone</th>
-                                        <th>Registered</th>
-                                        <th>Status</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="clientsTbody">
-                                    <?php if (empty($all_clients)): ?>
-                                        <tr class="empty-row">
-                                            <td colspan="7">No clients registered yet.</td>
-                                        </tr>
-                                    <?php else: ?>
-                                        <?php foreach ($all_clients as $c): ?>
-                                            <tr>
-                                                <td class="td-bold">
-                                                    <?php echo htmlspecialchars($c['first_name'] . ' ' . $c['last_name']); ?></td>
-                                                <td class="td-muted">
-                                                    <?php echo htmlspecialchars(!empty($c['email_address']) ? $c['email_address'] : '—'); ?>
-                                                </td>
-                                                <td class="td-muted">
-                                                    <?php echo htmlspecialchars(!empty($c['contact_number']) ? $c['contact_number'] : '—'); ?>
-                                                </td>
-                                                <td class="td-muted">
-                                                    <?php echo date('M d, Y', strtotime($c['registration_date'])); ?></td>
-                                                <td>
-                                                    <?php
-                                                    $disp_status = $c['client_status'];
-                                                    $doc_status = $c['document_verification_status'] ?? '';
-                                                    if ($doc_status !== 'Verified' && $doc_status !== 'Approved' && $disp_status === 'Active') {
-                                                        $disp_status = 'Inactive';
-                                                    }
-                                                    echo statusBadgePHP($disp_status);
-                                                    ?>
-                                                </td>
-                                                <td><button class="btn btn-sm btn-outline"
-                                                        onclick="viewClient(<?php echo (int) $c['client_id']; ?>)">View
-                                                        Profile</button></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </section>
-            <?php endif; ?>
+            <!-- ── CLIENTS (Moved to ?tab=clients) ── -->
 
             <!-- ── APPLICATIONS ── -->
             <?php if (has_permission('VIEW_CREDIT_ACCOUNTS') || has_permission('VIEW_CLIENTS') || has_permission('CREATE_CLIENTS')): ?>
@@ -1898,23 +1660,120 @@ $initials = mb_strtoupper($avF . $avL);
                                 oninput="onCreditAccountSearchInput()">
                         </div>
                     </div>
-                    <div class="filter-tabs" id="creditAccountsScoreFilterTabs">
-                        <button class="filter-tab active" data-score-filter="all"
-                            onclick="loadCreditAccounts(getCreditAccountFilter(), 'all', this)">All Scores</button>
-                        <button class="filter-tab" data-score-filter="high_credit"
-                            onclick="loadCreditAccounts(getCreditAccountFilter(), 'high_credit', this)">High Credit</button>
-                        <button class="filter-tab" data-score-filter="good_credit"
-                            onclick="loadCreditAccounts(getCreditAccountFilter(), 'good_credit', this)">Good Credit</button>
-                        <button class="filter-tab" data-score-filter="standard_credit"
-                            onclick="loadCreditAccounts(getCreditAccountFilter(), 'standard_credit', this)">Standard
-                            Credit</button>
-                        <button class="filter-tab" data-score-filter="fair_credit"
-                            onclick="loadCreditAccounts(getCreditAccountFilter(), 'fair_credit', this)">Fair Credit</button>
-                        <button class="filter-tab" data-score-filter="at_risk_credit"
-                            onclick="loadCreditAccounts(getCreditAccountFilter(), 'at_risk_credit', this)">At-Risk</button>
+                    <!-- filter tabs moved to inside the card below -->
+
+                    <!-- CREDIT POLICY SUMMARY CARD (READ-ONLY) -->
+                    <?php
+                        $stmt_policy = $pdo->prepare("SELECT setting_key, setting_value FROM system_settings WHERE tenant_id = ? AND setting_key IN ('policy_console_credit_limits', 'policy_console_decision_rules', 'policy_console_compliance_documents')");
+                        $stmt_policy->execute([$tenant_id]);
+                        
+                        $fetched_policies = [];
+                        while ($row = $stmt_policy->fetch(PDO::FETCH_ASSOC)) {
+                            $fetched_policies[$row['setting_key']] = json_decode($row['setting_value'], true) ?? [];
+                        }
+
+                        $pc_cl = $fetched_policies['policy_console_credit_limits'] ?? [];
+                        $pc_dr = $fetched_policies['policy_console_decision_rules'] ?? [];
+                        
+                        $score_bands = $pc_cl['score_bands']['rows'] ?? [];
+                        $start_score = $pc_cl['scoring_setup']['core']['starting_credit_score'] ?? '320';
+                        $initial_limit_pct = $pc_cl['limit_assignment']['initial_limit_percent_of_income'] ?? '40';
+                        
+                        $min_age = $pc_dr['decision_rules']['demographics']['min_age'] ?? '21';
+                        $max_age = $pc_dr['decision_rules']['demographics']['max_age'] ?? '65';
+                        $approval_mode = $pc_dr['workflow']['approval_mode'] ?? 'semi_automatic';
+                    ?>
+                    <div class="card" style="margin-bottom: 20px; border-top: 4px solid var(--accent-light); padding: 0;">
+                        <div class="card-header" style="background: var(--bg-hover); border-bottom: 1px solid var(--border-color); border-radius: 6px 6px 0 0; padding: 12px 20px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="material-symbols-rounded ms" style="color: var(--accent-light);">policy</span>
+                                <h3 style="margin: 0; font-size: 15px;">Credit Policy Overview</h3>
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px;">
+                            <!-- Score Thresholds & Bands (Table) -->
+                            <div style="flex: 1 1 350px;">
+                                <h4 style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 10px;text-transform: uppercase; letter-spacing: 0.5px;">Score Bands Matrix</h4>
+                                <div class="table-wrap" style="margin: 0; border: 1px solid var(--border-color); border-radius: 6px;">
+                                    <table style="margin: 0; font-size: 13px;">
+                                        <thead style="background: var(--bg-hover);">
+                                            <tr>
+                                                <th style="padding: 8px 12px;">Band Name</th>
+                                                <th style="padding: 8px 12px; text-align: right;">Min Score</th>
+                                                <th style="padding: 8px 12px; text-align: right;">Max Score</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php if(empty($score_bands)): ?>
+                                                <tr><td colspan="3" style="text-align: center; padding: 10px; color: var(--text-muted);">No score bands configured.</td></tr>
+                                            <?php else: ?>
+                                                <?php foreach($score_bands as $band): ?>
+                                                    <tr>
+                                                        <td style="padding: 8px 12px; font-weight: 500;">
+                                                            <span class="badge" style="background: var(--bg-hover); color: var(--text-color); border: 1px solid var(--border-color);"><?php echo htmlspecialchars($band['label'] ?? 'Band'); ?></span>
+                                                        </td>
+                                                        <td style="padding: 8px 12px; text-align: right;"><?php echo htmlspecialchars($band['min_score'] ?? '0'); ?></td>
+                                                        <td style="padding: 8px 12px; text-align: right; color: var(--text-muted);"><?php echo ($band['max_score'] ?? '') === '' || $band['max_score'] === null ? 'Max' : htmlspecialchars($band['max_score']); ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- Parameters Summary -->
+                            <div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 15px;">
+                                <div>
+                                    <h4 style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Standard Parameters</h4>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                        <div style="background: var(--bg-hover); border-radius: 6px; padding: 12px; border: 1px solid var(--border-color);">
+                                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Starting Score</div>
+                                            <div style="font-size: 16px; font-weight: 600; color: var(--accent-light);"><?php echo htmlspecialchars($start_score); ?></div>
+                                        </div>
+                                        <div style="background: var(--bg-hover); border-radius: 6px; padding: 12px; border: 1px solid var(--border-color);">
+                                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Initial Limit (of income)</div>
+                                            <div style="font-size: 16px; font-weight: 600;"><?php echo htmlspecialchars($initial_limit_pct); ?>%</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Requirements</h4>
+                                    <div style="background: var(--bg-hover); border-radius: 6px; padding: 12px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                                        <div style="display: flex; justify-content: space-between;">
+                                            <span style="color: var(--text-muted);">Allowed Age Range:</span>
+                                            <span style="font-weight: 500;"><?php echo htmlspecialchars($min_age); ?> - <?php echo htmlspecialchars($max_age); ?> yrs</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <span style="color: var(--text-muted);">Approval Mode:</span>
+                                            <span class="badge badge-success"><?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $approval_mode))); ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
                     <div class="card">
-                        <div class="table-wrap">
+                        <div class="filter-tabs" id="creditAccountsScoreFilterTabs" style="padding: 15px 20px; border-bottom: 1px solid var(--border-color); margin-bottom: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+                            <span style="font-size: 13px; font-weight: 500; color: var(--text-muted); margin-right: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Score Display:</span>
+                            <button class="filter-tab active" data-score-filter="all"
+                                onclick="loadCreditAccounts(getCreditAccountFilter(), 'all', this)">All Scores</button>
+                            <button class="filter-tab" data-score-filter="high_credit"
+                                onclick="loadCreditAccounts(getCreditAccountFilter(), 'high_credit', this)">High Credit</button>
+                            <button class="filter-tab" data-score-filter="good_credit"
+                                onclick="loadCreditAccounts(getCreditAccountFilter(), 'good_credit', this)">Good Credit</button>
+                            <button class="filter-tab" data-score-filter="standard_credit"
+                                onclick="loadCreditAccounts(getCreditAccountFilter(), 'standard_credit', this)">Standard
+                                Credit</button>
+                            <button class="filter-tab" data-score-filter="fair_credit"
+                                onclick="loadCreditAccounts(getCreditAccountFilter(), 'fair_credit', this)">Fair Credit</button>
+                            <button class="filter-tab" data-score-filter="at_risk_credit"
+                                onclick="loadCreditAccounts(getCreditAccountFilter(), 'at_risk_credit', this)">At-Risk</button>
+                        </div>
+                        <div class="table-wrap" style="margin-top: 0; border-top: none;">
                             <table>
                                 <thead>
                                     <tr>
@@ -2188,6 +2047,8 @@ $initials = mb_strtoupper($avF . $avL);
             <?php endif; ?>
 
             <!-- ── USERS ── -->
+            
+            <?php } ?>
         </div><!-- /content -->
     </div><!-- /main-wrap -->
 
@@ -3086,17 +2947,23 @@ $initials = mb_strtoupper($avF . $avL);
 
             navItems.forEach(item => {
                 item.addEventListener('click', e => {
+                    const tid = item.dataset.target;
+                    const tv = document.getElementById(tid);
+                    
+                    // If target view isn't in DOM (migrated), let browser navigate normally to ?tab=...
+                    if (!tv) return; 
+
                     e.preventDefault();
                     navItems.forEach(n => n.classList.remove('active'));
                     item.classList.add('active');
                     views.forEach(v => v.classList.remove('active'));
-                    const tid = item.dataset.target;
-                    const tv = document.getElementById(tid);
-                    if (tv) tv.classList.add('active');
+                    
+                    tv.classList.add('active');
                     const titleText = item.dataset.title || item.textContent.trim();
                     const subtitleText = item.dataset.subtitle || tid.charAt(0).toUpperCase() + tid.slice(1);
                     title.innerHTML = `${escapeHtml(titleText)} <span>${escapeHtml(subtitleText)}</span>`;
                     history.pushState(null, '', `#${tid}`);
+                    
                     // Lazy load on first visit
                     if (tid === 'credit-accounts') loadCreditAccounts(getCreditAccountFilter(), getCreditAccountScoreFilter());
                     if (tid === 'applications') loadApps('all');
@@ -3107,9 +2974,16 @@ $initials = mb_strtoupper($avF . $avL);
                 });
             });
 
-            // Handle hash
-            const hash = location.hash.replace('#', '');
-            if (hash) { const n = document.querySelector(`.nav-item[data-target="${hash}"]`); if (n) n.click(); }
+            // Handle hash or current tab loading
+            let hashTab = location.hash.replace('#', '');
+            let urlTab = new URLSearchParams(window.location.search).get('tab') || 'home';
+            
+            // If there is a hash, and it's different from current url tab, simulate click.
+            // Otherwise, do not simulate click to avoid infinite refresh loops on migrated tabs.
+            if (hashTab && hashTab !== urlTab) {
+                const n = document.querySelector(`.nav-item[data-target="${hashTab}"]`); 
+                if (n) setTimeout(() => n.click(), 10); 
+            }
 
             // Theme toggle
             const themeBtn = document.getElementById('themeToggle');

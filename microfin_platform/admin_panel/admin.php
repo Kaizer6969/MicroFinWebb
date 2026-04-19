@@ -1999,12 +1999,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     if ($form['product_name'] === '') {
 
         $_SESSION['admin_error'] = 'Product name is required.';
-    } elseif (!in_array($form['product_type'], array_merge($loan_product_type_options, ['Others']), true)) {
+    } elseif (!in_array($form['product_type'], array_merge($reference_loan_product_type_options, ['Others']), true)) {
 
         $_SESSION['admin_error'] = 'Invalid product type.';
     } elseif ($form['product_type'] === 'Others' && $form['custom_product_type'] === '') {
 
         $_SESSION['admin_error'] = 'Please provide a custom product type name.';
+    } elseif ($form['product_type'] === 'Others' && in_array(strtolower($form['custom_product_type']), array_map('strtolower', $reference_loan_product_type_options), true)) {
+    
+        $_SESSION['admin_error'] = 'Custom product type cannot be one of the predefined types (Personal, Business, Emergency).';
     } elseif (!in_array($form['interest_type'], ['Flat', 'Declining Balance'], true)) {
 
         $_SESSION['admin_error'] = 'Invalid interest type.';
@@ -2027,25 +2030,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
         $original_product_type = trim((string)($existing_product['product_type'] ?? ''));
 
-        $is_changing_product_type = !$existing_product || strcasecmp($original_product_type, $resolved_product_type) !== 0;
-
-
-
-        if ($is_changing_product_type) {
-
-            $duplicate_type_stmt = $pdo->prepare('SELECT product_id FROM loan_products WHERE tenant_id = ? AND product_type = ? AND (? = 0 OR product_id <> ?) LIMIT 1');
-
-            $duplicate_type_stmt->execute([$tenant_id, $resolved_product_type, $target_product_id, $target_product_id]);
-
-            $duplicate_type_exists = $duplicate_type_stmt->fetchColumn();
-
-
-
-            if ($duplicate_type_exists) {
-
-                $_SESSION['admin_error'] = 'This product type is already being used in your workspace. Please choose another one.';
-            }
-        }
     }
 
 
@@ -3707,15 +3691,30 @@ if ($loan_products_mode === 'new') {
 
 $loan_products_form_open = $loan_products_mode === 'new' || $selected_loan_product_id > 0;
 
-$loan_product_type_options = ['Personal Loan', 'Business Loan', 'Emergency Loan'];
+$reference_loan_product_type_options = ['Personal Loan', 'Business Loan', 'Emergency Loan'];
 
+// Filter out existing standard choices unless they belong to the current product
+$in_use_stmt = $pdo->prepare('SELECT LOWER(product_type) FROM loan_products WHERE tenant_id = ? AND is_active = 1' . ($selected_loan_product_id > 0 ? " AND product_id <> " . (int)$selected_loan_product_id : ""));
+$in_use_stmt->execute([$tenant_id]);
+$in_use_types = $in_use_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+$filtered_options = [];
+foreach ($reference_loan_product_type_options as $opt) {
+    if (!in_array(strtolower($opt), $in_use_types, true)) {
+        $filtered_options[] = $opt;
+    }
+}
+
+$loan_product_type_options = $filtered_options;
+
+$default_product_type = count($loan_product_type_options) > 0 ? $loan_product_type_options[0] : 'Others';
 
 
 $lp_form = [
 
     'product_name' => $existing_product['product_name'] ?? '',
 
-    'product_type' => $existing_product['product_type'] ?? 'Personal Loan',
+    'product_type' => $existing_product['product_type'] ?? $default_product_type,
 
     'custom_product_type' => '',
 
@@ -3765,7 +3764,7 @@ if (is_array($loan_products_session_form)) {
 
 $lp_form_product_type = trim((string)($lp_form['product_type'] ?? ''));
 
-if ($lp_form_product_type !== '' && !in_array($lp_form_product_type, $loan_product_type_options, true) && $lp_form_product_type !== 'Others') {
+if ($lp_form_product_type !== '' && !in_array($lp_form_product_type, $reference_loan_product_type_options, true) && $lp_form_product_type !== 'Others') {
 
     $lp_form['custom_product_type'] = $lp_form_product_type;
 
@@ -7724,60 +7723,21 @@ function hexToRgb($hex)
 
         <!-- Main Content -->
 
-        <main class="main-content">
+        <main class="main-content" style="position: relative;">
 
-            <!-- Header -->
-
-            <header class="top-header">
-
-                <div class="header-left">
-
-                    <h1 id="page-title"><?php echo htmlspecialchars($page_title); ?></h1>
-
-                </div>
-
-                <div class="header-right">
-
-                    <button id="theme-toggle" class="icon-btn" title="Toggle Light/Dark Mode">
-
-                        <span class="material-symbols-rounded"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
-
-                    </button>
-
-                    <?php
-                        // Fetch current user details for avatar
-                        $avatar_stmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE user_id = ? AND tenant_id = ?");
-                        $avatar_stmt->execute([$_SESSION['user_id'], $_SESSION['tenant_id']]);
-                        $avatar_user = $avatar_stmt->fetch(PDO::FETCH_ASSOC);
-                        
-                        $f = trim($avatar_user['first_name'] ?? '');
-                        $l = trim($avatar_user['last_name'] ?? '');
-                        $adminDisplay = (!empty($f) || !empty($l)) ? trim("$f $l") : ($_SESSION['username'] ?? 'User');
-                        $avF = !empty($f) ? mb_substr($f, 0, 1) : mb_substr($adminDisplay, 0, 1);
-                        $avL = !empty($l) ? mb_substr($l, -1) : mb_substr($adminDisplay, -1);
-                        $avatarName = urlencode(mb_strtoupper($avF . $avL));
-                    ?>
-                    <div class="admin-profile" style="cursor:pointer;" onclick="window.location.href='admin.php?tab=personal';" title="Manage Profile">
-
-                        <img src="https://ui-avatars.com/api/?name=<?php echo $avatarName; ?>&background=random" alt="Admin Avatar"
-
-                            class="avatar">
-
-                        <div class="admin-info">
-
-                            <span class="admin-name"><?php echo htmlspecialchars($settings['company_name']); ?></span>
-
-                            <span class="admin-role"><?php echo htmlspecialchars($role_name); ?></span>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </header>
-
-
+            <?php
+                // Fetch current user details for avatar globally
+                $avatar_stmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE user_id = ? AND tenant_id = ?");
+                $avatar_stmt->execute([$_SESSION['user_id'], $_SESSION['tenant_id']]);
+                $avatar_user = $avatar_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                $f = trim($avatar_user['first_name'] ?? '');
+                $l = trim($avatar_user['last_name'] ?? '');
+                $adminDisplay = (!empty($f) || !empty($l)) ? trim("$f $l") : ($_SESSION['username'] ?? 'User');
+                $avF = !empty($f) ? mb_substr($f, 0, 1) : mb_substr($adminDisplay, 0, 1);
+                $avL = !empty($l) ? mb_substr($l, -1) : mb_substr($adminDisplay, -1);
+                $avatarName = urlencode(mb_strtoupper($avF . $avL));
+            ?>
 
             <?php if ($flash_message !== ''): ?>
 
@@ -7804,6 +7764,19 @@ function hexToRgb($hex)
 
             <!-- Views Container -->
 
+            <div id="global-top-controls" style="position: absolute; top: 1.5rem; right: 2rem; display: <?php echo ($active_view === 'dashboard' || $active_view === 'personal') ? 'none' : 'flex'; ?>; align-items: center; gap: 1rem; z-index: 1000; pointer-events: auto;">
+                <button type="button" class="theme-toggle icon-btn" title="Toggle Light/Dark Mode" style="background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e2e8f0); box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 8px; padding: 6px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                    <span class="material-symbols-rounded" style="pointer-events: none;"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
+                </button>
+                <a href="admin.php?tab=personal" class="admin-profile nav-item" data-target="personal" style="cursor:pointer; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e2e8f0); padding: 0.25rem 0.75rem 0.25rem 0.25rem; border-radius: 9999px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-decoration: none;" title="Manage Profile">
+                    <img src="https://ui-avatars.com/api/?name=<?php echo $avatarName; ?>&background=random" alt="Admin Avatar" class="avatar" style="width: 32px; height: 32px; border-radius: 50%;">
+                    <div class="admin-info" style="display: flex; flex-direction: column;">
+                        <span class="admin-name" style="font-weight: 600; font-size: 0.875rem; color: var(--text-main, #1e293b);"><?php echo htmlspecialchars($adminDisplay); ?></span>
+                        <span class="admin-role" style="font-size: 0.75rem; opacity: 0.8; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars($role_name); ?></span>
+                    </div>
+                </a>
+            </div>
+
             <div class="views-container">
 
 
@@ -7812,7 +7785,20 @@ function hexToRgb($hex)
 
                 <section id="dashboard" class="view-section <?php echo $active_view === 'dashboard' ? 'active' : ''; ?>">
 
-                    <div class="dashboard-hero dashboard-hero-<?php echo htmlspecialchars($dashboard_health_tone); ?>">
+                    <div class="dashboard-hero dashboard-hero-<?php echo htmlspecialchars($dashboard_health_tone); ?>" style="position: relative;">
+
+                        <div style="position: absolute; top: 1.5rem; right: 1.5rem; display: flex; align-items: center; gap: 1rem; z-index: 10;">
+                            <button class="theme-toggle icon-btn" title="Toggle Light/Dark Mode" style="background: rgba(var(--primary-rgb), 0); border: 1px solid rgba(var(--primary-rgb), 0.2); box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; padding: 6px;">
+                                <span class="material-symbols-rounded"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
+                            </button>
+                            <a href="admin.php?tab=personal" class="admin-profile nav-item" data-target="personal" style="cursor:pointer; display: flex; align-items: center; gap: 0.75rem; background: rgba(var(--primary-rgb), 0); border: 1px solid rgba(var(--primary-rgb), 0.2); padding: 0.25rem 0.75rem 0.25rem 0.25rem; border-radius: 9999px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); text-decoration: none;" title="Manage Profile">
+                                <img src="https://ui-avatars.com/api/?name=<?php echo $avatarName; ?>&background=random" alt="Admin Avatar" class="avatar" style="width: 32px; height: 32px; border-radius: 50%;">
+                                <div class="admin-info" style="display: flex; flex-direction: column;">
+                                    <span class="admin-name" style="font-weight: 600; font-size: 0.875rem; color: var(--text-main, #1e293b);"><?php echo htmlspecialchars($adminDisplay); ?></span>
+                                    <span class="admin-role" style="font-size: 0.75rem; opacity: 0.8; color: var(--text-muted, #64748b);"><?php echo htmlspecialchars($role_name); ?></span>
+                                </div>
+                            </a>
+                        </div>
 
                         <div class="dashboard-hero-copy">
 
@@ -8920,12 +8906,17 @@ function hexToRgb($hex)
 
                             </div>
 
-                            <div class="personal-profile-kicker">
+                            <div style="display: flex; gap: 1rem; align-items: center;">
+                                <div class="personal-profile-kicker">
 
-                                <span class="material-symbols-rounded">shield_person</span>
+                                    <span class="material-symbols-rounded">shield_person</span>
 
-                                <span>Account settings</span>
+                                    <span>Account settings</span>
 
+                                </div>
+                                <button class="theme-toggle icon-btn" title="Toggle Light/Dark Mode" style="background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e2e8f0); box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 8px; padding: 6px; height: 38px; display: flex; align-items: center; justify-content: center;">
+                                    <span class="material-symbols-rounded"><?php echo $ui_theme === 'dark' ? 'light_mode' : 'dark_mode'; ?></span>
+                                </button>
                             </div>
 
                         </div>
@@ -11206,7 +11197,7 @@ function hexToRgb($hex)
 
                 <!-- â•â•â• WEBSITE EDITOR â•â•â• -->
 
-                <section id="website" class="view-section <?php echo $active_view === 'website' ? 'active' : ''; ?>">
+                <section id="website" class="view-section <?php echo $active_view === 'website' ? 'active' : ''; ?>" style="padding-top: 1.5rem;">
 
                     <div class="we-editor-card" style="height: calc(100vh - 120px); display: flex; flex-direction: column; margin-bottom: 0;">
 
@@ -11427,25 +11418,31 @@ function hexToRgb($hex)
                                                             <div class="custom-select-options-list" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100;">
                                                                 
                                                                 <div class="custom-select-option" data-value="Declining Balance" style="padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); transition: background 0.2s;">
-                                                                    <span>Declining Balance</span>
-                                                                    <div class="custom-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-                                                                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary-color, #3b82f6); color: #fff; font-size: 11px; font-weight: 800; font-family: monospace;">!</span>
-                                                                        <div class="custom-tooltip-text" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 10;">
-                                                                            Interest is calculated only on the remaining principal balance. The interest amount decreases over time as the principal is paid off.
-                                                                            <div style="position: absolute; top: 50%; right: -5px; transform: translateY(-50%); border-width: 5px; border-style: solid; border-color: transparent transparent transparent rgba(15, 23, 42, 0.95);"></div>
+                                                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                                                        <span>Declining Balance</span>
+                                                                        <div class="custom-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+                                                                            <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary-color, #3b82f6); color: #fff; font-size: 11px; font-weight: 800; font-family: monospace;">!</span>
+                                                                            <div class="custom-tooltip-text" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 10;">
+                                                                                Interest is calculated only on the remaining principal balance. The interest amount decreases over time as the principal is paid off.
+                                                                                <div style="position: absolute; top: 50%; right: -5px; transform: translateY(-50%); border-width: 5px; border-style: solid; border-color: transparent transparent transparent rgba(15, 23, 42, 0.95);"></div>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
+                                                                    <span class="material-symbols-rounded" style="font-size: 20px; color: var(--accent-color); visibility: <?php echo $lp_form['interest_type'] === 'Declining Balance' ? 'visible' : 'hidden'; ?>;">check</span>
                                                                 </div>
 
                                                                 <div class="custom-select-option" data-value="Flat" style="padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;">
-                                                                    <span>Flat</span>
-                                                                    <div class="custom-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-                                                                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary-color, #3b82f6); color: #fff; font-size: 11px; font-weight: 800; font-family: monospace;">!</span>
-                                                                        <div class="custom-tooltip-text" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 10;">
-                                                                            Interest is calculated on the full original principal for the entire loan term, regardless of payments made.
-                                                                            <div style="position: absolute; top: 50%; right: -5px; transform: translateY(-50%); border-width: 5px; border-style: solid; border-color: transparent transparent transparent rgba(15, 23, 42, 0.95);"></div>
+                                                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                                                        <span>Flat</span>
+                                                                        <div class="custom-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+                                                                            <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary-color, #3b82f6); color: #fff; font-size: 11px; font-weight: 800; font-family: monospace;">!</span>
+                                                                            <div class="custom-tooltip-text" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: normal; width: 220px; line-height: 1.4; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 10;">
+                                                                                Interest is calculated on the full original principal for the entire loan term, regardless of payments made.
+                                                                                <div style="position: absolute; top: 50%; right: -5px; transform: translateY(-50%); border-width: 5px; border-style: solid; border-color: transparent transparent transparent rgba(15, 23, 42, 0.95);"></div>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
+                                                                    <span class="material-symbols-rounded" style="font-size: 20px; color: var(--accent-color); visibility: <?php echo $lp_form['interest_type'] === 'Flat' ? 'visible' : 'hidden'; ?>;">check</span>
                                                                 </div>
 
                                                             </div>
@@ -11745,83 +11742,89 @@ function hexToRgb($hex)
                                                               });
                                                           }
 
-                                                          // Dynamic Term Validation based on Billing Cycle
                                                           const billingCycleSelect = document.querySelector('select[name="billing_cycle"]');
                                                           const minTermInput = document.querySelector('input[name="min_term_months"]');
                                                           const maxTermInput = document.querySelector('input[name="max_term_months"]');
                                                           const saveBtn = document.getElementById('save_loan_product_btn');
 
                                                           if (billingCycleSelect && minTermInput && maxTermInput && saveBtn) {
+                                                              function getBillingCycleMonths() {
+                                                                  if (billingCycleSelect.value === 'Yearly') {
+                                                                      return 12;
+                                                                  }
+
+                                                                  if (billingCycleSelect.value === 'Semi-Annually') {
+                                                                      return 6;
+                                                                  }
+
+                                                                  if (billingCycleSelect.value === 'Quarterly') {
+                                                                      return 3;
+                                                                  }
+
+                                                                  return 1;
+                                                              }
+
+                                                              function setTermFieldState(field, hasError) {
+                                                                  field.style.borderColor = hasError ? '#dc2626' : '';
+                                                                  field.style.boxShadow = hasError ? '0 0 0 1px rgba(220, 38, 38, 0.15)' : '';
+                                                                  field.setAttribute('aria-invalid', hasError ? 'true' : 'false');
+                                                              }
+
+                                                              function syncSaveButtonState(disabled) {
+                                                                  saveBtn.disabled = disabled;
+                                                                  saveBtn.style.opacity = disabled ? '0.5' : '1';
+                                                                  saveBtn.style.cursor = disabled ? 'not-allowed' : 'pointer';
+                                                                  saveBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+                                                              }
+
+                                                              function syncTermConstraints() {
+                                                                  const cycleMonths = getBillingCycleMonths();
+
+                                                                  minTermInput.step = String(cycleMonths);
+                                                                  maxTermInput.step = String(cycleMonths);
+                                                                  minTermInput.min = String(cycleMonths);
+                                                                  maxTermInput.min = String(cycleMonths);
+
+                                                                  return cycleMonths;
+                                                              }
+
                                                               function validateTermsMatchCycle() {
-                                                                  const cycle = billingCycleSelect.value;
-                                                                  let baseMultiple = 1;
+                                                                  const cycleMonths = syncTermConstraints();
+                                                                  const minVal = parseInt(minTermInput.value, 10) || 0;
+                                                                  const maxVal = parseInt(maxTermInput.value, 10) || 0;
+                                                                  const minInvalid = minVal < cycleMonths || (minVal % cycleMonths) !== 0;
+                                                                  const maxInvalid = maxVal < cycleMonths || (maxVal % cycleMonths) !== 0 || maxVal < minVal;
 
-                                                                  if (cycle === 'Yearly') {
-                                                                      baseMultiple = 12;
-                                                                  } else if (cycle === 'Semi-Annually') {
-                                                                      baseMultiple = 6;
-                                                                  } else if (cycle === 'Quarterly') {
-                                                                      baseMultiple = 3;
-                                                                  } else {
-                                                                      baseMultiple = 1;
-                                                                  }
+                                                                  setTermFieldState(minTermInput, minInvalid);
+                                                                  setTermFieldState(maxTermInput, maxInvalid);
 
-                                                                  minTermInput.step = baseMultiple;
-                                                                  maxTermInput.step = baseMultiple;
-                                                                  minTermInput.min = baseMultiple;
-                                                                  maxTermInput.min = baseMultiple;
+                                                                  minTermInput.setCustomValidity(minInvalid ? 'Minimum term must match the selected billing cycle.' : '');
+                                                                  maxTermInput.setCustomValidity(maxInvalid ? 'Maximum term must match the selected billing cycle and stay greater than or equal to the minimum term.' : '');
 
-                                                                  // Validation
-                                                                  let isValid = true;
-                                                                  const minVal = parseInt(minTermInput.value) || 0;
-                                                                  const maxVal = parseInt(maxTermInput.value) || 0;
-
-                                                                  if (minVal % baseMultiple !== 0 || minVal === 0) {
-                                                                      minTermInput.style.borderColor = '#dc2626'; // Red
-                                                                      isValid = false;
-                                                                  } else {
-                                                                      minTermInput.style.borderColor = ''; // Default
-                                                                  }
-
-                                                                  if (maxVal % baseMultiple !== 0 || maxVal === 0 || maxVal < minVal) {
-                                                                      maxTermInput.style.borderColor = '#dc2626'; // Red
-                                                                      isValid = false;
-                                                                  } else {
-                                                                      maxTermInput.style.borderColor = ''; // Default
-                                                                  }
-
-                                                                  if (!isValid) {
-                                                                      saveBtn.disabled = true;
-                                                                      saveBtn.style.opacity = '0.5';
-                                                                      saveBtn.style.cursor = 'not-allowed';
-                                                                  } else {
-                                                                      saveBtn.disabled = false;
-                                                                      saveBtn.style.opacity = '1';
-                                                                      saveBtn.style.cursor = 'pointer';
-                                                                  }
+                                                                  syncSaveButtonState(minInvalid || maxInvalid);
                                                               }
 
                                                               function updateTermsToMatchCycle() {
-                                                                  const cycle = billingCycleSelect.value;
-                                                                  let baseMultiple = cycle === 'Yearly' ? 12 : cycle === 'Semi-Annually' ? 6 : cycle === 'Quarterly' ? 3 : 1;
-                                                                  
-                                                                  // Grab current values or default to base multiple
-                                                                  let minVal = parseInt(minTermInput.value) || baseMultiple;
-                                                                  let maxVal = parseInt(maxTermInput.value) || (baseMultiple * 2);
+                                                                  const cycleMonths = syncTermConstraints();
+                                                                  const currentMin = parseInt(minTermInput.value, 10) || 0;
+                                                                  const snappedMin = Math.max(cycleMonths, Math.ceil(Math.max(currentMin, 1) / cycleMonths) * cycleMonths);
 
-                                                                  // Snap to closest valid multiple
-                                                                  minTermInput.value = Math.max(baseMultiple, Math.ceil(minVal / baseMultiple) * baseMultiple);
-                                                                  maxVal = Math.max(maxVal, parseInt(minTermInput.value));
-                                                                  maxTermInput.value = Math.max(baseMultiple, Math.ceil(maxVal / baseMultiple) * baseMultiple);
+                                                                  if (currentMin !== snappedMin) {
+                                                                      minTermInput.value = String(snappedMin);
+                                                                  }
 
                                                                   validateTermsMatchCycle();
+                                                                  minTermInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                                                  maxTermInput.dispatchEvent(new Event('input', { bubbles: true }));
                                                               }
 
                                                               billingCycleSelect.addEventListener('change', updateTermsToMatchCycle);
                                                               minTermInput.addEventListener('input', validateTermsMatchCycle);
+                                                              minTermInput.addEventListener('change', validateTermsMatchCycle);
                                                               maxTermInput.addEventListener('input', validateTermsMatchCycle);
-                                                              
-                                                              validateTermsMatchCycle();
+                                                              maxTermInput.addEventListener('change', validateTermsMatchCycle);
+
+                                                              updateTermsToMatchCycle();
                                                           }
 
                                                     });
@@ -11973,7 +11976,7 @@ function hexToRgb($hex)
 
                                                         <div class="loan-preview-summary-row">
 
-                                                            <span>Estimated installment</span>
+                                                            <span data-loan-preview-bind="installment-label">Estimated monthly payment</span>
 
                                                             <strong data-loan-preview-bind="estimated-installment">â‚±0.00</strong>
 
@@ -12044,6 +12047,16 @@ function hexToRgb($hex)
                                                     </div>
 
 
+
+                                                    <template id="loan-preview-early-settlement-card-template">
+                                                        <div class="loan-preview-fee-card">
+
+                                                            <span>Sample early settlement fee</span>
+
+                                                            <strong data-loan-preview-bind="early-settlement-fee-value">Not applied</strong>
+
+                                                        </div>
+                                                    </template>
 
                                                     <p class="loan-preview-footnote">This preview is an estimate for the borrower experience only. The final repayment and approval still follow your saved product rules.</p>
 
