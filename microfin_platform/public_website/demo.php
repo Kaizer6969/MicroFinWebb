@@ -397,7 +397,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $pdo->rollBack();
                 }
                 error_log('Demo request submission failed: ' . $e->getMessage());
-                $form_error = 'An error occurred while submitting your request. Please try again later.';
+                $form_error = 'An error occurred: ' . $e->getMessage();
             }
         }
     }

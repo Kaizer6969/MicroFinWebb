@@ -35,14 +35,14 @@ function sa_load_super_admin_state(PDO $pdo, int $userId): ?array
 
 function sa_super_admin_theme(array $superAdmin): string
 {
-    $theme = strtolower(trim((string)($superAdmin['ui_theme'] ?? '')));
+    $theme = strtolower(trim((string) ($superAdmin['ui_theme'] ?? '')));
     return in_array($theme, ['light', 'dark'], true) ? $theme : 'light';
 }
 
 function sa_super_admin_profile_is_complete(array $superAdmin): bool
 {
     foreach (['first_name', 'last_name', 'phone_number', 'date_of_birth'] as $field) {
-        if (trim((string)($superAdmin[$field] ?? '')) === '') {
+        if (trim((string) ($superAdmin[$field] ?? '')) === '') {
             return false;
         }
     }
@@ -52,13 +52,13 @@ function sa_super_admin_profile_is_complete(array $superAdmin): bool
 
 function sa_super_admin_requires_onboarding(array $superAdmin): bool
 {
-    return trim((string)($superAdmin['status'] ?? '')) === 'Inactive'
+    return trim((string) ($superAdmin['status'] ?? '')) === 'Inactive'
         && empty($superAdmin['force_password_change']);
 }
 
 function sa_sync_super_admin_session_from_state(array $superAdmin): void
 {
-    $_SESSION['super_admin_username'] = (string)($superAdmin['username'] ?? 'Super Admin');
+    $_SESSION['super_admin_username'] = (string) ($superAdmin['username'] ?? 'Super Admin');
     $_SESSION['ui_theme'] = sa_super_admin_theme($superAdmin);
     $_SESSION['super_admin_force_password_change'] = !empty($superAdmin['force_password_change']);
     $_SESSION['super_admin_onboarding_required'] = sa_super_admin_requires_onboarding($superAdmin);
@@ -68,9 +68,9 @@ function sa_sanitize_platform_username(string $value): string
 {
     $value = strtolower(trim($value));
     $value = preg_replace('/[^a-z0-9._-]+/', '', $value);
-    $value = trim((string)$value, '._-');
+    $value = trim((string) $value, '._-');
 
-    return substr((string)$value, 0, 50);
+    return substr((string) $value, 0, 50);
 }
 
 function sa_first_name_username_seed(string $firstName): string
@@ -81,7 +81,7 @@ function sa_first_name_username_seed(string $firstName): string
     }
 
     $parts = preg_split('/\s+/', $firstName);
-    $firstWord = is_array($parts) ? (string)($parts[0] ?? '') : '';
+    $firstWord = is_array($parts) ? (string) ($parts[0] ?? '') : '';
 
     return sa_sanitize_platform_username($firstWord);
 }
@@ -111,7 +111,7 @@ function sa_platform_username_exists(PDO $pdo, string $username, int $excludeUse
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
 
-    return (bool)$stmt->fetchColumn();
+    return (bool) $stmt->fetchColumn();
 }
 
 function sa_generate_unique_platform_username(
@@ -150,7 +150,7 @@ function sa_generate_unique_platform_username(
     $counter = 2;
 
     while (sa_platform_username_exists($pdo, $username, $excludeUserId)) {
-        $suffix = (string)$counter;
+        $suffix = (string) $counter;
         $username = substr($base, 0, max(1, 50 - strlen($suffix))) . $suffix;
         $counter++;
     }

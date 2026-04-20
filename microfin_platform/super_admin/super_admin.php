@@ -1310,7 +1310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $check = $pdo->prepare("
                     SELECT user_id
                     FROM users
-                    WHERE tenant_id IS NULL
+                    WHERE user_type = 'Super Admin'
                       AND deleted_at IS NULL
                       AND (email = ? OR username = ?)
                     LIMIT 1
