@@ -149,6 +149,15 @@ if ($userId > 0) {
         } catch (\Throwable $pe) {
             error_log('Failed syncing profile limit in mobile API: ' . $pe->getMessage());
         }
+        // Fallback: if active credit_limit is 0, use potential_limit from policy_metadata
+        if ($clientProfile['credit_limit'] <= 0) {
+            $rawMeta = $clientProfile['policy_metadata'] ?? '{}';
+            $policyMeta = is_string($rawMeta) ? (json_decode($rawMeta, true) ?: []) : ($rawMeta ?: []);
+            $potentialLimit = (float) ($policyMeta['potential_limit'] ?? 0);
+            if ($potentialLimit > 0) {
+                $clientProfile['credit_limit'] = $potentialLimit;
+            }
+        }
     }
 
     $creditSummary = $clientProfile
@@ -195,3 +204,4 @@ if ($creditSummary !== null) {
 }
 
 microfin_json_response($payload);
+

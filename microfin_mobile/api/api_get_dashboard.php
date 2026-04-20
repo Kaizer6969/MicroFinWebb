@@ -316,6 +316,13 @@ try {
 
         $profile = mf_sync_client_credit_profile($pdo, $tenantId, (int) $client['client_id']);
         $computedLimit = (float) ($profile['client']['credit_limit'] ?? $computedLimit);
+        if ($computedLimit <= 0) {
+            $policyMetadata = json_decode($client['policy_metadata'] ?? '{}', true) ?: [];
+            $potentialLimit = (float) ($policyMetadata['potential_limit'] ?? 0);
+            if ($potentialLimit > 0) {
+                $computedLimit = $potentialLimit;
+            }
+        }
     } catch (Throwable $pe) {
         error_log("Failed to compute dynamic credit limit: " . $pe->getMessage());
     }
@@ -342,3 +349,4 @@ try {
         'message' => 'Unable to load dashboard: ' . $e->getMessage(),
     ]);
 }
+

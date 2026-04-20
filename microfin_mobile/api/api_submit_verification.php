@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/api_utils.php';
 require_once __DIR__ . '/db.php';
 
@@ -385,6 +385,7 @@ try {
             // 2. Initial Limit from tenant settings (stored as potential, NOT active)
             $limitResult = $limitEngine->calculateInitialLimit($monthlyIncome);
             $potentialLimit = (float) ($limitResult['limit'] ?? 0);
+            $assignedCreditLimit = 0.00;
 
             // 3. Band Mapping
             $band = $limitEngine->identifyScoreBand($assignedCreditScore);
@@ -466,7 +467,7 @@ try {
             verification_notes,
             expiry_date,
             is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '$finalVerificationStatus', ?, ?, 1)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, 1)
     ");
     if (!$insertDocStmt) {
         throw new RuntimeException('Failed to prepare document insert.');
@@ -480,7 +481,7 @@ try {
             file_size = ?,
             file_type = ?,
             upload_date = NOW(),
-            verification_status = '$finalVerificationStatus',
+            verification_status = 'Pending',
             verification_notes = ?,
             expiry_date = ?,
             is_active = 1
@@ -557,7 +558,7 @@ try {
             comaker_street = ?,
             id_type = ?,
             verification_rejection_reason = ?,
-            document_verification_status = '$finalVerificationStatus'
+            document_verification_status = 'Pending'
     ";
 
     if ($hasPolicyMetadataColumn) {
@@ -573,7 +574,7 @@ try {
 
     if (microfin_has_client_column($conn, 'verification_status')) {
         $clientUpdateSql .= ",
-            verification_status = '$finalVerificationStatus'
+            verification_status = 'Pending'
         ";
     }
 

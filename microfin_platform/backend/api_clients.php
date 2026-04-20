@@ -747,7 +747,7 @@ if ($method === 'POST' && $action === 'approve_client') {
             ? 'policy_metadata, monthly_income, credit_limit'
             : 'monthly_income, credit_limit';
 
-        // Read the client's approval inputs. policy_metadata is optional in older schemas.
+        // Read the client current data for the engine
         $meta_stmt = $pdo->prepare("SELECT {$clientMetaFields} FROM clients WHERE client_id = ? AND tenant_id = ? LIMIT 1");
         $meta_stmt->execute([$client_id, $tenant_id]);
         $client_row = $meta_stmt->fetch(PDO::FETCH_ASSOC);
@@ -756,43 +756,70 @@ if ($method === 'POST' && $action === 'approve_client') {
             $policyMeta    = $hasPolicyMetadataColumn
                 ? (json_decode((string) ($client_row['policy_metadata'] ?? ''), true) ?: [])
                 : [];
-            $currentLimit  = (float) ($client_row['credit_limit'] ?? 0);
             $monthlyIncome = (float) ($client_row['monthly_income'] ?? 0);
 
-            // Use the pre-calculated potential_limit when the metadata snapshot exists.
-            $promotedLimit = $hasPolicyMetadataColumn
-                ? (float) ($policyMeta['potential_limit'] ?? 0)
-                : 0.0;
+            // ── ALWAYS recalculate from the CURRENT admin policy at approval time ──
+            // This guarantees credit_limit matches exactly what admin/staff panel shows:
+            //   Income x initial_limit_percent from live policy_console_credit_limits.
+            $promotedLimit = 0.0;
 
-            // If no potential_limit exists (legacy client), calculate it now using the engine
-            if ($promotedLimit <= 0 && $monthlyIncome > 0) {
+            if ($monthlyIncome > 0) {
                 try {
                     require_once __DIR__ . '/engines/credit_limit_engine.php';
-                    $engine = new CreditLimitEngine($pdo, $tenant_id);
-                    $result = $engine->calculateInitialLimit($monthlyIncome);
-                    $promotedLimit = (float) ($result['limit'] ?? 0);
+                    require_once __DIR__ . '/engines/credit_score_engine.php';
 
-                    // Save the engine snapshot into policy_metadata for audit
-                    $policyMeta['engine_snapshot'] = $result;
-                    $policyMeta['snapshot_config'] = $engine->getConfigSnapshot();
+                    $limitEngine = new CreditLimitEngine($pdo, $tenant_id);
+                    $scoreEngine = new CreditScoreEngine($pdo, $tenant_id);
+
+                    $limitResult   = $limitEngine->calculateInitialLimit($monthlyIncome);
+                    $promotedLimit = (float) ($limitResult['limit'] ?? 0);
+
+                    $startingScore = $scoreEngine->getStartingScore();
+                    $band          = $limitEngine->identifyScoreBand($startingScore);
+
+                    // Upsert a credit_scores row so the staff Credit Accounts tab
+                    // immediately reflects the engine-calculated score and limit.
+                    $pdo->prepare("
+                        INSERT INTO credit_scores
+                            (client_id, tenant_id, credit_score, credit_rating, max_loan_amount, notes, score_metadata, computation_date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                    ")->execute([
+                        $client_id,
+                        $tenant_id,
+                        $startingScore,
+                        $band['label'] ?? 'Standard',
+                        $promotedLimit,
+                        'Auto-assigned on admin approval via CreditLimitEngine.',
+                        json_encode([
+                            'basis'                  => 'Admin approval recalculation',
+                            'income_at_approval'     => $monthlyIncome,
+                            'config_percent'         => $limitResult['initial_limit_percent'] ?? 0,
+                            'engine_reason'          => $limitResult['reason'] ?? '',
+                            'approved_by_user_id'    => $session_user_id,
+                            'approved_at'            => date('Y-m-d H:i:s'),
+                        ]),
+                    ]);
+
+                    // Update policy_metadata audit trail
+                    $policyMeta['approved_limit']          = $promotedLimit;
+                    $policyMeta['approved_starting_score'] = $startingScore;
+                    $policyMeta['approved_score_band']     = $band['label'] ?? 'Standard';
+                    $policyMeta['approved_by_user_id']     = $session_user_id;
+                    $policyMeta['approved_at']             = date('Y-m-d H:i:s');
+                    $policyMeta['approval_engine_snapshot']= $limitResult;
+
                 } catch (\Throwable $engineErr) {
-                    $policyMeta['engine_error'] = $engineErr->getMessage();
+                    $policyMeta['approval_engine_error'] = $engineErr->getMessage();
                 }
             }
 
-            // Promote the limit if we have one and it's greater than what's already there
-            if ($promotedLimit > 0 && $promotedLimit > $currentLimit) {
-                if ($hasPolicyMetadataColumn) {
-                    $policyMeta['approved_by_user_id'] = $session_user_id;
-                    $policyMeta['approved_at'] = date('Y-m-d H:i:s');
-                    $metaJson = json_encode($policyMeta);
-
-                    $pdo->prepare("UPDATE clients SET credit_limit = ?, policy_metadata = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
-                        ->execute([$promotedLimit, $metaJson, $client_id, $tenant_id]);
-                } else {
-                    $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
-                        ->execute([$promotedLimit, $client_id, $tenant_id]);
-                }
+            // Always write the calculated credit_limit (0 if income missing / engine failed)
+            if ($hasPolicyMetadataColumn) {
+                $pdo->prepare("UPDATE clients SET credit_limit = ?, policy_metadata = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                    ->execute([$promotedLimit, json_encode($policyMeta), $client_id, $tenant_id]);
+            } else {
+                $pdo->prepare("UPDATE clients SET credit_limit = ?, updated_at = NOW() WHERE client_id = ? AND tenant_id = ?")
+                    ->execute([$promotedLimit, $client_id, $tenant_id]);
             }
         }
 

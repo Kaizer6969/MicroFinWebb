@@ -33,17 +33,29 @@ try {
 
     $tStmt = $conn->prepare("
         (SELECT 
-            payment_id AS transaction_id, loan_id, payment_amount AS amount, payment_date AS date,
-            payment_method AS type, payment_status AS status, payment_reference AS reference_number
-        FROM payments
-        WHERE client_id = ? AND tenant_id = ?)
+            p.payment_id AS transaction_id, p.loan_id, 
+            p.payment_amount, p.payment_date,
+            p.payment_method, p.payment_status, p.payment_reference,
+            p.principal_paid, p.interest_paid,
+            l.loan_number, l.remaining_balance,
+            CONCAT(c.first_name, ' ', c.last_name) AS client_name
+        FROM payments p
+        JOIN loans l ON p.loan_id = l.loan_id
+        JOIN clients c ON p.client_id = c.client_id
+        WHERE p.client_id = ? AND p.tenant_id = ?)
         UNION ALL
         (SELECT 
-            transaction_id, loan_id, amount, payment_date AS date,
-            payment_method AS type, status, transaction_ref AS reference_number
-        FROM payment_transactions
-        WHERE client_id = ? AND tenant_id = ?)
-        ORDER BY date DESC
+            t.transaction_id, t.loan_id, 
+            t.amount AS payment_amount, t.payment_date,
+            t.payment_method, t.status AS payment_status, t.transaction_ref AS payment_reference,
+            0 AS principal_paid, 0 AS interest_paid,
+            l.loan_number, l.remaining_balance,
+            CONCAT(c.first_name, ' ', c.last_name) AS client_name
+        FROM payment_transactions t
+        JOIN loans l ON t.loan_id = l.loan_id
+        JOIN clients c ON t.client_id = c.client_id
+        WHERE t.client_id = ? AND t.tenant_id = ?)
+        ORDER BY payment_date DESC
     ");
     $tStmt->bind_param('isis', $clientId, $tenantId, $clientId, $tenantId);
     $tStmt->execute();

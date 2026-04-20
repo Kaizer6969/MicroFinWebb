@@ -3924,17 +3924,21 @@ $name_parts = explode(' ', $adminDisplay);
                     ${renderDetailItem('Occupation', formatTextValue(c.occupation))}
                     ${renderDetailItem('Employer Name', formatTextValue(c.employer_name))}
                     ${renderDetailItem('Monthly Income', formatMoneyValue(c.monthly_income))}
-                    ${renderDetailItem('Credit Limit', formatMoneyValue(c.credit_limit))}
                     ${(() => {
+                        const activeLimit = parseFloat(c.credit_limit || 0);
                         let meta = {};
                         try {
                             meta = typeof c.policy_metadata === 'string' ? JSON.parse(c.policy_metadata) : (c.policy_metadata || {});
                         } catch(e) {}
+                        const potentialLimit = parseFloat(meta.potential_limit || meta.approved_limit || 0);
                         
-                        if (meta.potential_limit && Math.abs(parseFloat(meta.potential_limit) - parseFloat(c.credit_limit)) > 0.01) {
-                            return renderDetailItem('Potential Limit', `<span style="color:var(--brand);font-weight:700;">${formatMoneyValue(meta.potential_limit)}</span> <small style="font-weight:normal;color:var(--text-muted);">(Pending Approval)</small>`);
+                        if (activeLimit > 0) {
+                            return renderDetailItem('Credit Limit', formatMoneyValue(activeLimit));
+                        } else if (potentialLimit > 0) {
+                            return renderDetailItem('Credit Limit', `<span style="color:#b45309;font-weight:700;">${formatMoneyValue(potentialLimit)}</span> <small style="display:block;font-weight:normal;color:var(--text-muted);">(Pending Approval)</small>`);
+                        } else {
+                            return renderDetailItem('Credit Limit', formatMoneyValue(activeLimit));
                         }
-                        return '';
                     })()}
                     ${renderDetailItem('Last Seen Credit Limit', formatMoneyValue(c.last_seen_credit_limit))}
                 </div>
@@ -3985,11 +3989,18 @@ $name_parts = explode(' ', $adminDisplay);
                             html += renderDetailItem('Engine Reason', `<span style="font-size:0.85rem;">${escapeHtml(meta.limit_calculation.reason)}</span>`, true);
                         }
                         
-                        // Active limit status
+                        // Active limit status — fall back to potential_limit for unapproved clients
                         const activeLimit = parseFloat(c.credit_limit || 0);
-                        html += renderDetailItem('Active Credit Limit', activeLimit > 0 
-                            ? `<span style="color:#166534;font-weight:700;">${formatMoneyValue(activeLimit)}</span>`
-                            : `<span style="color:#991b1b;font-weight:600;">Not yet assigned</span>`);
+                        const potentialLimit = parseFloat(meta.potential_limit || meta.approved_limit || 0);
+                        if (activeLimit > 0) {
+                            html += renderDetailItem('Active Credit Limit', `<span style="color:#166534;font-weight:700;">${formatMoneyValue(activeLimit)}</span>`);
+                        } else if (potentialLimit > 0) {
+                            html += renderDetailItem('Active Credit Limit',
+                                `<span style="color:#b45309;font-weight:700;">${formatMoneyValue(potentialLimit)}</span>
+                                 <span style="display:block;font-size:0.75rem;color:var(--text-muted);margin-top:3px;">⏳ Pending Approval — will be activated when admin approves this client</span>`);
+                        } else {
+                            html += renderDetailItem('Active Credit Limit', `<span style="color:#991b1b;font-weight:600;">Not yet assigned</span>`);
+                        }
                         
                         if (c.limit_snapshot?.blocked_reason) {
                             html += renderDetailItem('Restriction Reason', escapeHtml(c.limit_snapshot.blocked_reason), true);

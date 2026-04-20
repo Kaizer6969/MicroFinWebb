@@ -198,8 +198,8 @@ if ($method === 'POST' && ($action === 'post' || $action === '')) {
     $penalty_paid = min($payment_left, $penalty);
     $payment_left -= $penalty_paid;
 
-    // Expected monthly interest
-    $monthly_rate  = (float) $loan['interest_rate'] / 100 / 12;
+    // Expected monthly interest (interest_rate is already per month)
+    $monthly_rate  = (float) $loan['interest_rate'] / 100;
     $outstanding_principal = (float) $loan['outstanding_principal'];
     $interest_portion = $sched_entry ? (float) $sched_entry['interest_amount'] : ($outstanding_principal * $monthly_rate);
     

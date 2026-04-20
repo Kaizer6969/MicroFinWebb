@@ -49,7 +49,8 @@ try {
             comaker_barangay,
             comaker_city,
             comaker_province,
-            comaker_postal_code
+            comaker_postal_code,
+            policy_metadata
         FROM clients
         WHERE user_id = ?
           AND tenant_id = ?
@@ -73,6 +74,11 @@ try {
     }
 
     $credit_limit = (float) ($client['credit_limit'] ?? 0);
+    $policyMetadata = json_decode($client['policy_metadata'] ?? '{}', true) ?: [];
+    $potentialLimit = (float) ($policyMetadata['potential_limit'] ?? 0);
+    if ($credit_limit <= 0 && $potentialLimit > 0) {
+        $credit_limit = $potentialLimit;
+    }
     $creditSummary = microfin_build_client_loan_application_summary($conn, [
         'client_id' => $client_id,
         'tenant_id' => $tenant_id,
@@ -322,3 +328,4 @@ try {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
 ?>
+

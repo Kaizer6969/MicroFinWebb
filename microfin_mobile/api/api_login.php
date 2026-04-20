@@ -166,6 +166,15 @@ if ($clientId > 0) {
     } catch (\Throwable $pe) {
         error_log('Failed syncing profile limit in login API: ' . $pe->getMessage());
     }
+    // Fallback: if active credit_limit is 0, use potential_limit from policy_metadata
+    if ($currentLimit <= 0 && $policyMetadataColumnExists) {
+        $rawMeta = $user['policy_metadata'] ?? '{}';
+        $policyMeta = is_string($rawMeta) ? (json_decode($rawMeta, true) ?: []) : ($rawMeta ?: []);
+        $potentialLimit = (float) ($policyMeta['potential_limit'] ?? 0);
+        if ($potentialLimit > 0) {
+            $currentLimit = $potentialLimit;
+        }
+    }
 }
 
 microfin_json_response([

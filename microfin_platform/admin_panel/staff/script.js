@@ -1390,7 +1390,22 @@
                     ${renderDetailItem('Occupation', formatTextValue(c.occupation))}
                     ${renderDetailItem('Employer Name', formatTextValue(c.employer_name))}
                     ${renderDetailItem('Monthly Income', formatMoneyValue(c.monthly_income))}
-                    ${renderDetailItem('Credit Limit', formatMoneyValue(c.credit_limit))}
+                    ${(() => {
+                        const activeLimit = parseFloat(c.credit_limit || 0);
+                        let meta = {};
+                        try {
+                            meta = typeof c.policy_metadata === 'string' ? JSON.parse(c.policy_metadata) : (c.policy_metadata || {});
+                        } catch(e) {}
+                        const potentialLimit = parseFloat(meta.potential_limit || meta.approved_limit || 0);
+                        
+                        if (activeLimit > 0) {
+                            return renderDetailItem('Credit Limit', formatMoneyValue(activeLimit));
+                        } else if (potentialLimit > 0) {
+                            return renderDetailItem('Credit Limit', `<span style="color:#b45309;font-weight:700;">${formatMoneyValue(potentialLimit)}</span> <small style="display:block;font-weight:normal;color:var(--text-muted);">(Pending Approval)</small>`);
+                        } else {
+                            return renderDetailItem('Credit Limit', formatMoneyValue(activeLimit));
+                        }
+                    })()}
                     ${renderDetailItem('Last Seen Credit Limit', formatMoneyValue(c.last_seen_credit_limit))}
                 </div>
             </section>

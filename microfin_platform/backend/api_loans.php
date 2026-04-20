@@ -340,10 +340,11 @@ if ($method === 'POST' && $action === 'release') {
     if ($interest_type === 'Fixed') $interest_type = 'Flat';
 
     // Calculate interest based on type
-    $monthly_rate = $interest_rate / 100 / 12;
+    // Note: interest_rate in Microfin is stored and displayed as % PER MONTH.
+    $monthly_rate = $interest_rate / 100;
 
     if ($interest_type === 'Flat' || $monthly_rate == 0) {
-        $interest_amount = $principal * ($interest_rate / 100) * ($loan_term / 12);
+        $interest_amount = $principal * ($interest_rate / 100) * $loan_term;
         $monthly_payment = ($principal + $interest_amount) / $loan_term;
     } else {
         // Declining Balance

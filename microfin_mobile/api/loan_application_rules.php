@@ -60,7 +60,8 @@ function microfin_find_client_loan_profile(mysqli $conn, int $userId, string $te
             tenant_id,
             document_verification_status,
             COALESCE(monthly_income, 0) AS monthly_income,
-            COALESCE(credit_limit, 0) AS credit_limit
+            COALESCE(credit_limit, 0) AS credit_limit,
+            policy_metadata
         FROM clients
         WHERE user_id = ?
           AND tenant_id = ?
@@ -86,6 +87,11 @@ function microfin_find_client_loan_profile(mysqli $conn, int $userId, string $te
     $client['tenant_id'] = trim((string) ($client['tenant_id'] ?? ''));
     $client['document_verification_status'] = trim((string) ($client['document_verification_status'] ?? 'Unverified'));
     $client['credit_limit'] = (float) ($client['credit_limit'] ?? 0);
+    $policyMetadata = json_decode($client['policy_metadata'] ?? '{}', true) ?: [];
+    $potentialLimit = (float) ($policyMetadata['potential_limit'] ?? 0);
+    if ($client['credit_limit'] <= 0 && $potentialLimit > 0) {
+        $client['credit_limit'] = $potentialLimit;
+    }
 
     return $client;
 }
@@ -369,3 +375,4 @@ function microfin_build_loan_access_state(array $products, array $summary): arra
 
     return $state;
 }
+
