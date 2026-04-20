@@ -140,6 +140,35 @@ function microfin_normalize_date(?string $value): ?string
     return date('Y-m-d', strtotime((string) $value));
 }
 
+function microfin_normalize_employment_status(?string $value): string
+{
+    $normalized = strtolower(trim((string) $value));
+
+    $map = [
+        'employed' => 'Employed',
+        'full_time' => 'Employed',
+        'full-time' => 'Employed',
+        'self_employed' => 'Self-Employed',
+        'self-employed' => 'Self-Employed',
+        'freelancer' => 'Freelancer',
+        'contract' => 'Contractual',
+        'contractual' => 'Contractual',
+        'part_time' => 'Part-Time',
+        'part-time' => 'Part-Time',
+        'ofw' => 'OFW',
+        'student' => 'Student',
+        'unemployed' => 'Unemployed',
+        'casual' => 'Unemployed',
+        'retired' => 'Retired',
+    ];
+
+    if (isset($map[$normalized])) {
+        return $map[$normalized];
+    }
+
+    return $value !== null && trim($value) !== '' ? trim((string) $value) : 'Employed';
+}
+
 /**
  * Resolve a document type identifier to its actual ID.
  * Handles the special 'scanned_id' marker from mobile app.
@@ -215,6 +244,7 @@ function microfin_build_document_note(array $data, int $documentTypeId, bool $is
 $parsedName = microfin_split_full_name($fullName);
 $birthDate = microfin_normalize_date($dateOfBirth);
 $expiryDate = microfin_normalize_date($idExpiry);
+$employmentStatus = microfin_normalize_employment_status($employmentStatus);
 
 if ($birthDate === null) {
     microfin_json_response(['success' => false, 'message' => 'Date of birth must use a valid date format.'], 422);

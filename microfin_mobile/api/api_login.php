@@ -172,6 +172,7 @@ microfin_json_response([
     'success' => true,
     'message' => 'Login successful!',
     'user_id' => (int) ($user['user_id'] ?? 0),
+    'client_id' => $clientId,
     'first_name' => $firstName,
     'last_name' => $lastName,
     'email' => (string) ($user['email'] ?? ''),

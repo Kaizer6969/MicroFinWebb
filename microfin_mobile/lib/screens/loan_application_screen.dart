@@ -51,6 +51,9 @@ class _LoanApplicationScreenState extends State<LoanApplicationScreen> {
         );
 
         request.fields['tenant_id'] = activeTenant.value.id;
+        request.fields['client_id'] = '${currentUser.value?['client_id'] ?? 0}';
+        request.fields['user_id'] = '${currentUser.value?['user_id'] ?? 0}';
+        request.fields['file_category'] = docTypeId.toString();
 
         if (file.bytes != null) {
           request.files.add(

@@ -260,6 +260,7 @@ class _LoginScreenState extends State<LoginScreen>
 
         currentUser.value = {
           'user_id': data['user_id'],
+          'client_id': data['client_id'] ?? 0,
           'tenant_id': tenantBranding.id,
           'username': baseUsername,
           'login_username': loginUsername,

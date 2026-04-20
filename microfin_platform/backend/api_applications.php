@@ -170,7 +170,7 @@ if ($method === 'GET' && $action === 'view') {
               lp.interest_rate AS product_interest_rate,
               lp.min_term_months, lp.max_term_months,
             (
-                SELECT cs.total_score
+                SELECT cs.credit_score
                 FROM credit_scores cs
                 WHERE cs.client_id = la.client_id AND cs.tenant_id = la.tenant_id
                 ORDER BY cs.computation_date DESC, cs.score_id DESC

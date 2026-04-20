@@ -71,7 +71,9 @@ if (!function_exists('statusBadgePHP')) {
                     <th>Email</th>
                     <th>Phone</th>
                     <th>Registered</th>
+                    <th>Source</th>
                     <th>Status</th>
+                    <th>View User</th>
                 </tr>
             </thead>
             <tbody id="clientsTbody">
@@ -93,7 +95,17 @@ if (!function_exists('statusBadgePHP')) {
                             <td class="td-muted">
                                 <?php echo date('M d, Y', strtotime($c['registration_date'])); ?></td>
                             <td>
+                                <?php if (($c['user_type'] ?? '') === 'Client'): ?>
+                                    <span class="badge badge-blue">App</span>
+                                <?php else: ?>
+                                    <span class="badge badge-gray">Walk-in</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
                                 <?php echo statusBadgePHP($c['effective_status'] ?? 'Unverified'); ?>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline" onclick="viewClient(<?php echo (int) ($c['client_id'] ?? 0); ?>)">View User</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>

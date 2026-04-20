@@ -1276,7 +1276,7 @@
         <td class="td-muted">${fmtDate(c.registration_date)}</td>
         <td>${c.user_type === 'Client' ? '<span class="badge badge-blue">📱 App</span>' : '<span class="badge badge-gray">🏢 Walk-in</span>'}</td>
         <td>${badge((c.document_verification_status !== 'Verified' && c.document_verification_status !== 'Approved' && c.client_status === 'Active') ? 'Inactive' : c.client_status)}</td>
-        <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View Profile</button></td>
+        <td><button class="btn btn-sm btn-outline" onclick="viewClient(${c.client_id})">View User</button></td>
     </tr>`).join('');
         }
 
