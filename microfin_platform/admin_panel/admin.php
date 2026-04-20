@@ -7619,12 +7619,6 @@ function hexToRgb($hex)
 
                         </a>
 
-                        <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=decision_rules" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'decision_rules' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="decision_rules" data-title="Rules &amp; Requirements">
-
-                            <span>Rules &amp; Requirements</span>
-
-                        </a>
-
                         <a href="admin.php?tab=credit_control_policy&amp;credit_policy_tab=compliance_documents" class="nav-item nav-item-child <?php echo $active_view === 'credit_settings' && $credit_policy_subtab === 'compliance_documents' ? 'active' : ''; ?>" data-target="credit_settings" data-credit-policy-subtab="compliance_documents" data-title="Required Documents">
 
                             <span>Required Documents</span>

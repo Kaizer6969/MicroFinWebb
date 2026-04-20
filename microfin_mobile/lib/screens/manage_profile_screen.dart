@@ -174,7 +174,7 @@ class _ManageProfileScreenState extends State<ManageProfileScreen> {
         'occupation': _occupationCtrl.text,
         'employer_name': _employerCtrl.text,
         'employer_contact': _employerContactCtrl.text,
-        'monthly_income': double.tryParse(_monthlyIncomeCtrl.text) ?? 0,
+        'monthly_income': double.tryParse(_monthlyIncomeCtrl.text.replaceAll(',', '')) ?? 0,
         // Address
         'present_house_no': _houseNoCtrl.text,
         'present_street': _streetCtrl.text,

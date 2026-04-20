@@ -18,7 +18,7 @@ $employmentStatus = microfin_clean_string($data['employment_status'] ?? '');
 $occupation = microfin_clean_string($data['occupation'] ?? '');
 $employerName = microfin_clean_string($data['employer'] ?? '');
 $employerContact = microfin_clean_string($data['employer_contact'] ?? '');
-$monthlyIncome = (float) ($data['monthly_income'] ?? 0);
+$monthlyIncome = (float) str_replace(',', '', (string) ($data['monthly_income'] ?? 0));
 $houseNo = microfin_clean_string($data['house_no'] ?? '');
 $street = microfin_clean_string($data['street'] ?? '');
 $barangay = microfin_clean_string($data['barangay'] ?? '');
@@ -36,7 +36,7 @@ $hasComaker = microfin_clean_string($data['has_comaker'] ?? '0') === '1' ? 1 : 0
 $comakerName = microfin_clean_string($data['comaker_name'] ?? '');
 $comakerRelationship = microfin_clean_string($data['comaker_relationship'] ?? '');
 $comakerContact = microfin_clean_string($data['comaker_contact'] ?? '');
-$comakerIncome = (float) ($data['comaker_income'] ?? 0);
+$comakerIncome = (float) str_replace(',', '', (string) ($data['comaker_income'] ?? 0));
 $comakerAddress = microfin_clean_string($data['comaker_address'] ?? '');
 $idType = microfin_clean_string($data['id_type'] ?? '');
 $idNumber = microfin_clean_string($data['id_number'] ?? '');

@@ -756,7 +756,7 @@ if ($method === 'POST' && $action === 'approve_client') {
             $policyMeta    = $hasPolicyMetadataColumn
                 ? (json_decode((string) ($client_row['policy_metadata'] ?? ''), true) ?: [])
                 : [];
-            $monthlyIncome = (float) ($client_row['monthly_income'] ?? 0);
+            $monthlyIncome = (float) str_replace(',', '', (string) ($client_row['monthly_income'] ?? 0));
 
             // ── ALWAYS recalculate from the CURRENT admin policy at approval time ──
             // This guarantees credit_limit matches exactly what admin/staff panel shows:
