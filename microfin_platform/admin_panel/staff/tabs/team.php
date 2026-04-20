@@ -79,7 +79,9 @@ if (!function_exists('statusBadgePHP')) {
                             </td>
                             <?php if (has_permission('CREATE_USERS')): ?>
                                 <td style="text-align: center;">
-                                    <?php if ($staff['user_type'] === 'Admin' || $staff['role_name'] === 'Admin'): ?>
+                                    <?php if ((int)$staff['user_id'] === (int)$_SESSION['user_id']): ?>
+                                        <span style="font-size: 0.8rem; color: var(--muted); font-weight: 600;">You</span>
+                                    <?php elseif ($staff['user_type'] === 'Admin' || $staff['role_name'] === 'Admin'): ?>
                                         <span style="font-size: 0.8rem; color: var(--muted);">Restricted</span>
                                     <?php else: ?>
                                         <?php if (strcasecmp($staff['status'], 'Suspended') === 0 || strcasecmp($staff['status'], 'Locked') === 0 || strcasecmp($staff['status'], 'Inactive') === 0): ?>

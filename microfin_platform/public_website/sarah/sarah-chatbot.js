@@ -27,8 +27,7 @@
             'How much does MicroFin cost?',
             'Is our client data secure?',
             'How does migration and go-live work?',
-            'What training and support do we get?',
-            'Can I talk to an agent?'
+            'What training and support do we get?'
         ];
 
         const branchSuggestions = {
@@ -58,8 +57,7 @@
             'how much does microfin cost?': 'pricing',
             'is our client data secure?': 'security',
             'how does migration and go-live work?': 'migration',
-            'what training and support do we get?': 'training',
-            'can i talk to an agent?': 'agent'
+            'what training and support do we get?': 'training'
         };
 
         const languageDictionary = {
