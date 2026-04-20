@@ -257,6 +257,28 @@ try {
 
     $receiptContext = microfin_fetch_payment_receipt_context($conn, $tenantId, (int) $loan['client_id'], $loanId);
 
+    $paymentDateFormatted = date('Y-m-d H:i:s');
+
+    // Automatically send receipt email to client after every successful payment
+    try {
+        if ($receiptContext['client_email'] !== '') {
+            microfin_send_receipt_email($conn, [
+                'tenant_id'         => $tenantId,
+                'tenant_name'       => $receiptContext['tenant_name'],
+                'user_id'           => $userId > 0 ? $userId : null,
+                'client_email'      => $receiptContext['client_email'],
+                'client_name'       => $receiptContext['client_name'],
+                'payment_reference' => $refNum,
+                'payment_method'    => $method,
+                'loan_number'       => $receiptContext['loan_number'],
+                'payment_date'      => $paymentDateFormatted,
+                'amount'            => $amount,
+            ]);
+        }
+    } catch (Throwable $emailError) {
+        error_log('Receipt email send failed: ' . $emailError->getMessage());
+    }
+
     echo json_encode([
         'success' => true,
         'message' => 'Payment posted successfully.',
@@ -265,7 +287,7 @@ try {
         'client_name' => $receiptContext['client_name'],
         'tenant_name' => $receiptContext['tenant_name'],
         'loan_number' => $receiptContext['loan_number'],
-        'payment_date' => date('Y-m-d H:i:s'),
+        'payment_date' => $paymentDateFormatted,
     ]);
 } catch (Throwable $e) {
     try {

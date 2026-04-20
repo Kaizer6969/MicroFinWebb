@@ -9565,7 +9565,7 @@ function hexToRgb($hex)
 
                                         <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); padding: 8px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); text-align: right;">
 
-                                            <div style="font-weight: 800; font-size: 1.25rem;">â‚±<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 0); ?></div>
+                                            <div style="font-weight: 800; font-size: 1.25rem;">₱<?php echo number_format((float)$plan_catalog[$current_plan]['price'], 0); ?></div>
 
                                             <div style="font-size: 0.75rem; opacity: 0.9;">per month</div>
 
@@ -9631,13 +9631,13 @@ function hexToRgb($hex)
 
                                                     <select name="new_plan" id="new-plan-select" style="flex: 1; min-width: 140px; background: rgba(255,255,255,0.9); border: none; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; color: #1e293b; outline: none; cursor: pointer;">
 
-                                                        <option value="Starter" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - â‚±4,999/mo</option>
+                                                        <option value="Starter" <?php echo $current_plan === 'Starter' ? 'selected' : ''; ?>>Starter - ₱4,999/mo</option>
 
-                                                        <option value="Pro" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - â‚±14,999/mo</option>
+                                                        <option value="Pro" <?php echo $current_plan === 'Pro' ? 'selected' : ''; ?>>Pro - ₱14,999/mo</option>
 
-                                                        <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - â‚±19,999/mo</option>
+                                                        <option value="Enterprise" <?php echo $current_plan === 'Enterprise' ? 'selected' : ''; ?>>Enterprise - ₱19,999/mo</option>
 
-                                                        <option value="Unlimited" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - â‚±29,999/mo</option>
+                                                        <option value="Unlimited" <?php echo $current_plan === 'Unlimited' ? 'selected' : ''; ?>>Unlimited - ₱29,999/mo</option>
 
                                                     </select>
 
@@ -9983,7 +9983,7 @@ function hexToRgb($hex)
 
                                                             <span class="material-symbols-rounded text-muted">credit_card</span>
 
-                                                            <span class="text-muted" style="font-weight: 500;">â€¢â€¢â€¢â€¢ <?php echo htmlspecialchars($pm['last_four_digits']); ?></span>
+                                                            <span class="text-muted" style="font-weight: 500;">•••• <?php echo htmlspecialchars($pm['last_four_digits']); ?></span>
 
                                                         </div>
 
@@ -11625,7 +11625,7 @@ function hexToRgb($hex)
 
 
                                                 <!-- Early Settlement Fee Card -->
-                                                <div class="credit-policy-card" style="margin-top: 24px;">
+                                                <div class="credit-policy-card" style="margin-top: 24px; display: none;">
                                                     <div class="credit-policy-card-header" style="display: flex; justify-content: space-between; align-items: center;">
                                                         <h3 class="credit-policy-card-title" style="display: flex; align-items: center; gap: 8px; position: relative;">
                                                             Early Settlement Fee
@@ -11896,7 +11896,7 @@ function hexToRgb($hex)
 
                                                             <span>Maximum amount</span>
 
-                                                            <strong data-loan-preview-bind="max-amount">â‚±100,000.00</strong>
+                                                            <strong data-loan-preview-bind="max-amount">₱100,000.00</strong>
 
                                                         </div>
 
@@ -11912,7 +11912,7 @@ function hexToRgb($hex)
 
                                                             <span>Est. cash release</span>
 
-                                                            <strong data-loan-preview-bind="cash-release">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="cash-release">₱0.00</strong>
 
                                                         </div>
 
@@ -11930,7 +11930,7 @@ function hexToRgb($hex)
 
                                                             <strong>Sample loan amount</strong>
 
-                                                            <span data-loan-preview-bind="selected-amount">â‚±0.00</span>
+                                                            <span data-loan-preview-bind="selected-amount">₱0.00</span>
 
                                                         </div>
 
@@ -11938,9 +11938,9 @@ function hexToRgb($hex)
 
                                                         <div class="loan-preview-range-meta">
 
-                                                            <span data-loan-preview-bind="min-amount">â‚±0.00</span>
+                                                            <span data-loan-preview-bind="min-amount">₱0.00</span>
 
-                                                            <span data-loan-preview-bind="max-amount-range">â‚±0.00</span>
+                                                            <span data-loan-preview-bind="max-amount-range">₱0.00</span>
 
                                                         </div>
 
@@ -11978,7 +11978,7 @@ function hexToRgb($hex)
 
                                                             <span data-loan-preview-bind="installment-label">Estimated monthly payment</span>
 
-                                                            <strong data-loan-preview-bind="estimated-installment">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="estimated-installment">₱0.00</strong>
 
                                                         </div>
 
@@ -11986,7 +11986,7 @@ function hexToRgb($hex)
 
                                                             <span>Total repayment</span>
 
-                                                            <strong data-loan-preview-bind="total-repayment">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="total-repayment">₱0.00</strong>
 
                                                         </div>
 
@@ -11994,7 +11994,7 @@ function hexToRgb($hex)
 
                                                             <span>Total upfront charges</span>
 
-                                                            <strong data-loan-preview-bind="charges-total">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="charges-total">₱0.00</strong>
 
                                                         </div>
 
@@ -12002,7 +12002,7 @@ function hexToRgb($hex)
 
                                                             <span>Estimated cash release</span>
 
-                                                            <strong data-loan-preview-bind="cash-release">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="cash-release">₱0.00</strong>
 
                                                         </div>
 
@@ -12016,7 +12016,7 @@ function hexToRgb($hex)
 
                                                             <span>Processing fee</span>
 
-                                                            <strong data-loan-preview-bind="processing-fee-value">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="processing-fee-value">₱0.00</strong>
 
                                                         </div>
 
@@ -12024,7 +12024,7 @@ function hexToRgb($hex)
 
                                                             <span>Insurance fee</span>
 
-                                                            <strong data-loan-preview-bind="insurance-fee-value">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="insurance-fee-value">₱0.00</strong>
 
                                                         </div>
 
@@ -12032,7 +12032,7 @@ function hexToRgb($hex)
 
                                                             <span>Service charge</span>
 
-                                                            <strong data-loan-preview-bind="service-charge-value">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="service-charge-value">₱0.00</strong>
 
                                                         </div>
 
@@ -12040,7 +12040,7 @@ function hexToRgb($hex)
 
                                                             <span>Documentary stamp</span>
 
-                                                            <strong data-loan-preview-bind="doc-stamp-value">â‚±0.00</strong>
+                                                            <strong data-loan-preview-bind="doc-stamp-value">₱0.00</strong>
 
                                                         </div>
 
@@ -12049,7 +12049,7 @@ function hexToRgb($hex)
 
 
                                                     <template id="loan-preview-early-settlement-card-template">
-                                                        <div class="loan-preview-fee-card">
+                                                        <div class="loan-preview-fee-card" style="display: none;">
 
                                                             <span>Sample early settlement fee</span>
 
@@ -12150,7 +12150,7 @@ function hexToRgb($hex)
 
                                             <div class="loan-product-record-meta">
 
-                                                <span>Early Settlement Fee: <?php echo htmlspecialchars((string)($loan_product_record['early_settlement_fee_type'] ?? 'Percentage')); ?> <?php echo number_format((float)($loan_product_record['early_settlement_fee_value'] ?? 0), 2); ?><?php echo (($loan_product_record['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage') ? '%' : ''; ?></span>
+                                                <span style="display: none;">Early Settlement Fee: <?php echo htmlspecialchars((string)($loan_product_record['early_settlement_fee_type'] ?? 'Percentage')); ?> <?php echo number_format((float)($loan_product_record['early_settlement_fee_value'] ?? 0), 2); ?><?php echo (($loan_product_record['early_settlement_fee_type'] ?? 'Percentage') === 'Percentage') ? '%' : ''; ?></span>
 
                                                 <span>Grace: <?php echo (int)($loan_product_record['grace_period_days'] ?? 0); ?> day(s)</span>
 
@@ -15843,5 +15843,6 @@ function hexToRgb($hex)
 </body>
 
 </html>
+
 
 
