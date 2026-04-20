@@ -744,6 +744,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
   int _step = 1;
   int _passwordStrength = 0;
   String _finalLoginUsername = '';
+  String _pendingToken = '';
   String? _errorMessage;
   String? _infoMessage;
 
@@ -1016,10 +1017,12 @@ class _RegistrationModalState extends State<_RegistrationModal> {
       final data = _decodeApiMap(response.body);
       if (data['success'] == true) {
         final returnedToken = _cleanString(data['tenant_context_token']);
+        final returnedPendingToken = _cleanString(data['pending_token']);
         setState(() {
           _step = 2;
           _otpController.clear();
           _finalLoginUsername = _cleanString(data['login_username']);
+          _pendingToken = returnedPendingToken;
           _tenant = _ResolvedTenant(
             tenant: _tenant!.tenant,
             token: returnedToken.isEmpty ? _tenant!.token : returnedToken,
@@ -1083,6 +1086,7 @@ class _RegistrationModalState extends State<_RegistrationModal> {
               'otp': otp,
               'login_username': _finalLoginUsername,
               'tenant_context_token': _tenant!.token,
+              if (_pendingToken.isNotEmpty) 'pending_token': _pendingToken,
             }),
           )
           .timeout(const Duration(seconds: 20));

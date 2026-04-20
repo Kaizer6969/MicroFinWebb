@@ -65,141 +65,54 @@ try {
         microfin_json_response(['success' => false, 'message' => 'Username or email already exists for this tenant.'], 409);
     }
 
-    $conn->begin_transaction();
-
-    $roleStmt = $conn->prepare("
-        SELECT role_id
-        FROM user_roles
-        WHERE role_name = 'Client'
-          AND tenant_id = ?
-          AND deleted_at IS NULL
-        LIMIT 1
-    ");
-    $roleStmt->bind_param('s', $tenantId);
-    $roleStmt->execute();
-    $roleResult = $roleStmt->get_result();
-
-    if ($roleResult->num_rows === 0) {
-        $insertRoleStmt = $conn->prepare("
-            INSERT INTO user_roles (tenant_id, role_name, role_description)
-            VALUES (?, 'Client', 'Default Client Role')
-        ");
-        $insertRoleStmt->bind_param('s', $tenantId);
-        $insertRoleStmt->execute();
-        $roleId = $insertRoleStmt->insert_id;
-        $insertRoleStmt->close();
-    } else {
-        $roleId = (int) $roleResult->fetch_assoc()['role_id'];
-    }
-    $roleStmt->close();
-
+    // Generate OTP and verification token (NOT saving to DB yet)
     $verificationCode = microfin_generate_one_time_code();
     $verificationToken = microfin_build_verification_token($verificationCode, 15);
-    $passwordHash = password_hash($password, PASSWORD_ARGON2ID);
 
-    $userStmt = $conn->prepare("
-        INSERT INTO users (
-            tenant_id,
-            username,
-            email,
-            password_hash,
-            email_verified,
-            first_name,
-            last_name,
-            middle_name,
-            suffix,
-            role_id,
-            user_type,
-            status,
-            verification_token
-        ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'Client', 'Active', ?)
-    ");
-    $userStmt->bind_param(
-        'ssssssssis',
-        $tenantId,
-        $baseUsername,
-        $email,
-        $passwordHash,
-        $firstName,
-        $lastName,
-        $middleName,
-        $suffix,
-        $roleId,
-        $verificationToken
-    );
-    $userStmt->execute();
-    $userId = $conn->insert_id;
-    $userStmt->close();
+    // Build a signed pending-registration payload so we can create the account
+    // only after OTP verification succeeds.
+    $pendingRegistration = json_encode([
+        'tenant_id'      => $tenantId,
+        'tenant_slug'    => $tenantSlug,
+        'base_username'  => $baseUsername,
+        'email'          => $email,
+        'password'       => $password,
+        'first_name'     => $firstName,
+        'middle_name'    => $middleName,
+        'last_name'      => $lastName,
+        'suffix'         => $suffix,
+        'verification'   => $verificationToken,
+        'created_at'     => gmdate('Y-m-d\TH:i:s\Z'),
+    ]);
 
-    $clientCode = 'CLT' . date('Y') . '-' . str_pad((string) $userId, 5, '0', STR_PAD_LEFT);
-    $clientStmt = $conn->prepare("
-        INSERT INTO clients (
-            user_id,
-            tenant_id,
-            client_code,
-            first_name,
-            middle_name,
-            last_name,
-            suffix,
-            date_of_birth,
-            contact_number,
-            email_address,
-            client_status,
-            registration_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, '1990-01-01', '', ?, 'Active', CURDATE())
-    ");
-    $clientStmt->bind_param(
-        'isssssss',
-        $userId,
-        $tenantId,
-        $clientCode,
-        $firstName,
-        $middleName,
-        $lastName,
-        $suffix,
-        $email
-    );
-    $clientStmt->execute();
-    $clientStmt->close();
+    // HMAC-sign the payload to prevent tampering
+    $hmacKey = microfin_config('APP_SECRET_KEY', 'microfin-default-secret-key-change-me');
+    $signature = hash_hmac('sha256', $pendingRegistration, $hmacKey);
+    $pendingToken = base64_encode($pendingRegistration) . '.' . $signature;
 
+    // Send the OTP email (no user_id yet since account is not created)
     $emailResult = microfin_send_registration_otp_email($conn, [
-        'tenant_id' => $tenantId,
-        'tenant_name' => $tenant['tenant_name'],
-        'user_id' => $userId,
-        'to_email' => $email,
+        'tenant_id'      => $tenantId,
+        'tenant_name'    => $tenant['tenant_name'],
+        'user_id'        => null,
+        'to_email'       => $email,
         'recipient_name' => trim($firstName . ' ' . $lastName),
-        'otp' => $verificationCode,
-        'ttl_minutes' => 15,
+        'otp'            => $verificationCode,
+        'ttl_minutes'    => 15,
     ]);
 
     if (!$emailResult['success']) {
         throw new RuntimeException('Unable to send verification email: ' . ($emailResult['message'] ?? 'Unknown email error.'));
     }
 
-    $conn->commit();
-
     microfin_json_response([
-        'success' => true,
-        'requires_otp' => true,
-        'message' => 'Verification code sent to your email.',
-        'login_username' => $loginUsername,
+        'success'              => true,
+        'requires_otp'         => true,
+        'message'              => 'Verification code sent to your email. Please verify before your account is created.',
+        'login_username'       => $loginUsername,
+        'pending_token'        => $pendingToken,
         'tenant_context_token' => $tenantContextToken !== '' ? $tenantContextToken : microfin_identity_issue_tenant_context_token($tenant),
     ]);
 } catch (Throwable $e) {
-    if ($conn->errno === 0 && $conn->more_results()) {
-        while ($conn->more_results() && $conn->next_result()) {
-            if ($result = $conn->store_result()) {
-                $result->free();
-            }
-        }
-    }
-
-    if ($conn->connect_errno === 0) {
-        try {
-            $conn->rollback();
-        } catch (Throwable $rollbackError) {
-        }
-    }
-
     microfin_json_response(['success' => false, 'message' => $e->getMessage()], 500);
 }
