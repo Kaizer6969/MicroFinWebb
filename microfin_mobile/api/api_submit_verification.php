@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/api_utils.php';
 require_once __DIR__ . '/db.php';
 
@@ -349,12 +349,9 @@ try {
 
     if ($rejectionReason !== null) {
         $finalVerificationStatus = 'Rejected';
-        $coolingDays = (int)($decisionRules['decision_rules']['guardrails']['rejected_cooling_days'] ?? 30);
-        $coolingUntil = date('Y-m-d H:i:s', strtotime("+$coolingDays days"));
 
         $policyMetadataStr = json_encode([
             'last_rejection_date' => date('Y-m-d H:i:s'),
-            'cooling_until' => $coolingUntil,
             'rejection_triggers' => $rejectionTriggers,
             'eligibility_flags' => [
                 'can_apply' => false,
